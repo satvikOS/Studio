@@ -203,6 +203,8 @@ function WorkbenchStudio() {
   const [compositeFilter, setCompositeFilter] = useState('grayscale(100%)');
   // Subdivision — vertex count for the currently selected mesh, mirrored
   // into a panel readout so the user sees the (≈4×) growth per pass.
+  // Mirror modifier — duplicate-and-flip the selected mesh across an axis.
+  const [mirrorAxis, setMirrorAxis] = useState('x');
 
   function recomputeMeshStats(scene) {
     let v = 0;
@@ -579,6 +581,54 @@ function WorkbenchStudio() {
     primitiveStackRef.current.push(mesh);
     setPrimitiveCount(c => c + 1);
     recomputeMeshStats(scene);
+  }
+
+  /*
+   * Mirror modifier — clone the selected mesh's geometry, flip the
+   * clone across the chosen axis, invert winding to preserve outward
+   * normals, merge the original + mirrored back into a single geometry.
+   * Useful for symmetric character / hard-surface modelling.
+   */
+  function mirrorSelected() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return;
+    const original = mesh.geometry.clone();
+    const flipped  = mesh.geometry.clone();
+    const pos = flipped.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      if (mirrorAxis === 'x')      pos.setX(i, -pos.getX(i));
+      else if (mirrorAxis === 'y') pos.setY(i, -pos.getY(i));
+      else                          pos.setZ(i, -pos.getZ(i));
+    }
+    pos.needsUpdate = true;
+    // Flipping across a single axis reverses face winding — swap the
+    // last two indices of every triangle to keep normals facing out.
+    if (flipped.index) {
+      const arr = flipped.index.array;
+      for (let i = 0; i < arr.length; i += 3) {
+        const tmp = arr[i + 1];
+        arr[i + 1] = arr[i + 2];
+        arr[i + 2] = tmp;
+      }
+      flipped.index.needsUpdate = true;
+    } else {
+      // Non-indexed: swap successive triangle vertices in the position
+      // buffer directly.
+      const arr = flipped.attributes.position.array;
+      for (let i = 0; i < arr.length; i += 9) {
+        const tx = arr[i + 3], ty = arr[i + 4], tz = arr[i + 5];
+        arr[i + 3] = arr[i + 6]; arr[i + 4] = arr[i + 7]; arr[i + 5] = arr[i + 8];
+        arr[i + 6] = tx;         arr[i + 7] = ty;         arr[i + 8] = tz;
+      }
+    }
+    flipped.computeVertexNormals();
+    const merged = mergeGeometries([original, flipped]);
+    merged.computeVertexNormals();
+    merged.computeBoundingSphere();
+    merged.computeBoundingBox();
+    mesh.geometry.dispose();
+    mesh.geometry = merged;
+    recomputeMeshStats(window.__archdiscScene);
   }
 
   /*
@@ -1577,6 +1627,31 @@ function WorkbenchStudio() {
             </button>
           </div>
         )}
+
+        <div className="property-section" data-studio-section="mirror">
+          <h3 className="property-header">Mirror Modifier</h3>
+          <div className="property-row">
+            <span className="property-label">Axis</span>
+            <select
+              className="property-input"
+              data-studio-mirror="axis"
+              value={mirrorAxis}
+              onChange={e => setMirrorAxis(e.target.value)}
+            >
+              <option value="x">X</option>
+              <option value="y">Y</option>
+              <option value="z">Z</option>
+            </select>
+          </div>
+          <button
+            className="property-button"
+            data-studio-action="mirror-selected"
+            onClick={mirrorSelected}
+            disabled={!selectedKind}
+          >
+            Mirror Selected
+          </button>
+        </div>
 
         <div className="property-section" data-studio-section="subdivision">
           <h3 className="property-header">Subdivision Surface</h3>
