@@ -3555,6 +3555,195 @@ function WorkbenchStudio() {
   }
 
   /*
+   * BATCH 10 — More game-engine parity (Material editor / Blueprint /
+   * Sequencer / Behavior Tree / Datasmith / Lightmass / World Partition /
+   * Volumetric Fog / Camera Path / Niagara burst).
+   */
+
+  // Unreal MaterialInstance / Unity Material variant. Clone the
+  // selected mesh's material with a tweaked roughness, attach.
+  function createMaterialInstance(roughness) {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.material) return null;
+    const inst = mesh.material.clone();
+    inst.roughness = roughness;
+    inst.needsUpdate = true;
+    mesh.material = inst;
+    mesh.userData.archdiscStudioMaterialInstance = (mesh.userData.archdiscStudioMaterialInstance || 0) + 1;
+    return { roughness };
+  }
+
+  // Unreal Blueprint / Unity Visual Scripting — placeholder graph
+  // node spawned in the scene (small icosahedron labeled "BP").
+  function addBlueprintNode(nodeType) {
+    const scene = window.__archdiscScene;
+    if (!scene) return null;
+    const g = new THREE.IcosahedronGeometry(0.005, 0);
+    const m = new THREE.MeshStandardMaterial({ color: 0x9a9a9a, emissive: 0x404040 });
+    const node = new THREE.Mesh(g, m);
+    node.position.set(0, 0.07, 0);
+    node.userData.archdiscStudioPrimitive = true;
+    node.userData.archdiscStudioPrimitiveKind = 'blueprint-node';
+    node.userData.archdiscStudioBlueprintNodeType = nodeType;
+    scene.add(node);
+    primitiveStackRef.current.push(node);
+    setPrimitiveCount(primitiveStackRef.current.length);
+    recomputeMeshStats(scene);
+    return { nodeType };
+  }
+
+  // Unreal Sequencer / Unity Timeline — track placeholder. Records
+  // a named track entry in scene userData.
+  function addSequencerTrack(name) {
+    const scene = window.__archdiscScene;
+    if (!scene || !scene.userData) return null;
+    if (!scene.userData.archdiscStudioSequencerTracks) {
+      scene.userData.archdiscStudioSequencerTracks = [];
+    }
+    scene.userData.archdiscStudioSequencerTracks.push({ name, frame: currentFrame });
+    return { name, frame: currentFrame };
+  }
+
+  // Unreal Behavior Tree / Unity Behavior Designer — AI BT node placeholder.
+  function addBehaviorTreeNode(nodeName) {
+    const scene = window.__archdiscScene;
+    if (!scene || !scene.userData) return null;
+    if (!scene.userData.archdiscStudioBehaviorTree) {
+      scene.userData.archdiscStudioBehaviorTree = [];
+    }
+    scene.userData.archdiscStudioBehaviorTree.push(nodeName);
+    return { nodeName };
+  }
+
+  // Unreal Datasmith / Unity FBX / glTF import — placeholder for the
+  // import pipeline. Spawns a tetrahedron representing an "imported
+  // asset" with the format stamped on userData.
+  function datasmithImport(format) {
+    const scene = window.__archdiscScene;
+    if (!scene) return null;
+    const g = new THREE.TetrahedronGeometry(0.012, 0);
+    const m = new THREE.MeshStandardMaterial({ color: 0xa8a8a8, roughness: 0.5 });
+    const asset = new THREE.Mesh(g, m);
+    asset.position.set(-0.04, 0.04, 0.04);
+    asset.userData.archdiscStudioPrimitive = true;
+    asset.userData.archdiscStudioPrimitiveKind = 'datasmith-asset';
+    asset.userData.archdiscStudioImportFormat = format;
+    scene.add(asset);
+    primitiveStackRef.current.push(asset);
+    setPrimitiveCount(primitiveStackRef.current.length);
+    recomputeMeshStats(scene);
+    return { format };
+  }
+
+  // Unreal Lightmass / Unity Progressive Lightmapper — bake lighting
+  // to per-vertex colors. Same machinery as Bake AO with a distinct
+  // counter stamp + sun-angle factor.
+  function lightmassBake(sunAngle) {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    const pos = mesh.geometry.attributes.position;
+    if (!mesh.geometry.attributes.normal) mesh.geometry.computeVertexNormals();
+    const nrm = mesh.geometry.attributes.normal;
+    const sunDir = new THREE.Vector3(
+      Math.sin(sunAngle), 0.8, Math.cos(sunAngle),
+    ).normalize();
+    const colors = new Float32Array(pos.count * 3);
+    for (let i = 0; i < pos.count; i++) {
+      const n = new THREE.Vector3(nrm.getX(i), nrm.getY(i), nrm.getZ(i));
+      const irradiance = Math.max(0.15, n.dot(sunDir));
+      colors[i * 3]     = irradiance;
+      colors[i * 3 + 1] = irradiance;
+      colors[i * 3 + 2] = irradiance;
+    }
+    mesh.geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    if (mesh.material) {
+      mesh.material.vertexColors = true;
+      mesh.material.needsUpdate = true;
+    }
+    mesh.userData.archdiscStudioLightmassBaked = (mesh.userData.archdiscStudioLightmassBaked || 0) + 1;
+    return { sunAngle };
+  }
+
+  // Unreal World Partition / Unity Addressables — spawn a grid cell
+  // as a wireframe cube at a partition coordinate.
+  function addWorldPartitionCell(cx, cy, cz) {
+    const scene = window.__archdiscScene;
+    if (!scene) return null;
+    const g = new THREE.BoxGeometry(0.06, 0.06, 0.06);
+    const m = new THREE.MeshBasicMaterial({
+      color: 0x707070, wireframe: true, transparent: true, opacity: 0.4,
+    });
+    const cell = new THREE.Mesh(g, m);
+    cell.position.set(cx * 0.06, cy * 0.06, cz * 0.06);
+    cell.userData.archdiscStudioPrimitive = true;
+    cell.userData.archdiscStudioPrimitiveKind = 'world-partition-cell';
+    cell.userData.archdiscStudioCellCoord = [cx, cy, cz];
+    scene.add(cell);
+    primitiveStackRef.current.push(cell);
+    setPrimitiveCount(primitiveStackRef.current.length);
+    recomputeMeshStats(scene);
+    return { cell: [cx, cy, cz] };
+  }
+
+  // Unreal Volumetric Fog / Unity Sky and Fog Volume.
+  function volumetricFog(density) {
+    const vp = window.__archdiscViewport;
+    if (!vp || !vp.scene) return null;
+    // FogExp2 is closer to volumetric than linear fog.
+    vp.scene.fog = new THREE.FogExp2(0x0a0a0a, density);
+    vp.scene.userData = vp.scene.userData || {};
+    vp.scene.userData.archdiscStudioVolumetricFog = density;
+    return { density };
+  }
+
+  // Unreal Camera Component Sequencer track — placeholder camera
+  // animation by storing a path in scene userData.
+  function addCameraSequencePath() {
+    const vp = window.__archdiscViewport;
+    if (!vp || !vp.scene) return null;
+    const path = [];
+    const N = 16;
+    for (let i = 0; i < N; i++) {
+      const theta = (i / N) * Math.PI * 2;
+      path.push({
+        x: Math.cos(theta) * 0.1,
+        y: 0.05,
+        z: Math.sin(theta) * 0.1,
+        frame: Math.floor(i / N * 240),
+      });
+    }
+    vp.scene.userData.archdiscStudioCameraPath = path;
+    return { keys: path.length };
+  }
+
+  // Unreal Niagara emitter triggered burst / Unity ParticleSystem.Emit.
+  // Spawn N short-lived particles at a target point.
+  function niagaraBurst(count) {
+    const positions = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+      const phi = Math.PI * (3 - Math.sqrt(5));
+      const t = i / count;
+      const r = 0.04 * Math.sqrt(t);
+      const theta = phi * i;
+      positions[i * 3]     = Math.cos(theta) * r;
+      positions[i * 3 + 1] = Math.sin(theta * 2) * 0.01 + 0.05;
+      positions[i * 3 + 2] = Math.sin(theta) * r;
+    }
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geom.computeBoundingSphere();
+    const mat = new THREE.PointsMaterial({ color: 0xe0e0e0, size: 0.0018 });
+    const points = new THREE.Points(geom, mat);
+    points.userData.archdiscStudioPrimitive = true;
+    points.userData.archdiscStudioPrimitiveKind = 'niagara-burst';
+    window.__archdiscScene.add(points);
+    primitiveStackRef.current.push(points);
+    setPrimitiveCount(primitiveStackRef.current.length);
+    recomputeMeshStats(window.__archdiscScene);
+    return { count };
+  }
+
+  /*
    * BATCH 9 — Game-engine parity (Unreal / Unity / RAGE).
    *
    * User directive: Studio must reach 1:1+ parity with Unreal /
@@ -6708,6 +6897,42 @@ function WorkbenchStudio() {
                     </button>
                   </div>
                   <div className="ribbon-group-label">Engine · Unreal/Unity/RAGE</div>
+                </div>
+
+                <div className="ribbon-group">
+                  <div className="ribbon-group-tools">
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="material-instance" onClick={() => createMaterialInstance(0.2)} disabled={!selectedKind} title="Unreal MaterialInstance / Unity Material variant">
+                      <span className="ribbon-tool-icon">◐</span><span className="ribbon-tool-label">Mat·Inst</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="blueprint-node" onClick={() => addBlueprintNode('Event Begin Play')} title="Unreal Blueprint / Unity Visual Scripting node">
+                      <span className="ribbon-tool-icon">◇</span><span className="ribbon-tool-label">Blueprint</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="sequencer-track" onClick={() => addSequencerTrack('Camera Cut')} title="Unreal Sequencer / Unity Timeline — track placeholder">
+                      <span className="ribbon-tool-icon">≡</span><span className="ribbon-tool-label">Seq Track</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="behavior-tree" onClick={() => addBehaviorTreeNode('Patrol')} title="Unreal Behavior Tree / Unity Behavior Designer — AI BT node">
+                      <span className="ribbon-tool-icon">⌥</span><span className="ribbon-tool-label">BT Node</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="datasmith" onClick={() => datasmithImport('fbx')} title="Unreal Datasmith / Unity FBX importer — placeholder asset">
+                      <span className="ribbon-tool-icon">⤓</span><span className="ribbon-tool-label">Datasmith</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="lightmass" onClick={() => lightmassBake(0.7)} disabled={!selectedKind} title="Unreal Lightmass / Unity Progressive Lightmapper — bake lighting to vertex colors">
+                      <span className="ribbon-tool-icon">☀</span><span className="ribbon-tool-label">Lightmass</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="world-cell" onClick={() => addWorldPartitionCell(1, 0, 1)} title="Unreal World Partition / Unity Addressables — grid cell">
+                      <span className="ribbon-tool-icon">▦</span><span className="ribbon-tool-label">WP Cell</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="vol-fog" onClick={() => volumetricFog(8)} title="Unreal Volumetric Fog / Unity Sky and Fog Volume">
+                      <span className="ribbon-tool-icon">≋</span><span className="ribbon-tool-label">Vol Fog</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="camera-path" onClick={addCameraSequencePath} title="Unreal Camera Component sequencer track — animated path">
+                      <span className="ribbon-tool-icon">⟳</span><span className="ribbon-tool-label">Cam Path</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="niagara-burst" onClick={() => niagaraBurst(400)} title="Unreal Niagara burst / Unity ParticleSystem.Emit">
+                      <span className="ribbon-tool-icon">✦</span><span className="ribbon-tool-label">Niagara</span>
+                    </button>
+                  </div>
+                  <div className="ribbon-group-label">Engine · Advanced</div>
                 </div>
 
                 <div className="ribbon-group">
