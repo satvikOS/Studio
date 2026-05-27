@@ -4470,25 +4470,16 @@ function WorkbenchStudio() {
                     display: 'flex',
                     flexDirection: 'column',
                     gap: '2px',
-                    maxHeight: '140px',
+                    maxHeight: '180px',
                     overflowY: 'auto',
                   }}
                 >
                   {sceneEntries.map((entry, i) => (
-                    <button
+                    <div
                       key={entry.uuid}
                       data-studio-outliner-entry={i}
                       data-studio-outliner-kind={entry.kind}
-                      onClick={() => {
-                        if (typeof window === 'undefined' || !window.__archdiscScene) return;
-                        const mesh = window.__archdiscScene.getObjectByProperty('uuid', entry.uuid);
-                        if (mesh && window.__studioSelectMesh && entry.isPrimitive) {
-                          window.__studioSelectMesh(mesh);
-                        }
-                      }}
                       style={{
-                        all: 'unset',
-                        cursor: entry.isPrimitive ? 'pointer' : 'default',
                         padding: '4px 8px',
                         borderRadius: '4px',
                         background: selectedKind === entry.kind
@@ -4513,8 +4504,93 @@ function WorkbenchStudio() {
                           flexShrink: 0,
                         }}
                       />
-                      {entry.kind}
-                    </button>
+                      <span
+                        data-studio-outliner-label
+                        onClick={() => {
+                          if (typeof window === 'undefined' || !window.__archdiscScene) return;
+                          const mesh = window.__archdiscScene.getObjectByProperty('uuid', entry.uuid);
+                          if (mesh && window.__studioSelectMesh && entry.isPrimitive) {
+                            window.__studioSelectMesh(mesh);
+                          }
+                        }}
+                        style={{
+                          flex: 1,
+                          cursor: entry.isPrimitive ? 'pointer' : 'default',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {entry.kind}
+                      </span>
+                      {/* Visibility toggle */}
+                      <span
+                        data-studio-outliner-visibility={entry.uuid}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (typeof window === 'undefined' || !window.__archdiscScene) return;
+                          const obj = window.__archdiscScene.getObjectByProperty('uuid', entry.uuid);
+                          if (!obj) return;
+                          obj.visible = !obj.visible;
+                          // Force re-render by nudging primitive count touch.
+                          setPrimitiveCount(c => c);
+                        }}
+                        style={{
+                          cursor: 'pointer',
+                          opacity: 0.55,
+                          fontSize: '10px',
+                          padding: '0 4px',
+                          flexShrink: 0,
+                        }}
+                        title="Toggle visibility"
+                      >
+                        ◉
+                      </span>
+                      {/* Delete button — only for primitives */}
+                      {entry.isPrimitive && (
+                        <span
+                          data-studio-outliner-delete={entry.uuid}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (typeof window === 'undefined' || !window.__archdiscScene) return;
+                            const obj = window.__archdiscScene.getObjectByProperty('uuid', entry.uuid);
+                            if (!obj) return;
+                            // Find + remove from primitive stack.
+                            const stack = primitiveStackRef.current;
+                            const idx = stack.indexOf(obj);
+                            if (idx !== -1) stack.splice(idx, 1);
+                            // Clear selection if it pointed at this mesh.
+                            if (selectedMeshRef.current === obj) {
+                              selectedMeshRef.current = null;
+                              setSelectedKind(null);
+                              setSelectedTransform(null);
+                            }
+                            window.__archdiscScene.remove(obj);
+                            if (obj.geometry && obj.geometry.dispose) obj.geometry.dispose();
+                            if (obj.material) {
+                              if (Array.isArray(obj.material)) {
+                                obj.material.forEach(m => m.dispose && m.dispose());
+                              } else if (obj.material.dispose) {
+                                obj.material.dispose();
+                              }
+                            }
+                            setPrimitiveCount(stack.length);
+                            recomputeMeshStats(window.__archdiscScene);
+                          }}
+                          style={{
+                            cursor: 'pointer',
+                            opacity: 0.45,
+                            fontSize: '13px',
+                            padding: '0 4px',
+                            color: '#d47f7f',
+                            flexShrink: 0,
+                          }}
+                          title="Delete primitive"
+                        >
+                          ×
+                        </span>
+                      )}
+                    </div>
                   ))}
                 </div>
               )}
