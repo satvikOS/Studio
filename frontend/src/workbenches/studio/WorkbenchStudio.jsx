@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import {
   MousePointer2, Move, RotateCw, Maximize2,
   Box, Mountain, PaintBucket, Bone, Play, Sparkles, Camera,
@@ -18,6 +19,28 @@ import Viewport3D from '../../components/Viewport3D';
  */
 const PRIMITIVE_SIZE = 0.03; // 30 mm, sized to fit Viewport3D's mm-scale CAD camera
 
+function buildVoxelCubeGeometry(S, NN, predicate) {
+  const cubeSize = S / NN;
+  const voxel = cubeSize * 0.9; // 10% gap between voxels for the classic blocky look
+  const pieces = [];
+  const half = (NN - 1) / 2;
+  for (let x = 0; x < NN; x++) {
+    for (let y = 0; y < NN; y++) {
+      for (let z = 0; z < NN; z++) {
+        if (!predicate(x, y, z, NN)) continue;
+        const cx = (x - half) * cubeSize;
+        const cy = (y - half) * cubeSize;
+        const cz = (z - half) * cubeSize;
+        const g = new THREE.BoxGeometry(voxel, voxel, voxel);
+        g.translate(cx, cy, cz);
+        pieces.push(g);
+      }
+    }
+  }
+  if (pieces.length === 0) return new THREE.BoxGeometry(voxel, voxel, voxel);
+  return mergeGeometries(pieces);
+}
+
 function buildPrimitiveGeometry(kind) {
   const S = PRIMITIVE_SIZE;
   switch (kind) {
@@ -31,6 +54,19 @@ function buildPrimitiveGeometry(kind) {
     case 'icosahedron':  return new THREE.IcosahedronGeometry(S * 0.6, 0);
     case 'dodecahedron': return new THREE.DodecahedronGeometry(S * 0.6, 0);
     case 'tetrahedron':  return new THREE.TetrahedronGeometry(S * 0.7, 0);
+    case 'voxel-cube':
+      // Solid 8x8x8 grid of voxels — classic Minecraft-style block.
+      return buildVoxelCubeGeometry(S, 8, () => true);
+    case 'voxel-sphere': {
+      // Voxelised sphere — distance-from-centroid test on a 10x10x10 grid.
+      const NN = 10;
+      const half = (NN - 1) / 2;
+      const maxR = half + 0.5;
+      return buildVoxelCubeGeometry(S, NN, (x, y, z) => {
+        const dx = x - half, dy = y - half, dz = z - half;
+        return Math.sqrt(dx * dx + dy * dy + dz * dz) <= maxR;
+      });
+    }
     default: return null;
   }
 }
@@ -46,6 +82,8 @@ const PRIMITIVE_KINDS = [
   { id: 'icosahedron',  label: 'Icosa' },
   { id: 'dodecahedron', label: 'Dodeca' },
   { id: 'tetrahedron',  label: 'Tetra' },
+  { id: 'voxel-cube',   label: 'Voxel Cube' },
+  { id: 'voxel-sphere', label: 'Voxel Sphere' },
 ];
 
 /**
