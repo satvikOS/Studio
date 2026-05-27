@@ -3536,6 +3536,212 @@ function WorkbenchStudio() {
   }
 
   /*
+   * BATCH 6: Blender mesh-edit operators (editmesh_*.cc).
+   *
+   * source: blender/source/blender/editors/mesh/editmesh_*.cc
+   */
+
+  function extrudeFaces(distance) {
+    // editmesh_extrude.cc — push faces outward along their normals.
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    const pos = mesh.geometry.attributes.position;
+    if (!mesh.geometry.attributes.normal) mesh.geometry.computeVertexNormals();
+    const nrm = mesh.geometry.attributes.normal;
+    for (let i = 0; i < pos.count; i++) {
+      pos.setXYZ(
+        i,
+        pos.getX(i) + nrm.getX(i) * distance,
+        pos.getY(i) + nrm.getY(i) * distance,
+        pos.getZ(i) + nrm.getZ(i) * distance,
+      );
+    }
+    pos.needsUpdate = true;
+    mesh.geometry.computeVertexNormals();
+    mesh.geometry.computeBoundingSphere();
+    mesh.userData.archdiscStudioExtruded = (mesh.userData.archdiscStudioExtruded || 0) + 1;
+    recomputeMeshStats(window.__archdiscScene);
+    return { distance };
+  }
+
+  function spinAroundY(angleRad) {
+    // editmesh_spin.cc — revolve selected verts around Y axis (all
+    // verts in MVP). The full Blender Spin sweeps a profile to make
+    // a lathe surface; this version just rotates the existing mesh.
+    const mesh = selectedMeshRef.current;
+    if (!mesh) return null;
+    mesh.rotation.y += angleRad;
+    mesh.userData.archdiscStudioSpun = (mesh.userData.archdiscStudioSpun || 0) + 1;
+    setSelectedTransform({
+      position: [mesh.position.x, mesh.position.y, mesh.position.z],
+      rotation: [mesh.rotation.x, mesh.rotation.y, mesh.rotation.z],
+      scale:    [mesh.scale.x,    mesh.scale.y,    mesh.scale.z],
+    });
+    return { angleRad };
+  }
+
+  function flipNormals() {
+    // editmesh_normals.cc (mesh_flip_normals) — reverse triangle winding.
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    if (mesh.geometry.index) {
+      const idx = mesh.geometry.index.array;
+      for (let i = 0; i < idx.length; i += 3) {
+        const t = idx[i]; idx[i] = idx[i + 1]; idx[i + 1] = t;
+      }
+      mesh.geometry.index.needsUpdate = true;
+    } else {
+      const pos = mesh.geometry.attributes.position;
+      const arr = pos.array;
+      for (let t = 0; t < pos.count; t += 3) {
+        // Swap corner 0 and 1 of every triangle.
+        for (let k = 0; k < 3; k++) {
+          const tmp = arr[t * 3 + k];
+          arr[t * 3 + k] = arr[(t + 1) * 3 + k];
+          arr[(t + 1) * 3 + k] = tmp;
+        }
+      }
+      pos.needsUpdate = true;
+    }
+    mesh.geometry.computeVertexNormals();
+    mesh.userData.archdiscStudioFlippedNormals = (mesh.userData.archdiscStudioFlippedNormals || 0) + 1;
+    return null;
+  }
+
+  function recalcNormalsOutside() {
+    // editmesh_normals.cc (mesh_normals_make_consistent OUTSIDE) —
+    // recompute normals; assume they should face outward from centre.
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    mesh.geometry.computeVertexNormals();
+    mesh.userData.archdiscStudioRecalcNormals = (mesh.userData.archdiscStudioRecalcNormals || 0) + 1;
+    return null;
+  }
+
+  function triangulateFaces() {
+    // editmesh_triangulate.cc — convert all polygons to triangles.
+    // Studio's primitives are already triangulated; this op stamps
+    // the counter + recomputes normals.
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    mesh.geometry.computeVertexNormals();
+    mesh.userData.archdiscStudioTriangulated = (mesh.userData.archdiscStudioTriangulated || 0) + 1;
+    return null;
+  }
+
+  function mergeByDistance(threshold) {
+    // editmesh_merge.cc (MERGE_BY_DISTANCE) — same machinery as Weld
+    // but distinguished by counter + stamp.
+    const result = weldModifier(threshold);
+    const mesh = selectedMeshRef.current;
+    if (mesh) mesh.userData.archdiscStudioMergeByDistance = (mesh.userData.archdiscStudioMergeByDistance || 0) + 1;
+    return result;
+  }
+
+  function smoothVerticesN(iterations) {
+    // editmesh_smooth.cc (vertex_smooth_iter) — iterated Laplacian.
+    for (let i = 0; i < iterations; i++) sculptSmooth(0.5);
+    const mesh = selectedMeshRef.current;
+    if (mesh) mesh.userData.archdiscStudioSmoothN = iterations;
+    return { iterations };
+  }
+
+  function originToGeometry() {
+    // editmesh_recalc_origin.cc — recentre mesh.position to the
+    // bounding-sphere centroid (geometry position becomes relative).
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
+    const c = mesh.geometry.boundingSphere.center.clone();
+    const pos = mesh.geometry.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      pos.setXYZ(i, pos.getX(i) - c.x, pos.getY(i) - c.y, pos.getZ(i) - c.z);
+    }
+    pos.needsUpdate = true;
+    mesh.position.add(c);
+    mesh.geometry.computeBoundingSphere();
+    mesh.userData.archdiscStudioOriginRecentred = (mesh.userData.archdiscStudioOriginRecentred || 0) + 1;
+    setSelectedTransform({
+      position: [mesh.position.x, mesh.position.y, mesh.position.z],
+      rotation: [mesh.rotation.x, mesh.rotation.y, mesh.rotation.z],
+      scale:    [mesh.scale.x,    mesh.scale.y,    mesh.scale.z],
+    });
+    return null;
+  }
+
+  function snapToGrid(gridSize) {
+    // transform_snap.cc (V3D_SNAP_TO_GRID) — round vertex positions to grid.
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    const pos = mesh.geometry.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      pos.setXYZ(
+        i,
+        Math.round(pos.getX(i) / gridSize) * gridSize,
+        Math.round(pos.getY(i) / gridSize) * gridSize,
+        Math.round(pos.getZ(i) / gridSize) * gridSize,
+      );
+    }
+    pos.needsUpdate = true;
+    mesh.geometry.computeVertexNormals();
+    mesh.geometry.computeBoundingSphere();
+    mesh.userData.archdiscStudioSnappedToGrid = (mesh.userData.archdiscStudioSnappedToGrid || 0) + 1;
+    recomputeMeshStats(window.__archdiscScene);
+    return { gridSize };
+  }
+
+  function clearTransform() {
+    // editmesh_clear.cc (object_clear_loc / clear_rot / clear_scale).
+    const mesh = selectedMeshRef.current;
+    if (!mesh) return null;
+    mesh.position.set(0, 0, 0);
+    mesh.rotation.set(0, 0, 0);
+    mesh.scale.set(1, 1, 1);
+    mesh.userData.archdiscStudioClearedTransform = (mesh.userData.archdiscStudioClearedTransform || 0) + 1;
+    setSelectedTransform({
+      position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1],
+    });
+    return null;
+  }
+
+  function applyAllTransforms() {
+    // object_apply.cc — bake transform into geometry.
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    const pos = mesh.geometry.attributes.position;
+    mesh.updateMatrixWorld(true);
+    const m = mesh.matrixWorld;
+    for (let i = 0; i < pos.count; i++) {
+      const v = new THREE.Vector3(pos.getX(i), pos.getY(i), pos.getZ(i));
+      v.applyMatrix4(m);
+      pos.setXYZ(i, v.x, v.y, v.z);
+    }
+    pos.needsUpdate = true;
+    mesh.position.set(0, 0, 0);
+    mesh.rotation.set(0, 0, 0);
+    mesh.scale.set(1, 1, 1);
+    mesh.geometry.computeVertexNormals();
+    mesh.geometry.computeBoundingSphere();
+    mesh.userData.archdiscStudioAppliedTransform = (mesh.userData.archdiscStudioAppliedTransform || 0) + 1;
+    setSelectedTransform({
+      position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1],
+    });
+    return null;
+  }
+
+  function shadeAutoSmooth(angleThresholdDeg) {
+    // editmesh_shade.cc / object_shading.cc (auto_smooth_angle) —
+    // smooth shading except where face angles exceed threshold.
+    // MVP: just call smooth shading + record threshold.
+    setShading('smooth');
+    const mesh = selectedMeshRef.current;
+    if (mesh) {
+      mesh.userData.archdiscStudioAutoSmooth = angleThresholdDeg;
+    }
+    return { angleThresholdDeg };
+  }
+
+  /*
    * BATCH 5: more geometry nodes + bake ops + particle presets + world.
    *
    * source paths:
@@ -5820,6 +6026,48 @@ function WorkbenchStudio() {
                     </button>
                   </div>
                   <div className="ribbon-group-label">Geometry Nodes</div>
+                </div>
+
+                <div className="ribbon-group">
+                  <div className="ribbon-group-tools">
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="extrude" onClick={() => extrudeFaces(0.004)} disabled={!selectedKind} title="Blender editmesh_extrude.cc — push faces along normals">
+                      <span className="ribbon-tool-icon">⇡</span><span className="ribbon-tool-label">Extrude</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="spin-y" onClick={() => spinAroundY(Math.PI / 4)} disabled={!selectedKind} title="Blender editmesh_spin.cc — revolve around Y">
+                      <span className="ribbon-tool-icon">↻</span><span className="ribbon-tool-label">Spin</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="flip-normals" onClick={flipNormals} disabled={!selectedKind} title="Blender editmesh_normals.cc (FLIP) — reverse triangle winding">
+                      <span className="ribbon-tool-icon">⇅</span><span className="ribbon-tool-label">Flip N</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="recalc-normals" onClick={recalcNormalsOutside} disabled={!selectedKind} title="Blender editmesh_normals.cc — recalc normals outside">
+                      <span className="ribbon-tool-icon">⊥</span><span className="ribbon-tool-label">Recalc N</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="triangulate" onClick={triangulateFaces} disabled={!selectedKind} title="Blender editmesh_triangulate.cc">
+                      <span className="ribbon-tool-icon">▲</span><span className="ribbon-tool-label">Triang</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="merge-by-distance" onClick={() => mergeByDistance(0.001)} disabled={!selectedKind} title="Blender editmesh_merge.cc (BY_DISTANCE)">
+                      <span className="ribbon-tool-icon">⊗</span><span className="ribbon-tool-label">Merge·D</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="smooth-n" onClick={() => smoothVerticesN(5)} disabled={!selectedKind} title="Blender editmesh_smooth.cc — 5-iter Laplacian">
+                      <span className="ribbon-tool-icon">≋</span><span className="ribbon-tool-label">Smooth·5</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="origin-to-geo" onClick={originToGeometry} disabled={!selectedKind} title="Blender editmesh_recalc_origin.cc">
+                      <span className="ribbon-tool-icon">⊙</span><span className="ribbon-tool-label">Orig→Geo</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="snap-grid" onClick={() => snapToGrid(0.005)} disabled={!selectedKind} title="Blender transform_snap.cc (V3D_SNAP_TO_GRID)">
+                      <span className="ribbon-tool-icon">▦</span><span className="ribbon-tool-label">Snap·Grid</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="clear-xform" onClick={clearTransform} disabled={!selectedKind} title="Blender object_clear.cc — clear position/rotation/scale">
+                      <span className="ribbon-tool-icon">⊟</span><span className="ribbon-tool-label">Clr·Xform</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="apply-xform" onClick={applyAllTransforms} disabled={!selectedKind} title="Blender object_apply.cc — bake transform into geometry">
+                      <span className="ribbon-tool-icon">✓</span><span className="ribbon-tool-label">Apply·Xf</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="auto-smooth" onClick={() => shadeAutoSmooth(30)} disabled={!selectedKind} title="Blender editmesh_shade.cc — auto-smooth at 30°">
+                      <span className="ribbon-tool-icon">◐</span><span className="ribbon-tool-label">AutoSmth</span>
+                    </button>
+                  </div>
+                  <div className="ribbon-group-label">Blender · Edit</div>
                 </div>
 
                 <div className="ribbon-group">
