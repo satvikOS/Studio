@@ -289,6 +289,8 @@ function WorkbenchStudio() {
   const [arrayRadius,  setArrayRadius]  = useState(0.04);
   // Asset library — readout of last-loaded preset.
   const [libraryLastLoaded, setLibraryLastLoaded] = useState('');
+  // UI/UX — collapsed-section state (keyed by section id).
+  const [collapsedSections, setCollapsedSections] = useState({});
   // Display modes — view-time toggles for wireframe, bounding-box,
   // and vertex-normals visualization on Studio primitives.
   const [displayWireframe,   setDisplayWireframe]   = useState(false);
@@ -2068,6 +2070,36 @@ function WorkbenchStudio() {
   useEffect(() => {
     syncMotionPaths();
   }, [showMotionPaths, keyframes]);
+
+  /*
+   * UI/UX — collapsible sections.
+   *
+   * Every property-section in the right panel becomes click-to-collapse
+   * via its header. Click toggles `data-studio-collapsed` on the section;
+   * CSS hides everything except the header in that state and rotates the
+   * chevron. Click handlers ignore events on form controls so toggling
+   * a checkbox/input doesn't fold the section.
+   */
+  useEffect(() => {
+    const sections = document.querySelectorAll('[data-studio-properties="studio"] .property-section');
+    const cleanups = [];
+    sections.forEach(section => {
+      const id = section.getAttribute('data-studio-section');
+      const header = section.querySelector('.property-header');
+      if (!id || !header) return;
+      const handler = (e) => {
+        // Don't fold when clicking interactive children of the header
+        // (status badges that may contain spans, etc).
+        const tag = e.target.tagName;
+        if (tag === 'INPUT' || tag === 'BUTTON' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+        setCollapsedSections(c => ({ ...c, [id]: !c[id] }));
+      };
+      header.addEventListener('click', handler);
+      section.setAttribute('data-studio-collapsed', collapsedSections[id] ? 'true' : 'false');
+      cleanups.push(() => header.removeEventListener('click', handler));
+    });
+    return () => cleanups.forEach(fn => fn());
+  }, [collapsedSections, activeTab]);
   useEffect(() => {
     if (!isPlayingTimeline) return;
     let last = performance.now();
@@ -3729,36 +3761,250 @@ function WorkbenchStudio() {
           [data-studio-discipline="rendering"] [data-studio-section="lighting"],
           [data-studio-discipline="compositing"] [data-studio-section="compositing"],
           [data-studio-discipline="compositing"] [data-studio-section="renders"] { display: block; }
+
+          /* =================================================================
+             STUDIO UI/UX OVERHAUL — slice 59
+             ================================================================= */
+
+          /* Properties panel scrolls cleanly; floor + room for the banner. */
+          [data-studio-properties="studio"] {
+            overflow-y: auto;
+            padding-bottom: 32px;
+            background: #0d0d14;
+          }
+
+          /* Section card — soft background panel, rounded edges, breathing room. */
+          [data-studio-properties="studio"] .property-section {
+            background: linear-gradient(180deg, rgba(255,255,255,0.025) 0%, rgba(255,255,255,0.01) 100%);
+            border: 1px solid rgba(255,255,255,0.045);
+            border-radius: 8px;
+            padding: 10px 12px;
+            margin: 6px 10px 8px 10px;
+            transition: border-color 0.15s, background 0.15s;
+          }
+          [data-studio-properties="studio"] .property-section:hover {
+            border-color: rgba(40,212,212,0.18);
+            background: linear-gradient(180deg, rgba(40,212,212,0.04) 0%, rgba(40,212,212,0.01) 100%);
+          }
+
+          /* Section header — flex layout with stripe + uppercase title.
+             ::before stripe is recoloured per-section by the rules below. */
+          [data-studio-properties="studio"] .property-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 0 0 8px 0;
+            padding: 2px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            text-transform: uppercase;
+            font-size: 10.5px;
+            letter-spacing: 0.7px;
+            color: #d4dadf;
+            cursor: pointer;
+            user-select: none;
+          }
+          [data-studio-properties="studio"] .property-header::before {
+            content: '';
+            display: inline-block;
+            width: 3px;
+            height: 12px;
+            background: #28d4d4;
+            border-radius: 2px;
+            flex-shrink: 0;
+          }
+          /* Collapsed state: section body hidden, header stays. */
+          [data-studio-properties="studio"] .property-section[data-studio-collapsed="true"] > *:not(.property-header) {
+            display: none !important;
+          }
+          [data-studio-properties="studio"] .property-section[data-studio-collapsed="true"] {
+            padding-bottom: 6px;
+          }
+          [data-studio-properties="studio"] .property-header::after {
+            content: '▾';
+            margin-left: auto;
+            font-size: 10px;
+            opacity: 0.55;
+            transition: transform 0.2s;
+          }
+          [data-studio-properties="studio"] .property-section[data-studio-collapsed="true"] .property-header::after {
+            transform: rotate(-90deg);
+          }
+
+          /* Per-section discipline-coloured stripes — gives each panel a
+             scannable visual identity. */
+          [data-studio-properties="studio"] [data-studio-section="ai"]            .property-header::before { background: #ff7eb6; }
+          [data-studio-properties="studio"] [data-studio-section="welcome"]       .property-header::before { background: #28d4d4; }
+          [data-studio-properties="studio"] [data-studio-section="library"]       .property-header::before { background: #28d4d4; }
+          [data-studio-properties="studio"] [data-studio-section="selection"]     .property-header::before { background: #fff176; }
+          [data-studio-properties="studio"] [data-studio-section="mesh"]          .property-header::before { background: #28d4d4; }
+          [data-studio-properties="studio"] [data-studio-section="display"]       .property-header::before { background: #7fd4a8; }
+          [data-studio-properties="studio"] [data-studio-section="material"]      .property-header::before { background: #d4a07f; }
+          [data-studio-properties="studio"] [data-studio-section="texture"]       .property-header::before { background: #d4c628; }
+          [data-studio-properties="studio"] [data-studio-section="sculpting"]     .property-header::before { background: #d47fa0; }
+          [data-studio-properties="studio"] [data-studio-section="subdivision"]   .property-header::before { background: #7fd49e; }
+          [data-studio-properties="studio"] [data-studio-section="mirror"]        .property-header::before { background: #28d4d4; }
+          [data-studio-properties="studio"] [data-studio-section="boolean"]       .property-header::before { background: #d47f7f; }
+          [data-studio-properties="studio"] [data-studio-section="scatter"]       .property-header::before { background: #a0d47f; }
+          [data-studio-properties="studio"] [data-studio-section="procedural"]    .property-header::before { background: #d47fd4; }
+          [data-studio-properties="studio"] [data-studio-section="instancing"]    .property-header::before { background: #d4a07f; }
+          [data-studio-properties="studio"] [data-studio-section="text3d"]        .property-header::before { background: #fff176; }
+          [data-studio-properties="studio"] [data-studio-section="archviz"]       .property-header::before { background: #7fa0d4; }
+          [data-studio-properties="studio"] [data-studio-section="lathe"]         .property-header::before { background: #d47fa0; }
+          [data-studio-properties="studio"] [data-studio-section="reference"]     .property-header::before { background: #c0c0c0; }
+          [data-studio-properties="studio"] [data-studio-section="shape-keys"]    .property-header::before { background: #d47fa0; }
+          [data-studio-properties="studio"] [data-studio-section="armature"]      .property-header::before { background: #7fd49e; }
+          [data-studio-properties="studio"] [data-studio-section="animation"]     .property-header::before { background: #d47fa0; }
+          [data-studio-properties="studio"] [data-studio-section="particles"]     .property-header::before { background: #a07fd4; }
+          [data-studio-properties="studio"] [data-studio-section="physics"]       .property-header::before { background: #d4a07f; }
+          [data-studio-properties="studio"] [data-studio-section="render"]        .property-header::before { background: #7fa0d4; }
+          [data-studio-properties="studio"] [data-studio-section="renders"]       .property-header::before { background: #7fa0d4; }
+          [data-studio-properties="studio"] [data-studio-section="lighting"]      .property-header::before { background: #fff176; }
+          [data-studio-properties="studio"] [data-studio-section="compositing"]   .property-header::before { background: #d47f7f; }
+          [data-studio-properties="studio"] [data-studio-section="scene"]         .property-header::before { background: #28d4d4; }
+          [data-studio-properties="studio"] [data-studio-section="scene-io"]      .property-header::before { background: #7fd4a8; }
+          [data-studio-properties="studio"] [data-studio-section="camera"]        .property-header::before { background: #7fa0d4; }
+          [data-studio-properties="studio"] [data-studio-section="export"]        .property-header::before { background: #d4a07f; }
+
+          /* Buttons — Studio teal hover glow, smoother transitions. */
+          [data-studio-properties="studio"] .property-button {
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.08);
+            color: #d4dadf;
+            font-size: 11px;
+            font-weight: 500;
+            letter-spacing: 0.2px;
+            padding: 6px 10px;
+            border-radius: 6px;
+            height: 28px;
+            margin-bottom: 5px;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
+            width: 100%;
+            text-align: center;
+          }
+          [data-studio-properties="studio"] .property-button:hover:not(:disabled) {
+            background: rgba(40,212,212,0.10);
+            border-color: rgba(40,212,212,0.45);
+            color: #f0f6f7;
+            box-shadow: 0 0 12px rgba(40,212,212,0.15);
+          }
+          [data-studio-properties="studio"] .property-button:active:not(:disabled) {
+            background: rgba(40,212,212,0.20);
+          }
+          [data-studio-properties="studio"] .property-button:disabled {
+            opacity: 0.35;
+            cursor: not-allowed;
+          }
+
+          /* Inputs / selects — match Studio teal accent. */
+          [data-studio-properties="studio"] .property-input {
+            background: rgba(255,255,255,0.025);
+            border: 1px solid rgba(255,255,255,0.08);
+            color: #d4dadf;
+            font-size: 11px;
+            padding: 4px 8px;
+            border-radius: 5px;
+            transition: border-color 0.12s, background 0.12s;
+          }
+          [data-studio-properties="studio"] .property-input:focus {
+            outline: none;
+            border-color: #28d4d4;
+            background: rgba(40,212,212,0.03);
+          }
+          [data-studio-properties="studio"] input[type="range"] {
+            accent-color: #28d4d4;
+            height: 4px;
+          }
+          [data-studio-properties="studio"] input[type="checkbox"] {
+            accent-color: #28d4d4;
+            cursor: pointer;
+          }
+          [data-studio-properties="studio"] input[type="color"] {
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 5px;
+            background: transparent;
+          }
+
+          /* Property row label/input alignment. */
+          [data-studio-properties="studio"] .property-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 4px;
+          }
+          [data-studio-properties="studio"] .property-label {
+            font-size: 11px;
+            color: #95a0a8;
+            min-width: 64px;
+            flex-shrink: 0;
+          }
         `}</style>
 
         {/* Studio brand banner — always at the top of the right panel.
-            Per-discipline subtitle so users see which mode is armed. */}
+            Bigger Studio identity + inline scene-state chips + active-
+            discipline pill so users see which mode is armed at a glance. */}
         <div
           data-studio-banner
           style={{
-            padding: '10px 14px',
-            background: 'linear-gradient(180deg, rgba(40, 212, 212, 0.10) 0%, rgba(40, 212, 212, 0) 100%)',
-            borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-            marginBottom: '6px',
+            padding: '14px 14px 12px 14px',
+            background: 'linear-gradient(180deg, rgba(40,212,212,0.16) 0%, rgba(40,212,212,0.02) 70%, rgba(0,0,0,0) 100%)',
+            borderBottom: '1px solid rgba(40,212,212,0.18)',
+            marginBottom: '4px',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Wand2 size={16} style={{ color: '#28d4d4' }} />
-            <h2 style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: '#e9ecef', letterSpacing: '0.4px' }}>
-              ArchDisc Studio
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+            <Wand2 size={18} style={{ color: '#28d4d4', filter: 'drop-shadow(0 0 6px rgba(40,212,212,0.4))' }} />
+            <h2 style={{
+              margin: 0, fontSize: '14px', fontWeight: 700, color: '#f0f6f7',
+              letterSpacing: '0.5px',
+            }}>
+              ArchDisc <span style={{ color: '#28d4d4' }}>Studio</span>
             </h2>
             <span
               data-studio-banner-discipline
               style={{
                 marginLeft: 'auto',
-                fontSize: '10px',
+                fontSize: '9.5px',
                 fontFamily: 'monospace',
-                opacity: 0.6,
+                color: '#28d4d4',
+                background: 'rgba(40,212,212,0.12)',
+                border: '1px solid rgba(40,212,212,0.32)',
+                padding: '3px 8px',
+                borderRadius: '10px',
                 textTransform: 'uppercase',
-                letterSpacing: '0.6px',
+                letterSpacing: '0.8px',
+                fontWeight: 600,
               }}
             >
               {DISCIPLINE_TABS.find(t => t.id === activeTab)?.label || activeTab}
+            </span>
+          </div>
+          {/* Quick-stats row — primitives, lights, renders. Mirrors status
+              bar but kept right-rail-visible for context while editing. */}
+          <div
+            data-studio-banner-stats
+            style={{
+              display: 'flex',
+              gap: '12px',
+              fontSize: '10px',
+              fontFamily: 'monospace',
+              color: '#95a0a8',
+            }}
+          >
+            <span data-studio-banner-stat="prims" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              <Box size={10} style={{ opacity: 0.7 }} />
+              {primitiveCount} prim
+            </span>
+            <span data-studio-banner-stat="lights" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              <Lightbulb size={10} style={{ opacity: 0.7 }} />
+              {lightCount} lt
+            </span>
+            <span data-studio-banner-stat="renders" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              <Camera size={10} style={{ opacity: 0.7 }} />
+              {renders.length} rdr
+            </span>
+            <span data-studio-banner-stat="verts" style={{ marginLeft: 'auto', opacity: 0.7 }}>
+              {vertexCount.toLocaleString()} v
             </span>
           </div>
         </div>
