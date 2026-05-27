@@ -124,6 +124,8 @@ function WorkbenchStudio() {
   const [isAnimating, setIsAnimating] = useState(false);
   const [animSpeedDegPerSec, setAnimSpeedDegPerSec] = useState(90);
   const animRafRef = useRef(null);
+  // Sculpting — strength of one click of an Inflate/Twist/Smooth pass.
+  const [sculptStrength, setSculptStrength] = useState(0.1);
 
   function recomputeMeshStats(scene) {
     let v = 0;
@@ -434,6 +436,96 @@ function WorkbenchStudio() {
   }
 
   /*
+   * Sculpt brushes — procedural full-mesh deformations applied to the
+   * selected mesh's geometry. These are the digital-clay primitives
+   * Studio's Sculpting discipline starts from; per-vertex brushable
+   * passes with mouse painting arrive in a later slice.
+   */
+  function sculptInflate(strength) {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return;
+    const pos = mesh.geometry.attributes.position;
+    const nrm = mesh.geometry.attributes.normal;
+    if (!pos || !nrm) return;
+    // Average mesh "radius" so strength is geometry-relative, not absolute mm.
+    const r = mesh.geometry.boundingSphere ? mesh.geometry.boundingSphere.radius : 0.015;
+    const k = strength * r;
+    for (let i = 0; i < pos.count; i++) {
+      pos.setXYZ(
+        i,
+        pos.getX(i) + nrm.getX(i) * k,
+        pos.getY(i) + nrm.getY(i) * k,
+        pos.getZ(i) + nrm.getZ(i) * k,
+      );
+    }
+    pos.needsUpdate = true;
+    mesh.geometry.computeVertexNormals();
+    mesh.geometry.computeBoundingSphere();
+    mesh.geometry.computeBoundingBox();
+    recomputeMeshStats(window.__archdiscScene);
+  }
+
+  function sculptTwist(strength) {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return;
+    const pos = mesh.geometry.attributes.position;
+    if (!pos) return;
+    // Twist around Y proportional to y-coordinate (normalised by bounding-sphere radius).
+    const r = mesh.geometry.boundingSphere ? mesh.geometry.boundingSphere.radius : 0.015;
+    const kRad = strength * Math.PI; // 1.0 strength = π rad over the full y-extent
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+      const angle = (y / r) * kRad;
+      const c = Math.cos(angle), s = Math.sin(angle);
+      pos.setXYZ(i, x * c - z * s, y, x * s + z * c);
+    }
+    pos.needsUpdate = true;
+    mesh.geometry.computeVertexNormals();
+    mesh.geometry.computeBoundingSphere();
+    mesh.geometry.computeBoundingBox();
+    recomputeMeshStats(window.__archdiscScene);
+  }
+
+  function sculptSmooth(strength) {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry || !mesh.geometry.index) return;
+    const pos = mesh.geometry.attributes.position;
+    const idx = mesh.geometry.index;
+    // One-ring Laplacian average per vertex via triangle adjacency walk.
+    const sums = new Float32Array(pos.count * 3);
+    const counts = new Int32Array(pos.count);
+    const tri = [[0, 1], [0, 2], [1, 0], [1, 2], [2, 0], [2, 1]];
+    for (let t = 0; t < idx.count; t += 3) {
+      const a = [idx.getX(t), idx.getX(t + 1), idx.getX(t + 2)];
+      for (const [i, j] of tri) {
+        const vi = a[i], vj = a[j];
+        sums[vi * 3]     += pos.getX(vj);
+        sums[vi * 3 + 1] += pos.getY(vj);
+        sums[vi * 3 + 2] += pos.getZ(vj);
+        counts[vi]++;
+      }
+    }
+    const k = Math.min(1, Math.max(0, strength));
+    for (let i = 0; i < pos.count; i++) {
+      if (counts[i] === 0) continue;
+      const ax = sums[i * 3]     / counts[i];
+      const ay = sums[i * 3 + 1] / counts[i];
+      const az = sums[i * 3 + 2] / counts[i];
+      pos.setXYZ(
+        i,
+        pos.getX(i) * (1 - k) + ax * k,
+        pos.getY(i) * (1 - k) + ay * k,
+        pos.getZ(i) * (1 - k) + az * k,
+      );
+    }
+    pos.needsUpdate = true;
+    mesh.geometry.computeVertexNormals();
+    mesh.geometry.computeBoundingSphere();
+    mesh.geometry.computeBoundingBox();
+    recomputeMeshStats(window.__archdiscScene);
+  }
+
+  /*
    * Animation — rAF loop that rotates the currently selected mesh
    * around Y at animSpeedDegPerSec. Stops on toggle, on selection
    * change to no-mesh, or on unmount.
@@ -641,6 +733,53 @@ function WorkbenchStudio() {
             </button>
           </div>
         )}
+
+        <div className="property-section" data-studio-section="sculpting">
+          <h3 className="property-header">Sculpting</h3>
+          <div className="property-row">
+            <span className="property-label">Strength</span>
+            <input
+              type="range"
+              min="0.01"
+              max="0.5"
+              step="0.01"
+              data-studio-sculpt="strength"
+              value={sculptStrength}
+              onChange={e => setSculptStrength(Number(e.target.value))}
+              style={{ flex: 1 }}
+            />
+            <span
+              data-studio-sculpt-readout="strength"
+              style={{ marginLeft: '6px', fontSize: '10px', fontFamily: 'monospace', minWidth: '40px', textAlign: 'right' }}
+            >
+              {sculptStrength.toFixed(2)}
+            </span>
+          </div>
+          <button
+            className="property-button"
+            data-studio-action="sculpt-inflate"
+            onClick={() => sculptInflate(sculptStrength)}
+            disabled={!selectedKind}
+          >
+            Inflate
+          </button>
+          <button
+            className="property-button"
+            data-studio-action="sculpt-twist"
+            onClick={() => sculptTwist(sculptStrength)}
+            disabled={!selectedKind}
+          >
+            Twist
+          </button>
+          <button
+            className="property-button"
+            data-studio-action="sculpt-smooth"
+            onClick={() => sculptSmooth(sculptStrength)}
+            disabled={!selectedKind}
+          >
+            Smooth
+          </button>
+        </div>
 
         <div className="property-section" data-studio-section="animation">
           <h3 className="property-header">
