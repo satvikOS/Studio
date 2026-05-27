@@ -340,6 +340,50 @@ function WorkbenchStudio() {
   }
 
   /*
+   * Compose Demo Scene — one click drives the entire Studio toolchain
+   * (clear → primitives + materials + tree + lights → showreel) as a
+   * preview of the eventual AI-plug-and-play workflow ("from empty
+   * viewport to fully rendered output" via a single prompt-equivalent
+   * action). Useful both as a 1000×-faster-than-user demo and as a
+   * test fixture for the integrated pipeline.
+   */
+  async function composeDemoScene() {
+    clearScene();
+    clearCinematicLights();
+    clearRenders();
+    await new Promise(r => setTimeout(r, 80));
+    // Five primitives of different kinds — grid-laid by addPrimitive.
+    for (const k of ['cube', 'sphere', 'torus-knot', 'icosahedron', 'cone']) {
+      addPrimitive(k);
+      await new Promise(r => setTimeout(r, 60));
+    }
+    // A procedural tree as a backdrop.
+    generateProceduralTree();
+    await new Promise(r => setTimeout(r, 80));
+    // Two cinematic lights — warm key + cool fill.
+    setLightColor('#ffb56b');
+    setLightIntensity(2.4);
+    addCinematicLight();
+    await new Promise(r => setTimeout(r, 60));
+    setLightColor('#6bb5ff');
+    setLightIntensity(1.6);
+    addCinematicLight();
+    await new Promise(r => setTimeout(r, 80));
+    // Capture two thumbnails as a quick rendered output.
+    if (typeof window.__archdiscOrbitView === 'function') {
+      window.__archdiscOrbitView(35, 25, 1);
+    }
+    await new Promise(r => setTimeout(r, 250));
+    captureRender();
+    await new Promise(r => setTimeout(r, 100));
+    if (typeof window.__archdiscOrbitView === 'function') {
+      window.__archdiscOrbitView(135, 25, 1);
+    }
+    await new Promise(r => setTimeout(r, 250));
+    captureRender();
+  }
+
+  /*
    * Showreel — one-click 4-view auto-capture (front / right / back /
    * left at +25° elevation). Orbits the camera to each angle, waits
    * for the rAF render loop to settle, captures via the same path
@@ -1641,6 +1685,14 @@ function WorkbenchStudio() {
           <p className="property-label">
             Forked from Blender (GPL-3); parity target with Maya, Houdini, ZBrush, Substance, Cinema 4D.
           </p>
+          <button
+            className="property-button"
+            data-studio-action="compose-demo"
+            onClick={composeDemoScene}
+            style={{ marginTop: '8px' }}
+          >
+            Compose Demo Scene
+          </button>
         </div>
 
         {selectedKind && selectedTransform && (
