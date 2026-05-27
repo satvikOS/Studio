@@ -990,22 +990,32 @@ function WorkbenchStudio() {
     const R = instanceRadius;
     const instanced = new THREE.InstancedMesh(source.geometry, source.material, N);
     const dummy = new THREE.Object3D();
+    // Deterministic swarm: golden-angle helical sphere distribution.
+    // Position: Fibonacci sphere (latitude-uniform, golden-angle longitude).
+    //   Radius interpolates over (0.55 R, R) by index so the swarm has
+    //   "depth" without random jitter.
+    // Scale + rotation: index-driven trig sequences — every (count, radius)
+    //   pair produces the exact same swarm, every run.
+    const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
     for (let i = 0; i < N; i++) {
-      const u = Math.random(), v = Math.random();
-      const theta = u * 2 * Math.PI;
-      const phi   = Math.acos(2 * v - 1);
-      const r     = R * Math.cbrt(0.4 + Math.random() * 0.6);
+      const t = (i + 0.5) / N;
+      const phi   = Math.acos(1 - 2 * t);
+      const theta = GOLDEN_ANGLE * i;
+      const r     = R * (0.55 + 0.45 * t);
       dummy.position.set(
         r * Math.sin(phi) * Math.cos(theta),
         r * Math.sin(phi) * Math.sin(theta),
         r * Math.cos(phi),
       );
-      const s = 0.4 + Math.random() * 0.8;
+      // Scale: 8-step cycle (0.45 .. 1.15) over i — chosen so adjacent
+      // instances aren't the same size but the sequence is fully repeatable.
+      const s = 0.45 + 0.1 * (i % 8);
       dummy.scale.set(s, s, s);
+      // Rotation: each axis advances by golden-angle multiples of i.
       dummy.rotation.set(
-        Math.random() * Math.PI * 2,
-        Math.random() * Math.PI * 2,
-        Math.random() * Math.PI * 2,
+        GOLDEN_ANGLE * i * 0.7,
+        GOLDEN_ANGLE * i * 1.0,
+        GOLDEN_ANGLE * i * 1.3,
       );
       dummy.updateMatrix();
       instanced.setMatrixAt(i, dummy.matrix);
@@ -1517,18 +1527,26 @@ function WorkbenchStudio() {
     const colors    = new Float32Array(n * 3);
     const R = PRIMITIVE_SIZE * 0.8;
     const tempColor = new THREE.Color();
+    // Deterministic distribution: golden-angle helical sphere-fill.
+    // - phi from acos(1 - 2t) keeps points latitude-uniform.
+    // - theta = i * golden-angle keeps them longitude-spread.
+    // - r = R * (i/N)^(1/3) fills volume evenly along the radius.
+    const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
     for (let i = 0; i < n; i++) {
-      // Uniform-in-volume sample inside a sphere via inverse CDF.
-      const u = Math.random(), v = Math.random();
-      const theta = u * 2 * Math.PI;
-      const phi = Math.acos(2 * v - 1);
-      const r = R * Math.cbrt(Math.random());
+      const t = (i + 0.5) / n;
+      const phi = Math.acos(1 - 2 * t);
+      const theta = GOLDEN_ANGLE * i;
+      const r = R * Math.pow(t, 1 / 3);
       positions[i * 3]     = r * Math.sin(phi) * Math.cos(theta);
       positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
       positions[i * 3 + 2] = r * Math.cos(phi);
-      // Warm palette (red/orange/gold).
-      const hue = 0.03 + Math.random() * 0.13;
-      tempColor.setHSL(hue, 0.9, 0.45 + Math.random() * 0.35);
+      // Warm palette cycled by index — hue rotates through a fixed
+      // red/orange/gold band; lightness pulses on a low-frequency
+      // sine so neighboring particles read as a coherent gradient,
+      // not noise.
+      const hue = 0.03 + 0.13 * ((i % 11) / 10);
+      const lightness = 0.45 + 0.30 * 0.5 * (1 + Math.sin(i * 0.5));
+      tempColor.setHSL(hue, 0.9, lightness);
       colors[i * 3]     = tempColor.r;
       colors[i * 3 + 1] = tempColor.g;
       colors[i * 3 + 2] = tempColor.b;
