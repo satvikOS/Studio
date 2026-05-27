@@ -1913,6 +1913,47 @@ function WorkbenchStudio() {
   }
 
   /*
+   * UV Unwrap — spherical projection.
+   *
+   * Generates UV coordinates by mapping each vertex's direction from
+   * the mesh's bounding-sphere centre onto the unit sphere, then to
+   * (u, v) via the standard equirectangular projection:
+   *
+   *   u = atan2(z, x) / (2π) + 0.5     in [0, 1]
+   *   v = asin(y / r)   / π   + 0.5    in [0, 1]
+   *
+   * Works for any topology — closed meshes get clean coverage, open
+   * meshes get coverage on the side facing outward. Replaces (or
+   * creates) the geometry's UV attribute and stamps a counter onto
+   * userData so the spec can confirm unwrap fired.
+   */
+  function unwrapUVs() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return;
+    const geom = mesh.geometry;
+    const pos = geom.attributes.position;
+    if (!pos) return;
+    if (!geom.boundingSphere) geom.computeBoundingSphere();
+    const cx = geom.boundingSphere.center.x;
+    const cy = geom.boundingSphere.center.y;
+    const cz = geom.boundingSphere.center.z;
+    const uvs = new Float32Array(pos.count * 2);
+    for (let i = 0; i < pos.count; i++) {
+      const dx = pos.getX(i) - cx;
+      const dy = pos.getY(i) - cy;
+      const dz = pos.getZ(i) - cz;
+      const r = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
+      const u = Math.atan2(dz, dx) / (2 * Math.PI) + 0.5;
+      const v = Math.asin(Math.max(-1, Math.min(1, dy / r))) / Math.PI + 0.5;
+      uvs[i * 2]     = u;
+      uvs[i * 2 + 1] = v;
+    }
+    geom.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+    geom.attributes.uv.needsUpdate = true;
+    mesh.userData.archdiscStudioUvUnwrapped = (mesh.userData.archdiscStudioUvUnwrapped || 0) + 1;
+  }
+
+  /*
    * Physics — vertical gravity drop with a single ground plane and
    * energy-losing bounces. Stores per-mesh velocity on userData so
    * primitives spawned mid-sim seamlessly join the loop. Stops on
@@ -3576,6 +3617,21 @@ function WorkbenchStudio() {
           >
             Remove Texture
           </button>
+          <button
+            className="property-button"
+            data-studio-action="unwrap-uvs"
+            onClick={unwrapUVs}
+            disabled={!selectedKind}
+          >
+            Unwrap UVs (Spherical)
+          </button>
+          <p
+            data-studio-uv-status
+            className="property-label"
+            style={{ opacity: 0.5, fontSize: '10px', margin: '4px 0 0 0', fontFamily: 'monospace' }}
+          >
+            {selectedKind ? `${selectedKind} → unwrap to generate spherical UVs` : 'Select a mesh to unwrap UVs'}
+          </p>
         </div>
 
         <div className="property-section" data-studio-section="physics">
