@@ -3681,75 +3681,424 @@ function WorkbenchStudio() {
   return (
     <>
       {/* RIBBON: Studio discipline tabs (placeholder; real ribbons land per discipline) */}
+      {/* RIBBON — matches Mech's RibbonToolbar layout: ribbon-tabs strip
+          on top, ribbon-content with grouped tool buttons + section
+          labels below. Studio uses the same .ribbon-* classes for
+          consistent visual identity with the rest of the ArchDisc
+          Universe. */}
       <div
         className="workbench-ribbon-placeholder"
         data-archdisc-ribbon-placeholder="studio"
       >
-        <div className="workbench-ribbon-placeholder-tabs">
-          {DISCIPLINE_TABS.map(tab => {
-            const TabIcon = tab.Icon;
-            return (
-              <span
-                key={tab.id}
-                className={
-                  'workbench-ribbon-placeholder-tab'
-                  + (tab.id === activeTab ? ' active' : '')
-                }
-                data-studio-discipline={tab.id}
-                data-studio-active={tab.id === activeTab ? '1' : '0'}
-                onClick={() => setActiveTab(tab.id)}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-              >
-                {TabIcon && <TabIcon size={12} style={{ opacity: 0.75 }} />}
-                {tab.label}
-              </span>
-            );
-          })}
-        </div>
-        <div className="workbench-ribbon-placeholder-body">
-          {activeTab === 'modeling' ? (
-            <div
-              data-studio-modeling-primitives
-              style={{
-                display: 'flex',
-                gap: '8px',
-                flexWrap: 'wrap',
-                alignItems: 'center',
-                width: '100%',
-              }}
-            >
-              <span style={{ opacity: 0.6, marginRight: '8px' }}>Primitives:</span>
-              {PRIMITIVE_KINDS.map(p => (
+        <div className="ribbon-container">
+          <div className="ribbon-tabs">
+            {DISCIPLINE_TABS.map(tab => {
+              const TabIcon = tab.Icon;
+              return (
                 <button
-                  key={p.id}
+                  key={tab.id}
                   type="button"
-                  data-studio-primitive={p.id}
-                  onClick={() => addPrimitive(p.id)}
-                  style={{
-                    padding: '4px 10px',
-                    background: 'rgba(255,255,255,0.06)',
-                    border: '1px solid rgba(255,255,255,0.12)',
-                    color: 'inherit',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontSize: '12px',
-                  }}
+                  className={
+                    'ribbon-tab workbench-ribbon-placeholder-tab'
+                    + (tab.id === activeTab ? ' active' : '')
+                  }
+                  data-studio-discipline={tab.id}
+                  data-studio-active={tab.id === activeTab ? '1' : '0'}
+                  onClick={() => setActiveTab(tab.id)}
                 >
-                  + {p.label}
+                  {TabIcon && <TabIcon size={12} style={{ marginRight: '6px', verticalAlign: '-2px' }} />}
+                  {tab.label}
                 </button>
-              ))}
-              <span
-                data-studio-primitive-count
-                style={{ marginLeft: '12px', opacity: 0.6 }}
-              >
-                {primitiveCount} primitive{primitiveCount === 1 ? '' : 's'} in scene
-              </span>
-            </div>
-          ) : (
-            <>
-              ArchDisc Studio · forked from Blender · {DISCIPLINE_TABS.find(t => t.id === activeTab)?.label} (placeholder)
-            </>
-          )}
+              );
+            })}
+          </div>
+
+          <div className="ribbon-content" data-studio-ribbon-discipline={activeTab}>
+            {activeTab === 'modeling' && (
+              <>
+                <div className="ribbon-group">
+                  <div className="ribbon-group-tools" data-studio-modeling-primitives>
+                    {PRIMITIVE_KINDS.map(p => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        className="ribbon-tool"
+                        data-studio-primitive={p.id}
+                        onClick={() => addPrimitive(p.id)}
+                        title={`Add ${p.label}`}
+                      >
+                        <span className="ribbon-tool-icon">+</span>
+                        <span className="ribbon-tool-label">{p.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="ribbon-group-label">Primitives</div>
+                </div>
+                <div className="ribbon-group">
+                  <div className="ribbon-group-tools">
+                    <button
+                      type="button"
+                      className="ribbon-tool"
+                      data-studio-ribbon-action="subdivide"
+                      onClick={subdivideSelected}
+                      disabled={!selectedKind}
+                      title="Midpoint subdivide selected mesh"
+                    >
+                      <span className="ribbon-tool-icon">▤</span>
+                      <span className="ribbon-tool-label">Subdivide</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="ribbon-tool"
+                      data-studio-ribbon-action="loop-subdivide"
+                      onClick={loopSubdivideSelected}
+                      disabled={!selectedKind}
+                      title="Loop smooth subdivision"
+                    >
+                      <span className="ribbon-tool-icon">◐</span>
+                      <span className="ribbon-tool-label">Loop Sub</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="ribbon-tool"
+                      data-studio-ribbon-action="decimate"
+                      onClick={() => decimateSelected(decimateAggressiveness)}
+                      disabled={!selectedKind}
+                      title="Vertex-clustering polygon reduction"
+                    >
+                      <span className="ribbon-tool-icon">◇</span>
+                      <span className="ribbon-tool-label">Decimate</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="ribbon-tool"
+                      data-studio-ribbon-action="apply-array"
+                      onClick={() => arrayModifier(arrayMode, arrayCount, arrayOffsetX, arrayOffsetY, arrayOffsetZ, arrayRadius)}
+                      disabled={!selectedKind}
+                      title="Linear / radial duplicate array"
+                    >
+                      <span className="ribbon-tool-icon">▦</span>
+                      <span className="ribbon-tool-label">Array</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="ribbon-tool"
+                      data-studio-ribbon-action="fracture"
+                      onClick={() => fractureSelected(fractureChunks, fractureExplode)}
+                      disabled={!selectedKind}
+                      title="Voronoi cell fracture"
+                    >
+                      <span className="ribbon-tool-icon">✶</span>
+                      <span className="ribbon-tool-label">Fracture</span>
+                    </button>
+                  </div>
+                  <div className="ribbon-group-label">Modifiers</div>
+                </div>
+                <div className="ribbon-group">
+                  <div className="ribbon-group-tools">
+                    <button
+                      type="button"
+                      className="ribbon-tool"
+                      onClick={() => setDisplayWireframe(v => !v)}
+                      title="Toggle wireframe display"
+                    >
+                      <span className="ribbon-tool-icon">⌗</span>
+                      <span className="ribbon-tool-label">Wireframe</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="ribbon-tool"
+                      onClick={() => setDisplayBoundingBox(v => !v)}
+                      title="Toggle bounding box overlay"
+                    >
+                      <span className="ribbon-tool-icon">▢</span>
+                      <span className="ribbon-tool-label">BBox</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="ribbon-tool"
+                      onClick={() => setDisplayNormals(v => !v)}
+                      title="Toggle vertex normals overlay"
+                    >
+                      <span className="ribbon-tool-icon">⤴</span>
+                      <span className="ribbon-tool-label">Normals</span>
+                    </button>
+                  </div>
+                  <div className="ribbon-group-label">Display</div>
+                </div>
+                <div className="ribbon-group">
+                  <div className="ribbon-group-tools">
+                    <button
+                      type="button"
+                      className="ribbon-tool"
+                      data-studio-action="delete-last-ribbon"
+                      onClick={deleteLastPrimitive}
+                      disabled={primitiveCount === 0}
+                      title="Delete most-recent primitive"
+                    >
+                      <span className="ribbon-tool-icon">×</span>
+                      <span className="ribbon-tool-label">Del Last</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="ribbon-tool"
+                      data-studio-action="clear-scene-ribbon"
+                      onClick={clearScene}
+                      disabled={primitiveCount === 0}
+                      title="Wipe the scene"
+                    >
+                      <span className="ribbon-tool-icon">⌫</span>
+                      <span className="ribbon-tool-label">Clear</span>
+                    </button>
+                    <span
+                      data-studio-primitive-count
+                      style={{ alignSelf: 'center', fontSize: '11px', opacity: 0.6, padding: '0 8px' }}
+                    >
+                      {primitiveCount} primitive{primitiveCount === 1 ? '' : 's'} in scene
+                    </span>
+                  </div>
+                  <div className="ribbon-group-label">Scene</div>
+                </div>
+              </>
+            )}
+
+            {activeTab === 'sculpting' && (
+              <>
+                <div className="ribbon-group">
+                  <div className="ribbon-group-tools">
+                    <button type="button" className="ribbon-tool" onClick={() => sculptInflate(sculptStrength)} disabled={!selectedKind} title="Inflate sculpt pass">
+                      <span className="ribbon-tool-icon">●</span>
+                      <span className="ribbon-tool-label">Inflate</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" onClick={() => sculptTwist(sculptStrength)} disabled={!selectedKind} title="Twist sculpt pass">
+                      <span className="ribbon-tool-icon">↻</span>
+                      <span className="ribbon-tool-label">Twist</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" onClick={() => sculptSmooth(sculptStrength)} disabled={!selectedKind} title="Smooth sculpt pass">
+                      <span className="ribbon-tool-icon">≋</span>
+                      <span className="ribbon-tool-label">Smooth</span>
+                    </button>
+                  </div>
+                  <div className="ribbon-group-label">Brushes</div>
+                </div>
+                <div className="ribbon-group">
+                  <div className="ribbon-group-tools">
+                    <button type="button" className="ribbon-tool" onClick={() => setBrushActive(v => !v)} title="Click-paint brush toggle">
+                      <span className="ribbon-tool-icon">◉</span>
+                      <span className="ribbon-tool-label">{brushActive ? 'Brush ON' : 'Brush'}</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" onClick={() => setBrushMode('push')} title="Push mode">
+                      <span className="ribbon-tool-icon">↑</span>
+                      <span className="ribbon-tool-label">Push</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" onClick={() => setBrushMode('pull')} title="Pull mode">
+                      <span className="ribbon-tool-icon">↓</span>
+                      <span className="ribbon-tool-label">Pull</span>
+                    </button>
+                  </div>
+                  <div className="ribbon-group-label">Click Paint</div>
+                </div>
+                <div className="ribbon-group">
+                  <div className="ribbon-group-tools">
+                    <button type="button" className="ribbon-tool" onClick={subdivideSelected} disabled={!selectedKind} title="Midpoint subdivide">
+                      <span className="ribbon-tool-icon">▤</span>
+                      <span className="ribbon-tool-label">Subdivide</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" onClick={loopSubdivideSelected} disabled={!selectedKind} title="Loop smooth subdivision">
+                      <span className="ribbon-tool-icon">◐</span>
+                      <span className="ribbon-tool-label">Loop Sub</span>
+                    </button>
+                  </div>
+                  <div className="ribbon-group-label">Refine</div>
+                </div>
+              </>
+            )}
+
+            {activeTab === 'uv-texture' && (
+              <>
+                <div className="ribbon-group">
+                  <div className="ribbon-group-tools">
+                    <button type="button" className="ribbon-tool" onClick={unwrapUVs} disabled={!selectedKind} title="Spherical UV unwrap">
+                      <span className="ribbon-tool-icon">◯</span>
+                      <span className="ribbon-tool-label">Unwrap</span>
+                    </button>
+                  </div>
+                  <div className="ribbon-group-label">UV</div>
+                </div>
+                <div className="ribbon-group">
+                  <div className="ribbon-group-tools">
+                    <button type="button" className="ribbon-tool" onClick={applyTexture} disabled={!selectedKind} title="Apply procedural texture">
+                      <span className="ribbon-tool-icon">▦</span>
+                      <span className="ribbon-tool-label">Apply</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" onClick={removeTexture} disabled={!selectedKind} title="Remove texture">
+                      <span className="ribbon-tool-icon">×</span>
+                      <span className="ribbon-tool-label">Remove</span>
+                    </button>
+                  </div>
+                  <div className="ribbon-group-label">Texture</div>
+                </div>
+              </>
+            )}
+
+            {activeTab === 'rigging' && (
+              <>
+                <div className="ribbon-group">
+                  <div className="ribbon-group-tools">
+                    <button type="button" className="ribbon-tool" onClick={addArmature} title="Add bone armature">
+                      <span className="ribbon-tool-icon">⊥</span>
+                      <span className="ribbon-tool-label">Armature</span>
+                    </button>
+                  </div>
+                  <div className="ribbon-group-label">Skeleton</div>
+                </div>
+                <div className="ribbon-group">
+                  <div className="ribbon-group-tools">
+                    <button type="button" className="ribbon-tool" onClick={() => resetShapeKeys()} title="Reset face shape keys">
+                      <span className="ribbon-tool-icon">⊖</span>
+                      <span className="ribbon-tool-label">Reset Keys</span>
+                    </button>
+                  </div>
+                  <div className="ribbon-group-label">Shape Keys</div>
+                </div>
+              </>
+            )}
+
+            {activeTab === 'animation' && (
+              <>
+                <div className="ribbon-group">
+                  <div className="ribbon-group-tools">
+                    <button type="button" className="ribbon-tool" onClick={() => setIsAnimating(v => !v)} title="Animate selected mesh">
+                      <span className="ribbon-tool-icon">▶</span>
+                      <span className="ribbon-tool-label">{isAnimating ? 'Stop' : 'Animate'}</span>
+                    </button>
+                  </div>
+                  <div className="ribbon-group-label">Playback</div>
+                </div>
+                <div className="ribbon-group">
+                  <div className="ribbon-group-tools">
+                    <button type="button" className="ribbon-tool" onClick={insertKeyframe} disabled={!selectedKind} title="Insert keyframe at current frame">
+                      <span className="ribbon-tool-icon">◆</span>
+                      <span className="ribbon-tool-label">Insert KF</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" onClick={() => setIsPlayingTimeline(v => !v)} disabled={keyframes.length < 2} title="Play timeline">
+                      <span className="ribbon-tool-icon">⏵</span>
+                      <span className="ribbon-tool-label">{isPlayingTimeline ? 'Stop TL' : 'Play TL'}</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" onClick={clearKeyframes} disabled={keyframes.length === 0} title="Clear all keyframes">
+                      <span className="ribbon-tool-icon">×</span>
+                      <span className="ribbon-tool-label">Clear</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" onClick={() => setShowMotionPaths(v => !v)} title="Toggle motion path overlay">
+                      <span className="ribbon-tool-icon">⤳</span>
+                      <span className="ribbon-tool-label">Path</span>
+                    </button>
+                  </div>
+                  <div className="ribbon-group-label">Keyframes</div>
+                </div>
+              </>
+            )}
+
+            {activeTab === 'vfx-sim' && (
+              <>
+                <div className="ribbon-group">
+                  <div className="ribbon-group-tools">
+                    <button type="button" className="ribbon-tool" onClick={spawnParticles} title="Spawn particle cloud">
+                      <span className="ribbon-tool-icon">⁂</span>
+                      <span className="ribbon-tool-label">Particles</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" onClick={() => growHair(hairCount, hairLength)} disabled={!selectedKind} title="Grow hair on selected surface">
+                      <span className="ribbon-tool-icon">⨈</span>
+                      <span className="ribbon-tool-label">Hair</span>
+                    </button>
+                  </div>
+                  <div className="ribbon-group-label">Particles</div>
+                </div>
+                <div className="ribbon-group">
+                  <div className="ribbon-group-tools">
+                    <button type="button" className="ribbon-tool" onClick={spawnClothPlane} title="Add cloth plane">
+                      <span className="ribbon-tool-icon">▭</span>
+                      <span className="ribbon-tool-label">Add Cloth</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" onClick={() => setClothActive(v => !v)} disabled={!clothStateRef.current} title="Run cloth simulation">
+                      <span className="ribbon-tool-icon">≈</span>
+                      <span className="ribbon-tool-label">{clothActive ? 'Stop' : 'Run'}</span>
+                    </button>
+                  </div>
+                  <div className="ribbon-group-label">Cloth</div>
+                </div>
+                <div className="ribbon-group">
+                  <div className="ribbon-group-tools">
+                    <button type="button" className="ribbon-tool" onClick={() => setIsPhysicsActive(v => !v)} title="Toggle physics gravity sim">
+                      <span className="ribbon-tool-icon">⇓</span>
+                      <span className="ribbon-tool-label">{isPhysicsActive ? 'Stop' : 'Drop'}</span>
+                    </button>
+                  </div>
+                  <div className="ribbon-group-label">Physics</div>
+                </div>
+              </>
+            )}
+
+            {activeTab === 'rendering' && (
+              <>
+                <div className="ribbon-group">
+                  <div className="ribbon-group-tools">
+                    <button type="button" className="ribbon-tool" onClick={() => applyCameraPreset('front')} title="Front view">
+                      <span className="ribbon-tool-icon">⊥</span>
+                      <span className="ribbon-tool-label">Front</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" onClick={() => applyCameraPreset('top')} title="Top view">
+                      <span className="ribbon-tool-icon">⊤</span>
+                      <span className="ribbon-tool-label">Top</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" onClick={() => applyCameraPreset('iso')} title="Iso view">
+                      <span className="ribbon-tool-icon">◆</span>
+                      <span className="ribbon-tool-label">Iso</span>
+                    </button>
+                  </div>
+                  <div className="ribbon-group-label">Camera</div>
+                </div>
+                <div className="ribbon-group">
+                  <div className="ribbon-group-tools">
+                    <button type="button" className="ribbon-tool" onClick={applyThreePointLighting} title="Apply 3-point cinematic lighting">
+                      <span className="ribbon-tool-icon">✶</span>
+                      <span className="ribbon-tool-label">3-Point</span>
+                    </button>
+                  </div>
+                  <div className="ribbon-group-label">Lights</div>
+                </div>
+                <div className="ribbon-group">
+                  <div className="ribbon-group-tools">
+                    <button type="button" className="ribbon-tool" onClick={captureRender} title="Capture single render frame">
+                      <span className="ribbon-tool-icon">▣</span>
+                      <span className="ribbon-tool-label">Frame</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" onClick={captureShowreel} title="Capture 4-view showreel">
+                      <span className="ribbon-tool-icon">⊞</span>
+                      <span className="ribbon-tool-label">Showreel</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" onClick={exportGltf} title="Export scene as glTF">
+                      <span className="ribbon-tool-icon">⤓</span>
+                      <span className="ribbon-tool-label">glTF</span>
+                    </button>
+                  </div>
+                  <div className="ribbon-group-label">Render / Export</div>
+                </div>
+              </>
+            )}
+
+            {activeTab === 'compositing' && (
+              <div className="ribbon-group">
+                <div className="ribbon-group-tools">
+                  <button type="button" className="ribbon-tool" onClick={postProcessLastRender} disabled={renders.length === 0} title="Apply filter to last render">
+                    <span className="ribbon-tool-icon">◐</span>
+                    <span className="ribbon-tool-label">Apply Filter</span>
+                  </button>
+                </div>
+                <div className="ribbon-group-label">Filters</div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -4217,61 +4566,116 @@ function WorkbenchStudio() {
             display: none !important;
           }
 
-          /* Discipline tabs — replace the inherited static blue underline
-             with a teal Studio underline on the ACTIVE tab + a soft hover
-             affordance. The component sets data-studio-discipline on every
-             tab; the JSX adds an additional data-active flag to the active
-             one (next slice). For now hover suffices. */
-          body:has([data-studio-properties="studio"]) .workbench-ribbon-placeholder-tabs {
-            background: linear-gradient(180deg, #0a0a0a 0%, #000000 100%) !important;
-            border-bottom: 1px solid rgba(255,255,255,0.18) !important;
-          }
-          body:has([data-studio-properties="studio"]) .workbench-ribbon-placeholder-tab {
-            position: relative;
-            border-bottom: 2px solid transparent !important;
-            transition: color 0.15s, background 0.15s, border-color 0.15s;
-            cursor: pointer;
-          }
-          body:has([data-studio-properties="studio"]) .workbench-ribbon-placeholder-tab:hover {
-            color: #e6e6e6 !important;
-            background: rgba(255,255,255,0.06);
-            border-bottom-color: rgba(255,255,255,0.35) !important;
-          }
-          /* Active tab — gets data-studio-active="1" on every render. */
-          body:has([data-studio-properties="studio"]) .workbench-ribbon-placeholder-tab[data-studio-active="1"] {
-            color: #e6e6e6 !important;
-            border-bottom-color: #e6e6e6 !important;
-            background: rgba(255,255,255,0.08);
-            text-shadow: none;
-          }
-
-          /* Ribbon body — primitive-button row + section header strip. */
-          body:has([data-studio-properties="studio"]) .workbench-ribbon-placeholder-body {
+          /* Ribbon — Mech-style layout, Studio monotone palette.
+             Tabs are now real .ribbon-tab buttons inside .ribbon-tabs;
+             content is .ribbon-content with .ribbon-group sections. */
+          body:has([data-studio-properties="studio"]) .ribbon-container {
             background: #000000 !important;
-            font-style: normal !important;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.10) !important;
           }
-
-          /* Studio primitive buttons (top ribbon "+ Cube", "+ Sphere", ...) —
-             render as Studio-themed chips with teal hover. */
-          [data-studio-primitive] {
-            background: rgba(255,255,255,0.04);
-            border: 1px solid rgba(255,255,255,0.10);
-            color: #d4dadf;
-            border-radius: 6px;
-            padding: 4px 10px;
-            font-size: 11px;
-            font-weight: 500;
+          body:has([data-studio-properties="studio"]) .ribbon-tabs {
+            background: #050505 !important;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+            padding: 0 8px !important;
+            height: 24px !important;
+          }
+          body:has([data-studio-properties="studio"]) .ribbon-tab {
+            background: transparent !important;
+            color: #95a0a8 !important;
+            border: none !important;
+            border-bottom: 2px solid transparent !important;
+            font-size: 11px !important;
+            padding: 5px 14px !important;
+            font-weight: 500 !important;
+            letter-spacing: 0.3px !important;
             cursor: pointer;
-            transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
+            transition: color 0.15s, background 0.15s, border-color 0.15s;
+            font-family: inherit !important;
+          }
+          body:has([data-studio-properties="studio"]) .ribbon-tab:hover {
+            color: #e6e6e6 !important;
+            background: rgba(255,255,255,0.04) !important;
+            border-bottom-color: rgba(255,255,255,0.25) !important;
+          }
+          body:has([data-studio-properties="studio"]) .ribbon-tab.active,
+          body:has([data-studio-properties="studio"]) .ribbon-tab[data-studio-active="1"] {
+            color: #f0f0f0 !important;
+            background: rgba(255,255,255,0.06) !important;
+            border-bottom-color: #e6e6e6 !important;
+          }
+          body:has([data-studio-properties="studio"]) .ribbon-content {
+            background: #050505 !important;
+            padding: 6px 8px !important;
+            display: flex !important;
+            gap: 0 !important;
+            flex-wrap: wrap !important;
+            align-items: flex-start !important;
+          }
+          body:has([data-studio-properties="studio"]) .ribbon-group {
+            border-right: 1px solid rgba(255,255,255,0.05) !important;
+            padding: 0 10px !important;
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: stretch !important;
+          }
+          body:has([data-studio-properties="studio"]) .ribbon-group:last-child {
+            border-right: none !important;
+          }
+          body:has([data-studio-properties="studio"]) .ribbon-group-tools {
+            display: flex !important;
+            gap: 3px !important;
+            flex-wrap: wrap !important;
+            flex: 1 !important;
+          }
+          body:has([data-studio-properties="studio"]) .ribbon-group-label {
+            color: rgba(255,255,255,0.32) !important;
+            font-size: 9px !important;
+            text-transform: uppercase !important;
+            letter-spacing: 0.6px !important;
+            text-align: center !important;
+            margin-top: 4px !important;
+          }
+          body:has([data-studio-properties="studio"]) .ribbon-tool {
+            background: transparent !important;
+            border: 1px solid transparent !important;
+            color: #d4dadf !important;
+            border-radius: 5px !important;
+            padding: 4px 6px !important;
+            min-width: 56px !important;
+            max-width: 72px !important;
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            gap: 2px !important;
+            cursor: pointer;
+            transition: background 0.12s, border-color 0.12s, color 0.12s;
+            font-family: inherit !important;
+          }
+          body:has([data-studio-properties="studio"]) .ribbon-tool:hover:not(:disabled) {
+            background: rgba(255,255,255,0.06) !important;
+            border-color: rgba(255,255,255,0.18) !important;
+            color: #f0f0f0 !important;
+          }
+          body:has([data-studio-properties="studio"]) .ribbon-tool:active:not(:disabled) {
+            background: rgba(255,255,255,0.12) !important;
+          }
+          body:has([data-studio-properties="studio"]) .ribbon-tool:disabled {
+            opacity: 0.35 !important;
+            cursor: not-allowed;
+          }
+          body:has([data-studio-properties="studio"]) .ribbon-tool-icon {
+            font-size: 16px !important;
+            line-height: 1 !important;
+            opacity: 0.85;
+          }
+          body:has([data-studio-properties="studio"]) .ribbon-tool-label {
+            font-size: 10px !important;
+            letter-spacing: 0.2px !important;
+            opacity: 0.85 !important;
             white-space: nowrap;
-          }
-          [data-studio-primitive]:hover {
-            background: rgba(255,255,255,0.10);
-            border-color: rgba(255,255,255,0.45);
-            color: #f0f6f7;
-          }
-          [data-studio-primitive]:active {
-            background: rgba(255,255,255,0.22);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 64px;
           }
 
           /* Workbench top header — apply Studio teal accent to the active
