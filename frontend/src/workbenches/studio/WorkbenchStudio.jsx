@@ -264,6 +264,9 @@ function WorkbenchStudio() {
   const [displaceFrequency, setDisplaceFrequency] = useState(80);
   const [displaceAmplitude, setDisplaceAmplitude] = useState(0.004);
   const [displaceOctaves,   setDisplaceOctaves]   = useState(2);
+  // Hair / fur — instanced strands rooted on a surface mesh.
+  const [hairCount,  setHairCount]  = useState(800);
+  const [hairLength, setHairLength] = useState(0.008);
   // Display modes — view-time toggles for wireframe, bounding-box,
   // and vertex-normals visualization on Studio primitives.
   const [displayWireframe,   setDisplayWireframe]   = useState(false);
@@ -1916,6 +1919,85 @@ function WorkbenchStudio() {
       mesh.material.map = null;
       mesh.material.needsUpdate = true;
     }
+  }
+
+  /*
+   * Hair / Fur — instanced strands rooted on a surface mesh.
+   *
+   * For each strand:
+   *   - Pick a triangle deterministically (stride through the index
+   *     buffer so the same mesh + same count always yields the same
+   *     placement — NO randomness).
+   *   - Compute the triangle centroid as the strand root.
+   *   - Compute the triangle face normal as the strand direction.
+   *   - Add an InstancedMesh of thin cylinders oriented +Y → normal.
+   *
+   * The result is a single draw-call mesh carrying N strands. Tagged
+   * as a Studio primitive so the stats panel + display modes pick
+   * it up, with userData.archdiscStudioHairOf pointing back to the
+   * host mesh kind for traceability.
+   */
+  function growHair(count, length) {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry || !mesh.geometry.index) return null;
+    const pos = mesh.geometry.attributes.position;
+    const idx = mesh.geometry.index;
+    const numTris = idx.count / 3;
+    const strandCount = Math.min(count, numTris);
+    if (strandCount === 0) return null;
+    const strandGeom = new THREE.CylinderGeometry(0.0002, 0.0001, length, 6, 1, true);
+    // Cylinder defaults to centre at origin; shift up so the base sits
+    // on the strand root.
+    strandGeom.translate(0, length / 2, 0);
+    const strandMat = new THREE.MeshStandardMaterial({
+      color: 0x6e4d2a,
+      roughness: 0.85,
+      side: THREE.DoubleSide,
+    });
+    const instanced = new THREE.InstancedMesh(strandGeom, strandMat, strandCount);
+    const dummy = new THREE.Object3D();
+    const tmpVec = new THREE.Vector3();
+    const tmpNrm = new THREE.Vector3();
+    const up = new THREE.Vector3(0, 1, 0);
+    // Stride through triangles so strands cover the whole surface
+    // even when count << numTris.
+    const stride = Math.max(1, Math.floor(numTris / strandCount));
+    for (let i = 0; i < strandCount; i++) {
+      const triIdx = (i * stride) % numTris;
+      const a = idx.getX(triIdx * 3);
+      const b = idx.getX(triIdx * 3 + 1);
+      const c = idx.getX(triIdx * 3 + 2);
+      const ax = pos.getX(a), ay = pos.getY(a), az = pos.getZ(a);
+      const bx = pos.getX(b), by = pos.getY(b), bz = pos.getZ(b);
+      const cx = pos.getX(c), cy = pos.getY(c), cz = pos.getZ(c);
+      const px = (ax + bx + cx) / 3;
+      const py = (ay + by + cy) / 3;
+      const pz = (az + bz + cz) / 3;
+      // Face normal via cross product of two edges.
+      const ux = bx - ax, uy = by - ay, uz = bz - az;
+      const vx = cx - ax, vy = cy - ay, vz = cz - az;
+      tmpNrm.set(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx).normalize();
+      // Transform centroid + normal into world space so the strands
+      // sit on the actual mesh location.
+      tmpVec.set(px, py, pz);
+      mesh.localToWorld(tmpVec);
+      tmpNrm.transformDirection(mesh.matrixWorld);
+      dummy.position.copy(tmpVec);
+      dummy.quaternion.setFromUnitVectors(up, tmpNrm);
+      dummy.scale.set(1, 1, 1);
+      dummy.updateMatrix();
+      instanced.setMatrixAt(i, dummy.matrix);
+    }
+    instanced.instanceMatrix.needsUpdate = true;
+    instanced.userData.archdiscStudioPrimitive = true;
+    instanced.userData.archdiscStudioPrimitiveKind = 'hair';
+    instanced.userData.archdiscStudioHairOf = mesh.userData.archdiscStudioPrimitiveKind || 'unknown';
+    instanced.userData.archdiscStudioHairStrandCount = strandCount;
+    window.__archdiscScene.add(instanced);
+    primitiveStackRef.current.push(instanced);
+    setPrimitiveCount(c => c + 1);
+    recomputeMeshStats(window.__archdiscScene);
+    return { strandCount };
   }
 
   /*
@@ -4129,6 +4211,59 @@ function WorkbenchStudio() {
           >
             Spawn Particle Cloud
           </button>
+
+          <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+            <p className="property-label" style={{ opacity: 0.6, fontSize: '11px', margin: '0 0 4px 0' }}>
+              Hair / Fur — instanced strands rooted on the selected
+              mesh, oriented along surface normals.
+            </p>
+            <div className="property-row">
+              <span className="property-label">Strands</span>
+              <input
+                type="range"
+                min="50"
+                max="3000"
+                step="50"
+                data-studio-hair="count"
+                value={hairCount}
+                onChange={e => setHairCount(Number(e.target.value))}
+                style={{ flex: 1 }}
+              />
+              <span
+                data-studio-hair-readout="count"
+                style={{ marginLeft: '6px', fontSize: '10px', fontFamily: 'monospace', minWidth: '40px', textAlign: 'right' }}
+              >
+                {hairCount}
+              </span>
+            </div>
+            <div className="property-row">
+              <span className="property-label">Length</span>
+              <input
+                type="range"
+                min="0.002"
+                max="0.025"
+                step="0.0005"
+                data-studio-hair="length"
+                value={hairLength}
+                onChange={e => setHairLength(Number(e.target.value))}
+                style={{ flex: 1 }}
+              />
+              <span
+                data-studio-hair-readout="length"
+                style={{ marginLeft: '6px', fontSize: '10px', fontFamily: 'monospace', minWidth: '46px', textAlign: 'right' }}
+              >
+                {(hairLength * 1000).toFixed(1)} mm
+              </span>
+            </div>
+            <button
+              className="property-button"
+              data-studio-action="grow-hair"
+              onClick={() => growHair(hairCount, hairLength)}
+              disabled={!selectedKind}
+            >
+              Grow Hair · Fur
+            </button>
+          </div>
         </div>
 
         <div className="property-section" data-studio-section="text3d">
