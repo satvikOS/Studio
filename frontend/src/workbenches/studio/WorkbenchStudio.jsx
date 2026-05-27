@@ -87,6 +87,53 @@ function buildPrimitiveGeometry(kind) {
       g.computeBoundingBox();
       return g;
     }
+    case 'spline-helix': {
+      // Catmull-Rom helix swept as a tube — deterministic 1.5-turn
+      // helix with 8 sample points, tube radius S/25.
+      const points = [];
+      const TURNS = 1.5, SEGS = 8;
+      for (let i = 0; i < SEGS; i++) {
+        const t = i / (SEGS - 1);
+        const a = t * Math.PI * 2 * TURNS;
+        points.push(new THREE.Vector3(
+          Math.cos(a) * S * 0.5,
+          (t - 0.5) * S,
+          Math.sin(a) * S * 0.5,
+        ));
+      }
+      const curve = new THREE.CatmullRomCurve3(points);
+      return new THREE.TubeGeometry(curve, 80, S * 0.04, 8, false);
+    }
+    case 'spline-wave': {
+      // Sinusoidal wave along X — 9 control points.
+      const points = [];
+      const SEGS = 9;
+      for (let i = 0; i < SEGS; i++) {
+        const t = i / (SEGS - 1);
+        points.push(new THREE.Vector3(
+          (t - 0.5) * S * 1.4,
+          Math.sin(t * Math.PI * 2) * S * 0.3,
+          0,
+        ));
+      }
+      const curve = new THREE.CatmullRomCurve3(points);
+      return new THREE.TubeGeometry(curve, 80, S * 0.04, 8, false);
+    }
+    case 'spline-trefoil': {
+      // Trefoil-knot parametric curve.
+      const points = [];
+      const SEGS = 64;
+      for (let i = 0; i < SEGS; i++) {
+        const t = (i / SEGS) * Math.PI * 2;
+        points.push(new THREE.Vector3(
+          (Math.sin(t) + 2 * Math.sin(2 * t)) * S * 0.16,
+          (Math.cos(t) - 2 * Math.cos(2 * t)) * S * 0.16,
+          -Math.sin(3 * t) * S * 0.16,
+        ));
+      }
+      const curve = new THREE.CatmullRomCurve3(points, true);
+      return new THREE.TubeGeometry(curve, 200, S * 0.04, 10, true);
+    }
     default: return null;
   }
 }
@@ -102,9 +149,12 @@ const PRIMITIVE_KINDS = [
   { id: 'icosahedron',  label: 'Icosa' },
   { id: 'dodecahedron', label: 'Dodeca' },
   { id: 'tetrahedron',  label: 'Tetra' },
-  { id: 'voxel-cube',   label: 'Voxel Cube' },
-  { id: 'voxel-sphere', label: 'Voxel Sphere' },
-  { id: 'suzanne',      label: 'Suzanne' },
+  { id: 'voxel-cube',     label: 'Voxel Cube' },
+  { id: 'voxel-sphere',   label: 'Voxel Sphere' },
+  { id: 'suzanne',        label: 'Suzanne' },
+  { id: 'spline-helix',   label: 'Helix' },
+  { id: 'spline-wave',    label: 'Wave' },
+  { id: 'spline-trefoil', label: 'Trefoil' },
 ];
 
 /**
