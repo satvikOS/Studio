@@ -3557,6 +3557,7 @@ function WorkbenchStudio() {
                   + (tab.id === activeTab ? ' active' : '')
                 }
                 data-studio-discipline={tab.id}
+                data-studio-active={tab.id === activeTab ? '1' : '0'}
                 onClick={() => setActiveTab(tab.id)}
                 style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
               >
@@ -3937,6 +3938,81 @@ function WorkbenchStudio() {
             color: #95a0a8;
             min-width: 64px;
             flex-shrink: 0;
+          }
+
+          /* =================================================================
+             Whole-shell Studio identity — slice 60
+             ================================================================= */
+
+          /* Hide the Mech-inherited bottom chat / code / parametric console
+             when Studio is active. AI Prompt now lives in the right rail. */
+          body:has([data-studio-properties="studio"]) .workbench-console,
+          body:has([data-studio-properties="studio"]) .ai-console {
+            display: none !important;
+          }
+
+          /* Discipline tabs — replace the inherited static blue underline
+             with a teal Studio underline on the ACTIVE tab + a soft hover
+             affordance. The component sets data-studio-discipline on every
+             tab; the JSX adds an additional data-active flag to the active
+             one (next slice). For now hover suffices. */
+          body:has([data-studio-properties="studio"]) .workbench-ribbon-placeholder-tabs {
+            background: linear-gradient(180deg, #0e0e16 0%, #0d0d14 100%) !important;
+            border-bottom: 1px solid rgba(40,212,212,0.18) !important;
+          }
+          body:has([data-studio-properties="studio"]) .workbench-ribbon-placeholder-tab {
+            position: relative;
+            border-bottom: 2px solid transparent !important;
+            transition: color 0.15s, background 0.15s, border-color 0.15s;
+            cursor: pointer;
+          }
+          body:has([data-studio-properties="studio"]) .workbench-ribbon-placeholder-tab:hover {
+            color: #28d4d4 !important;
+            background: rgba(40,212,212,0.06);
+            border-bottom-color: rgba(40,212,212,0.35) !important;
+          }
+          /* Active tab — gets data-studio-active="1" on every render. */
+          body:has([data-studio-properties="studio"]) .workbench-ribbon-placeholder-tab[data-studio-active="1"] {
+            color: #28d4d4 !important;
+            border-bottom-color: #28d4d4 !important;
+            background: rgba(40,212,212,0.08);
+            text-shadow: 0 0 8px rgba(40,212,212,0.4);
+          }
+
+          /* Ribbon body — primitive-button row + section header strip. */
+          body:has([data-studio-properties="studio"]) .workbench-ribbon-placeholder-body {
+            background: #0d0d14 !important;
+            font-style: normal !important;
+          }
+
+          /* Studio primitive buttons (top ribbon "+ Cube", "+ Sphere", ...) —
+             render as Studio-themed chips with teal hover. */
+          [data-studio-primitive] {
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.10);
+            color: #d4dadf;
+            border-radius: 6px;
+            padding: 4px 10px;
+            font-size: 11px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
+            white-space: nowrap;
+          }
+          [data-studio-primitive]:hover {
+            background: rgba(40,212,212,0.10);
+            border-color: rgba(40,212,212,0.45);
+            color: #f0f6f7;
+            box-shadow: 0 0 10px rgba(40,212,212,0.18);
+          }
+          [data-studio-primitive]:active {
+            background: rgba(40,212,212,0.22);
+          }
+
+          /* Workbench top header — apply Studio teal accent to the active
+             workbench wordmark. */
+          body:has([data-studio-properties="studio"]) .workbench-current .workbench-name {
+            color: #28d4d4;
           }
         `}</style>
 
