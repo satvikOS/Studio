@@ -9,6 +9,7 @@ import { geometryToManifold, manifoldToGeometry } from '../../foundation/Manifol
 import {
   MousePointer2, Move, RotateCw, Maximize2,
   Box, Mountain, PaintBucket, Bone, Play, Sparkles, Camera,
+  Palette, Layers, Lightbulb, Image as ImageIcon, Wand2,
 } from 'lucide-react';
 import Viewport3D from '../../components/Viewport3D';
 
@@ -2033,8 +2034,67 @@ function WorkbenchStudio() {
       </aside>
 
       {/* CENTER VIEWPORT — three.js scene (shared component reused from Mech) */}
-      <main className="workbench-viewport">
+      <main className="workbench-viewport" style={{ position: 'relative' }}>
         <Viewport3D canvasId="render-canvas-studio" domain="studio" />
+        {/* Studio status bar — always-visible scene stats overlaid on the
+            bottom of the viewport. Floats over the renderer canvas so the
+            same readout follows the user across every discipline tab. */}
+        <div
+          data-studio-status-bar
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            bottom: 0,
+            display: 'flex',
+            gap: '16px',
+            padding: '6px 14px',
+            background: 'linear-gradient(0deg, rgba(0, 0, 0, 0.65) 0%, rgba(0, 0, 0, 0) 100%)',
+            color: '#cfd6e0',
+            fontFamily: 'monospace',
+            fontSize: '11px',
+            alignItems: 'center',
+            pointerEvents: 'none',
+            zIndex: 10,
+          }}
+        >
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+            <Sparkles size={12} style={{ color: '#28d4d4' }} />
+            <span style={{ fontWeight: 600, color: '#28d4d4' }}>STUDIO</span>
+          </span>
+          <span data-studio-status="discipline" style={{ opacity: 0.85, textTransform: 'capitalize' }}>
+            {DISCIPLINE_TABS.find(t => t.id === activeTab)?.label || activeTab}
+          </span>
+          <span data-studio-status="primitives">
+            <Box size={11} style={{ verticalAlign: 'middle', marginRight: 4, opacity: 0.7 }} />
+            {primitiveCount} prim
+          </span>
+          <span data-studio-status="lights">
+            <Lightbulb size={11} style={{ verticalAlign: 'middle', marginRight: 4, opacity: 0.7 }} />
+            {lightCount} lt
+          </span>
+          <span data-studio-status="renders">
+            <Camera size={11} style={{ verticalAlign: 'middle', marginRight: 4, opacity: 0.7 }} />
+            {renders.length} rdr
+          </span>
+          <span
+            data-studio-status="animation"
+            style={{ opacity: isAnimating ? 1 : 0.5, color: isAnimating ? '#7fd49e' : 'inherit' }}
+          >
+            <Play size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />
+            {isAnimating ? 'animating' : 'idle'}
+          </span>
+          <span
+            data-studio-status="physics"
+            style={{ opacity: isPhysicsActive ? 1 : 0.5, color: isPhysicsActive ? '#d4a07f' : 'inherit' }}
+          >
+            <Mountain size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />
+            {isPhysicsActive ? 'simulating' : 'idle'}
+          </span>
+          <span data-studio-status="vertices" style={{ marginLeft: 'auto' }}>
+            {vertexCount.toLocaleString()} v · {faceCount.toLocaleString()} f
+          </span>
+        </div>
       </main>
 
       {/* RIGHT PROPERTIES PANEL */}
@@ -2096,6 +2156,38 @@ function WorkbenchStudio() {
           [data-studio-discipline="compositing"] [data-studio-section="compositing"],
           [data-studio-discipline="compositing"] [data-studio-section="renders"] { display: block; }
         `}</style>
+
+        {/* Studio brand banner — always at the top of the right panel.
+            Per-discipline subtitle so users see which mode is armed. */}
+        <div
+          data-studio-banner
+          style={{
+            padding: '10px 14px',
+            background: 'linear-gradient(180deg, rgba(40, 212, 212, 0.10) 0%, rgba(40, 212, 212, 0) 100%)',
+            borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+            marginBottom: '6px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Wand2 size={16} style={{ color: '#28d4d4' }} />
+            <h2 style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: '#e9ecef', letterSpacing: '0.4px' }}>
+              ArchDisc Studio
+            </h2>
+            <span
+              data-studio-banner-discipline
+              style={{
+                marginLeft: 'auto',
+                fontSize: '10px',
+                fontFamily: 'monospace',
+                opacity: 0.6,
+                textTransform: 'uppercase',
+                letterSpacing: '0.6px',
+              }}
+            >
+              {DISCIPLINE_TABS.find(t => t.id === activeTab)?.label || activeTab}
+            </span>
+          </div>
+        </div>
         <div className="property-section" data-studio-section="ai">
           <h3 className="property-header">
             AI Prompt
