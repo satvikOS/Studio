@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js';
 import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js';
+import { SUZANNE_POSITIONS, SUZANNE_INDICES } from './SuzanneGeometry.js';
 import {
   MousePointer2, Move, RotateCw, Maximize2,
   Box, Mountain, PaintBucket, Bone, Play, Sparkles, Camera,
@@ -69,6 +70,19 @@ function buildPrimitiveGeometry(kind) {
         return Math.sqrt(dx * dx + dy * dy + dz * dz) <= maxR;
       });
     }
+    case 'suzanne': {
+      // Suzanne (Blender's monkey) — geometry imported verbatim from
+      // blender/tests/files/io_tests/x3d/suzanne_material.x3d by
+      // tools/import_suzanne.py. First Studio primitive whose vertex
+      // data comes literally from the vendored Blender source.
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(SUZANNE_POSITIONS, 3));
+      g.setIndex(new THREE.BufferAttribute(SUZANNE_INDICES, 1));
+      g.computeVertexNormals();
+      g.computeBoundingSphere();
+      g.computeBoundingBox();
+      return g;
+    }
     default: return null;
   }
 }
@@ -86,6 +100,7 @@ const PRIMITIVE_KINDS = [
   { id: 'tetrahedron',  label: 'Tetra' },
   { id: 'voxel-cube',   label: 'Voxel Cube' },
   { id: 'voxel-sphere', label: 'Voxel Sphere' },
+  { id: 'suzanne',      label: 'Suzanne' },
 ];
 
 /**
@@ -768,6 +783,8 @@ function WorkbenchStudio() {
       ['voxel sphere', 'voxel-sphere'],
       ['voxel cube',   'voxel-cube'],
       ['torus knot',   'torus-knot'],
+      ['suzanne',      'suzanne'],
+      ['monkey',       'suzanne'],
       ['dodeca',       'dodecahedron'],
       ['icosa',        'icosahedron'],
       ['tetra',        'tetrahedron'],
@@ -1892,7 +1909,62 @@ function WorkbenchStudio() {
       </main>
 
       {/* RIGHT PROPERTIES PANEL */}
-      <aside className="workbench-properties" data-studio-properties="studio">
+      <aside
+        className="workbench-properties"
+        data-studio-properties="studio"
+        data-studio-discipline={activeTab}
+      >
+        {/* Discipline-aware section visibility. AI Prompt, Welcome,
+            Selection, Material show on every tab; everything else
+            gates on data-studio-discipline matching one of its allow-list. */}
+        <style>{`
+          [data-studio-properties="studio"] [data-studio-section="mesh"],
+          [data-studio-properties="studio"] [data-studio-section="reference"],
+          [data-studio-properties="studio"] [data-studio-section="archviz"],
+          [data-studio-properties="studio"] [data-studio-section="lathe"],
+          [data-studio-properties="studio"] [data-studio-section="subdivision"],
+          [data-studio-properties="studio"] [data-studio-section="mirror"],
+          [data-studio-properties="studio"] [data-studio-section="procedural"],
+          [data-studio-properties="studio"] [data-studio-section="instancing"],
+          [data-studio-properties="studio"] [data-studio-section="text3d"],
+          [data-studio-properties="studio"] [data-studio-section="texture"],
+          [data-studio-properties="studio"] [data-studio-section="sculpting"],
+          [data-studio-properties="studio"] [data-studio-section="armature"],
+          [data-studio-properties="studio"] [data-studio-section="animation"],
+          [data-studio-properties="studio"] [data-studio-section="particles"],
+          [data-studio-properties="studio"] [data-studio-section="physics"],
+          [data-studio-properties="studio"] [data-studio-section="render"],
+          [data-studio-properties="studio"] [data-studio-section="renders"],
+          [data-studio-properties="studio"] [data-studio-section="lighting"],
+          [data-studio-properties="studio"] [data-studio-section="compositing"],
+          [data-studio-properties="studio"] [data-studio-section="scene"] { display: none; }
+
+          [data-studio-discipline="modeling"] [data-studio-section="mesh"],
+          [data-studio-discipline="modeling"] [data-studio-section="reference"],
+          [data-studio-discipline="modeling"] [data-studio-section="archviz"],
+          [data-studio-discipline="modeling"] [data-studio-section="lathe"],
+          [data-studio-discipline="modeling"] [data-studio-section="subdivision"],
+          [data-studio-discipline="modeling"] [data-studio-section="mirror"],
+          [data-studio-discipline="modeling"] [data-studio-section="procedural"],
+          [data-studio-discipline="modeling"] [data-studio-section="instancing"],
+          [data-studio-discipline="modeling"] [data-studio-section="text3d"],
+          [data-studio-discipline="modeling"] [data-studio-section="texture"],
+          [data-studio-discipline="modeling"] [data-studio-section="scene"],
+          [data-studio-discipline="sculpting"] [data-studio-section="sculpting"],
+          [data-studio-discipline="sculpting"] [data-studio-section="subdivision"],
+          [data-studio-discipline="sculpting"] [data-studio-section="mirror"],
+          [data-studio-discipline="uv-texture"] [data-studio-section="texture"],
+          [data-studio-discipline="rigging"] [data-studio-section="armature"],
+          [data-studio-discipline="animation"] [data-studio-section="animation"],
+          [data-studio-discipline="animation"] [data-studio-section="scene"],
+          [data-studio-discipline="vfx-sim"] [data-studio-section="particles"],
+          [data-studio-discipline="vfx-sim"] [data-studio-section="physics"],
+          [data-studio-discipline="rendering"] [data-studio-section="render"],
+          [data-studio-discipline="rendering"] [data-studio-section="renders"],
+          [data-studio-discipline="rendering"] [data-studio-section="lighting"],
+          [data-studio-discipline="compositing"] [data-studio-section="compositing"],
+          [data-studio-discipline="compositing"] [data-studio-section="renders"] { display: block; }
+        `}</style>
         <div className="property-section" data-studio-section="ai">
           <h3 className="property-header">
             AI Prompt
