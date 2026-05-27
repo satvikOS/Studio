@@ -1778,6 +1778,70 @@ function WorkbenchStudio() {
   }
 
   /*
+   * Skin modifier — tube around edges + sphere at each vertex.
+   *
+   * Blender source: blender/source/blender/modifiers/intern/MOD_skin.cc
+   *
+   * Builds the "ball-and-stick" surface: each unique edge becomes
+   * an 8-segment cylinder oriented along it, each vertex becomes
+   * a small sphere. Result: a smooth-jointed pipe network — great
+   * for character base meshes, organic skeletons, lattice
+   * scaffolds.
+   *
+   * Differs from Wireframe (slice 76): Wireframe leaves sharp
+   * junctions; Skin adds the corner spheres so joints are smooth.
+   */
+  function applySkin(thickness) {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry || !mesh.geometry.index) return null;
+    const pos = mesh.geometry.attributes.position;
+    const idx = mesh.geometry.index;
+    const edges = new Map();
+    for (let t = 0; t < idx.count; t += 3) {
+      const a = idx.getX(t), b = idx.getX(t + 1), c = idx.getX(t + 2);
+      for (const [u, v] of [[a, b], [b, c], [c, a]]) {
+        const key = u < v ? `${u}|${v}` : `${v}|${u}`;
+        if (!edges.has(key)) edges.set(key, [u, v]);
+      }
+    }
+    const pieces = [];
+    const tmpA = new THREE.Vector3();
+    const tmpB = new THREE.Vector3();
+    const up = new THREE.Vector3(0, 1, 0);
+    // Cylinder per edge.
+    edges.forEach(([u, v]) => {
+      tmpA.set(pos.getX(u), pos.getY(u), pos.getZ(u));
+      tmpB.set(pos.getX(v), pos.getY(v), pos.getZ(v));
+      const len = tmpA.distanceTo(tmpB);
+      if (len < 1e-6) return;
+      const cyl = new THREE.CylinderGeometry(thickness, thickness, len, 8, 1);
+      cyl.translate(0, len / 2, 0);
+      const dir = new THREE.Vector3().subVectors(tmpB, tmpA).normalize();
+      const q = new THREE.Quaternion().setFromUnitVectors(up, dir);
+      cyl.applyQuaternion(q);
+      cyl.translate(tmpA.x, tmpA.y, tmpA.z);
+      pieces.push(cyl);
+    });
+    // Sphere per vertex.
+    for (let i = 0; i < pos.count; i++) {
+      const sph = new THREE.SphereGeometry(thickness * 1.05, 8, 6);
+      sph.translate(pos.getX(i), pos.getY(i), pos.getZ(i));
+      pieces.push(sph);
+    }
+    if (pieces.length === 0) return null;
+    const merged = mergeGeometries(pieces);
+    merged.computeVertexNormals();
+    merged.computeBoundingSphere();
+    mesh.geometry.dispose();
+    mesh.geometry = merged;
+    mesh.userData.archdiscStudioSkinned = (mesh.userData.archdiscStudioSkinned || 0) + 1;
+    mesh.userData.archdiscStudioSkinEdges = edges.size;
+    mesh.userData.archdiscStudioSkinJoints = pos.count;
+    recomputeMeshStats(window.__archdiscScene);
+    return { edges: edges.size, joints: pos.count };
+  }
+
+  /*
    * Build modifier — progressively reveal triangles over time.
    *
    * Blender source: blender/source/blender/modifiers/intern/MOD_build.cc
@@ -4315,6 +4379,17 @@ function WorkbenchStudio() {
                     >
                       <span className="ribbon-tool-icon">⏳</span>
                       <span className="ribbon-tool-label">Build</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="ribbon-tool"
+                      data-studio-ribbon-action="skin-mod"
+                      onClick={() => applySkin(0.0014)}
+                      disabled={!selectedKind}
+                      title="Blender MOD_skin — ball-and-stick (cylinder edges + sphere joints)"
+                    >
+                      <span className="ribbon-tool-icon">⨈</span>
+                      <span className="ribbon-tool-label">Skin</span>
                     </button>
                   </div>
                   <div className="ribbon-group-label">Blender · Mods</div>

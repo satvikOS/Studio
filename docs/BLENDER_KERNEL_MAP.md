@@ -41,18 +41,21 @@ Uint16Array JS modules consumed by `WorkbenchStudio.jsx`.
 | Solidify                      | `MOD_solidify.cc`                       | shipped (S73) |
 | Cast → Sphere / Cuboid        | `MOD_cast.cc`                           | shipped (S73) |
 | Wave                          | `MOD_wave.cc`                           | shipped (S73) |
+| Simple Deform · Bend          | `MOD_simpledeform.cc` (BEND)            | shipped (S74) |
+| Simple Deform · Taper         | `MOD_simpledeform.cc` (TAPER)           | shipped (S74) |
+| Weld                          | `MOD_weld.cc`                           | shipped (S75) |
+| Wireframe                     | `MOD_wireframe.cc`                      | shipped (S76) |
+| Build (progressive reveal)    | `MOD_build.cc`                          | shipped (S77) |
 | Armature                      | `MOD_armature.cc`                       | shipped (early) |
 | Cloth                         | `MOD_cloth.cc`                          | shipped (S55) |
 | Hair / Fur                    | `MOD_particleinstance.cc` + particles   | shipped (S51) |
 | Particles                     | `BKE_particle.h` + `particle_system.cc` | shipped (early) |
-| Subdivide (Loop)              | `MOD_subsurf.cc`                        | shipped (S65) |
 
 ### Pending (queued for future slices)
 
 | Modifier                     | Blender source                          |
 |------------------------------|------------------------------------------|
 | Bevel                        | `MOD_bevel.cc`                          |
-| Build (progressive reveal)   | `MOD_build.cc`                          |
 | Corrective Smooth            | `MOD_correctivesmooth.cc`               |
 | Curve (deform along curve)   | `MOD_curve.cc`                          |
 | Edge Split                   | `MOD_edgesplit.cc`                      |
@@ -66,14 +69,13 @@ Uint16Array JS modules consumed by `WorkbenchStudio.jsx`.
 | Remesh (voxel)               | `MOD_remesh.cc`                         |
 | Screw                        | `MOD_screw.cc`                          |
 | Shrinkwrap                   | `MOD_shrinkwrap.cc`                     |
-| Simple Deform (twist/bend)   | `MOD_simpledeform.cc`                   |
+| Simple Deform · Twist        | `MOD_simpledeform.cc` (TWIST)           |
+| Simple Deform · Stretch      | `MOD_simpledeform.cc` (STRETCH)         |
 | Skin (tube around edges)     | `MOD_skin.cc`                           |
-| Subdivision Surface          | `MOD_subsurf.cc` (Catmull-Clark)        |
+| Subdivision Surface (Catmull)| `MOD_subsurf.cc` (Catmull-Clark)        |
 | Surface (collision)          | `MOD_surface.cc`                        |
 | Warp                         | `MOD_warp.cc`                           |
 | Weighted Normal              | `MOD_weighted_normal.cc`                |
-| Weld                         | `MOD_weld.cc`                           |
-| Wireframe                    | `MOD_wireframe.cc`                      |
 
 ## Kernel modules — `blender/source/blender/blenkernel/`
 
