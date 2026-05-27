@@ -4,6 +4,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js';
 import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js';
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
+import { VertexNormalsHelper } from 'three/examples/jsm/helpers/VertexNormalsHelper.js';
 import { SUZANNE_POSITIONS, SUZANNE_INDICES } from './SuzanneGeometry.js';
 import { getManifold } from '../../foundation/manifoldKernel.js';
 import { geometryToManifold, manifoldToGeometry } from '../../foundation/ManifoldThreeBridge.js';
@@ -257,6 +258,11 @@ function WorkbenchStudio() {
   const [brushRadius, setBrushRadius]     = useState(0.012);
   const [brushFalloffStrength, setBrushFalloffStrength] = useState(0.4);
   const brushStateRef = useRef({ active: false, mode: 'push', radius: 0.012, strength: 0.4 });
+  // Display modes — view-time toggles for wireframe, bounding-box,
+  // and vertex-normals visualization on Studio primitives.
+  const [displayWireframe,   setDisplayWireframe]   = useState(false);
+  const [displayBoundingBox, setDisplayBoundingBox] = useState(false);
+  const [displayNormals,     setDisplayNormals]     = useState(false);
   // Scene I/O — save / load the current Studio primitives + lights to a
   // self-contained JSON string. In-state cache for the MVP; a follow-up
   // wires this through Electron's file picker.
@@ -2452,6 +2458,63 @@ function WorkbenchStudio() {
   }, [brushActive, brushMode, brushRadius, brushFalloffStrength]);
 
   /*
+   * Display modes — toggle wireframe, bounding-box overlay, and
+   * vertex-normals helpers on every Studio primitive in the scene.
+   * Helpers are tagged with `userData.archdiscStudioDisplayHelper` so
+   * the cleanup pass can find + remove them without ambushing other
+   * scene helpers (axes, ground grid, etc).
+   */
+  function syncDisplayModes() {
+    const vp = window.__archdiscViewport;
+    if (!vp) return;
+    // Wipe existing helpers first.
+    const toRemove = [];
+    vp.scene.traverse(o => {
+      if (o.userData && o.userData.archdiscStudioDisplayHelper) toRemove.push(o);
+    });
+    toRemove.forEach(h => {
+      vp.scene.remove(h);
+      if (h.dispose) h.dispose();
+      if (h.geometry && h.geometry.dispose) h.geometry.dispose();
+      if (h.material && h.material.dispose) h.material.dispose();
+    });
+    // Walk Studio primitives. Apply wireframe to their materials,
+    // add BoxHelpers + VertexNormalsHelpers per the active toggles.
+    vp.scene.traverse(o => {
+      if (!o.isMesh || !o.userData || !o.userData.archdiscStudioPrimitive) return;
+      if (o.material) {
+        if (Array.isArray(o.material)) {
+          o.material.forEach(m => { m.wireframe = displayWireframe; });
+        } else {
+          o.material.wireframe = displayWireframe;
+        }
+      }
+      if (displayBoundingBox) {
+        const box = new THREE.BoxHelper(o, 0x28d4d4);
+        box.userData.archdiscStudioDisplayHelper = true;
+        vp.scene.add(box);
+      }
+      if (displayNormals) {
+        // Sample 8% of faces for normals (keeps performance + render
+        // sane on dense meshes like 5×subdivided spheres).
+        const helper = new VertexNormalsHelper(o, 0.005, 0x28d4d4);
+        helper.userData.archdiscStudioDisplayHelper = true;
+        vp.scene.add(helper);
+      }
+    });
+  }
+
+  useEffect(() => {
+    syncDisplayModes();
+  }, [displayWireframe, displayBoundingBox, displayNormals]);
+
+  // Expose for spec — manually trigger after geometry mutations.
+  useEffect(() => {
+    window.__studioSyncDisplay = syncDisplayModes;
+    return () => { delete window.__studioSyncDisplay; };
+  });
+
+  /*
    * Sculpt brushes — procedural full-mesh deformations applied to the
    * selected mesh's geometry. These are the digital-clay primitives
    * Studio's Sculpting discipline starts from; per-vertex brushable
@@ -2771,6 +2834,7 @@ function WorkbenchStudio() {
           [data-studio-properties="studio"] [data-studio-section="scene"],
           [data-studio-properties="studio"] [data-studio-section="boolean"],
           [data-studio-properties="studio"] [data-studio-section="scatter"],
+          [data-studio-properties="studio"] [data-studio-section="display"],
           [data-studio-properties="studio"] [data-studio-section="shape-keys"] { display: none; }
 
           [data-studio-discipline="modeling"] [data-studio-section="mesh"],
@@ -2786,6 +2850,9 @@ function WorkbenchStudio() {
           [data-studio-discipline="modeling"] [data-studio-section="scene"],
           [data-studio-discipline="modeling"] [data-studio-section="boolean"],
           [data-studio-discipline="modeling"] [data-studio-section="scatter"],
+          [data-studio-discipline="modeling"] [data-studio-section="display"],
+          [data-studio-discipline="sculpting"] [data-studio-section="display"],
+          [data-studio-discipline="rendering"] [data-studio-section="display"],
           [data-studio-discipline="sculpting"] [data-studio-section="sculpting"],
           [data-studio-discipline="sculpting"] [data-studio-section="subdivision"],
           [data-studio-discipline="sculpting"] [data-studio-section="mirror"],
@@ -4238,6 +4305,51 @@ function WorkbenchStudio() {
           </button>
           <button className="property-button" disabled>Subdivide</button>
           <button className="property-button" disabled>Retopologize</button>
+        </div>
+
+        <div className="property-section" data-studio-section="display">
+          <h3 className="property-header">Display</h3>
+          <p className="property-label" style={{ opacity: 0.6, fontSize: '11px', margin: '0 0 6px 0' }}>
+            View-time overlays for every Studio primitive in the scene.
+          </p>
+          <div className="property-row">
+            <span className="property-label">Wireframe</span>
+            <input
+              type="checkbox"
+              data-studio-display="wireframe"
+              checked={displayWireframe}
+              onChange={e => setDisplayWireframe(e.target.checked)}
+              style={{ cursor: 'pointer' }}
+            />
+          </div>
+          <div className="property-row">
+            <span className="property-label">Bounding Box</span>
+            <input
+              type="checkbox"
+              data-studio-display="bounding-box"
+              checked={displayBoundingBox}
+              onChange={e => setDisplayBoundingBox(e.target.checked)}
+              style={{ cursor: 'pointer' }}
+            />
+          </div>
+          <div className="property-row">
+            <span className="property-label">Vertex Normals</span>
+            <input
+              type="checkbox"
+              data-studio-display="normals"
+              checked={displayNormals}
+              onChange={e => setDisplayNormals(e.target.checked)}
+              style={{ cursor: 'pointer' }}
+            />
+          </div>
+          <p
+            data-studio-display-status
+            className="property-label"
+            style={{ opacity: 0.5, fontSize: '10px', margin: '6px 0 0 0', fontFamily: 'monospace' }}
+          >
+            {[displayWireframe && 'wireframe', displayBoundingBox && 'bbox', displayNormals && 'normals']
+              .filter(Boolean).join(' + ') || 'solid'}
+          </p>
         </div>
 
         <div className="property-section" data-studio-section="render">
