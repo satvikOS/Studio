@@ -1777,6 +1777,58 @@ function WorkbenchStudio() {
   }
 
   /*
+   * Wireframe modifier — every unique edge becomes a thin cylinder.
+   *
+   * Blender source: blender/source/blender/modifiers/intern/MOD_wireframe.cc
+   *
+   * The classic "X-ray skeleton" look. Build the unique edge set from
+   * the index buffer, replace each edge with a small cylinder
+   * oriented along it, merge all cylinders into one BufferGeometry.
+   */
+  function applyWireframe(thickness) {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry || !mesh.geometry.index) return null;
+    const pos = mesh.geometry.attributes.position;
+    const idx = mesh.geometry.index;
+    const edges = new Map();
+    for (let t = 0; t < idx.count; t += 3) {
+      const a = idx.getX(t), b = idx.getX(t + 1), c = idx.getX(t + 2);
+      const pairs = [[a, b], [b, c], [c, a]];
+      for (const [u, v] of pairs) {
+        const key = u < v ? `${u}|${v}` : `${v}|${u}`;
+        if (!edges.has(key)) edges.set(key, [u, v]);
+      }
+    }
+    const cylGeoms = [];
+    const tmpA = new THREE.Vector3();
+    const tmpB = new THREE.Vector3();
+    const up = new THREE.Vector3(0, 1, 0);
+    edges.forEach(([u, v]) => {
+      tmpA.set(pos.getX(u), pos.getY(u), pos.getZ(u));
+      tmpB.set(pos.getX(v), pos.getY(v), pos.getZ(v));
+      const len = tmpA.distanceTo(tmpB);
+      if (len < 1e-6) return;
+      const cyl = new THREE.CylinderGeometry(thickness, thickness, len, 6, 1);
+      cyl.translate(0, len / 2, 0);
+      const dir = new THREE.Vector3().subVectors(tmpB, tmpA).normalize();
+      const q = new THREE.Quaternion().setFromUnitVectors(up, dir);
+      cyl.applyQuaternion(q);
+      cyl.translate(tmpA.x, tmpA.y, tmpA.z);
+      cylGeoms.push(cyl);
+    });
+    if (cylGeoms.length === 0) return null;
+    const merged = mergeGeometries(cylGeoms);
+    merged.computeVertexNormals();
+    merged.computeBoundingSphere();
+    mesh.geometry.dispose();
+    mesh.geometry = merged;
+    mesh.userData.archdiscStudioWireframed = (mesh.userData.archdiscStudioWireframed || 0) + 1;
+    mesh.userData.archdiscStudioWireframeEdges = edges.size;
+    recomputeMeshStats(window.__archdiscScene);
+    return { edges: edges.size };
+  }
+
+  /*
    * Weld modifier — merge nearby vertices.
    *
    * Blender source: blender/source/blender/modifiers/intern/MOD_weld.cc
@@ -4197,6 +4249,17 @@ function WorkbenchStudio() {
                     >
                       <span className="ribbon-tool-icon">⊗</span>
                       <span className="ribbon-tool-label">Weld</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="ribbon-tool"
+                      data-studio-ribbon-action="wireframe-mod"
+                      onClick={() => applyWireframe(0.0008)}
+                      disabled={!selectedKind}
+                      title="Blender MOD_wireframe — replace edges with thin tubes"
+                    >
+                      <span className="ribbon-tool-icon">▦</span>
+                      <span className="ribbon-tool-label">Wireframe</span>
                     </button>
                   </div>
                   <div className="ribbon-group-label">Blender · Mods</div>
