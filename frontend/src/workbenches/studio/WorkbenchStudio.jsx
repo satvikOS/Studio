@@ -109,14 +109,17 @@ function WorkbenchStudio() {
   // is reflected in the Selection panel so the user can see what tool is
   // armed.
   const [gizmoMode, setGizmoMode] = useState('translate');
-  // Stash of the original material so we can restore on deselect (we
-  // swap to a brighter "selected" material to make the selection visible).
-  const originalMaterialRef = useRef(null);
   // Wireframe outline overlay (a LineSegments object attached to the
-  // selected mesh as a sibling under the scene) so selection reads as
-  // a clear visual indicator without dragging in the heavy
-  // TransformControls gizmo at this scene's mm-scale.
+  // selected mesh as a sibling under the scene) — the SOLE selection
+  // indicator now that material edits land directly on the picked
+  // primitive's MeshStandardMaterial.
   const outlineRef = useRef(null);
+  // Live material controls for the selected mesh.
+  const [matColor, setMatColor]       = useState('#6e7681');
+  const [matMetalness, setMatMetalness] = useState(0.25);
+  const [matRoughness, setMatRoughness] = useState(0.45);
+  const [matEmissive, setMatEmissive]   = useState(0.0);
+  const [matWireframe, setMatWireframe] = useState(false);
 
   function recomputeMeshStats(scene) {
     let v = 0;
@@ -180,21 +183,9 @@ function WorkbenchStudio() {
 
   function maybeClearSelectionFor(mesh) {
     if (selectedMeshRef.current === mesh) {
-      // Don't restore swapped material — the mesh is about to be disposed
-      // entirely. Just clear selection state + remove the outline.
-      if (originalMaterialRef.current && mesh.material !== originalMaterialRef.current) {
-        mesh.material.dispose();
-        mesh.material = originalMaterialRef.current;
-      }
-      originalMaterialRef.current = null;
+      // Mesh is about to be disposed entirely — no emissive restore needed.
       selectedMeshRef.current = null;
-      const vp = window.__archdiscViewport;
-      if (vp && outlineRef.current) {
-        vp.scene.remove(outlineRef.current);
-        outlineRef.current.geometry.dispose();
-        outlineRef.current.material.dispose();
-        outlineRef.current = null;
-      }
+      outlineRef.current = null;
       setSelectedKind(null);
       setSelectedTransform(null);
     }
@@ -274,40 +265,16 @@ function WorkbenchStudio() {
     let cancelled = false;
     let cleanupFn = null;
 
-    function attachOutline(mesh, vp) {
-      // Remove any previous outline first.
-      if (outlineRef.current) {
-        vp.scene.remove(outlineRef.current);
-        outlineRef.current.geometry.dispose();
-        outlineRef.current.material.dispose();
-        outlineRef.current = null;
-      }
-      const edges = new THREE.EdgesGeometry(mesh.geometry, 25);
-      const lineMat = new THREE.LineBasicMaterial({
-        color: 0xffe066,
-        depthTest: false,
-        transparent: true,
-        opacity: 0.95,
-      });
-      const outline = new THREE.LineSegments(edges, lineMat);
-      outline.renderOrder = 999;
-      // Keep outline glued to the mesh's transform.
-      outline.position.copy(mesh.position);
-      outline.rotation.copy(mesh.rotation);
-      outline.scale.copy(mesh.scale);
-      outline.userData.isStudioOutline = true;
-      vp.scene.add(outline);
-      outlineRef.current = outline;
-    }
-
-    function clearOutline(vp) {
-      if (outlineRef.current) {
-        vp.scene.remove(outlineRef.current);
-        outlineRef.current.geometry.dispose();
-        outlineRef.current.material.dispose();
-        outlineRef.current = null;
-      }
-    }
+    // Selection has NO viewport overlay or material auto-swap — both
+    // approaches (BoxHelper, EdgesGeometry, emissive boost) collided
+    // with this scene's lighting / inherited Mech helpers. Selection
+    // is signalled exclusively by the Selection + Material property
+    // panels appearing in the right column, and material edits make
+    // their own impact visible on the mesh directly. outlineRef is
+    // kept as a no-op slot so existing call sites compile, with a
+    // future slice free to add a clean indicator.
+    function attachOutline(mesh) { outlineRef.current = mesh; }
+    function clearOutline() { outlineRef.current = null; }
 
     function setup() {
       if (cancelled) return;
@@ -318,23 +285,8 @@ function WorkbenchStudio() {
       }
 
       const selectMesh = (mesh) => {
-        if (selectedMeshRef.current && selectedMeshRef.current !== mesh) {
-          const prev = selectedMeshRef.current;
-          if (originalMaterialRef.current && prev.material !== originalMaterialRef.current) {
-            prev.material.dispose();
-            prev.material = originalMaterialRef.current;
-          }
-        }
         selectedMeshRef.current = mesh;
-        originalMaterialRef.current = mesh.material;
-        mesh.material = new THREE.MeshStandardMaterial({
-          color: 0xff4d6d,
-          metalness: 0.2,
-          roughness: 0.35,
-          emissive: 0x331122,
-          emissiveIntensity: 0.3,
-        });
-        attachOutline(mesh, vp);
+        attachOutline(mesh);
 
         setSelectedKind(mesh.userData?.archdiscStudioPrimitiveKind || 'unknown');
         setSelectedTransform({
@@ -342,19 +294,21 @@ function WorkbenchStudio() {
           rotation: [mesh.rotation.x, mesh.rotation.y, mesh.rotation.z],
           scale:    [mesh.scale.x,    mesh.scale.y,    mesh.scale.z],
         });
+
+        // Populate material controls from the picked mesh's current material.
+        const m = mesh.material;
+        if (m && m.color) {
+          setMatColor('#' + m.color.getHexString());
+          setMatMetalness(typeof m.metalness === 'number' ? m.metalness : 0);
+          setMatRoughness(typeof m.roughness === 'number' ? m.roughness : 1);
+          setMatEmissive(typeof m.emissiveIntensity === 'number' ? m.emissiveIntensity : 0);
+          setMatWireframe(!!m.wireframe);
+        }
       };
 
       const deselect = () => {
-        const prev = selectedMeshRef.current;
-        if (prev) {
-          if (originalMaterialRef.current && prev.material !== originalMaterialRef.current) {
-            prev.material.dispose();
-            prev.material = originalMaterialRef.current;
-          }
-        }
-        originalMaterialRef.current = null;
+        clearOutline();
         selectedMeshRef.current = null;
-        clearOutline(vp);
         setSelectedKind(null);
         setSelectedTransform(null);
       };
@@ -400,7 +354,7 @@ function WorkbenchStudio() {
       cleanupFn = () => {
         vp.renderer.domElement.removeEventListener('pointerdown', onPointerDown);
         window.removeEventListener('keydown', onKeyDown);
-        clearOutline(vp);
+        clearOutline();
         delete window.__studioSelectMesh;
         delete window.__studioDeselect;
       };
@@ -421,26 +375,10 @@ function WorkbenchStudio() {
 
   function deleteSelectedMesh() {
     const scene = window.__archdiscScene;
-    const vp = window.__archdiscViewport;
     const mesh = selectedMeshRef.current;
     if (!scene || !mesh) return;
 
-    // Remove the outline overlay first.
-    if (vp && outlineRef.current) {
-      vp.scene.remove(outlineRef.current);
-      outlineRef.current.geometry.dispose();
-      outlineRef.current.material.dispose();
-      outlineRef.current = null;
-    }
-
-    // Restore original material BEFORE disposing so we don't free
-    // the user's chosen material along with the selected-style swap.
-    if (originalMaterialRef.current && mesh.material !== originalMaterialRef.current) {
-      mesh.material.dispose();
-      mesh.material = originalMaterialRef.current;
-    }
-    originalMaterialRef.current = null;
-
+    outlineRef.current = null;
     scene.remove(mesh);
     const idx = primitiveStackRef.current.indexOf(mesh);
     if (idx >= 0) primitiveStackRef.current.splice(idx, 1);
@@ -451,6 +389,44 @@ function WorkbenchStudio() {
     setSelectedTransform(null);
     setPrimitiveCount(c => Math.max(0, c - 1));
     recomputeMeshStats(scene);
+  }
+
+  // Material edit handlers — live-edit the selected mesh's MeshStandardMaterial.
+  function applyMatColor(hex) {
+    setMatColor(hex);
+    const mesh = selectedMeshRef.current;
+    if (mesh && mesh.material && mesh.material.color) {
+      mesh.material.color.set(hex);
+      mesh.material.needsUpdate = true;
+    }
+  }
+  function applyMatMetalness(v) {
+    const n = Number(v);
+    setMatMetalness(n);
+    const mesh = selectedMeshRef.current;
+    if (mesh && mesh.material) { mesh.material.metalness = n; mesh.material.needsUpdate = true; }
+  }
+  function applyMatRoughness(v) {
+    const n = Number(v);
+    setMatRoughness(n);
+    const mesh = selectedMeshRef.current;
+    if (mesh && mesh.material) { mesh.material.roughness = n; mesh.material.needsUpdate = true; }
+  }
+  function applyMatEmissive(v) {
+    const n = Number(v);
+    setMatEmissive(n);
+    const mesh = selectedMeshRef.current;
+    if (mesh && mesh.material) {
+      mesh.material.emissive = mesh.material.emissive || new THREE.Color(0xffffff);
+      mesh.material.emissive.set(0xffffff);
+      mesh.material.emissiveIntensity = n;
+      mesh.material.needsUpdate = true;
+    }
+  }
+  function applyMatWireframe(checked) {
+    setMatWireframe(checked);
+    const mesh = selectedMeshRef.current;
+    if (mesh && mesh.material) { mesh.material.wireframe = !!checked; mesh.material.needsUpdate = true; }
   }
   // Keep the latest deleteSelectedMesh available to setup-scoped listeners.
   const deleteSelectedMeshRef = useRef(deleteSelectedMesh);
@@ -620,6 +596,90 @@ function WorkbenchStudio() {
             >
               Delete Selected
             </button>
+          </div>
+        )}
+
+        {selectedKind && (
+          <div className="property-section" data-studio-section="material">
+            <h3 className="property-header">Material</h3>
+            <div className="property-row">
+              <span className="property-label">Color</span>
+              <input
+                type="color"
+                className="property-input"
+                data-studio-material="color"
+                value={matColor}
+                onChange={e => applyMatColor(e.target.value)}
+                style={{ height: '24px', cursor: 'pointer' }}
+              />
+            </div>
+            <div className="property-row">
+              <span className="property-label">Metalness</span>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                data-studio-material="metalness"
+                value={matMetalness}
+                onChange={e => applyMatMetalness(e.target.value)}
+                style={{ flex: 1 }}
+              />
+              <span
+                data-studio-material-readout="metalness"
+                style={{ marginLeft: '6px', fontSize: '10px', fontFamily: 'monospace', minWidth: '32px', textAlign: 'right' }}
+              >
+                {matMetalness.toFixed(2)}
+              </span>
+            </div>
+            <div className="property-row">
+              <span className="property-label">Roughness</span>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                data-studio-material="roughness"
+                value={matRoughness}
+                onChange={e => applyMatRoughness(e.target.value)}
+                style={{ flex: 1 }}
+              />
+              <span
+                data-studio-material-readout="roughness"
+                style={{ marginLeft: '6px', fontSize: '10px', fontFamily: 'monospace', minWidth: '32px', textAlign: 'right' }}
+              >
+                {matRoughness.toFixed(2)}
+              </span>
+            </div>
+            <div className="property-row">
+              <span className="property-label">Emissive</span>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                data-studio-material="emissive"
+                value={matEmissive}
+                onChange={e => applyMatEmissive(e.target.value)}
+                style={{ flex: 1 }}
+              />
+              <span
+                data-studio-material-readout="emissive"
+                style={{ marginLeft: '6px', fontSize: '10px', fontFamily: 'monospace', minWidth: '32px', textAlign: 'right' }}
+              >
+                {matEmissive.toFixed(2)}
+              </span>
+            </div>
+            <div className="property-row">
+              <span className="property-label">Wireframe</span>
+              <input
+                type="checkbox"
+                data-studio-material="wireframe"
+                checked={matWireframe}
+                onChange={e => applyMatWireframe(e.target.checked)}
+                style={{ cursor: 'pointer' }}
+              />
+            </div>
           </div>
         )}
 
