@@ -274,6 +274,7 @@ function WorkbenchStudio() {
   const [keyframes,         setKeyframes]         = useState([]);
   const [currentFrame,      setCurrentFrame]      = useState(0);
   const [isPlayingTimeline, setIsPlayingTimeline] = useState(false);
+  const [showMotionPaths,   setShowMotionPaths]   = useState(false);
   // Cloth simulation — PBD edge-spring cloth, drops under gravity.
   const [clothActive, setClothActive] = useState(false);
   const clothStateRef = useRef(null);
@@ -2011,6 +2012,62 @@ function WorkbenchStudio() {
   useEffect(() => {
     applyFrameToScene(currentFrame);
   }, [currentFrame, keyframes]);
+
+  /*
+   * Motion Path display — for every mesh with ≥2 keyframes, sample
+   * the interpolated position at every frame between the first and
+   * last keyframe and emit a teal poly-line. Lines are tagged with
+   * userData.archdiscStudioMotionPath so the sync routine can clean
+   * them up without ambushing other scene lines.
+   */
+  function syncMotionPaths() {
+    const scene = window.__archdiscScene;
+    if (!scene) return;
+    // Clear existing.
+    const toRemove = [];
+    scene.traverse(o => { if (o.userData && o.userData.archdiscStudioMotionPath) toRemove.push(o); });
+    toRemove.forEach(o => {
+      scene.remove(o);
+      if (o.geometry && o.geometry.dispose) o.geometry.dispose();
+      if (o.material && o.material.dispose) o.material.dispose();
+    });
+    if (!showMotionPaths) return;
+    const byMesh = new Map();
+    for (const k of keyframes) {
+      if (!byMesh.has(k.meshUuid)) byMesh.set(k.meshUuid, []);
+      byMesh.get(k.meshUuid).push(k);
+    }
+    byMesh.forEach((kfs, uuid) => {
+      if (kfs.length < 2) return;
+      kfs.sort((a, b) => a.frame - b.frame);
+      const minF = kfs[0].frame, maxF = kfs[kfs.length - 1].frame;
+      const positions = [];
+      for (let f = minF; f <= maxF; f++) {
+        let before = kfs[0], after = kfs[kfs.length - 1];
+        for (const k of kfs) {
+          if (k.frame <= f) before = k;
+          if (k.frame >= f) { after = k; break; }
+        }
+        const span = after.frame - before.frame;
+        const t = span === 0 ? 0 : (f - before.frame) / span;
+        positions.push(
+          before.px * (1 - t) + after.px * t,
+          before.py * (1 - t) + after.py * t,
+          before.pz * (1 - t) + after.pz * t,
+        );
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      const mat = new THREE.LineBasicMaterial({ color: 0x28d4d4, transparent: true, opacity: 0.85 });
+      const line = new THREE.Line(g, mat);
+      line.userData.archdiscStudioMotionPath = true;
+      line.userData.archdiscStudioMotionPathForUuid = uuid;
+      scene.add(line);
+    });
+  }
+  useEffect(() => {
+    syncMotionPaths();
+  }, [showMotionPaths, keyframes]);
   useEffect(() => {
     if (!isPlayingTimeline) return;
     let last = performance.now();
@@ -5100,6 +5157,16 @@ function WorkbenchStudio() {
             >
               Clear Keyframes
             </button>
+            <div className="property-row" style={{ marginTop: '4px' }}>
+              <span className="property-label">Motion Path</span>
+              <input
+                type="checkbox"
+                data-studio-timeline="show-motion-path"
+                checked={showMotionPaths}
+                onChange={e => setShowMotionPaths(e.target.checked)}
+                style={{ cursor: 'pointer' }}
+              />
+            </div>
             <p
               data-studio-keyframe-count
               className="property-label"
