@@ -260,6 +260,10 @@ function WorkbenchStudio() {
   const brushStateRef = useRef({ active: false, mode: 'push', radius: 0.012, strength: 0.4 });
   // Decimate aggressiveness (vertex-clustering quantization fraction).
   const [decimateAggressiveness, setDecimateAggressiveness] = useState(0.5);
+  // Noise displacement — value noise along normals.
+  const [displaceFrequency, setDisplaceFrequency] = useState(80);
+  const [displaceAmplitude, setDisplaceAmplitude] = useState(0.004);
+  const [displaceOctaves,   setDisplaceOctaves]   = useState(2);
   // Display modes — view-time toggles for wireframe, bounding-box,
   // and vertex-normals visualization on Studio primitives.
   const [displayWireframe,   setDisplayWireframe]   = useState(false);
@@ -1912,6 +1916,80 @@ function WorkbenchStudio() {
       mesh.material.map = null;
       mesh.material.needsUpdate = true;
     }
+  }
+
+  /*
+   * Noise Displacement modifier — deterministic 3D value noise along
+   * vertex normals. Real organic surfaces (terrain, bark, skin, rust)
+   * without any randomness — same vertex coordinates always produce
+   * the same noise value because the underlying hash is purely a
+   * function of (x, y, z).
+   */
+  function noise3Hash(x, y, z) {
+    // Deterministic pseudo-noise from integer-quantized coordinates.
+    // The sin-based hash is widely used in shader code and gives a
+    // good visual approximation of value noise without seed state.
+    const a = Math.sin(x * 12.9898 + y * 78.233 + z * 37.719) * 43758.5453;
+    return a - Math.floor(a);
+  }
+  function smoothNoise3(x, y, z) {
+    const x0 = Math.floor(x), x1 = x0 + 1;
+    const y0 = Math.floor(y), y1 = y0 + 1;
+    const z0 = Math.floor(z), z1 = z0 + 1;
+    const fx = x - x0, fy = y - y0, fz = z - z0;
+    // Smoothstep weighting so the result is C1-continuous.
+    const sx = fx * fx * (3 - 2 * fx);
+    const sy = fy * fy * (3 - 2 * fy);
+    const sz = fz * fz * (3 - 2 * fz);
+    const n000 = noise3Hash(x0, y0, z0);
+    const n100 = noise3Hash(x1, y0, z0);
+    const n010 = noise3Hash(x0, y1, z0);
+    const n110 = noise3Hash(x1, y1, z0);
+    const n001 = noise3Hash(x0, y0, z1);
+    const n101 = noise3Hash(x1, y0, z1);
+    const n011 = noise3Hash(x0, y1, z1);
+    const n111 = noise3Hash(x1, y1, z1);
+    const nx00 = n000 * (1 - sx) + n100 * sx;
+    const nx10 = n010 * (1 - sx) + n110 * sx;
+    const nx01 = n001 * (1 - sx) + n101 * sx;
+    const nx11 = n011 * (1 - sx) + n111 * sx;
+    const ny0 = nx00 * (1 - sy) + nx10 * sy;
+    const ny1 = nx01 * (1 - sy) + nx11 * sy;
+    return ny0 * (1 - sz) + ny1 * sz;
+  }
+  function displaceNoise(frequency, amplitude, octaves) {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    const pos = mesh.geometry.attributes.position;
+    if (!mesh.geometry.attributes.normal) mesh.geometry.computeVertexNormals();
+    const norm = mesh.geometry.attributes.normal;
+    let maxDelta = 0;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+      // Fractal sum: octaves of smoothNoise at doubling frequencies +
+      // halving amplitudes. octaves=1 gives pure value noise.
+      let n = 0, freq = frequency, amp = 1, totalAmp = 0;
+      for (let o = 0; o < octaves; o++) {
+        n += (smoothNoise3(x * freq, y * freq, z * freq) - 0.5) * amp;
+        totalAmp += amp;
+        freq *= 2;
+        amp *= 0.5;
+      }
+      n /= totalAmp;
+      const dx = norm.getX(i) * n * amplitude;
+      const dy = norm.getY(i) * n * amplitude;
+      const dz = norm.getZ(i) * n * amplitude;
+      pos.setXYZ(i, x + dx, y + dy, z + dz);
+      const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      if (d > maxDelta) maxDelta = d;
+    }
+    pos.needsUpdate = true;
+    mesh.geometry.computeVertexNormals();
+    mesh.geometry.computeBoundingSphere();
+    mesh.userData.archdiscStudioDisplaced = (mesh.userData.archdiscStudioDisplaced || 0) + 1;
+    mesh.userData.archdiscStudioDisplacedMaxDelta = maxDelta;
+    recomputeMeshStats(window.__archdiscScene);
+    return { maxDelta };
   }
 
   /*
@@ -4459,6 +4537,77 @@ function WorkbenchStudio() {
               disabled={!selectedKind}
             >
               Decimate Selected
+            </button>
+          </div>
+
+          <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+            <p className="property-label" style={{ opacity: 0.6, fontSize: '11px', margin: '0 0 4px 0' }}>
+              Displace · Noise — deterministic 3D value noise along normals.
+            </p>
+            <div className="property-row">
+              <span className="property-label">Frequency</span>
+              <input
+                type="range"
+                min="20"
+                max="400"
+                step="5"
+                data-studio-displace="frequency"
+                value={displaceFrequency}
+                onChange={e => setDisplaceFrequency(Number(e.target.value))}
+                style={{ flex: 1 }}
+              />
+              <span
+                data-studio-displace-readout="frequency"
+                style={{ marginLeft: '6px', fontSize: '10px', fontFamily: 'monospace', minWidth: '32px', textAlign: 'right' }}
+              >
+                {displaceFrequency}
+              </span>
+            </div>
+            <div className="property-row">
+              <span className="property-label">Amplitude</span>
+              <input
+                type="range"
+                min="0.0005"
+                max="0.015"
+                step="0.0005"
+                data-studio-displace="amplitude"
+                value={displaceAmplitude}
+                onChange={e => setDisplaceAmplitude(Number(e.target.value))}
+                style={{ flex: 1 }}
+              />
+              <span
+                data-studio-displace-readout="amplitude"
+                style={{ marginLeft: '6px', fontSize: '10px', fontFamily: 'monospace', minWidth: '46px', textAlign: 'right' }}
+              >
+                {(displaceAmplitude * 1000).toFixed(1)} mm
+              </span>
+            </div>
+            <div className="property-row">
+              <span className="property-label">Octaves</span>
+              <input
+                type="range"
+                min="1"
+                max="6"
+                step="1"
+                data-studio-displace="octaves"
+                value={displaceOctaves}
+                onChange={e => setDisplaceOctaves(Number(e.target.value))}
+                style={{ flex: 1 }}
+              />
+              <span
+                data-studio-displace-readout="octaves"
+                style={{ marginLeft: '6px', fontSize: '10px', fontFamily: 'monospace', minWidth: '20px', textAlign: 'right' }}
+              >
+                {displaceOctaves}
+              </span>
+            </div>
+            <button
+              className="property-button"
+              data-studio-action="displace-noise"
+              onClick={() => displaceNoise(displaceFrequency, displaceAmplitude, displaceOctaves)}
+              disabled={!selectedKind}
+            >
+              Displace · Noise
             </button>
           </div>
         </div>
