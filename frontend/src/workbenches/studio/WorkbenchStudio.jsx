@@ -1568,6 +1568,145 @@ function WorkbenchStudio() {
   }
 
   /*
+   * Loop subdivision — Charles Loop's smooth subdivision scheme.
+   *
+   * Topology: every triangle becomes four (same as midpoint subdivision).
+   * Positions: SMOOTHED via Loop's weight rules — interior edge points
+   * are weighted averages of 4 surrounding vertices, and existing
+   * vertices get pulled toward the centroid of their one-ring
+   * neighbours.
+   *
+   * Weights:
+   *   Interior edge mid: 3/8 (a + b) + 1/8 (left + right)
+   *   Boundary  edge mid: 1/2 (a + b)              (no opposite verts)
+   *   Existing vertex i with n neighbours:
+   *     beta = n==3 ? 3/16 : 3/(8n)
+   *     newpos = (1 - n*beta) * oldpos + beta * sum(neighbours)
+   *
+   * Reference: Loop, "Smooth Subdivision Surfaces Based on Triangles"
+   * (1987 MSc thesis). Standard implementation used by Blender's
+   * Subdivision Surface modifier, Maya's "Smooth" command, etc.
+   */
+  function loopSubdivideSelected() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    let g = mesh.geometry;
+    // Loop's edge / vertex weights only make sense on a DEDUPED mesh —
+    // shared edges between faces must use the same vertex indices.
+    // Pre-merge identical positions (strip normals/UVs first so dedup
+    // is positional only) before subdividing.
+    const positionsArr = Array.from(g.attributes.position.array);
+    const tmp = new THREE.BufferGeometry();
+    tmp.setAttribute('position', new THREE.Float32BufferAttribute(positionsArr, 3));
+    if (g.index) {
+      tmp.setIndex(Array.from(g.index.array));
+    } else {
+      // Synthesize implicit index for a non-indexed source.
+      const n = g.attributes.position.count;
+      const arr = new Array(n);
+      for (let i = 0; i < n; i++) arr[i] = i;
+      tmp.setIndex(arr);
+    }
+    g = mergeVertices(tmp, 1e-5);
+    const oldPos = g.attributes.position;
+    const oldIdx = g.index;
+    const numTris = oldIdx.count / 3;
+
+    // 1. Edge map: edge key -> { u, v, opposites[] }
+    const edgeMap = new Map();
+    const edgeKey = (a, b) => a < b ? `${a}|${b}` : `${b}|${a}`;
+    for (let t = 0; t < numTris; t++) {
+      const a = oldIdx.getX(t * 3);
+      const b = oldIdx.getX(t * 3 + 1);
+      const c = oldIdx.getX(t * 3 + 2);
+      const pairs = [[a, b, c], [b, c, a], [c, a, b]];
+      for (const [u, v, opp] of pairs) {
+        const k = edgeKey(u, v);
+        if (!edgeMap.has(k)) edgeMap.set(k, { u, v, opposites: [] });
+        edgeMap.get(k).opposites.push(opp);
+      }
+    }
+
+    // 2. One-ring neighbours per vertex.
+    const neighbours = Array.from({ length: oldPos.count }, () => new Set());
+    edgeMap.forEach(({ u, v }) => {
+      neighbours[u].add(v);
+      neighbours[v].add(u);
+    });
+
+    // 3. Smoothed existing vertices.
+    const xs = [], ys = [], zs = [];
+    for (let i = 0; i < oldPos.count; i++) {
+      const nb = neighbours[i];
+      const n = nb.size;
+      if (n === 0) {
+        xs.push(oldPos.getX(i)); ys.push(oldPos.getY(i)); zs.push(oldPos.getZ(i));
+        continue;
+      }
+      const beta = n === 3 ? 3 / 16 : 3 / (8 * n);
+      let sx = 0, sy = 0, sz = 0;
+      nb.forEach(j => { sx += oldPos.getX(j); sy += oldPos.getY(j); sz += oldPos.getZ(j); });
+      const w = 1 - n * beta;
+      xs.push(oldPos.getX(i) * w + sx * beta);
+      ys.push(oldPos.getY(i) * w + sy * beta);
+      zs.push(oldPos.getZ(i) * w + sz * beta);
+    }
+
+    // 4. Edge midpoint vertices with Loop weights.
+    const edgeMidIdx = new Map();
+    edgeMap.forEach((info, k) => {
+      let ex, ey, ez;
+      if (info.opposites.length === 2) {
+        const [l, r] = info.opposites;
+        ex = (3 / 8) * (oldPos.getX(info.u) + oldPos.getX(info.v))
+           + (1 / 8) * (oldPos.getX(l)      + oldPos.getX(r));
+        ey = (3 / 8) * (oldPos.getY(info.u) + oldPos.getY(info.v))
+           + (1 / 8) * (oldPos.getY(l)      + oldPos.getY(r));
+        ez = (3 / 8) * (oldPos.getZ(info.u) + oldPos.getZ(info.v))
+           + (1 / 8) * (oldPos.getZ(l)      + oldPos.getZ(r));
+      } else {
+        ex = (oldPos.getX(info.u) + oldPos.getX(info.v)) * 0.5;
+        ey = (oldPos.getY(info.u) + oldPos.getY(info.v)) * 0.5;
+        ez = (oldPos.getZ(info.u) + oldPos.getZ(info.v)) * 0.5;
+      }
+      edgeMidIdx.set(k, xs.length);
+      xs.push(ex); ys.push(ey); zs.push(ez);
+    });
+
+    // 5. Build new index buffer — 4 triangles per original triangle.
+    const newIndices = [];
+    for (let t = 0; t < numTris; t++) {
+      const a = oldIdx.getX(t * 3);
+      const b = oldIdx.getX(t * 3 + 1);
+      const c = oldIdx.getX(t * 3 + 2);
+      const mAB = edgeMidIdx.get(edgeKey(a, b));
+      const mBC = edgeMidIdx.get(edgeKey(b, c));
+      const mCA = edgeMidIdx.get(edgeKey(c, a));
+      newIndices.push(a, mAB, mCA);
+      newIndices.push(mAB, b, mBC);
+      newIndices.push(mCA, mBC, c);
+      newIndices.push(mAB, mBC, mCA);
+    }
+
+    const positions = new Float32Array(xs.length * 3);
+    for (let i = 0; i < xs.length; i++) {
+      positions[i * 3]     = xs[i];
+      positions[i * 3 + 1] = ys[i];
+      positions[i * 3 + 2] = zs[i];
+    }
+    const newGeom = new THREE.BufferGeometry();
+    newGeom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    newGeom.setIndex(newIndices);
+    newGeom.computeVertexNormals();
+    newGeom.computeBoundingSphere();
+    mesh.geometry.dispose();
+    mesh.geometry = newGeom;
+    mesh.userData.archdiscStudioLoopSubdivided = (mesh.userData.archdiscStudioLoopSubdivided || 0) + 1;
+    recomputeMeshStats(window.__archdiscScene);
+    return { vertCount: xs.length, triCount: newIndices.length / 3 };
+  }
+
+  /*
    * Compositing — take the most recent Render thumbnail, redraw it
    * through a CSS-filter-style canvas filter (grayscale/sepia/invert/
    * blur/contrast), append the filtered result as a new thumbnail
@@ -4856,6 +4995,18 @@ function WorkbenchStudio() {
             disabled={!selectedKind}
           >
             Subdivide Selected
+          </button>
+          <p className="property-label" style={{ opacity: 0.6, fontSize: '11px', margin: '6px 0 4px 0' }}>
+            Loop subdivision: smooth scheme — edge points + existing
+            vertices repositioned per Loop's weights. 4× tri count.
+          </p>
+          <button
+            className="property-button"
+            data-studio-action="loop-subdivide-selected"
+            onClick={loopSubdivideSelected}
+            disabled={!selectedKind}
+          >
+            Loop Subdivide (Smooth)
           </button>
         </div>
 
