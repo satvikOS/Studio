@@ -211,11 +211,8 @@ test('Studio Integration — AAA Game Level (30+ engine tools)', async () => {
   await win.screenshot({ path: path.join(OUT, '03-full-gameplay.png'), fullPage: false });
 
   // ════════════ LIGHTING ═══════════════════════════════════════════
-  await tab(win, 'rendering');
-  await win.locator('[data-studio-action="three-point-preset"]').click();
-  await win.waitForTimeout(400);
-  await win.locator('[data-studio-ribbon-action="light-sun"]').click();
-  await win.waitForTimeout(250);
+  // SkyLight + Reflection Probe live in Modeling tab's Engine group;
+  // 3-Point + Sun + Shade-Rendered live on Rendering tab.
   await win.locator('[data-studio-ribbon-action="sky-light"]').click();
   await win.waitForTimeout(250);
   await win.locator('[data-studio-ribbon-action="reflection-probe"]').click();
@@ -223,6 +220,12 @@ test('Studio Integration — AAA Game Level (30+ engine tools)', async () => {
   await win.locator('[data-studio-ribbon-action="reflection-probe"]').click();
   await win.waitForTimeout(250);
   await win.locator('[data-studio-ribbon-action="reflection-probe"]').click();
+  await win.waitForTimeout(250);
+
+  await tab(win, 'rendering');
+  await win.locator('[data-studio-action="three-point-preset"]').click();
+  await win.waitForTimeout(400);
+  await win.locator('[data-studio-ribbon-action="light-sun"]').click();
   await win.waitForTimeout(250);
   await win.locator('[data-studio-ribbon-action="shade-rendered"]').click();
   await win.waitForTimeout(280);
