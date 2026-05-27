@@ -270,6 +270,8 @@ function WorkbenchStudio() {
   // Cell fracture / shatter — split selected mesh into N spatial chunks.
   const [fractureChunks, setFractureChunks] = useState(12);
   const [fractureExplode, setFractureExplode] = useState(0.006);
+  // Asset library — readout of last-loaded preset.
+  const [libraryLastLoaded, setLibraryLastLoaded] = useState('');
   // Display modes — view-time toggles for wireframe, bounding-box,
   // and vertex-normals visualization on Studio primitives.
   const [displayWireframe,   setDisplayWireframe]   = useState(false);
@@ -1925,6 +1927,54 @@ function WorkbenchStudio() {
   }
 
   /*
+   * Asset Library — preset scenes that exercise the Studio toolchain
+   * end-to-end. Every loader is a deterministic pure-data composition
+   * of existing Studio ops; no per-preset bespoke builders. Real DCC
+   * apps ship asset libraries to demonstrate workflows; ours runs the
+   * ops a user would invoke by hand.
+   */
+  function selectLastPrimitive() {
+    const stack = primitiveStackRef.current;
+    if (stack.length === 0) return null;
+    const last = stack[stack.length - 1];
+    if (window.__studioSelectMesh) window.__studioSelectMesh(last);
+    else selectedMeshRef.current = last;
+    return last;
+  }
+  function loadPreset(preset) {
+    const mat = (id) => MATERIAL_PRESETS.find(p => p.id === id);
+    clearScene();
+    if (preset === 'crystal-garden') {
+      addPrimitive('icosahedron');
+      selectLastPrimitive(); subdivideSelected(); applyMaterialPreset(mat('chrome'));
+      addPrimitive('dodecahedron');
+      selectLastPrimitive(); subdivideSelected(); applyMaterialPreset(mat('gold'));
+      addPrimitive('icosahedron');
+      selectLastPrimitive(); applyMaterialPreset(mat('copper'));
+    } else if (preset === 'furry-suzanne') {
+      addPrimitive('suzanne');
+      selectLastPrimitive();
+      subdivideSelected();
+      applyMaterialPreset(mat('chrome'));
+      growHair(1500, 0.012);
+    } else if (preset === 'shattered-sphere') {
+      addPrimitive('sphere');
+      selectLastPrimitive();
+      subdivideSelected();
+      displaceNoise(120, 0.004, 3);
+      fractureSelected(14, 0.008);
+    } else if (preset === 'industrial-pod') {
+      addPrimitive('cylinder');
+      selectLastPrimitive(); applyMaterialPreset(mat('chrome'));
+      addPrimitive('torus');
+      selectLastPrimitive(); applyMaterialPreset(mat('gold'));
+      addPrimitive('cube');
+      selectLastPrimitive(); applyMaterialPreset(mat('chrome'));
+    }
+    setLibraryLastLoaded(preset);
+  }
+
+  /*
    * Cell Fracture / Voronoi Shatter — split a mesh into N spatial chunks
    * along Voronoi-like cell boundaries, optionally offset outward
    * (explode) for a destruction VFX look. Deterministic: same seed
@@ -3496,6 +3546,55 @@ function WorkbenchStudio() {
           >
             Compose Demo Scene
           </button>
+        </div>
+
+        <div className="property-section" data-studio-section="library">
+          <h3 className="property-header">Asset Library</h3>
+          <p className="property-label" style={{ opacity: 0.6, fontSize: '11px', margin: '0 0 6px 0' }}>
+            Preset scenes — each is a deterministic composition of
+            Studio ops, not a pre-baked file.
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px' }}>
+            <button
+              className="property-button"
+              data-studio-preset="crystal-garden"
+              onClick={() => loadPreset('crystal-garden')}
+              style={{ margin: 0 }}
+            >
+              Crystal Garden
+            </button>
+            <button
+              className="property-button"
+              data-studio-preset="furry-suzanne"
+              onClick={() => loadPreset('furry-suzanne')}
+              style={{ margin: 0 }}
+            >
+              Furry Suzanne
+            </button>
+            <button
+              className="property-button"
+              data-studio-preset="shattered-sphere"
+              onClick={() => loadPreset('shattered-sphere')}
+              style={{ margin: 0 }}
+            >
+              Shattered Sphere
+            </button>
+            <button
+              className="property-button"
+              data-studio-preset="industrial-pod"
+              onClick={() => loadPreset('industrial-pod')}
+              style={{ margin: 0 }}
+            >
+              Industrial Pod
+            </button>
+          </div>
+          <p
+            data-studio-library-status
+            className="property-label"
+            style={{ opacity: 0.55, fontSize: '10px', margin: '6px 0 0 0', fontFamily: 'monospace' }}
+          >
+            {libraryLastLoaded ? `Loaded: ${libraryLastLoaded}` : 'No preset loaded'}
+          </p>
         </div>
 
         {selectedKind && selectedTransform && (
