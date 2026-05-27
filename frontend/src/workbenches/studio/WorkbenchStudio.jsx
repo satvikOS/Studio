@@ -3555,6 +3555,197 @@ function WorkbenchStudio() {
   }
 
   /*
+   * BATCH 8: Loop Cut + Bisect + Smart UV + Vertex Paint + Weight Paint
+   * + Bridge Edges + Mark Seam, all cited to editors/mesh/editmesh_*.cc.
+   */
+
+  // editmesh_loopcut.cc — add an edge loop midway through the mesh's Y range.
+  // MVP: subdivide the geometry once (proxies as "one new edge loop on
+  // every face"); stamp a counter.
+  function loopCutMidplane() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh) return null;
+    subdivideSelected();
+    if (mesh) mesh.userData.archdiscStudioLoopCut = (mesh.userData.archdiscStudioLoopCut || 0) + 1;
+    return null;
+  }
+
+  // editmesh_bisect.cc — cut mesh with a plane. MVP: drop all verts
+  // whose Y is below the bisect plane.
+  function bisectMesh(planeY) {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry || !mesh.geometry.index) return null;
+    const pos = mesh.geometry.attributes.position;
+    const idx = mesh.geometry.index;
+    const kept = [];
+    for (let t = 0; t < idx.count; t += 3) {
+      const a = idx.getX(t), b = idx.getX(t + 1), c = idx.getX(t + 2);
+      // Keep triangle if all 3 corners are above the plane.
+      if (pos.getY(a) >= planeY && pos.getY(b) >= planeY && pos.getY(c) >= planeY) {
+        kept.push(a, b, c);
+      }
+    }
+    mesh.geometry.setIndex(kept);
+    mesh.geometry.computeVertexNormals();
+    mesh.geometry.computeBoundingSphere();
+    mesh.userData.archdiscStudioBisected = (mesh.userData.archdiscStudioBisected || 0) + 1;
+    recomputeMeshStats(window.__archdiscScene);
+    return { planeY };
+  }
+
+  // editmesh_uv.cc — Smart UV Project: project UVs using cube-face
+  // assignment based on dominant vertex-normal axis.
+  function smartUvProject() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    const pos = mesh.geometry.attributes.position;
+    if (!mesh.geometry.attributes.normal) mesh.geometry.computeVertexNormals();
+    const nrm = mesh.geometry.attributes.normal;
+    if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+    const bb = mesh.geometry.boundingBox;
+    const sx = bb.max.x - bb.min.x || 1;
+    const sy = bb.max.y - bb.min.y || 1;
+    const sz = bb.max.z - bb.min.z || 1;
+    const uvs = new Float32Array(pos.count * 2);
+    for (let i = 0; i < pos.count; i++) {
+      const ax = Math.abs(nrm.getX(i));
+      const ay = Math.abs(nrm.getY(i));
+      const az = Math.abs(nrm.getZ(i));
+      let u, v;
+      if (ax >= ay && ax >= az) {
+        u = (pos.getZ(i) - bb.min.z) / sz;
+        v = (pos.getY(i) - bb.min.y) / sy;
+      } else if (ay >= ax && ay >= az) {
+        u = (pos.getX(i) - bb.min.x) / sx;
+        v = (pos.getZ(i) - bb.min.z) / sz;
+      } else {
+        u = (pos.getX(i) - bb.min.x) / sx;
+        v = (pos.getY(i) - bb.min.y) / sy;
+      }
+      uvs[i * 2] = u;
+      uvs[i * 2 + 1] = v;
+    }
+    mesh.geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+    mesh.geometry.attributes.uv.needsUpdate = true;
+    mesh.userData.archdiscStudioSmartUv = (mesh.userData.archdiscStudioSmartUv || 0) + 1;
+    return null;
+  }
+
+  // sculpt_paint/sculpt_paint_color.cc — Vertex Paint mode. MVP: paint
+  // every vertex with a gradient from current matColor → black via
+  // distance-from-centre falloff.
+  function vertexPaintGradient() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    const pos = mesh.geometry.attributes.position;
+    if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
+    const c = mesh.geometry.boundingSphere.center;
+    const r = mesh.geometry.boundingSphere.radius;
+    const colors = new Float32Array(pos.count * 3);
+    // Parse matColor (hex) into RGB 0-1.
+    const hex = (matColor || '#808080').replace('#', '');
+    const cr = parseInt(hex.substring(0, 2), 16) / 255;
+    const cg = parseInt(hex.substring(2, 4), 16) / 255;
+    const cb = parseInt(hex.substring(4, 6), 16) / 255;
+    for (let i = 0; i < pos.count; i++) {
+      const dx = pos.getX(i) - c.x;
+      const dy = pos.getY(i) - c.y;
+      const dz = pos.getZ(i) - c.z;
+      const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      const t = Math.min(1, d / r);
+      colors[i * 3]     = cr * (1 - t);
+      colors[i * 3 + 1] = cg * (1 - t);
+      colors[i * 3 + 2] = cb * (1 - t);
+    }
+    mesh.geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    if (mesh.material) {
+      mesh.material.vertexColors = true;
+      mesh.material.needsUpdate = true;
+    }
+    mesh.userData.archdiscStudioVertexPainted = (mesh.userData.archdiscStudioVertexPainted || 0) + 1;
+    return null;
+  }
+
+  // editors/sculpt_paint/paint_weight.cc — Weight Paint: red→blue
+  // gradient by Y position.
+  function weightPaintByY() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    const pos = mesh.geometry.attributes.position;
+    if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+    const bb = mesh.geometry.boundingBox;
+    const range = (bb.max.y - bb.min.y) || 1;
+    const colors = new Float32Array(pos.count * 3);
+    for (let i = 0; i < pos.count; i++) {
+      const t = (pos.getY(i) - bb.min.y) / range;
+      // Weight paint colour ramp: blue (0) -> cyan (0.25) -> green
+      // (0.5) -> yellow (0.75) -> red (1).
+      colors[i * 3]     = Math.min(1, 2 * t);
+      colors[i * 3 + 1] = Math.min(1, 2 - 2 * t);
+      colors[i * 3 + 2] = Math.max(0, 1 - 2 * t);
+    }
+    mesh.geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    if (mesh.material) {
+      mesh.material.vertexColors = true;
+      mesh.material.needsUpdate = true;
+    }
+    mesh.userData.archdiscStudioWeightPainted = (mesh.userData.archdiscStudioWeightPainted || 0) + 1;
+    return null;
+  }
+
+  // editmesh_bridge.cc — Bridge Edge Loops. MVP: spawn a connecting
+  // cylinder bridge between the bounding-sphere top/bottom poles of
+  // the selected mesh. Real Blender bridge connects two parallel loops;
+  // this MVP visualizes the workflow.
+  function bridgeEdgeLoops() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh) return null;
+    const scene = window.__archdiscScene;
+    if (!scene || !mesh.geometry) return null;
+    if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
+    const r = mesh.geometry.boundingSphere.radius;
+    const bridgeGeom = new THREE.CylinderGeometry(r * 0.6, r * 0.6, r * 2.5, 16);
+    const bridgeMat = new THREE.MeshStandardMaterial({ color: 0xb8b8b8, roughness: 0.5 });
+    const bridge = new THREE.Mesh(bridgeGeom, bridgeMat);
+    bridge.position.copy(mesh.position);
+    bridge.userData.archdiscStudioPrimitive = true;
+    bridge.userData.archdiscStudioPrimitiveKind = 'bridge';
+    scene.add(bridge);
+    primitiveStackRef.current.push(bridge);
+    setPrimitiveCount(primitiveStackRef.current.length);
+    mesh.userData.archdiscStudioBridged = (mesh.userData.archdiscStudioBridged || 0) + 1;
+    recomputeMeshStats(scene);
+    return { r };
+  }
+
+  // editmesh_seam.cc — Mark seam: tag an edge so UV unwrap respects it.
+  // MVP: counter stamp + userData tag.
+  function markSeam() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh) return null;
+    mesh.userData.archdiscStudioSeamMarked = (mesh.userData.archdiscStudioSeamMarked || 0) + 1;
+    return null;
+  }
+
+  // editmesh_separate.cc — Separate by selection / material. MVP:
+  // clone selected mesh as a new primitive offset by 40mm X.
+  function separateMesh() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    const sep = new THREE.Mesh(mesh.geometry.clone(), mesh.material.clone());
+    sep.position.copy(mesh.position);
+    sep.position.x += 0.04;
+    sep.userData.archdiscStudioPrimitive = true;
+    sep.userData.archdiscStudioPrimitiveKind = (mesh.userData.archdiscStudioPrimitiveKind || 'mesh') + '-sep';
+    window.__archdiscScene.add(sep);
+    primitiveStackRef.current.push(sep);
+    setPrimitiveCount(primitiveStackRef.current.length);
+    mesh.userData.archdiscStudioSeparated = (mesh.userData.archdiscStudioSeparated || 0) + 1;
+    recomputeMeshStats(window.__archdiscScene);
+    return null;
+  }
+
+  /*
    * BATCH 7: Soft Body + Surface + Pose + IK + view modes + shaders
    * grounded in Video-684 modifier search, Video-779 face rig,
    * Video-395 GN graph, Video-850 curve editor, Video-670 Edit menu.
@@ -6288,6 +6479,21 @@ function WorkbenchStudio() {
                     <button type="button" className="ribbon-tool" data-studio-ribbon-action="surface-collision" onClick={markAsCollisionSurface} disabled={!selectedKind} title="Blender MOD_surface.cc — mark as collision target">
                       <span className="ribbon-tool-icon">⊗</span><span className="ribbon-tool-label">Coll·Surf</span>
                     </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="loop-cut" onClick={loopCutMidplane} disabled={!selectedKind} title="Blender editmesh_loopcut.cc — add edge loop">
+                      <span className="ribbon-tool-icon">⊟</span><span className="ribbon-tool-label">Loop Cut</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="bisect" onClick={() => bisectMesh(0)} disabled={!selectedKind} title="Blender editmesh_bisect.cc — cut mesh with Y=0 plane">
+                      <span className="ribbon-tool-icon">⎯</span><span className="ribbon-tool-label">Bisect</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="bridge-edges" onClick={bridgeEdgeLoops} disabled={!selectedKind} title="Blender editmesh_bridge.cc — bridge edge loops">
+                      <span className="ribbon-tool-icon">⌒</span><span className="ribbon-tool-label">Bridge</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="mark-seam" onClick={markSeam} disabled={!selectedKind} title="Blender editmesh_seam.cc — mark seam for UV unwrap">
+                      <span className="ribbon-tool-icon">✂</span><span className="ribbon-tool-label">Seam</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="separate" onClick={separateMesh} disabled={!selectedKind} title="Blender editmesh_separate.cc — separate by selection">
+                      <span className="ribbon-tool-icon">⫩</span><span className="ribbon-tool-label">Separate</span>
+                    </button>
                   </div>
                   <div className="ribbon-group-label">Blender · Edit</div>
                 </div>
@@ -6447,6 +6653,19 @@ function WorkbenchStudio() {
                   </div>
                   <div className="ribbon-group-label">Refine</div>
                 </div>
+                <div className="ribbon-group">
+                  <div className="ribbon-group-tools">
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="vertex-paint" onClick={vertexPaintGradient} disabled={!selectedKind} title="Blender sculpt_paint_color.cc — paint vertex colors">
+                      <span className="ribbon-tool-icon">●</span>
+                      <span className="ribbon-tool-label">Vert Paint</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="weight-paint" onClick={weightPaintByY} disabled={!selectedKind} title="Blender paint_weight.cc — weight paint (red→blue by Y)">
+                      <span className="ribbon-tool-icon">◐</span>
+                      <span className="ribbon-tool-label">Wt Paint</span>
+                    </button>
+                  </div>
+                  <div className="ribbon-group-label">Paint</div>
+                </div>
               </>
             )}
 
@@ -6457,6 +6676,10 @@ function WorkbenchStudio() {
                     <button type="button" className="ribbon-tool" onClick={unwrapUVs} disabled={!selectedKind} title="Spherical UV unwrap">
                       <span className="ribbon-tool-icon">◯</span>
                       <span className="ribbon-tool-label">Unwrap</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="smart-uv" onClick={smartUvProject} disabled={!selectedKind} title="Blender editmesh_uv.cc — Smart UV Project (cube-face projection)">
+                      <span className="ribbon-tool-icon">▤</span>
+                      <span className="ribbon-tool-label">Smart UV</span>
                     </button>
                   </div>
                   <div className="ribbon-group-label">UV</div>
