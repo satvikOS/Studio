@@ -4,6 +4,8 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js';
 import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js';
 import { SUZANNE_POSITIONS, SUZANNE_INDICES } from './SuzanneGeometry.js';
+import { getManifold } from '../../foundation/manifoldKernel.js';
+import { geometryToManifold, manifoldToGeometry } from '../../foundation/ManifoldThreeBridge.js';
 import {
   MousePointer2, Move, RotateCw, Maximize2,
   Box, Mountain, PaintBucket, Bone, Play, Sparkles, Camera,
@@ -235,6 +237,9 @@ function WorkbenchStudio() {
   // canvas (labeled cross-hairs); next slice swaps in a real file picker.
   const [refLabel, setRefLabel] = useState('FRONT');
   const [refWidth, setRefWidth] = useState(0.06);
+  // Boolean / CSG — manifold-3d backs union/subtract/intersect on the
+  // selected primitive against the previous primitive in the stack.
+  const [manifoldReady, setManifoldReady] = useState(false);
 
   function recomputeMeshStats(scene) {
     let v = 0;
@@ -681,6 +686,113 @@ function WorkbenchStudio() {
     primitiveStackRef.current.push(mesh);
     setPrimitiveCount(c => c + 1);
     recomputeMeshStats(scene);
+  }
+
+  /*
+   * Boolean / CSG (Union / Difference / Intersect).
+   *
+   * Source: manifold-3d (MIT, Emmett Lalish — also used by OpenSCAD,
+   * Onshape, Slic3r). Studio's Mech sibling has been on this kernel
+   * for CAD CSG since the original archdiscv1 work; Studio's slice
+   * reuses the existing bridge + adds a geometryToManifold helper
+   * with world-matrix application.
+   *
+   * Operand A = the second-most-recently-added Studio primitive.
+   * Operand B = the selected primitive.
+   * Result   = a new Mesh built from manifoldToGeometry(result),
+   *            inserted at A's position; A + B are removed.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    getManifold()
+      .then(() => { if (!cancelled) setManifoldReady(true); })
+      .catch((e) => { /* leave false; UI disables boolean buttons */ });
+    return () => { cancelled = true; };
+  }, []);
+
+  async function booleanWithPrevious(op) {
+    const scene = window.__archdiscScene;
+    const mesh = selectedMeshRef.current;
+    if (!scene || !mesh) return;
+    const stack = primitiveStackRef.current;
+    const selectedIdx = stack.indexOf(mesh);
+    if (selectedIdx < 0) return;
+    // Find the previous primitive in stack (skip non-Mesh, like InstancedMesh
+    // — Boolean only makes sense on plain Mesh geometry).
+    let prev = null;
+    for (let i = selectedIdx - 1; i >= 0; i--) {
+      const candidate = stack[i];
+      if (candidate.isMesh && !candidate.isInstancedMesh && candidate.geometry) {
+        prev = candidate;
+        break;
+      }
+    }
+    if (!prev) return;
+
+    const m = await getManifold();
+    // Force world matrix to be up to date.
+    prev.updateMatrixWorld(true);
+    mesh.updateMatrixWorld(true);
+    let mA = null, mB = null, mResult = null;
+    try {
+      mA = geometryToManifold(prev.geometry, m, prev.matrixWorld);
+      mB = geometryToManifold(mesh.geometry, m, mesh.matrixWorld);
+      if (op === 'union')           mResult = mA.add(mB);
+      else if (op === 'difference') mResult = mA.subtract(mB);
+      else if (op === 'intersect')  mResult = mA.intersect(mB);
+      else return;
+
+      const newGeom = manifoldToGeometry(mResult);
+      // Move geometry-origin to operand A's old position so the resulting
+      // mesh's world transform is identity (vertices are already in world space).
+      const newMaterial = new THREE.MeshStandardMaterial({
+        color: 0x7fb98b,
+        metalness: 0.2,
+        roughness: 0.5,
+      });
+      const result = new THREE.Mesh(newGeom, newMaterial);
+      result.castShadow = true;
+      result.receiveShadow = true;
+      result.userData.archdiscStudioPrimitive = true;
+      result.userData.archdiscStudioPrimitiveKind = `boolean-${op}`;
+      result.name = `studio-primitive-boolean-${op}-${primitiveCount}`;
+      // No further position offset — manifold's output is in world space.
+      result.position.set(0, 0, 0);
+
+      // Remove operands A + B from scene + stack, dispose their materials.
+      [prev, mesh].forEach(target => {
+        scene.remove(target);
+        const idx = stack.indexOf(target);
+        if (idx >= 0) stack.splice(idx, 1);
+        try { target.geometry.dispose(); } catch (_) {}
+        try { target.material.dispose && target.material.dispose(); } catch (_) {}
+      });
+
+      scene.add(result);
+      stack.push(result);
+      // Clear selection — the meshes referenced are gone.
+      selectedMeshRef.current = null;
+      setSelectedKind(null);
+      setSelectedTransform(null);
+      setPrimitiveCount(stack.length);
+      recomputeMeshStats(scene);
+    } catch (err) {
+      // Boolean op failed — log for diagnostic, leave operands in place.
+      // eslint-disable-next-line no-console
+      console.warn('[studio:boolean] failed', op, err && err.message, err);
+      // eslint-disable-next-line no-console
+      console.warn('[studio:boolean] prev geom v/idx:',
+        prev && prev.geometry && prev.geometry.attributes.position.count,
+        prev && prev.geometry && prev.geometry.index && prev.geometry.index.count);
+      // eslint-disable-next-line no-console
+      console.warn('[studio:boolean] mesh geom v/idx:',
+        mesh.geometry.attributes.position.count,
+        mesh.geometry.index && mesh.geometry.index.count);
+    } finally {
+      try { mA && mA.delete(); } catch (_) {}
+      try { mB && mB.delete(); } catch (_) {}
+      try { mResult && mResult.delete(); } catch (_) {}
+    }
   }
 
   /*
@@ -1937,7 +2049,8 @@ function WorkbenchStudio() {
           [data-studio-properties="studio"] [data-studio-section="renders"],
           [data-studio-properties="studio"] [data-studio-section="lighting"],
           [data-studio-properties="studio"] [data-studio-section="compositing"],
-          [data-studio-properties="studio"] [data-studio-section="scene"] { display: none; }
+          [data-studio-properties="studio"] [data-studio-section="scene"],
+          [data-studio-properties="studio"] [data-studio-section="boolean"] { display: none; }
 
           [data-studio-discipline="modeling"] [data-studio-section="mesh"],
           [data-studio-discipline="modeling"] [data-studio-section="reference"],
@@ -1950,6 +2063,7 @@ function WorkbenchStudio() {
           [data-studio-discipline="modeling"] [data-studio-section="text3d"],
           [data-studio-discipline="modeling"] [data-studio-section="texture"],
           [data-studio-discipline="modeling"] [data-studio-section="scene"],
+          [data-studio-discipline="modeling"] [data-studio-section="boolean"],
           [data-studio-discipline="sculpting"] [data-studio-section="sculpting"],
           [data-studio-discipline="sculpting"] [data-studio-section="subdivision"],
           [data-studio-discipline="sculpting"] [data-studio-section="mirror"],
@@ -2159,6 +2273,47 @@ function WorkbenchStudio() {
             disabled={lightCount === 0}
           >
             Clear All Lights
+          </button>
+        </div>
+
+        <div className="property-section" data-studio-section="boolean">
+          <h3 className="property-header">
+            Boolean / CSG
+            <span
+              data-studio-boolean-state
+              style={{ float: 'right', opacity: 0.6, fontSize: '11px', fontWeight: 'normal' }}
+            >
+              {manifoldReady ? 'manifold ready' : 'loading…'}
+            </span>
+          </h3>
+          <p className="property-label" style={{ opacity: 0.6, fontSize: '11px' }}>
+            Source: manifold-3d (MIT). Operates on the selected primitive +
+            the previous one in the scene stack — operands consumed,
+            result inserted.
+          </p>
+          <button
+            className="property-button"
+            data-studio-action="boolean-union"
+            onClick={() => booleanWithPrevious('union')}
+            disabled={!manifoldReady || !selectedKind || primitiveCount < 2}
+          >
+            Union with Previous
+          </button>
+          <button
+            className="property-button"
+            data-studio-action="boolean-difference"
+            onClick={() => booleanWithPrevious('difference')}
+            disabled={!manifoldReady || !selectedKind || primitiveCount < 2}
+          >
+            Subtract Selected from Previous
+          </button>
+          <button
+            className="property-button"
+            data-studio-action="boolean-intersect"
+            onClick={() => booleanWithPrevious('intersect')}
+            disabled={!manifoldReady || !selectedKind || primitiveCount < 2}
+          >
+            Intersect with Previous
           </button>
         </div>
 
