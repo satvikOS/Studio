@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js';
 import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js';
+import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
 import { SUZANNE_POSITIONS, SUZANNE_INDICES } from './SuzanneGeometry.js';
 import { getManifold } from '../../foundation/manifoldKernel.js';
 import { geometryToManifold, manifoldToGeometry } from '../../foundation/ManifoldThreeBridge.js';
@@ -254,6 +255,9 @@ function WorkbenchStudio() {
   // wires this through Electron's file picker.
   const [sceneJson, setSceneJson]               = useState('');
   const [sceneSavedAt, setSceneSavedAt]         = useState(null);
+  // glTF export — industry-standard 3D interop (Unreal / Unity / Blender / Sketchfab).
+  const [gltfBytes, setGltfBytes]   = useState(0);
+  const [gltfExportedAt, setGltfExportedAt] = useState(null);
   // Camera — FOV control + named view presets.
   // Viewport3D's PerspectiveCamera ships at FOV 45°; we mirror the
   // value into React state and the panel slider.
@@ -491,6 +495,52 @@ function WorkbenchStudio() {
     if (typeof window.__archdiscOrbitView === 'function') {
       window.__archdiscOrbitView(p.az, p.el, 1);
     }
+  }
+
+  /*
+   * glTF export — industry-standard 3D interop. Clones each Studio
+   * primitive into a fresh THREE.Scene so Mech's inherited helpers
+   * (axes triad, ground, lights, gizmo) stay out of the exported
+   * file, then runs three's GLTFExporter in ASCII mode. The result
+   * is the spec-compliant glTF JSON; size + timestamp echoed back to
+   * the panel.
+   */
+  async function exportGltf() {
+    const scene = window.__archdiscScene;
+    if (!scene) return;
+    const tempScene = new THREE.Scene();
+    scene.traverse(o => {
+      if (!o.userData || !o.userData.archdiscStudioPrimitive) return;
+      // Clone preserves the mesh's geometry + material + transform without
+      // mutating the live scene.
+      tempScene.add(o.clone());
+    });
+    // Add Studio lights too — they meaningfully shape any downstream render.
+    scene.traverse(o => {
+      if (o.userData && o.userData.archdiscStudioLight && o.isLight) {
+        tempScene.add(o.clone());
+      }
+    });
+    const exporter = new GLTFExporter();
+    await new Promise((resolve) => {
+      exporter.parse(
+        tempScene,
+        (result) => {
+          const json = JSON.stringify(result);
+          setGltfBytes(json.length);
+          setGltfExportedAt(new Date().toLocaleTimeString());
+          // Stash on window for downstream tooling / spec verification.
+          window.__studioLastGltf = json;
+          resolve();
+        },
+        (error) => {
+          // eslint-disable-next-line no-console
+          console.warn('[studio:gltf] export failed', error);
+          resolve();
+        },
+        { binary: false, onlyVisible: true, embedImages: true },
+      );
+    });
   }
 
   /*
@@ -2816,6 +2866,29 @@ function WorkbenchStudio() {
               </button>
             ))}
           </div>
+        </div>
+
+        <div className="property-section" data-studio-section="export">
+          <h3 className="property-header">Export</h3>
+          <p className="property-label" style={{ opacity: 0.6, fontSize: '11px' }}>
+            glTF — Khronos's industry-standard 3D interop format.
+            Imports into Unreal, Unity, Blender, Sketchfab, three.js.
+          </p>
+          <button
+            className="property-button"
+            data-studio-action="export-gltf"
+            onClick={exportGltf}
+          >
+            Export Scene as glTF
+          </button>
+          <p
+            data-studio-export-status
+            style={{ marginTop: '4px', fontSize: '10px', fontFamily: 'monospace', opacity: 0.7 }}
+          >
+            {gltfExportedAt
+              ? `Exported ${gltfExportedAt} · ${(gltfBytes / 1024).toFixed(1)} KiB`
+              : 'No export yet'}
+          </p>
         </div>
 
         <div className="property-section" data-studio-section="scene-io">
