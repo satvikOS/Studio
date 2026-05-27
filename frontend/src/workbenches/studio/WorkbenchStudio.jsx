@@ -191,6 +191,9 @@ function WorkbenchStudio() {
   // Texture — procedural canvas pattern applied to the selected mesh's material.
   const [texPattern, setTexPattern] = useState('checker');
   const [texTiles,   setTexTiles]   = useState(8);
+  // Procedural — recursive Tree generator parameters.
+  const [procTreeDepth, setProcTreeDepth]   = useState(4);
+  const [procTreeBranches, setProcTreeBranches] = useState(3);
 
   function recomputeMeshStats(scene) {
     let v = 0;
@@ -552,6 +555,90 @@ function WorkbenchStudio() {
     mesh.userData.archdiscStudioPrimitive = true;
     mesh.userData.archdiscStudioPrimitiveKind = 'text-3d';
     mesh.name = `studio-primitive-text3d-${primitiveCount}`;
+
+    const cols = 4;
+    const i = primitiveCount;
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    mesh.position.set(
+      (col - (cols - 1) / 2) * PRIMITIVE_SIZE * 1.9,
+      0,
+      row * PRIMITIVE_SIZE * 1.9,
+    );
+
+    scene.add(mesh);
+    primitiveStackRef.current.push(mesh);
+    setPrimitiveCount(c => c + 1);
+    recomputeMeshStats(scene);
+  }
+
+  /*
+   * Procedural Tree — recursive L-system-ish generator. Each level
+   * spawns `branches` child branches at a tilt + spread, lengths
+   * shrink by a fixed ratio, radius narrows. Leaf spheres land at
+   * every leaf node. All pieces merge into one mesh so the tree
+   * counts as a single Studio primitive.
+   */
+  function generateTreeGeometry(depth, childBranches) {
+    const pieces = [];
+    const Q_TMP = new THREE.Quaternion();
+    const UP = new THREE.Vector3(0, 1, 0);
+    function branch(start, dir, length, radius, d) {
+      const cyl = new THREE.CylinderGeometry(radius * 0.65, radius, length, 8);
+      // Orient cylinder so its local Y aligns with dir.
+      Q_TMP.setFromUnitVectors(UP, dir.clone().normalize());
+      cyl.applyQuaternion(Q_TMP);
+      const mid = start.clone().add(dir.clone().normalize().multiplyScalar(length / 2));
+      cyl.translate(mid.x, mid.y, mid.z);
+      pieces.push(cyl);
+      const end = start.clone().add(dir.clone().normalize().multiplyScalar(length));
+      if (d >= depth) {
+        const leaf = new THREE.SphereGeometry(radius * 4.5, 8, 6);
+        leaf.translate(end.x, end.y, end.z);
+        pieces.push(leaf);
+        return;
+      }
+      for (let i = 0; i < childBranches; i++) {
+        const az = (i * (2 * Math.PI / childBranches)) + d * 0.4;
+        const swingAxis = new THREE.Vector3(Math.cos(az), 0, Math.sin(az));
+        const tiltRad = Math.PI / 4.5;
+        const childDir = dir.clone().applyAxisAngle(swingAxis, tiltRad).normalize();
+        branch(end, childDir, length * 0.72, radius * 0.65, d + 1);
+      }
+    }
+    const S = PRIMITIVE_SIZE;
+    branch(
+      new THREE.Vector3(0, -S * 0.5, 0),
+      new THREE.Vector3(0, 1, 0),
+      S * 0.35,
+      S * 0.05,
+      0,
+    );
+    const merged = mergeGeometries(pieces);
+    merged.center();
+    merged.computeVertexNormals();
+    return merged;
+  }
+
+  function generateProceduralTree() {
+    const scene = window.__archdiscScene;
+    if (!scene) return;
+    const depth = Math.max(1, Math.min(5, Math.floor(procTreeDepth)));
+    const branches = Math.max(2, Math.min(4, Math.floor(procTreeBranches)));
+    const geometry = generateTreeGeometry(depth, branches);
+    const material = new THREE.MeshStandardMaterial({
+      color: 0x4f7a3f,
+      metalness: 0.0,
+      roughness: 0.85,
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.userData.archdiscStudioPrimitive = true;
+    mesh.userData.archdiscStudioPrimitiveKind = 'procedural-tree';
+    mesh.userData.archdiscStudioTreeDepth = depth;
+    mesh.userData.archdiscStudioTreeBranches = branches;
+    mesh.name = `studio-primitive-tree-${depth}-${branches}-${primitiveCount}`;
 
     const cols = 4;
     const i = primitiveCount;
@@ -1316,6 +1403,55 @@ function WorkbenchStudio() {
             </button>
           </div>
         )}
+
+        <div className="property-section" data-studio-section="procedural">
+          <h3 className="property-header">Procedural · Tree</h3>
+          <div className="property-row">
+            <span className="property-label">Depth</span>
+            <input
+              type="range"
+              min="1"
+              max="5"
+              step="1"
+              data-studio-proc="depth"
+              value={procTreeDepth}
+              onChange={e => setProcTreeDepth(Number(e.target.value))}
+              style={{ flex: 1 }}
+            />
+            <span
+              data-studio-proc-readout="depth"
+              style={{ marginLeft: '6px', fontSize: '10px', fontFamily: 'monospace', minWidth: '24px', textAlign: 'right' }}
+            >
+              {procTreeDepth}
+            </span>
+          </div>
+          <div className="property-row">
+            <span className="property-label">Branches</span>
+            <input
+              type="range"
+              min="2"
+              max="4"
+              step="1"
+              data-studio-proc="branches"
+              value={procTreeBranches}
+              onChange={e => setProcTreeBranches(Number(e.target.value))}
+              style={{ flex: 1 }}
+            />
+            <span
+              data-studio-proc-readout="branches"
+              style={{ marginLeft: '6px', fontSize: '10px', fontFamily: 'monospace', minWidth: '24px', textAlign: 'right' }}
+            >
+              {procTreeBranches}
+            </span>
+          </div>
+          <button
+            className="property-button"
+            data-studio-action="generate-tree"
+            onClick={generateProceduralTree}
+          >
+            Generate Tree
+          </button>
+        </div>
 
         <div className="property-section" data-studio-section="texture">
           <h3 className="property-header">Texture · UV</h3>
