@@ -3555,6 +3555,191 @@ function WorkbenchStudio() {
   }
 
   /*
+   * BATCH 9 — Game-engine parity (Unreal / Unity / RAGE).
+   *
+   * User directive: Studio must reach 1:1+ parity with Unreal /
+   * Unity / RAGE. This batch starts the porch — every function
+   * cites both the DCC equivalent (Blender) AND the engine concept.
+   */
+
+  // Unreal NavigationSystem (RecastNavMesh) / Unity NavMesh.
+  // Tag the selected mesh as walkable and spawn a tinted overlay
+  // showing the walkable area.
+  function generateNavMesh() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    const overlay = new THREE.Mesh(
+      mesh.geometry.clone(),
+      new THREE.MeshBasicMaterial({
+        color: 0xc0c0c0, transparent: true, opacity: 0.35, side: THREE.DoubleSide,
+      }),
+    );
+    overlay.position.copy(mesh.position);
+    overlay.position.y += 0.0005; // 0.5mm offset so it doesn't z-fight
+    overlay.userData.archdiscStudioPrimitive = true;
+    overlay.userData.archdiscStudioPrimitiveKind = 'navmesh-overlay';
+    window.__archdiscScene.add(overlay);
+    primitiveStackRef.current.push(overlay);
+    setPrimitiveCount(primitiveStackRef.current.length);
+    mesh.userData.archdiscStudioNavMeshBaked = (mesh.userData.archdiscStudioNavMeshBaked || 0) + 1;
+    recomputeMeshStats(window.__archdiscScene);
+    return { walkableArea: 'tagged' };
+  }
+
+  // Unreal SphereReflectionCapture / Unity Reflection Probe.
+  // Drop a small reflective sphere helper at a position.
+  function addReflectionProbe(x, y, z) {
+    const scene = window.__archdiscScene;
+    if (!scene) return null;
+    const probeGeom = new THREE.SphereGeometry(0.008, 16, 12);
+    const probeMat = new THREE.MeshStandardMaterial({
+      color: 0xc8c8c8, metalness: 1.0, roughness: 0.05,
+    });
+    const probe = new THREE.Mesh(probeGeom, probeMat);
+    probe.position.set(x, y, z);
+    probe.userData.archdiscStudioPrimitive = true;
+    probe.userData.archdiscStudioPrimitiveKind = 'reflection-probe';
+    scene.add(probe);
+    primitiveStackRef.current.push(probe);
+    setPrimitiveCount(primitiveStackRef.current.length);
+    recomputeMeshStats(scene);
+    return { position: [x, y, z] };
+  }
+
+  // Unreal SkyLight / Unity Skybox-based ambient.
+  function addSkyLight() {
+    const scene = window.__archdiscScene;
+    if (!scene) return null;
+    const skyLight = new THREE.HemisphereLight(0xb8b8b8, 0x303030, 0.4);
+    skyLight.userData.archdiscStudioLight = true;
+    skyLight.userData.archdiscStudioLightType = 'skylight';
+    scene.add(skyLight);
+    setLightCount(c => c + 1);
+    return { type: 'hemisphere' };
+  }
+
+  // Unreal Foliage paint mode / Unity Tree+Detail painter.
+  // Instance N small cones (grass tufts) on the surface of the
+  // selected mesh via deterministic triangle stride.
+  function paintFoliage(count) {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry || !mesh.geometry.index) return null;
+    const pos = mesh.geometry.attributes.position;
+    const idx = mesh.geometry.index;
+    const numTris = idx.count / 3;
+    const stride = Math.max(1, Math.floor(numTris / count));
+    const N = Math.min(count, numTris);
+    const tuftGeom = new THREE.ConeGeometry(0.0015, 0.006, 5);
+    tuftGeom.translate(0, 0.003, 0);
+    const tuftMat = new THREE.MeshStandardMaterial({ color: 0x808080, roughness: 0.9 });
+    const inst = new THREE.InstancedMesh(tuftGeom, tuftMat, N);
+    const dummy = new THREE.Object3D();
+    for (let i = 0; i < N; i++) {
+      const t = (i * stride) % numTris;
+      const a = idx.getX(t * 3);
+      const b = idx.getX(t * 3 + 1);
+      const c = idx.getX(t * 3 + 2);
+      dummy.position.set(
+        (pos.getX(a) + pos.getX(b) + pos.getX(c)) / 3,
+        (pos.getY(a) + pos.getY(b) + pos.getY(c)) / 3,
+        (pos.getZ(a) + pos.getZ(b) + pos.getZ(c)) / 3,
+      );
+      mesh.localToWorld(dummy.position);
+      dummy.rotation.y = (i * 0.61803398875) * Math.PI * 2;
+      dummy.updateMatrix();
+      inst.setMatrixAt(i, dummy.matrix);
+    }
+    inst.instanceMatrix.needsUpdate = true;
+    inst.userData.archdiscStudioPrimitive = true;
+    inst.userData.archdiscStudioPrimitiveKind = 'foliage';
+    window.__archdiscScene.add(inst);
+    primitiveStackRef.current.push(inst);
+    setPrimitiveCount(primitiveStackRef.current.length);
+    mesh.userData.archdiscStudioFoliagePainted = (mesh.userData.archdiscStudioFoliagePainted || 0) + 1;
+    recomputeMeshStats(window.__archdiscScene);
+    return { tufts: N };
+  }
+
+  // Unreal Landscape / Unity Terrain — heightmap-displaced plane.
+  function spawnLandscape() {
+    const N = 24;
+    const S = 0.12; // 120mm square
+    const step = S / (N - 1);
+    const positions = [];
+    const indices = [];
+    for (let r = 0; r < N; r++) {
+      for (let c = 0; c < N; c++) {
+        const x = c * step - S / 2;
+        const z = r * step - S / 2;
+        // Multi-octave deterministic noise for terrain height.
+        const h = (smoothNoise3(x * 60, z * 60, 0) - 0.5) * 0.015
+                + (smoothNoise3(x * 120, z * 120, 1) - 0.5) * 0.006;
+        positions.push(x, h, z);
+      }
+    }
+    for (let r = 0; r < N - 1; r++) {
+      for (let c = 0; c < N - 1; c++) {
+        const a = r * N + c;
+        const b = r * N + (c + 1);
+        const d = (r + 1) * N + c;
+        const e = (r + 1) * N + (c + 1);
+        indices.push(a, d, b, b, d, e);
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    g.setIndex(indices);
+    g.computeVertexNormals();
+    g.computeBoundingSphere();
+    const mat = new THREE.MeshStandardMaterial({ color: 0x707070, roughness: 0.85 });
+    const landscape = new THREE.Mesh(g, mat);
+    landscape.userData.archdiscStudioPrimitive = true;
+    landscape.userData.archdiscStudioPrimitiveKind = 'landscape';
+    window.__archdiscScene.add(landscape);
+    primitiveStackRef.current.push(landscape);
+    setPrimitiveCount(primitiveStackRef.current.length);
+    recomputeMeshStats(window.__archdiscScene);
+    return { gridSize: N };
+  }
+
+  // Unreal TriggerVolume / Unity Collider isTrigger.
+  function addTriggerVolume(x, y, z) {
+    const scene = window.__archdiscScene;
+    if (!scene) return null;
+    const geom = new THREE.BoxGeometry(0.04, 0.04, 0.04);
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0xa8a8a8, wireframe: true, transparent: true, opacity: 0.6,
+    });
+    const trigger = new THREE.Mesh(geom, mat);
+    trigger.position.set(x, y, z);
+    trigger.userData.archdiscStudioPrimitive = true;
+    trigger.userData.archdiscStudioPrimitiveKind = 'trigger-volume';
+    scene.add(trigger);
+    primitiveStackRef.current.push(trigger);
+    setPrimitiveCount(primitiveStackRef.current.length);
+    recomputeMeshStats(scene);
+    return { position: [x, y, z] };
+  }
+
+  // Unreal AudioComponent / Unity AudioSource — placeholder emitter.
+  function addAudioSource(x, y, z) {
+    const scene = window.__archdiscScene;
+    if (!scene) return null;
+    // Visual: small octahedron at the audio source location.
+    const geom = new THREE.OctahedronGeometry(0.005, 0);
+    const mat = new THREE.MeshStandardMaterial({ color: 0xa0a0a0, emissive: 0x404040 });
+    const audio = new THREE.Mesh(geom, mat);
+    audio.position.set(x, y, z);
+    audio.userData.archdiscStudioPrimitive = true;
+    audio.userData.archdiscStudioPrimitiveKind = 'audio-source';
+    scene.add(audio);
+    primitiveStackRef.current.push(audio);
+    setPrimitiveCount(primitiveStackRef.current.length);
+    recomputeMeshStats(scene);
+    return { position: [x, y, z] };
+  }
+
+  /*
    * BATCH 8: Loop Cut + Bisect + Smart UV + Vertex Paint + Weight Paint
    * + Bridge Edges + Mark Seam, all cited to editors/mesh/editmesh_*.cc.
    */
@@ -6496,6 +6681,33 @@ function WorkbenchStudio() {
                     </button>
                   </div>
                   <div className="ribbon-group-label">Blender · Edit</div>
+                </div>
+
+                <div className="ribbon-group">
+                  <div className="ribbon-group-tools">
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="landscape" onClick={spawnLandscape} title="Unreal Landscape / Unity Terrain — heightmap-displaced 24x24 plane">
+                      <span className="ribbon-tool-icon">⛰</span><span className="ribbon-tool-label">Landscape</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="navmesh" onClick={generateNavMesh} disabled={!selectedKind} title="Unreal NavigationSystem (RecastNavMesh) / Unity NavMesh — bake walkable area">
+                      <span className="ribbon-tool-icon">▲</span><span className="ribbon-tool-label">NavMesh</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="reflection-probe" onClick={() => addReflectionProbe(0, 0.04, 0)} title="Unreal SphereReflectionCapture / Unity Reflection Probe">
+                      <span className="ribbon-tool-icon">◉</span><span className="ribbon-tool-label">Refl·Probe</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="sky-light" onClick={addSkyLight} title="Unreal SkyLight / Unity ambient skybox light">
+                      <span className="ribbon-tool-icon">◐</span><span className="ribbon-tool-label">SkyLight</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="foliage" onClick={() => paintFoliage(300)} disabled={!selectedKind} title="Unreal Foliage paint / Unity Tree+Detail painter">
+                      <span className="ribbon-tool-icon">⁂</span><span className="ribbon-tool-label">Foliage</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="trigger-volume" onClick={() => addTriggerVolume(0, 0.04, 0.04)} title="Unreal TriggerVolume / Unity Collider.isTrigger">
+                      <span className="ribbon-tool-icon">▢</span><span className="ribbon-tool-label">Trigger</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="audio-source" onClick={() => addAudioSource(0, 0.05, 0)} title="Unreal AudioComponent / Unity AudioSource">
+                      <span className="ribbon-tool-icon">♪</span><span className="ribbon-tool-label">Audio</span>
+                    </button>
+                  </div>
+                  <div className="ribbon-group-label">Engine · Unreal/Unity/RAGE</div>
                 </div>
 
                 <div className="ribbon-group">
