@@ -216,6 +216,12 @@ function WorkbenchStudio() {
   // geometry into N positioned + scaled + rotated instances.
   const [instanceCount, setInstanceCount]   = useState(500);
   const [instanceRadius, setInstanceRadius] = useState(0.08);
+  // Scatter on surface (Geometry-Nodes-style "Instance on Points") —
+  // distribute N copies of a small primitive across the selected
+  // target's triangle surface, oriented along each triangle's normal.
+  const [scatterKind,  setScatterKind]  = useState('cube');
+  const [scatterCount, setScatterCount] = useState(200);
+  const [scatterScale, setScatterScale] = useState(0.2);
   // Compositing — post-process the last captured render thumbnail
   // through a canvas filter and append the result as a new thumbnail.
   const [compositeFilter, setCompositeFilter] = useState('grayscale(100%)');
@@ -1207,6 +1213,96 @@ function WorkbenchStudio() {
   }
 
   /*
+   * Scatter on Surface — Geometry-Nodes-style "Instance on Points"
+   * (Houdini scatter). For each of N deterministic triangle indices,
+   * compute the triangle's centroid + normal in the target mesh's
+   * world space, then place an instance of the chosen scatter kind
+   * there, oriented along the surface normal. Single InstancedMesh
+   * draw call.
+   */
+  function scatterOnSurface() {
+    const target = selectedMeshRef.current;
+    const scene = window.__archdiscScene;
+    if (!target || !target.geometry || !scene) return;
+    const tGeom = target.geometry;
+    const posAttr = tGeom.attributes.position;
+    if (!posAttr) return;
+    const idxAttr = tGeom.index;
+    const triCount = idxAttr ? idxAttr.count / 3 : posAttr.count / 3;
+    const N = Math.max(1, Math.min(2000, Math.floor(scatterCount)));
+    if (triCount < 1) return;
+
+    target.updateMatrixWorld(true);
+    const targetMatrix = target.matrixWorld;
+    const normalMatrix = new THREE.Matrix3().getNormalMatrix(targetMatrix);
+
+    const instGeom = buildPrimitiveGeometry(scatterKind);
+    if (!instGeom) return;
+    // Shrink the instance template so a 200-instance scatter doesn't
+    // bury the target under enormous copies.
+    instGeom.scale(scatterScale, scatterScale, scatterScale);
+    const material = new THREE.MeshStandardMaterial({
+      color: 0xb5a274,
+      metalness: 0.35,
+      roughness: 0.45,
+    });
+    const instanced = new THREE.InstancedMesh(instGeom, material, N);
+    const dummy = new THREE.Object3D();
+    const va = new THREE.Vector3();
+    const vb = new THREE.Vector3();
+    const vc = new THREE.Vector3();
+    const edge1 = new THREE.Vector3();
+    const edge2 = new THREE.Vector3();
+    const normal = new THREE.Vector3();
+    const Y_UP = new THREE.Vector3(0, 1, 0);
+
+    for (let i = 0; i < N; i++) {
+      // Deterministic triangle pick: step through the triangle list
+      // evenly so the surface coverage doesn't depend on Math.random.
+      const triIdx = Math.floor((i / N) * triCount);
+      let a, b, c;
+      if (idxAttr) {
+        a = idxAttr.getX(triIdx * 3);
+        b = idxAttr.getX(triIdx * 3 + 1);
+        c = idxAttr.getX(triIdx * 3 + 2);
+      } else {
+        a = triIdx * 3;
+        b = triIdx * 3 + 1;
+        c = triIdx * 3 + 2;
+      }
+      va.fromBufferAttribute(posAttr, a);
+      vb.fromBufferAttribute(posAttr, b);
+      vc.fromBufferAttribute(posAttr, c);
+      // Centroid in local space.
+      const cx = (va.x + vb.x + vc.x) / 3;
+      const cy = (va.y + vb.y + vc.y) / 3;
+      const cz = (va.z + vb.z + vc.z) / 3;
+      dummy.position.set(cx, cy, cz).applyMatrix4(targetMatrix);
+      // Face normal in local space, then transform to world space.
+      edge1.subVectors(vb, va);
+      edge2.subVectors(vc, va);
+      normal.crossVectors(edge1, edge2).normalize();
+      normal.applyMatrix3(normalMatrix).normalize();
+      // Orient instance: +Y axis along the surface normal.
+      dummy.quaternion.setFromUnitVectors(Y_UP, normal);
+      dummy.scale.set(1, 1, 1);
+      dummy.updateMatrix();
+      instanced.setMatrixAt(i, dummy.matrix);
+    }
+    instanced.instanceMatrix.needsUpdate = true;
+    instanced.userData.archdiscStudioPrimitive = true;
+    instanced.userData.archdiscStudioPrimitiveKind = 'scatter';
+    instanced.userData.archdiscStudioScatterKind = scatterKind;
+    instanced.userData.archdiscStudioScatterCount = N;
+    instanced.name = `studio-primitive-scatter-${scatterKind}-${N}-${primitiveCount}`;
+
+    scene.add(instanced);
+    primitiveStackRef.current.push(instanced);
+    setPrimitiveCount(c => c + 1);
+    recomputeMeshStats(scene);
+  }
+
+  /*
    * Instanced rendering — clone the selected primitive's geometry +
    * material into a THREE.InstancedMesh with N positioned, rotated,
    * randomly-scaled instances scattered in a spherical shell. One
@@ -2127,7 +2223,8 @@ function WorkbenchStudio() {
           [data-studio-properties="studio"] [data-studio-section="lighting"],
           [data-studio-properties="studio"] [data-studio-section="compositing"],
           [data-studio-properties="studio"] [data-studio-section="scene"],
-          [data-studio-properties="studio"] [data-studio-section="boolean"] { display: none; }
+          [data-studio-properties="studio"] [data-studio-section="boolean"],
+          [data-studio-properties="studio"] [data-studio-section="scatter"] { display: none; }
 
           [data-studio-discipline="modeling"] [data-studio-section="mesh"],
           [data-studio-discipline="modeling"] [data-studio-section="reference"],
@@ -2141,6 +2238,7 @@ function WorkbenchStudio() {
           [data-studio-discipline="modeling"] [data-studio-section="texture"],
           [data-studio-discipline="modeling"] [data-studio-section="scene"],
           [data-studio-discipline="modeling"] [data-studio-section="boolean"],
+          [data-studio-discipline="modeling"] [data-studio-section="scatter"],
           [data-studio-discipline="sculpting"] [data-studio-section="sculpting"],
           [data-studio-discipline="sculpting"] [data-studio-section="subdivision"],
           [data-studio-discipline="sculpting"] [data-studio-section="mirror"],
@@ -2526,6 +2624,75 @@ function WorkbenchStudio() {
             disabled={renders.length === 0}
           >
             Post-Process Last Render
+          </button>
+        </div>
+
+        <div className="property-section" data-studio-section="scatter">
+          <h3 className="property-header">Scatter on Surface</h3>
+          <p className="property-label" style={{ opacity: 0.6, fontSize: '11px' }}>
+            Geometry-Nodes-style "Instance on Points". Pick a target,
+            choose what to scatter + how dense; one InstancedMesh draw call.
+          </p>
+          <div className="property-row">
+            <span className="property-label">Kind</span>
+            <select
+              className="property-input"
+              data-studio-scatter="kind"
+              value={scatterKind}
+              onChange={e => setScatterKind(e.target.value)}
+            >
+              <option value="cube">Cube</option>
+              <option value="sphere">Sphere</option>
+              <option value="cone">Cone</option>
+              <option value="cylinder">Cylinder</option>
+              <option value="tetrahedron">Tetrahedron</option>
+            </select>
+          </div>
+          <div className="property-row">
+            <span className="property-label">Count</span>
+            <input
+              type="range"
+              min="20"
+              max="2000"
+              step="10"
+              data-studio-scatter="count"
+              value={scatterCount}
+              onChange={e => setScatterCount(Number(e.target.value))}
+              style={{ flex: 1 }}
+            />
+            <span
+              data-studio-scatter-readout="count"
+              style={{ marginLeft: '6px', fontSize: '10px', fontFamily: 'monospace', minWidth: '40px', textAlign: 'right' }}
+            >
+              {scatterCount}
+            </span>
+          </div>
+          <div className="property-row">
+            <span className="property-label">Scale</span>
+            <input
+              type="range"
+              min="0.05"
+              max="0.6"
+              step="0.01"
+              data-studio-scatter="scale"
+              value={scatterScale}
+              onChange={e => setScatterScale(Number(e.target.value))}
+              style={{ flex: 1 }}
+            />
+            <span
+              data-studio-scatter-readout="scale"
+              style={{ marginLeft: '6px', fontSize: '10px', fontFamily: 'monospace', minWidth: '40px', textAlign: 'right' }}
+            >
+              {scatterScale.toFixed(2)}
+            </span>
+          </div>
+          <button
+            className="property-button"
+            data-studio-action="scatter-on-surface"
+            onClick={scatterOnSurface}
+            disabled={!selectedKind}
+          >
+            Scatter on Selected
           </button>
         </div>
 
