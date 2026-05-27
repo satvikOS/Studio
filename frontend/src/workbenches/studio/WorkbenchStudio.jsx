@@ -6,6 +6,8 @@ import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js';
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
 import { VertexNormalsHelper } from 'three/examples/jsm/helpers/VertexNormalsHelper.js';
 import { SUZANNE_POSITIONS, SUZANNE_INDICES } from './SuzanneGeometry.js';
+import { TEAPOT_POSITIONS, TEAPOT_INDICES } from './TeapotGeometry.js';
+import { COLOR_CUBE_POSITIONS, COLOR_CUBE_INDICES } from './ColorCubeGeometry.js';
 import { getManifold } from '../../foundation/manifoldKernel.js';
 import { geometryToManifold, manifoldToGeometry } from '../../foundation/ManifoldThreeBridge.js';
 import {
@@ -89,6 +91,28 @@ function buildPrimitiveGeometry(kind) {
       g.computeBoundingBox();
       return g;
     }
+    case 'teapot': {
+      // Utah teapot — imported from blender/tests/files/io_tests/x3d/
+      // teapot.x3d via tools/import_teapot_and_colorcube.js. The
+      // canonical computer-graphics test mesh (Martin Newell, 1975).
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(TEAPOT_POSITIONS, 3));
+      g.setIndex(new THREE.BufferAttribute(TEAPOT_INDICES, 1));
+      g.computeVertexNormals();
+      g.computeBoundingSphere();
+      g.computeBoundingBox();
+      return g;
+    }
+    case 'color-cube': {
+      // 6-face CAD-fixture cube from Blender's X3D test suite.
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(COLOR_CUBE_POSITIONS, 3));
+      g.setIndex(new THREE.BufferAttribute(COLOR_CUBE_INDICES, 1));
+      g.computeVertexNormals();
+      g.computeBoundingSphere();
+      g.computeBoundingBox();
+      return g;
+    }
     case 'spline-helix': {
       // Catmull-Rom helix swept as a tube — deterministic 1.5-turn
       // helix with 8 sample points, tube radius S/25.
@@ -154,6 +178,8 @@ const PRIMITIVE_KINDS = [
   { id: 'voxel-cube',     label: 'Voxel Cube' },
   { id: 'voxel-sphere',   label: 'Voxel Sphere' },
   { id: 'suzanne',        label: 'Suzanne' },
+  { id: 'teapot',         label: 'Teapot' },
+  { id: 'color-cube',     label: 'CAD Cube' },
   { id: 'spline-helix',   label: 'Helix' },
   { id: 'spline-wave',    label: 'Wave' },
   { id: 'spline-trefoil', label: 'Trefoil' },
