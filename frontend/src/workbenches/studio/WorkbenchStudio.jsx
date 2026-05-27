@@ -210,6 +210,11 @@ function WorkbenchStudio() {
   const [lightColor, setLightColor]   = useState('#ffd0a0');
   const [lightIntensity, setLightIntensity] = useState(1.6);
   const [lightCount, setLightCount]   = useState(0);
+  // AI prompt stub — simple keyword router as a first preview of the
+  // AI plug-and-play orchestration (real planner comes later; this is
+  // the harness it will eventually drive).
+  const [aiPrompt, setAiPrompt] = useState('add a cube and a torus knot');
+  const [aiLog, setAiLog]       = useState([]);
 
   function recomputeMeshStats(scene) {
     let v = 0;
@@ -656,6 +661,115 @@ function WorkbenchStudio() {
     primitiveStackRef.current.push(mesh);
     setPrimitiveCount(c => c + 1);
     recomputeMeshStats(scene);
+  }
+
+  /*
+   * AI Prompt Stub — keyword-route the user's natural-language prompt
+   * to existing Studio actions. This is intentionally a thin shim —
+   * future slices replace the keyword router with the real
+   * Clarifier → Planner → Verifier loop from Mech's AI scaffold.
+   * The harness it drives (string in → action list out → actions fire)
+   * is the durable contract; only the parser swaps.
+   */
+  function runAiPrompt() {
+    const raw = (aiPrompt || '').trim();
+    if (!raw) return;
+    const p = raw.toLowerCase();
+    const actions = [];
+    // Primitives — order ABSOLUTELY MATTERS: longer / more-specific
+    // needles come first so "voxel cube" matches "voxel-cube" without
+    // also matching "cube". After a needle hits, its substring is
+    // blanked out of `remaining` so shorter terms don't re-match.
+    const primKinds = [
+      ['voxel sphere', 'voxel-sphere'],
+      ['voxel cube',   'voxel-cube'],
+      ['torus knot',   'torus-knot'],
+      ['dodeca',       'dodecahedron'],
+      ['icosa',        'icosahedron'],
+      ['tetra',        'tetrahedron'],
+      ['cylinder',     'cylinder'],
+      ['sphere',       'sphere'],
+      ['plane',        'plane'],
+      ['cone',         'cone'],
+      ['torus',        'torus'],
+      ['cube',         'cube'],
+    ];
+    let remaining = p;
+    for (const [needle, kind] of primKinds) {
+      if (remaining.includes(needle)) {
+        actions.push(`add ${needle}`);
+        addPrimitive(kind);
+        remaining = remaining.split(needle).join(' ');
+      }
+    }
+    if (/tree/.test(p)) {
+      actions.push('generate procedural tree');
+      generateProceduralTree();
+    }
+    if (/lathe|vase|goblet|column/.test(p)) {
+      if (/vase/.test(p))   setLatheProfile('vase');
+      if (/goblet/.test(p)) setLatheProfile('goblet');
+      if (/column/.test(p)) setLatheProfile('column');
+      actions.push('add lathe surface');
+      addLatheSurface();
+    }
+    if (/floor plan|building|extrude/.test(p)) {
+      if (/l[- ]?shape/.test(p)) setFloorShape('L-shape');
+      if (/u[- ]?shape/.test(p)) setFloorShape('U-shape');
+      actions.push('extrude floor plan');
+      extrudeFloorPlan();
+    }
+    if (/particle/.test(p)) {
+      actions.push('spawn particle cloud');
+      spawnParticles();
+    }
+    if (/armature|bone/.test(p)) {
+      actions.push('add bone chain');
+      addArmature();
+    }
+    // Animation / physics
+    if (/spin|rotate|animate/.test(p) && !/stop/.test(p)) {
+      actions.push('start animation');
+      setIsAnimating(true);
+    }
+    if (/stop|pause/.test(p)) {
+      actions.push('stop animation');
+      setIsAnimating(false);
+    }
+    if (/drop|gravity|fall/.test(p)) {
+      actions.push('drop with gravity');
+      setIsPhysicsActive(true);
+    }
+    if (/reset/.test(p)) {
+      actions.push('reset to origin');
+      resetPhysics();
+      setIsPhysicsActive(false);
+    }
+    // Lighting
+    if (/light/.test(p)) {
+      actions.push('add cinematic light');
+      addCinematicLight();
+    }
+    // Rendering / compositing
+    if (/render|capture|screenshot/.test(p)) {
+      actions.push('capture render');
+      captureRender();
+    }
+    if (/showreel|turntable|four[- ]?view/.test(p)) {
+      actions.push('capture showreel');
+      captureShowreel();
+    }
+    // Scene management
+    if (/clear|empty|wipe/.test(p)) {
+      actions.push('clear scene');
+      clearScene();
+    }
+    if (/demo|compose/.test(p)) {
+      actions.push('compose demo scene');
+      composeDemoScene();
+    }
+    if (actions.length === 0) actions.push('(no matching keywords — try: add cube, spin, drop, render)');
+    setAiLog(l => l.concat([{ prompt: raw, actions, ts: new Date().toLocaleTimeString() }]));
   }
 
   /*
@@ -1677,6 +1791,66 @@ function WorkbenchStudio() {
 
       {/* RIGHT PROPERTIES PANEL */}
       <aside className="workbench-properties" data-studio-properties="studio">
+        <div className="property-section" data-studio-section="ai">
+          <h3 className="property-header">
+            AI Prompt
+            <span
+              data-studio-ai-runs
+              style={{ float: 'right', opacity: 0.6, fontSize: '11px', fontWeight: 'normal' }}
+            >
+              {aiLog.length} run{aiLog.length === 1 ? '' : 's'}
+            </span>
+          </h3>
+          <div className="property-row" style={{ alignItems: 'stretch' }}>
+            <input
+              type="text"
+              className="property-input"
+              data-studio-ai="prompt"
+              value={aiPrompt}
+              onChange={e => setAiPrompt(e.target.value)}
+              placeholder="e.g. add a cube and a sphere, then spin them"
+              style={{ flex: 1 }}
+            />
+          </div>
+          <button
+            className="property-button"
+            data-studio-action="run-ai-prompt"
+            onClick={runAiPrompt}
+            disabled={!aiPrompt.trim()}
+          >
+            Run Prompt
+          </button>
+          {aiLog.length > 0 && (
+            <div
+              data-studio-ai-log
+              style={{
+                marginTop: '6px',
+                maxHeight: '140px',
+                overflowY: 'auto',
+                fontSize: '10px',
+                fontFamily: 'monospace',
+                opacity: 0.85,
+              }}
+            >
+              {aiLog.slice().reverse().map((entry, i) => (
+                <div
+                  key={i}
+                  data-studio-ai-log-entry={aiLog.length - 1 - i}
+                  style={{
+                    padding: '4px',
+                    borderTop: i === 0 ? 'none' : '1px solid rgba(255,255,255,0.08)',
+                  }}
+                >
+                  <div style={{ opacity: 0.65 }}>{entry.ts} &nbsp; "{entry.prompt}"</div>
+                  <div data-studio-ai-actions style={{ marginTop: '2px' }}>
+                    → {entry.actions.join(' · ')}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         <div className="property-section" data-studio-section="welcome">
           <h3 className="property-header">ArchDisc Studio</h3>
           <p className="property-label">
