@@ -215,6 +215,11 @@ function WorkbenchStudio() {
   // the harness it will eventually drive).
   const [aiPrompt, setAiPrompt] = useState('add a cube and a torus knot');
   const [aiLog, setAiLog]       = useState([]);
+  // Reference Plane — image-against-photo workflow seen in Videos 29 + 402.
+  // For an MVP we generate a deterministic procedural "reference grid"
+  // canvas (labeled cross-hairs); next slice swaps in a real file picker.
+  const [refLabel, setRefLabel] = useState('FRONT');
+  const [refWidth, setRefWidth] = useState(0.06);
 
   function recomputeMeshStats(scene) {
     let v = 0;
@@ -654,6 +659,85 @@ function WorkbenchStudio() {
     mesh.position.set(
       (col - (cols - 1) / 2) * PRIMITIVE_SIZE * 1.9,
       0,
+      row * PRIMITIVE_SIZE * 1.9,
+    );
+
+    scene.add(mesh);
+    primitiveStackRef.current.push(mesh);
+    setPrimitiveCount(c => c + 1);
+    recomputeMeshStats(scene);
+  }
+
+  /*
+   * Reference Plane — drop a labeled grid plane into the scene that
+   * artists model against (the photo-to-3D workflow visible in the
+   * reels at Video-29 + Video-402). Texture is procedurally drawn so
+   * the slice is fully deterministic; a follow-up swaps in an
+   * Electron file picker.
+   */
+  function buildReferenceCanvas(label) {
+    const SIZE = 512;
+    const canvas = document.createElement('canvas');
+    canvas.width = SIZE;
+    canvas.height = SIZE;
+    const ctx = canvas.getContext('2d');
+    // Background — flat charcoal.
+    ctx.fillStyle = '#161821';
+    ctx.fillRect(0, 0, SIZE, SIZE);
+    // Major grid every 64 px = 8 cells across.
+    ctx.strokeStyle = '#3a4458';
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= 8; i++) {
+      const v = (i / 8) * SIZE;
+      ctx.beginPath(); ctx.moveTo(v, 0); ctx.lineTo(v, SIZE); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, v); ctx.lineTo(SIZE, v); ctx.stroke();
+    }
+    // Center cross-hairs.
+    ctx.strokeStyle = '#ff4d6d';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(SIZE / 2, 0); ctx.lineTo(SIZE / 2, SIZE); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, SIZE / 2); ctx.lineTo(SIZE, SIZE / 2); ctx.stroke();
+    // Label in top-left.
+    ctx.fillStyle = '#e9ecef';
+    ctx.font = 'bold 32px sans-serif';
+    ctx.fillText(label, 24, 50);
+    // Sub-label bottom-right with the dimensions.
+    ctx.fillStyle = '#9aa6b8';
+    ctx.font = '14px monospace';
+    ctx.fillText('ARCHDISC STUDIO · REFERENCE', 24, SIZE - 24);
+    return canvas;
+  }
+
+  function addReferencePlane() {
+    const scene = window.__archdiscScene;
+    if (!scene) return;
+    const w = Math.max(0.01, refWidth);
+    const geometry = new THREE.PlaneGeometry(w, w);
+    const canvas = buildReferenceCanvas((refLabel || 'REF').toUpperCase().slice(0, 12));
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    const material = new THREE.MeshStandardMaterial({
+      map: texture,
+      side: THREE.DoubleSide,
+      metalness: 0,
+      roughness: 1,
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    // Stand upright on Y; the user typically wants reference planes
+    // facing them in the default camera, so rotate the plane to face
+    // +Z (toward the camera at (0.15, 0.10, 0.15) which looks at origin).
+    mesh.userData.archdiscStudioPrimitive = true;
+    mesh.userData.archdiscStudioPrimitiveKind = 'reference-plane';
+    mesh.userData.archdiscStudioReferenceLabel = refLabel;
+    mesh.name = `studio-primitive-reference-${refLabel}-${primitiveCount}`;
+
+    const cols = 4;
+    const i = primitiveCount;
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    mesh.position.set(
+      (col - (cols - 1) / 2) * PRIMITIVE_SIZE * 1.9,
+      w * 0.5,
       row * PRIMITIVE_SIZE * 1.9,
     );
 
@@ -2363,6 +2447,52 @@ function WorkbenchStudio() {
             onClick={addLatheSurface}
           >
             Add Lathe Surface
+          </button>
+        </div>
+
+        <div className="property-section" data-studio-section="reference">
+          <h3 className="property-header">Reference Plane</h3>
+          <p className="property-label" style={{ opacity: 0.6, fontSize: '11px' }}>
+            Drop a labeled grid plane into the scene to model against
+            (photo-to-3D workflow). Procedural for now; file picker next.
+          </p>
+          <div className="property-row">
+            <span className="property-label">Label</span>
+            <input
+              type="text"
+              className="property-input"
+              data-studio-reference="label"
+              value={refLabel}
+              onChange={e => setRefLabel(e.target.value)}
+              maxLength={12}
+            />
+          </div>
+          <div className="property-row">
+            <span className="property-label">Size</span>
+            <input
+              type="range"
+              min="0.02"
+              max="0.15"
+              step="0.005"
+              data-studio-reference="size"
+              value={refWidth}
+              onChange={e => setRefWidth(Number(e.target.value))}
+              style={{ flex: 1 }}
+            />
+            <span
+              data-studio-reference-readout="size"
+              style={{ marginLeft: '6px', fontSize: '10px', fontFamily: 'monospace', minWidth: '52px', textAlign: 'right' }}
+            >
+              {(refWidth * 1000).toFixed(0)} mm
+            </span>
+          </div>
+          <button
+            className="property-button"
+            data-studio-action="add-reference-plane"
+            onClick={addReferencePlane}
+            disabled={!refLabel.trim()}
+          >
+            Add Reference Plane
           </button>
         </div>
 
