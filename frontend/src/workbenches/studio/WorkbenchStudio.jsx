@@ -199,6 +199,11 @@ function WorkbenchStudio() {
   const animRafRef = useRef(null);
   // Sculpting — strength of one click of an Inflate/Twist/Smooth pass.
   const [sculptStrength, setSculptStrength] = useState(0.1);
+  // Scene I/O — save / load the current Studio primitives + lights to a
+  // self-contained JSON string. In-state cache for the MVP; a follow-up
+  // wires this through Electron's file picker.
+  const [sceneJson, setSceneJson]               = useState('');
+  const [sceneSavedAt, setSceneSavedAt]         = useState(null);
   // Text 3D (Motion Graphics discipline) — typography rendered as an
   // extruded TextGeometry mesh.
   const [text3dInput, setText3dInput] = useState('Studio');
@@ -402,6 +407,111 @@ function WorkbenchStudio() {
 
   function clearRenders() {
     setRenders([]);
+  }
+
+  /*
+   * Scene save / load — serialise the current Studio primitives +
+   * lights to JSON; restore exactly from the same JSON. Only
+   * primitives whose kind is rebuild-able by buildPrimitiveGeometry
+   * are saved; Boolean / scatter / reference / instanced kinds (which
+   * carry custom geometry or shared textures) are skipped with a note
+   * in the file. A follow-up slice swaps the in-state cache for
+   * Electron's native file dialog.
+   */
+  function saveSceneJson() {
+    const scene = window.__archdiscScene;
+    if (!scene) return '';
+    const data = { v: 1, savedAt: Date.now(), primitives: [], lights: [], skipped: [] };
+    // Kinds we can rebuild from buildPrimitiveGeometry.
+    const SAVE_KINDS = new Set([
+      'cube', 'sphere', 'plane', 'cylinder', 'cone', 'torus',
+      'torus-knot', 'icosahedron', 'dodecahedron', 'tetrahedron',
+      'voxel-cube', 'voxel-sphere', 'suzanne',
+    ]);
+    scene.traverse(o => {
+      if (o.userData && o.userData.archdiscStudioPrimitive) {
+        const kind = o.userData.archdiscStudioPrimitiveKind;
+        if (!SAVE_KINDS.has(kind)) {
+          data.skipped.push(kind);
+          return;
+        }
+        data.primitives.push({
+          kind,
+          position: [o.position.x, o.position.y, o.position.z],
+          rotation: [o.rotation.x, o.rotation.y, o.rotation.z],
+          scale:    [o.scale.x,    o.scale.y,    o.scale.z],
+          material: (o.material && o.material.color) ? {
+            color:       '#' + o.material.color.getHexString(),
+            metalness:   typeof o.material.metalness === 'number' ? o.material.metalness : 0.25,
+            roughness:   typeof o.material.roughness === 'number' ? o.material.roughness : 0.45,
+            opacity:     typeof o.material.opacity === 'number' ? o.material.opacity : 1,
+            transparent: !!o.material.transparent,
+            wireframe:   !!o.material.wireframe,
+          } : null,
+        });
+      }
+      if (o.userData && o.userData.archdiscStudioLight && o.isLight) {
+        data.lights.push({
+          color:     '#' + o.color.getHexString(),
+          intensity: o.intensity,
+          position:  [o.position.x, o.position.y, o.position.z],
+        });
+      }
+    });
+    const json = JSON.stringify(data, null, 2);
+    setSceneJson(json);
+    setSceneSavedAt(new Date().toLocaleTimeString());
+    return json;
+  }
+
+  function loadSceneJson(jsonText) {
+    let data;
+    try { data = JSON.parse(jsonText || sceneJson || ''); } catch (e) { return; }
+    if (!data || data.v !== 1) return;
+    const scene = window.__archdiscScene;
+    if (!scene) return;
+    // Clear current scene + lights.
+    clearScene();
+    clearCinematicLights();
+    // Re-create primitives in order.
+    for (const p of (data.primitives || [])) {
+      const geom = buildPrimitiveGeometry(p.kind);
+      if (!geom) continue;
+      const mat = new THREE.MeshStandardMaterial({
+        color:       p.material?.color || 0x6e7681,
+        metalness:   p.material?.metalness ?? 0.25,
+        roughness:   p.material?.roughness ?? 0.45,
+        opacity:     p.material?.opacity ?? 1,
+        transparent: !!p.material?.transparent,
+        wireframe:   !!p.material?.wireframe,
+      });
+      const mesh = new THREE.Mesh(geom, mat);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      mesh.position.set(p.position[0], p.position[1], p.position[2]);
+      mesh.rotation.set(p.rotation[0], p.rotation[1], p.rotation[2]);
+      mesh.scale.set(p.scale[0], p.scale[1], p.scale[2]);
+      mesh.userData.archdiscStudioPrimitive = true;
+      mesh.userData.archdiscStudioPrimitiveKind = p.kind;
+      mesh.name = `studio-primitive-${p.kind}-loaded-${primitiveStackRef.current.length}`;
+      scene.add(mesh);
+      primitiveStackRef.current.push(mesh);
+    }
+    setPrimitiveCount(primitiveStackRef.current.length);
+    // Re-create lights.
+    for (const l of (data.lights || [])) {
+      const light = new THREE.PointLight(new THREE.Color(l.color), l.intensity, 0.5, 2);
+      light.position.set(l.position[0], l.position[1], l.position[2]);
+      light.userData.archdiscStudioLight = true;
+      scene.add(light);
+      try {
+        const helper = new THREE.PointLightHelper(light, PRIMITIVE_SIZE * 0.06, light.color);
+        helper.userData.archdiscStudioLightHelper = true;
+        scene.add(helper);
+      } catch (_) {}
+    }
+    setLightCount((data.lights || []).length);
+    recomputeMeshStats(scene);
   }
 
   /*
@@ -2523,6 +2633,37 @@ function WorkbenchStudio() {
               ))}
             </div>
           )}
+        </div>
+
+        <div className="property-section" data-studio-section="scene-io">
+          <h3 className="property-header">Scene I/O</h3>
+          <p className="property-label" style={{ opacity: 0.6, fontSize: '11px' }}>
+            Save the current Studio primitives + lights to a JSON
+            snapshot; Load restores from the cached snapshot. Boolean /
+            scatter / reference / instanced kinds are skipped (their
+            geometry isn't reproducible from a kind name alone).
+          </p>
+          <button
+            className="property-button"
+            data-studio-action="save-scene"
+            onClick={() => saveSceneJson()}
+          >
+            Save Scene
+          </button>
+          <button
+            className="property-button"
+            data-studio-action="load-scene"
+            onClick={() => loadSceneJson()}
+            disabled={!sceneJson}
+          >
+            Load Saved Scene
+          </button>
+          <p
+            data-studio-scene-io-status
+            style={{ marginTop: '4px', fontSize: '10px', fontFamily: 'monospace', opacity: 0.7 }}
+          >
+            {sceneSavedAt ? `Saved ${sceneSavedAt} · ${sceneJson.length.toLocaleString()} chars` : 'No save yet'}
+          </p>
         </div>
 
         <div className="property-section" data-studio-section="welcome">
