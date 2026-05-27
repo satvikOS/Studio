@@ -258,6 +258,8 @@ function WorkbenchStudio() {
   const [brushRadius, setBrushRadius]     = useState(0.012);
   const [brushFalloffStrength, setBrushFalloffStrength] = useState(0.4);
   const brushStateRef = useRef({ active: false, mode: 'push', radius: 0.012, strength: 0.4 });
+  // Decimate aggressiveness (vertex-clustering quantization fraction).
+  const [decimateAggressiveness, setDecimateAggressiveness] = useState(0.5);
   // Display modes — view-time toggles for wireframe, bounding-box,
   // and vertex-normals visualization on Studio primitives.
   const [displayWireframe,   setDisplayWireframe]   = useState(false);
@@ -1910,6 +1912,71 @@ function WorkbenchStudio() {
       mesh.material.map = null;
       mesh.material.needsUpdate = true;
     }
+  }
+
+  /*
+   * Decimate modifier — vertex-clustering polygon reduction.
+   *
+   * Quantizes every vertex position to a uniform grid sized by the
+   * `aggressiveness` slider, then collapses cells to a single
+   * representative. Triangles whose three corners collapse to the
+   * same / two vertices become degenerate and are dropped. The
+   * result is a topologically simpler mesh with strictly fewer
+   * vertices and faces — the standard "vertex clustering" decimation
+   * algorithm.
+   *
+   * cellSize = boundingRadius * aggressiveness * 0.5
+   *   ↳ 0.05 -> ~5% of bounding radius -> light decimation
+   *   ↳ 0.95 -> ~47% of bounding radius -> aggressive merge
+   */
+  function decimateSelected(aggressiveness) {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    const oldPos = mesh.geometry.attributes.position;
+    const oldIdx = mesh.geometry.index;
+    if (!oldPos || !oldIdx) return null;
+    if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
+    const cellSize = mesh.geometry.boundingSphere.radius * aggressiveness * 0.5;
+    if (cellSize <= 0) return null;
+    const cells = new Map();
+    const remap = new Int32Array(oldPos.count);
+    const newPositions = [];
+    for (let i = 0; i < oldPos.count; i++) {
+      const x = Math.round(oldPos.getX(i) / cellSize);
+      const y = Math.round(oldPos.getY(i) / cellSize);
+      const z = Math.round(oldPos.getZ(i) / cellSize);
+      const key = `${x}_${y}_${z}`;
+      if (cells.has(key)) {
+        remap[i] = cells.get(key);
+      } else {
+        const newIdx = newPositions.length / 3;
+        newPositions.push(oldPos.getX(i), oldPos.getY(i), oldPos.getZ(i));
+        cells.set(key, newIdx);
+        remap[i] = newIdx;
+      }
+    }
+    const newIndices = [];
+    for (let t = 0; t < oldIdx.count; t += 3) {
+      const a = remap[oldIdx.getX(t)];
+      const b = remap[oldIdx.getX(t + 1)];
+      const c = remap[oldIdx.getX(t + 2)];
+      if (a === b || b === c || a === c) continue;
+      newIndices.push(a, b, c);
+    }
+    const before = { verts: oldPos.count, tris: oldIdx.count / 3 };
+    const after  = { verts: newPositions.length / 3, tris: newIndices.length / 3 };
+    const newGeom = new THREE.BufferGeometry();
+    newGeom.setAttribute('position', new THREE.Float32BufferAttribute(newPositions, 3));
+    newGeom.setIndex(newIndices);
+    newGeom.computeVertexNormals();
+    newGeom.computeBoundingSphere();
+    mesh.geometry.dispose();
+    mesh.geometry = newGeom;
+    mesh.userData.archdiscStudioDecimated = (mesh.userData.archdiscStudioDecimated || 0) + 1;
+    mesh.userData.archdiscStudioDecimateBefore = before;
+    mesh.userData.archdiscStudioDecimateAfter  = after;
+    recomputeMeshStats(window.__archdiscScene);
+    return { before, after };
   }
 
   /*
@@ -4361,6 +4428,39 @@ function WorkbenchStudio() {
           </button>
           <button className="property-button" disabled>Subdivide</button>
           <button className="property-button" disabled>Retopologize</button>
+
+          <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+            <p className="property-label" style={{ opacity: 0.6, fontSize: '11px', margin: '0 0 4px 0' }}>
+              Decimate — vertex-clustering polygon reduction.
+            </p>
+            <div className="property-row">
+              <span className="property-label">Aggressiveness</span>
+              <input
+                type="range"
+                min="0.05"
+                max="0.95"
+                step="0.05"
+                data-studio-decimate="aggressiveness"
+                value={decimateAggressiveness}
+                onChange={e => setDecimateAggressiveness(Number(e.target.value))}
+                style={{ flex: 1 }}
+              />
+              <span
+                data-studio-decimate-readout="aggressiveness"
+                style={{ marginLeft: '6px', fontSize: '10px', fontFamily: 'monospace', minWidth: '36px', textAlign: 'right' }}
+              >
+                {decimateAggressiveness.toFixed(2)}
+              </span>
+            </div>
+            <button
+              className="property-button"
+              data-studio-action="decimate-selected"
+              onClick={() => decimateSelected(decimateAggressiveness)}
+              disabled={!selectedKind}
+            >
+              Decimate Selected
+            </button>
+          </div>
         </div>
 
         <div className="property-section" data-studio-section="display">
