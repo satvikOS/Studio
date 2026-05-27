@@ -27,6 +27,7 @@ test('Studio is the default workbench and the switcher round-trips to Mechanical
 
   const app = await electron.launch({
     args: [path.join(__dirname, '..', 'electron', 'main.js')],
+    slowMo: 400, // workflow spec — pace each click so the watcher follows the flow
   });
 
   const win = await app.firstWindow();

@@ -26,6 +26,7 @@ test('Studio identity is rendered as "ArchDisc Studio" in the running Electron a
 
   const app = await electron.launch({
     args: [path.join(__dirname, '..', 'electron', 'main.js')],
+    slowMo: 250,
   });
 
   const win = await app.firstWindow();

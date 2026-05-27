@@ -1,9 +1,44 @@
 import React, { useState } from 'react';
+import * as THREE from 'three';
 import {
   MousePointer2, Move, RotateCw, Maximize2,
   Box, Mountain, PaintBucket, Bone, Play, Sparkles, Camera,
 } from 'lucide-react';
 import Viewport3D from '../../components/Viewport3D';
+
+/**
+ * Studio modelling primitives — first real Studio tool.
+ *
+ * Backed by three.js directly (the vendored Blender source lives at
+ * blender/ and will be wired in for heavier modelling ops in later
+ * slices; primitives are simple enough to ship in pure JS first).
+ * Every primitive carries `userData.archdiscStudioPrimitive = true`
+ * so the stats panel + selection logic can scan only Studio-added
+ * objects, not Viewport3D's helpers (axes, ground, lights, gizmos).
+ */
+const PRIMITIVE_SIZE = 0.03; // 30 mm, sized to fit Viewport3D's mm-scale CAD camera
+
+function buildPrimitiveGeometry(kind) {
+  const S = PRIMITIVE_SIZE;
+  switch (kind) {
+    case 'cube':     return new THREE.BoxGeometry(S, S, S);
+    case 'sphere':   return new THREE.SphereGeometry(S * 0.6, 32, 24);
+    case 'plane':    return new THREE.PlaneGeometry(S * 1.6, S * 1.6);
+    case 'cylinder': return new THREE.CylinderGeometry(S * 0.5, S * 0.5, S, 32);
+    case 'cone':     return new THREE.ConeGeometry(S * 0.55, S, 32);
+    case 'torus':    return new THREE.TorusGeometry(S * 0.5, S * 0.18, 16, 32);
+    default: return null;
+  }
+}
+
+const PRIMITIVE_KINDS = [
+  { id: 'cube',     label: 'Cube' },
+  { id: 'sphere',   label: 'Sphere' },
+  { id: 'plane',    label: 'Plane' },
+  { id: 'cylinder', label: 'Cylinder' },
+  { id: 'cone',     label: 'Cone' },
+  { id: 'torus',    label: 'Torus' },
+];
 
 /**
  * ArchDisc Studio — primary workbench.
@@ -44,6 +79,60 @@ const TOOL_BUTTONS = [
 function WorkbenchStudio() {
   const [activeTab, setActiveTab] = useState('modeling');
   const [activeTool, setActiveTool] = useState('select');
+  const [primitiveCount, setPrimitiveCount] = useState(0);
+  const [vertexCount, setVertexCount] = useState(0);
+  const [faceCount, setFaceCount] = useState(0);
+
+  function recomputeMeshStats(scene) {
+    let v = 0;
+    let f = 0;
+    scene.traverse(o => {
+      if (o.userData && o.userData.archdiscStudioPrimitive && o.geometry) {
+        const g = o.geometry;
+        v += g.attributes?.position?.count || 0;
+        if (g.index) f += g.index.count / 3;
+        else f += (g.attributes?.position?.count || 0) / 3;
+      }
+    });
+    setVertexCount(v);
+    setFaceCount(Math.round(f));
+  }
+
+  function addPrimitive(kind) {
+    const scene = window.__archdiscScene;
+    if (!scene) return;
+
+    const geometry = buildPrimitiveGeometry(kind);
+    if (!geometry) return;
+
+    const material = new THREE.MeshStandardMaterial({
+      color: 0x6e7681,
+      metalness: 0.25,
+      roughness: 0.45,
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.userData.archdiscStudioPrimitive = true;
+    mesh.userData.archdiscStudioPrimitiveKind = kind;
+    mesh.name = `studio-primitive-${kind}-${primitiveCount}`;
+
+    // Grid layout — spread additions so multiple primitives are individually
+    // visible. 4 columns wide; new rows along +Z.
+    const cols = 4;
+    const i = primitiveCount;
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    mesh.position.set(
+      (col - (cols - 1) / 2) * PRIMITIVE_SIZE * 1.9,
+      0,
+      row * PRIMITIVE_SIZE * 1.9,
+    );
+
+    scene.add(mesh);
+    setPrimitiveCount(c => c + 1);
+    recomputeMeshStats(scene);
+  }
 
   return (
     <>
@@ -68,7 +157,49 @@ function WorkbenchStudio() {
           ))}
         </div>
         <div className="workbench-ribbon-placeholder-body">
-          ArchDisc Studio · forked from Blender · {DISCIPLINE_TABS.find(t => t.id === activeTab)?.label} (placeholder)
+          {activeTab === 'modeling' ? (
+            <div
+              data-studio-modeling-primitives
+              style={{
+                display: 'flex',
+                gap: '8px',
+                flexWrap: 'wrap',
+                alignItems: 'center',
+                width: '100%',
+              }}
+            >
+              <span style={{ opacity: 0.6, marginRight: '8px' }}>Primitives:</span>
+              {PRIMITIVE_KINDS.map(p => (
+                <button
+                  key={p.id}
+                  type="button"
+                  data-studio-primitive={p.id}
+                  onClick={() => addPrimitive(p.id)}
+                  style={{
+                    padding: '4px 10px',
+                    background: 'rgba(255,255,255,0.06)',
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    color: 'inherit',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                  }}
+                >
+                  + {p.label}
+                </button>
+              ))}
+              <span
+                data-studio-primitive-count
+                style={{ marginLeft: '12px', opacity: 0.6 }}
+              >
+                {primitiveCount} primitive{primitiveCount === 1 ? '' : 's'} in scene
+              </span>
+            </div>
+          ) : (
+            <>
+              ArchDisc Studio · forked from Blender · {DISCIPLINE_TABS.find(t => t.id === activeTab)?.label} (placeholder)
+            </>
+          )}
         </div>
       </div>
 
@@ -128,11 +259,23 @@ function WorkbenchStudio() {
           <h3 className="property-header">Mesh</h3>
           <div className="property-row">
             <span className="property-label">Vertices</span>
-            <input type="number" className="property-input" placeholder="0" disabled />
+            <input
+              type="number"
+              className="property-input"
+              data-studio-stat="vertices"
+              value={vertexCount}
+              readOnly
+            />
           </div>
           <div className="property-row">
             <span className="property-label">Faces</span>
-            <input type="number" className="property-input" placeholder="0" disabled />
+            <input
+              type="number"
+              className="property-input"
+              data-studio-stat="faces"
+              value={faceCount}
+              readOnly
+            />
           </div>
           <button className="property-button" disabled>Subdivide</button>
           <button className="property-button" disabled>Retopologize</button>
