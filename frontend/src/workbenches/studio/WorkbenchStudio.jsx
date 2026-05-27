@@ -204,6 +204,10 @@ function WorkbenchStudio() {
   // wires this through Electron's file picker.
   const [sceneJson, setSceneJson]               = useState('');
   const [sceneSavedAt, setSceneSavedAt]         = useState(null);
+  // Camera — FOV control + named view presets.
+  // Viewport3D's PerspectiveCamera ships at FOV 45°; we mirror the
+  // value into React state and the panel slider.
+  const [cameraFov, setCameraFov] = useState(45);
   // Text 3D (Motion Graphics discipline) — typography rendered as an
   // extruded TextGeometry mesh.
   const [text3dInput, setText3dInput] = useState('Studio');
@@ -407,6 +411,36 @@ function WorkbenchStudio() {
 
   function clearRenders() {
     setRenders([]);
+  }
+
+  /*
+   * Camera — FOV slider + view preset buttons. Front / Back / Right /
+   * Left / Top / Iso each orbit the camera to a fixed (azimuth,
+   * elevation) using window.__archdiscOrbitView; FOV directly mutates
+   * the PerspectiveCamera's fov and re-builds the projection matrix.
+   */
+  function applyCameraFov(value) {
+    const v = Math.max(15, Math.min(110, Number(value)));
+    setCameraFov(v);
+    const vp = window.__archdiscViewport;
+    if (vp && vp.camera) {
+      vp.camera.fov = v;
+      vp.camera.updateProjectionMatrix();
+    }
+  }
+
+  const CAMERA_PRESETS = [
+    { id: 'front', label: 'Front', az: 0,   el: 0  },
+    { id: 'back',  label: 'Back',  az: 180, el: 0  },
+    { id: 'right', label: 'Right', az: 90,  el: 0  },
+    { id: 'left',  label: 'Left',  az: 270, el: 0  },
+    { id: 'top',   label: 'Top',   az: 0,   el: 85 },
+    { id: 'iso',   label: 'Iso',   az: 45,  el: 25 },
+  ];
+  function applyCameraPreset(p) {
+    if (typeof window.__archdiscOrbitView === 'function') {
+      window.__archdiscOrbitView(p.az, p.el, 1);
+    }
   }
 
   /*
@@ -2633,6 +2667,59 @@ function WorkbenchStudio() {
               ))}
             </div>
           )}
+        </div>
+
+        <div className="property-section" data-studio-section="camera">
+          <h3 className="property-header">Camera</h3>
+          <div className="property-row">
+            <span className="property-label">FOV</span>
+            <input
+              type="range"
+              min="15"
+              max="110"
+              step="1"
+              data-studio-camera="fov"
+              value={cameraFov}
+              onChange={e => applyCameraFov(e.target.value)}
+              style={{ flex: 1 }}
+            />
+            <span
+              data-studio-camera-readout="fov"
+              style={{ marginLeft: '6px', fontSize: '10px', fontFamily: 'monospace', minWidth: '32px', textAlign: 'right' }}
+            >
+              {cameraFov}°
+            </span>
+          </div>
+          <div
+            data-studio-camera-presets
+            style={{
+              marginTop: '6px',
+              display: 'grid',
+              gridTemplateColumns: 'repeat(3, 1fr)',
+              gap: '4px',
+            }}
+          >
+            {CAMERA_PRESETS.map(p => (
+              <button
+                key={p.id}
+                type="button"
+                data-studio-camera-preset={p.id}
+                onClick={() => applyCameraPreset(p)}
+                style={{
+                  padding: '4px 2px',
+                  background: 'rgba(255,255,255,0.06)',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  color: 'inherit',
+                  borderRadius: '3px',
+                  cursor: 'pointer',
+                  fontSize: '10px',
+                  fontWeight: 600,
+                }}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="property-section" data-studio-section="scene-io">
