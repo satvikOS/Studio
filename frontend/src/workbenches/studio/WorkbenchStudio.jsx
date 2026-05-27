@@ -201,6 +201,8 @@ function WorkbenchStudio() {
   // Compositing — post-process the last captured render thumbnail
   // through a canvas filter and append the result as a new thumbnail.
   const [compositeFilter, setCompositeFilter] = useState('grayscale(100%)');
+  // Subdivision — vertex count for the currently selected mesh, mirrored
+  // into a panel readout so the user sees the (≈4×) growth per pass.
 
   function recomputeMeshStats(scene) {
     let v = 0;
@@ -577,6 +579,80 @@ function WorkbenchStudio() {
     primitiveStackRef.current.push(mesh);
     setPrimitiveCount(c => c + 1);
     recomputeMeshStats(scene);
+  }
+
+  /*
+   * Subdivision — midpoint scheme: for every triangle, add a new
+   * vertex at each edge midpoint and replace the triangle with 4
+   * sub-triangles. Vertex count grows ~4× per pass. Operates on the
+   * selected mesh's geometry in place; downstream sculpt brushes get
+   * a denser canvas to work with.
+   */
+  function subdivideSelected() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return;
+    const g = mesh.geometry;
+    // Some three primitives ship non-indexed (PolyhedronGeometry —
+    // Icosahedron/Dodecahedron/Tetrahedron — among them). Synthesize an
+    // implicit index so the midpoint scheme below has triangles to walk.
+    if (!g.index) {
+      const n = g.attributes.position.count;
+      const arr = n > 65535 ? new Uint32Array(n) : new Uint16Array(n);
+      for (let i = 0; i < n; i++) arr[i] = i;
+      g.setIndex(new THREE.BufferAttribute(arr, 1));
+    }
+    const oldPos = g.attributes.position;
+    const oldIdx = g.index;
+    const xs = []; const ys = []; const zs = [];
+    for (let i = 0; i < oldPos.count; i++) {
+      xs.push(oldPos.getX(i));
+      ys.push(oldPos.getY(i));
+      zs.push(oldPos.getZ(i));
+    }
+    const edgeMap = new Map();
+    const getMidpoint = (a, b) => {
+      const k = a < b ? `${a}|${b}` : `${b}|${a}`;
+      let v = edgeMap.get(k);
+      if (v !== undefined) return v;
+      v = xs.length;
+      xs.push((xs[a] + xs[b]) * 0.5);
+      ys.push((ys[a] + ys[b]) * 0.5);
+      zs.push((zs[a] + zs[b]) * 0.5);
+      edgeMap.set(k, v);
+      return v;
+    };
+    const newIndices = [];
+    for (let t = 0; t < oldIdx.count; t += 3) {
+      const a = oldIdx.getX(t);
+      const b = oldIdx.getX(t + 1);
+      const c = oldIdx.getX(t + 2);
+      const ab = getMidpoint(a, b);
+      const bc = getMidpoint(b, c);
+      const ca = getMidpoint(c, a);
+      newIndices.push(a, ab, ca,  ab, b, bc,  ca, bc, c,  ab, bc, ca);
+    }
+    const arr = new Float32Array(xs.length * 3);
+    for (let i = 0; i < xs.length; i++) {
+      arr[i * 3]     = xs[i];
+      arr[i * 3 + 1] = ys[i];
+      arr[i * 3 + 2] = zs[i];
+    }
+    const newGeom = new THREE.BufferGeometry();
+    newGeom.setAttribute('position', new THREE.BufferAttribute(arr, 3));
+    newGeom.setIndex(newIndices);
+    newGeom.computeVertexNormals();
+    newGeom.computeBoundingSphere();
+    newGeom.computeBoundingBox();
+    mesh.geometry.dispose();
+    mesh.geometry = newGeom;
+    recomputeMeshStats(window.__archdiscScene);
+    // Mirror new transform into the Selection panel so vertex count
+    // shifts there too.
+    setSelectedTransform({
+      position: [mesh.position.x, mesh.position.y, mesh.position.z],
+      rotation: [mesh.rotation.x, mesh.rotation.y, mesh.rotation.z],
+      scale:    [mesh.scale.x,    mesh.scale.y,    mesh.scale.z],
+    });
   }
 
   /*
@@ -1501,6 +1577,22 @@ function WorkbenchStudio() {
             </button>
           </div>
         )}
+
+        <div className="property-section" data-studio-section="subdivision">
+          <h3 className="property-header">Subdivision Surface</h3>
+          <p className="property-label" style={{ opacity: 0.6, fontSize: '11px' }}>
+            Midpoint tessellation: every triangle becomes 4 sub-triangles.
+            Vertex count grows ~4× per pass.
+          </p>
+          <button
+            className="property-button"
+            data-studio-action="subdivide-selected"
+            onClick={subdivideSelected}
+            disabled={!selectedKind}
+          >
+            Subdivide Selected
+          </button>
+        </div>
 
         <div className="property-section" data-studio-section="compositing">
           <h3 className="property-header">Compositing</h3>
