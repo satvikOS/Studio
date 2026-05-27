@@ -328,6 +328,29 @@ function WorkbenchStudio() {
   const [keyframeEasingMode, setKeyframeEasingMode] = useState('linear');
   // Last-op ref for Repeat Last.
   const lastOpRef = useRef(null);
+  // Studio camera re-centering — the inherited Viewport3D starts the
+  // camera at (0.15, 0.10, 0.15) which makes the world origin appear
+  // in the LOWER third of the viewport (a 25° down-tilt). Studio's
+  // monotone layout looks centred-vertical on a 12° down-tilt with the
+  // orbit target slightly above origin so the axes triad sits at the
+  // visual centre of the canvas.
+  useEffect(() => {
+    let done = false;
+    const tryAdjust = () => {
+      const vp = window.__archdiscViewport;
+      if (done || !vp || !vp.camera || !vp.controls) return false;
+      vp.camera.position.set(0.13, 0.06, 0.13);
+      vp.camera.lookAt(0, 0.005, 0);
+      vp.controls.target.set(0, 0.005, 0);
+      vp.controls.update();
+      done = true;
+      return true;
+    };
+    if (tryAdjust()) return;
+    const t = setInterval(() => { if (tryAdjust()) clearInterval(t); }, 100);
+    setTimeout(() => clearInterval(t), 5000); // give up after 5s
+    return () => clearInterval(t);
+  }, []);
   // Viewport right-click context menu — coordinates + target mesh uuid.
   const [contextMenu, setContextMenu] = useState(null);
   // Close context menu when clicking anywhere outside it.
