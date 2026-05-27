@@ -270,10 +270,15 @@ function WorkbenchStudio() {
   // Cell fracture / shatter — split selected mesh into N spatial chunks.
   const [fractureChunks, setFractureChunks] = useState(12);
   const [fractureExplode, setFractureExplode] = useState(0.006);
+  // Keyframe animation — per-mesh recorded poses interpolated across frames.
+  const [keyframes,         setKeyframes]         = useState([]);
+  const [currentFrame,      setCurrentFrame]      = useState(0);
+  const [isPlayingTimeline, setIsPlayingTimeline] = useState(false);
   // Cloth simulation — PBD edge-spring cloth, drops under gravity.
   const [clothActive, setClothActive] = useState(false);
   const clothStateRef = useRef(null);
   const clothRafRef   = useRef(null);
+  const animTimelineRafRef = useRef(null);
   // Array modifier — linear or radial duplicate of the selected mesh.
   const [arrayMode,    setArrayMode]    = useState('linear');
   const [arrayCount,   setArrayCount]   = useState(8);
@@ -1936,6 +1941,95 @@ function WorkbenchStudio() {
       mesh.material.needsUpdate = true;
     }
   }
+
+  /*
+   * Keyframe Animation system — DCC-grade timeline.
+   *
+   * Each keyframe records a mesh's position + rotation at a specific
+   * frame. Scrubbing the timeline interpolates linearly between the
+   * surrounding keyframes for every mesh that has them.
+   *
+   * Out-of-range protection: if the current frame is BEFORE the
+   * earliest keyframe or AFTER the latest for a given mesh, that
+   * mesh is left alone. This lets the user move a mesh to a new
+   * pose before inserting the next keyframe — without the timeline
+   * snapping the mesh back to the last keyframed pose.
+   */
+  function insertKeyframe() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh) return null;
+    const k = {
+      meshUuid: mesh.uuid,
+      frame: Math.round(currentFrame),
+      px: mesh.position.x, py: mesh.position.y, pz: mesh.position.z,
+      rx: mesh.rotation.x, ry: mesh.rotation.y, rz: mesh.rotation.z,
+    };
+    setKeyframes(kfs => {
+      // Replace any existing KF at the same (mesh, frame).
+      const filtered = kfs.filter(x => !(x.meshUuid === mesh.uuid && x.frame === k.frame));
+      return [...filtered, k];
+    });
+    return k;
+  }
+  function clearKeyframes() { setKeyframes([]); }
+  function applyFrameToScene(f) {
+    const scene = window.__archdiscScene;
+    if (!scene) return;
+    // Group keyframes by mesh uuid.
+    const byMesh = new Map();
+    for (const k of keyframes) {
+      if (!byMesh.has(k.meshUuid)) byMesh.set(k.meshUuid, []);
+      byMesh.get(k.meshUuid).push(k);
+    }
+    byMesh.forEach((kfs, uuid) => {
+      const mesh = scene.getObjectByProperty('uuid', uuid);
+      if (!mesh) return;
+      kfs.sort((a, b) => a.frame - b.frame);
+      const minF = kfs[0].frame;
+      const maxF = kfs[kfs.length - 1].frame;
+      // Out-of-range: leave mesh alone so user can author new poses.
+      if (f < minF || f > maxF) return;
+      let before = kfs[0], after = kfs[kfs.length - 1];
+      for (const k of kfs) {
+        if (k.frame <= f) before = k;
+        if (k.frame >= f) { after = k; break; }
+      }
+      const span = after.frame - before.frame;
+      const t = span === 0 ? 0 : (f - before.frame) / span;
+      mesh.position.set(
+        before.px * (1 - t) + after.px * t,
+        before.py * (1 - t) + after.py * t,
+        before.pz * (1 - t) + after.pz * t,
+      );
+      mesh.rotation.set(
+        before.rx * (1 - t) + after.rx * t,
+        before.ry * (1 - t) + after.ry * t,
+        before.rz * (1 - t) + after.rz * t,
+      );
+    });
+  }
+  useEffect(() => {
+    applyFrameToScene(currentFrame);
+  }, [currentFrame, keyframes]);
+  useEffect(() => {
+    if (!isPlayingTimeline) return;
+    let last = performance.now();
+    let f = currentFrame;
+    const totalFrames = 240;
+    const loop = () => {
+      const now = performance.now();
+      const dt = (now - last) / 1000;
+      last = now;
+      f += dt * 60; // 60 fps timeline
+      if (f >= totalFrames) f = 0; // wrap
+      setCurrentFrame(f);
+      animTimelineRafRef.current = requestAnimationFrame(loop);
+    };
+    animTimelineRafRef.current = requestAnimationFrame(loop);
+    return () => {
+      if (animTimelineRafRef.current) cancelAnimationFrame(animTimelineRafRef.current);
+    };
+  }, [isPlayingTimeline]);
 
   /*
    * Cloth simulation — Position-Based Dynamics (PBD) edge-spring cloth.
@@ -4955,6 +5049,65 @@ function WorkbenchStudio() {
           >
             {isAnimating ? 'Stop Animation' : 'Animate Selected'}
           </button>
+
+          <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+            <p className="property-label" style={{ opacity: 0.6, fontSize: '11px', margin: '0 0 4px 0' }}>
+              Keyframes — record per-mesh poses, scrub the timeline,
+              linear interpolation between surrounding keys.
+            </p>
+            <div className="property-row">
+              <span className="property-label">Frame</span>
+              <input
+                type="range"
+                min="0"
+                max="240"
+                step="1"
+                data-studio-timeline="frame"
+                value={currentFrame}
+                onChange={e => setCurrentFrame(Number(e.target.value))}
+                style={{ flex: 1 }}
+              />
+              <span
+                data-studio-timeline-readout="frame"
+                style={{ marginLeft: '6px', fontSize: '10px', fontFamily: 'monospace', minWidth: '32px', textAlign: 'right' }}
+              >
+                {Math.round(currentFrame)}
+              </span>
+            </div>
+            <button
+              className="property-button"
+              data-studio-action="insert-keyframe"
+              onClick={insertKeyframe}
+              disabled={!selectedKind}
+              style={{ margin: '0 0 4px 0' }}
+            >
+              Insert Keyframe @ Frame {Math.round(currentFrame)}
+            </button>
+            <button
+              className="property-button"
+              data-studio-action="toggle-timeline"
+              onClick={() => setIsPlayingTimeline(p => !p)}
+              disabled={keyframes.length < 2}
+              style={{ margin: '0 0 4px 0' }}
+            >
+              {isPlayingTimeline ? 'Stop Timeline' : 'Play Timeline'}
+            </button>
+            <button
+              className="property-button"
+              data-studio-action="clear-keyframes"
+              onClick={clearKeyframes}
+              disabled={keyframes.length === 0}
+            >
+              Clear Keyframes
+            </button>
+            <p
+              data-studio-keyframe-count
+              className="property-label"
+              style={{ opacity: 0.55, fontSize: '10px', margin: '4px 0 0 0', fontFamily: 'monospace' }}
+            >
+              {keyframes.length} keyframe{keyframes.length === 1 ? '' : 's'} · {isPlayingTimeline ? 'playing' : 'idle'}
+            </p>
+          </div>
         </div>
 
         {selectedKind && (
