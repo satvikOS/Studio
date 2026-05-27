@@ -94,6 +94,11 @@ function WorkbenchStudio() {
   // mutation doesn't drive any rendering (state primitiveCount mirrors
   // its length for UI bindings). Used by Delete Last + Clear Scene.
   const primitiveStackRef = useRef([]);
+  // Render thumbnails captured via the "Render Frame" tool. Each entry:
+  //   { dataUrl, ts, samples, engine, w, h }
+  const [renders, setRenders] = useState([]);
+  const [renderEngine, setRenderEngine] = useState('cycles');
+  const [renderSamples, setRenderSamples] = useState(128);
 
   function recomputeMeshStats(scene) {
     let v = 0;
@@ -176,6 +181,39 @@ function WorkbenchStudio() {
     primitiveStackRef.current = [];
     setPrimitiveCount(0);
     recomputeMeshStats(scene);
+  }
+
+  /*
+   * Render Frame — capture the current viewport state as a PNG data URL.
+   * The WebGLRenderer was created without preserveDrawingBuffer:true (a
+   * perf decision in Viewport3D), so the draw buffer can be empty by
+   * the time toDataURL fires. Re-rendering inline immediately before
+   * the read guarantees a valid pixel buffer.
+   */
+  function captureRender() {
+    const vp = window.__archdiscViewport;
+    if (!vp || !vp.renderer || !vp.scene || !vp.camera) return;
+    try {
+      vp.renderer.render(vp.scene, vp.camera);
+      const dataUrl = vp.renderer.domElement.toDataURL('image/png');
+      if (!dataUrl || dataUrl.length < 128) return; // empty / broken capture
+      const w = vp.renderer.domElement.width;
+      const h = vp.renderer.domElement.height;
+      setRenders(rs => rs.concat([{
+        dataUrl,
+        ts: new Date().toLocaleTimeString(),
+        samples: renderSamples,
+        engine: renderEngine,
+        w, h,
+      }]));
+    } catch (_) {
+      // Capture failures stay silent — the property panel renders zero
+      // thumbnails and the user can retry.
+    }
+  }
+
+  function clearRenders() {
+    setRenders([]);
   }
 
   return (
@@ -345,7 +383,12 @@ function WorkbenchStudio() {
           <h3 className="property-header">Render</h3>
           <div className="property-row">
             <span className="property-label">Engine</span>
-            <select className="property-input" defaultValue="cycles">
+            <select
+              className="property-input"
+              data-studio-render="engine"
+              value={renderEngine}
+              onChange={e => setRenderEngine(e.target.value)}
+            >
               <option value="cycles">Cycles (path-traced)</option>
               <option value="eevee">EEVEE (real-time)</option>
               <option value="workbench">Workbench (preview)</option>
@@ -353,10 +396,91 @@ function WorkbenchStudio() {
           </div>
           <div className="property-row">
             <span className="property-label">Samples</span>
-            <input type="number" className="property-input" placeholder="128" />
+            <input
+              type="number"
+              className="property-input"
+              data-studio-render="samples"
+              value={renderSamples}
+              onChange={e => setRenderSamples(Math.max(1, Number(e.target.value) || 1))}
+            />
           </div>
-          <button className="property-button" disabled>Render Frame</button>
+          <button
+            className="property-button"
+            data-studio-action="render-frame"
+            onClick={captureRender}
+          >
+            Render Frame
+          </button>
           <button className="property-button" disabled>Render Animation</button>
+        </div>
+
+        <div className="property-section" data-studio-section="renders">
+          <h3 className="property-header">
+            Renders
+            <span
+              data-studio-render-count
+              style={{ float: 'right', opacity: 0.6, fontSize: '11px', fontWeight: 'normal' }}
+            >
+              {renders.length}
+            </span>
+          </h3>
+          {renders.length === 0 ? (
+            <p className="property-label" style={{ opacity: 0.5, fontSize: '11px' }}>
+              No renders captured. Click "Render Frame" above to save a viewport snapshot.
+            </p>
+          ) : (
+            <>
+              <div
+                data-studio-render-thumbs
+                style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}
+              >
+                {renders.map((r, i) => (
+                  <div
+                    key={i}
+                    data-studio-render-thumb={i}
+                    style={{
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      borderRadius: '4px',
+                      padding: '4px',
+                      background: 'rgba(255,255,255,0.03)',
+                    }}
+                  >
+                    <img
+                      src={r.dataUrl}
+                      alt={`Render ${i + 1}`}
+                      data-studio-render-image={i}
+                      style={{
+                        display: 'block',
+                        width: '100%',
+                        height: 'auto',
+                        borderRadius: '2px',
+                      }}
+                    />
+                    <div
+                      style={{
+                        marginTop: '4px',
+                        fontSize: '10px',
+                        opacity: 0.6,
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                      }}
+                    >
+                      <span>#{i + 1} · {r.engine} · {r.samples} spp</span>
+                      <span>{r.ts}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <button
+                className="property-button"
+                data-studio-action="clear-renders"
+                onClick={clearRenders}
+                style={{ marginTop: '6px' }}
+              >
+                Clear Renders
+              </button>
+            </>
+          )}
         </div>
       </aside>
     </>
