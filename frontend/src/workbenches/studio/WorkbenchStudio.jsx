@@ -306,6 +306,7 @@ function WorkbenchStudio() {
   const clothStateRef = useRef(null);
   const clothRafRef   = useRef(null);
   const animTimelineRafRef = useRef(null);
+  const buildStateRef      = useRef(null);
   // Array modifier — linear or radial duplicate of the selected mesh.
   const [arrayMode,    setArrayMode]    = useState('linear');
   const [arrayCount,   setArrayCount]   = useState(8);
@@ -1774,6 +1775,49 @@ function WorkbenchStudio() {
     mesh.userData.archdiscStudioWaved = (mesh.userData.archdiscStudioWaved || 0) + 1;
     recomputeMeshStats(window.__archdiscScene);
     return { amplitude, frequency };
+  }
+
+  /*
+   * Build modifier — progressively reveal triangles over time.
+   *
+   * Blender source: blender/source/blender/modifiers/intern/MOD_build.cc
+   *
+   * Animates `geometry.drawRange.count` from 0 to the full index
+   * count over `duration` seconds. Useful for "growing mesh" reveal
+   * animations.
+   *
+   * State: `buildState.current` holds { mesh, start, duration,
+   * totalIdx, rafId } so the same op can be cleanly stopped + restarted.
+   */
+  function startBuildAnimation(duration) {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry || !mesh.geometry.index) return null;
+    // Cancel any existing build animation.
+    if (buildStateRef.current && buildStateRef.current.rafId) {
+      cancelAnimationFrame(buildStateRef.current.rafId);
+    }
+    const totalIdx = mesh.geometry.index.count;
+    const start = performance.now();
+    const state = { mesh, start, duration, totalIdx, rafId: null };
+    buildStateRef.current = state;
+    mesh.geometry.setDrawRange(0, 0);
+    mesh.userData.archdiscStudioBuilding = true;
+    const tick = (now) => {
+      const elapsed = (now - state.start) / 1000;
+      const t = Math.min(1, elapsed / duration);
+      const count = Math.floor(state.totalIdx * t);
+      // Snap to triangle boundary (multiples of 3).
+      state.mesh.geometry.setDrawRange(0, count - (count % 3));
+      if (t < 1) {
+        state.rafId = requestAnimationFrame(tick);
+      } else {
+        state.mesh.geometry.setDrawRange(0, state.totalIdx);
+        state.mesh.userData.archdiscStudioBuilding = false;
+        state.mesh.userData.archdiscStudioBuilt = (state.mesh.userData.archdiscStudioBuilt || 0) + 1;
+      }
+    };
+    state.rafId = requestAnimationFrame(tick);
+    return { totalIdx, duration };
   }
 
   /*
@@ -4260,6 +4304,17 @@ function WorkbenchStudio() {
                     >
                       <span className="ribbon-tool-icon">▦</span>
                       <span className="ribbon-tool-label">Wireframe</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="ribbon-tool"
+                      data-studio-ribbon-action="build-anim"
+                      onClick={() => startBuildAnimation(2.0)}
+                      disabled={!selectedKind}
+                      title="Blender MOD_build — progressively reveal triangles over 2s"
+                    >
+                      <span className="ribbon-tool-icon">⏳</span>
+                      <span className="ribbon-tool-label">Build</span>
                     </button>
                   </div>
                   <div className="ribbon-group-label">Blender · Mods</div>
