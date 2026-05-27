@@ -1989,6 +1989,66 @@ function WorkbenchStudio() {
   }
 
   /*
+   * Simple Deform — Twist modifier (axial rotation along Y).
+   *
+   * Blender source: blender/source/blender/modifiers/intern/MOD_simpledeform.cc
+   * (mode == MOD_SIMPLEDEFORM_MODE_TWIST)
+   *
+   * Rotates XZ around Y by `angleRad * t` where t = normalised Y
+   * position in the bounding box. Identical *shape* family as the
+   * earlier sculptTwist helper but cited / normalized by Y-extent
+   * (Blender semantics) rather than bounding-sphere radius.
+   */
+  function twistDeform(angleRad) {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    const pos = mesh.geometry.attributes.position;
+    if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+    const minY = mesh.geometry.boundingBox.min.y;
+    const maxY = mesh.geometry.boundingBox.max.y;
+    const range = (maxY - minY) || 1;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+      const t = (y - minY) / range;
+      const theta = angleRad * t;
+      const c = Math.cos(theta), s = Math.sin(theta);
+      pos.setXYZ(i, x * c - z * s, y, x * s + z * c);
+    }
+    pos.needsUpdate = true;
+    mesh.geometry.computeVertexNormals();
+    mesh.geometry.computeBoundingSphere();
+    mesh.userData.archdiscStudioTwisted = (mesh.userData.archdiscStudioTwisted || 0) + 1;
+    recomputeMeshStats(window.__archdiscScene);
+    return { angleRad };
+  }
+
+  /*
+   * Edge Split modifier — duplicate vertices along sharp edges so
+   * shading is flat across them.
+   *
+   * Blender source: blender/source/blender/modifiers/intern/MOD_edgesplit.cc
+   *
+   * MVP form: convert to non-indexed (all edges split) + recompute
+   * normals -> per-face flat shading everywhere. Matches Blender's
+   * Edge Split with angle threshold = 0. The real Blender modifier
+   * also takes an angle threshold + a sharp-edge tag; for now the
+   * "everything is sharp" path mirrors the Shading→Flat workflow
+   * but stamps a distinct counter so specs can tell them apart.
+   */
+  function edgeSplitModifier() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    let g = mesh.geometry;
+    if (g.index) g = g.toNonIndexed();
+    g.computeVertexNormals();
+    mesh.geometry.dispose();
+    mesh.geometry = g;
+    mesh.userData.archdiscStudioEdgeSplit = (mesh.userData.archdiscStudioEdgeSplit || 0) + 1;
+    recomputeMeshStats(window.__archdiscScene);
+    return { verts: g.attributes.position.count };
+  }
+
+  /*
    * Simple Deform — Bend modifier.
    *
    * Blender source: blender/source/blender/modifiers/intern/MOD_simpledeform.cc
@@ -4390,6 +4450,28 @@ function WorkbenchStudio() {
                     >
                       <span className="ribbon-tool-icon">⨈</span>
                       <span className="ribbon-tool-label">Skin</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="ribbon-tool"
+                      data-studio-ribbon-action="twist"
+                      onClick={() => twistDeform(1.0)}
+                      disabled={!selectedKind}
+                      title="Blender MOD_simpledeform (TWIST) — rotate XZ around Y by Y-position"
+                    >
+                      <span className="ribbon-tool-icon">↻</span>
+                      <span className="ribbon-tool-label">Twist</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="ribbon-tool"
+                      data-studio-ribbon-action="edge-split"
+                      onClick={edgeSplitModifier}
+                      disabled={!selectedKind}
+                      title="Blender MOD_edgesplit — duplicate verts at sharp edges (flat shading)"
+                    >
+                      <span className="ribbon-tool-icon">⊟</span>
+                      <span className="ribbon-tool-label">EdgeSplit</span>
                     </button>
                   </div>
                   <div className="ribbon-group-label">Blender · Mods</div>
