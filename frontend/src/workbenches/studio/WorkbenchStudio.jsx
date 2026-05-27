@@ -8159,10 +8159,27 @@ function WorkbenchStudio() {
 
           /* Ribbon — Mech-style layout, Studio monotone palette.
              Tabs are now real .ribbon-tab buttons inside .ribbon-tabs;
-             content is .ribbon-content with .ribbon-group sections. */
+             content is .ribbon-content with .ribbon-group sections.
+
+             Force the ribbon container + placeholder to a strict
+             168px height with overflow:hidden so the LEFT TOOLBAR
+             and viewport start at exactly y=168 (the value the
+             inherited workbench-tools rule expects via
+             `top: var(--ribbon-height)`). Without this, the ribbon
+             would auto-grow with content and the viewport+tools
+             would shift down. */
+          body:has([data-studio-properties="studio"]) .workbench-ribbon-placeholder,
+          body:has([data-studio-properties="studio"]) .ribbon-container {
+            height: 168px !important;
+            max-height: 168px !important;
+            min-height: 168px !important;
+            overflow: hidden !important;
+          }
           body:has([data-studio-properties="studio"]) .ribbon-container {
             background: #000000 !important;
             border-bottom: 1px solid rgba(255, 255, 255, 0.10) !important;
+            display: flex !important;
+            flex-direction: column !important;
           }
           body:has([data-studio-properties="studio"]) .ribbon-tabs {
             background: #050505 !important;
@@ -8204,6 +8221,9 @@ function WorkbenchStudio() {
             overflow-x: auto !important;
             overflow-y: hidden !important;
             scroll-behavior: smooth;
+            flex: 1 1 auto !important;
+            height: 144px !important;     /* 168 (container) - 24 (tabs) */
+            max-height: 144px !important;
           }
           /* Thin teal-tinted scrollbar for the ribbon strip so users
              can see when more groups are off-screen. */
