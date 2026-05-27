@@ -1989,6 +1989,76 @@ function WorkbenchStudio() {
   }
 
   /*
+   * Warp modifier — distance-falloff vertex displacement.
+   *
+   * Blender source: blender/source/blender/modifiers/intern/MOD_warp.cc
+   *
+   * For each vertex, displaces by `offset` weighted by a linear
+   * falloff: weight = max(0, 1 - dist_from_center / boundingRadius).
+   * Verts near the centre move fully; verts at the perimeter don't
+   * move at all. Result: a smooth dome / bump deformation.
+   */
+  function applyWarp(strength, offset) {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    const pos = mesh.geometry.attributes.position;
+    if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
+    const c = mesh.geometry.boundingSphere.center;
+    const r = mesh.geometry.boundingSphere.radius;
+    for (let i = 0; i < pos.count; i++) {
+      const dx = pos.getX(i) - c.x;
+      const dy = pos.getY(i) - c.y;
+      const dz = pos.getZ(i) - c.z;
+      const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      const w = Math.max(0, 1 - d / r);
+      pos.setXYZ(
+        i,
+        pos.getX(i) + offset[0] * w * strength,
+        pos.getY(i) + offset[1] * w * strength,
+        pos.getZ(i) + offset[2] * w * strength,
+      );
+    }
+    pos.needsUpdate = true;
+    mesh.geometry.computeVertexNormals();
+    mesh.geometry.computeBoundingSphere();
+    mesh.userData.archdiscStudioWarped = (mesh.userData.archdiscStudioWarped || 0) + 1;
+    recomputeMeshStats(window.__archdiscScene);
+    return { strength, offset };
+  }
+
+  /*
+   * Normal Edit modifier — radial-from-centre normal override.
+   *
+   * Blender source: blender/source/blender/modifiers/intern/MOD_normal_edit.cc
+   * (mode == RADIAL_FROM_CENTER)
+   *
+   * Replaces every vertex normal with the unit vector from the
+   * bounding-sphere centre to that vertex. Used to fake a uniform
+   * spherical highlight on irregular geometry.
+   */
+  function radialNormals() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    const pos = mesh.geometry.attributes.position;
+    if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
+    const c = mesh.geometry.boundingSphere.center;
+    const normals = new Float32Array(pos.count * 3);
+    for (let i = 0; i < pos.count; i++) {
+      const dx = pos.getX(i) - c.x;
+      const dy = pos.getY(i) - c.y;
+      const dz = pos.getZ(i) - c.z;
+      const d = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
+      normals[i * 3]     = dx / d;
+      normals[i * 3 + 1] = dy / d;
+      normals[i * 3 + 2] = dz / d;
+    }
+    mesh.geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+    mesh.geometry.attributes.normal.needsUpdate = true;
+    mesh.userData.archdiscStudioNormalEdited = (mesh.userData.archdiscStudioNormalEdited || 0) + 1;
+    return { count: pos.count };
+  }
+
+  /*
    * Simple Deform — Stretch modifier (volume-preserving Y stretch).
    *
    * Blender source: blender/source/blender/modifiers/intern/MOD_simpledeform.cc
@@ -4566,6 +4636,28 @@ function WorkbenchStudio() {
                     >
                       <span className="ribbon-tool-icon">⊡</span>
                       <span className="ribbon-tool-label">Inset</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="ribbon-tool"
+                      data-studio-ribbon-action="warp"
+                      onClick={() => applyWarp(1.0, [0, 0.008, 0])}
+                      disabled={!selectedKind}
+                      title="Blender MOD_warp — distance-falloff vertex displacement"
+                    >
+                      <span className="ribbon-tool-icon">⤴</span>
+                      <span className="ribbon-tool-label">Warp</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="ribbon-tool"
+                      data-studio-ribbon-action="radial-normals"
+                      onClick={radialNormals}
+                      disabled={!selectedKind}
+                      title="Blender MOD_normal_edit (RADIAL) — point all normals away from centre"
+                    >
+                      <span className="ribbon-tool-icon">↗</span>
+                      <span className="ribbon-tool-label">Radial N</span>
                     </button>
                   </div>
                   <div className="ribbon-group-label">Blender · Mods</div>
