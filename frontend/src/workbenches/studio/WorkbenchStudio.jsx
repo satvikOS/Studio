@@ -1175,7 +1175,7 @@ function WorkbenchStudio() {
       ctx.beginPath(); ctx.moveTo(0, v); ctx.lineTo(SIZE, v); ctx.stroke();
     }
     // Center cross-hairs.
-    ctx.strokeStyle = '#ff4d6d';
+    ctx.strokeStyle = '#e6e6e6';
     ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(SIZE / 2, 0); ctx.lineTo(SIZE / 2, SIZE); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(0, SIZE / 2); ctx.lineTo(SIZE, SIZE / 2); ctx.stroke();
@@ -2199,7 +2199,7 @@ function WorkbenchStudio() {
       }
       const g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-      const mat = new THREE.LineBasicMaterial({ color: 0x28d4d4, transparent: true, opacity: 0.85 });
+      const mat = new THREE.LineBasicMaterial({ color: 0xe6e6e6, transparent: true, opacity: 0.85 });
       const line = new THREE.Line(g, mat);
       line.userData.archdiscStudioMotionPath = true;
       line.userData.archdiscStudioMotionPathForUuid = uuid;
@@ -3522,14 +3522,14 @@ function WorkbenchStudio() {
         }
       }
       if (displayBoundingBox) {
-        const box = new THREE.BoxHelper(o, 0x28d4d4);
+        const box = new THREE.BoxHelper(o, 0xe6e6e6);
         box.userData.archdiscStudioDisplayHelper = true;
         vp.scene.add(box);
       }
       if (displayNormals) {
         // Sample 8% of faces for normals (keeps performance + render
         // sane on dense meshes like 5×subdivided spheres).
-        const helper = new VertexNormalsHelper(o, 0.005, 0x28d4d4);
+        const helper = new VertexNormalsHelper(o, 0.005, 0xe6e6e6);
         helper.userData.archdiscStudioDisplayHelper = true;
         vp.scene.add(helper);
       }
@@ -4652,7 +4652,7 @@ function WorkbenchStudio() {
                   style={{
                     padding: '2px 0',
                     opacity: i < aiPlanIndex ? 0.5 : 1,
-                    color: i === aiPlanIndex ? '#ff4d6d' : 'inherit',
+                    color: i === aiPlanIndex ? '#e6e6e6' : 'inherit',
                     fontWeight: i === aiPlanIndex ? 'bold' : 'normal',
                   }}
                 >
