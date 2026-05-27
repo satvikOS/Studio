@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js';
 import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js';
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
@@ -2285,6 +2285,38 @@ function WorkbenchStudio() {
       if (clothRafRef.current) cancelAnimationFrame(clothRafRef.current);
     };
   }, [clothActive]);
+
+  /*
+   * Smooth / Flat shading toggle — rebuild geometry so vertex normals
+   * either average across face boundaries (smooth) or duplicate
+   * per-face (flat, faceted). Standard modelling-mode op.
+   */
+  function setShading(mode) {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    let g = mesh.geometry;
+    if (mode === 'flat') {
+      if (g.index) g = g.toNonIndexed();
+      g.computeVertexNormals(); // per-face normals duplicated on each corner
+    } else if (mode === 'smooth') {
+      // mergeVertices dedupes only if ALL attributes match; per-face
+      // normals on a primitive like IcosahedronGeometry differ across
+      // faces sharing a position, so dedupe wouldn't merge them.
+      // Strip normals + UVs first so dedupe is positional, then
+      // recompute smooth normals.
+      const positions = g.attributes.position.array;
+      const tmp = new THREE.BufferGeometry();
+      tmp.setAttribute('position', new THREE.Float32BufferAttribute(Array.from(positions), 3));
+      if (g.index) tmp.setIndex(Array.from(g.index.array));
+      g = mergeVertices(tmp, 1e-5);
+      g.computeVertexNormals(); // smooth, averaged across adjacent faces
+    }
+    mesh.geometry.dispose();
+    mesh.geometry = g;
+    mesh.userData.archdiscStudioShading = mode;
+    recomputeMeshStats(window.__archdiscScene);
+    return { mode, vertCount: g.attributes.position.count };
+  }
 
   /*
    * Array modifier — duplicate the selected mesh in a deterministic
@@ -5620,6 +5652,33 @@ function WorkbenchStudio() {
             >
               Apply Array
             </button>
+          </div>
+
+          <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+            <p className="property-label" style={{ opacity: 0.6, fontSize: '11px', margin: '0 0 4px 0' }}>
+              Shading — vertex normals averaged across faces (smooth)
+              or duplicated per-face (flat / faceted).
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px' }}>
+              <button
+                className="property-button"
+                data-studio-action="shading-smooth"
+                onClick={() => setShading('smooth')}
+                disabled={!selectedKind}
+                style={{ margin: 0 }}
+              >
+                Smooth
+              </button>
+              <button
+                className="property-button"
+                data-studio-action="shading-flat"
+                onClick={() => setShading('flat')}
+                disabled={!selectedKind}
+                style={{ margin: 0 }}
+              >
+                Flat
+              </button>
+            </div>
           </div>
         </div>
 
