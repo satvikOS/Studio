@@ -188,6 +188,9 @@ function WorkbenchStudio() {
   const [physicsG, setPhysicsG]               = useState(9.8);
   const [physicsRestitution, setPhysicsRestitution] = useState(0.55);
   const physicsRafRef = useRef(null);
+  // Texture — procedural canvas pattern applied to the selected mesh's material.
+  const [texPattern, setTexPattern] = useState('checker');
+  const [texTiles,   setTexTiles]   = useState(8);
 
   function recomputeMeshStats(scene) {
     let v = 0;
@@ -564,6 +567,109 @@ function WorkbenchStudio() {
     primitiveStackRef.current.push(mesh);
     setPrimitiveCount(c => c + 1);
     recomputeMeshStats(scene);
+  }
+
+  /*
+   * Texture — procedurally rasterise a pattern onto a 2D canvas, wrap
+   * as a THREE.CanvasTexture, assign to the selected mesh's material.
+   * Live edit: switching pattern / tile count re-applies. The original
+   * map (if any) is dropped so this isn't a multi-layer system yet —
+   * each apply replaces.
+   */
+  function buildProceduralCanvas(pattern, tiles) {
+    const SIZE = 512;
+    const canvas = document.createElement('canvas');
+    canvas.width = SIZE;
+    canvas.height = SIZE;
+    const ctx = canvas.getContext('2d');
+    const t = Math.max(1, Math.floor(tiles));
+    if (pattern === 'checker') {
+      const cell = SIZE / t;
+      for (let y = 0; y < t; y++) {
+        for (let x = 0; x < t; x++) {
+          ctx.fillStyle = ((x + y) & 1) ? '#1a1a1a' : '#eaeaea';
+          ctx.fillRect(x * cell, y * cell, cell, cell);
+        }
+      }
+    } else if (pattern === 'brick') {
+      const rowH = SIZE / t;
+      const brickW = SIZE / Math.max(1, t / 2);
+      ctx.fillStyle = '#8a3b1f';
+      ctx.fillRect(0, 0, SIZE, SIZE);
+      ctx.fillStyle = '#3a1a0c';
+      const mortar = Math.max(2, Math.floor(rowH * 0.08));
+      for (let row = 0; row < t; row++) {
+        const yTop = row * rowH;
+        ctx.fillRect(0, yTop, SIZE, mortar);
+        const offset = (row & 1) ? brickW / 2 : 0;
+        for (let x = -brickW; x < SIZE + brickW; x += brickW) {
+          ctx.fillRect(x + offset, yTop, mortar, rowH);
+        }
+      }
+    } else if (pattern === 'grid') {
+      ctx.fillStyle = '#0e1218';
+      ctx.fillRect(0, 0, SIZE, SIZE);
+      ctx.strokeStyle = '#6aa8ff';
+      ctx.lineWidth = Math.max(1, SIZE / (t * 24));
+      const cell = SIZE / t;
+      for (let i = 0; i <= t; i++) {
+        ctx.beginPath();
+        ctx.moveTo(i * cell, 0);
+        ctx.lineTo(i * cell, SIZE);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, i * cell);
+        ctx.lineTo(SIZE, i * cell);
+        ctx.stroke();
+      }
+    } else { // noise
+      const img = ctx.createImageData(SIZE, SIZE);
+      // Block-noise scaled by tile count so changing tiles changes grain.
+      const block = Math.max(1, Math.floor(SIZE / t));
+      for (let y = 0; y < SIZE; y++) {
+        for (let x = 0; x < SIZE; x++) {
+          const bx = Math.floor(x / block), by = Math.floor(y / block);
+          // Deterministic per-block hash so blocks don't shimmer.
+          let h = bx * 374761393 + by * 668265263;
+          h = (h ^ (h >>> 13)) * 1274126177;
+          h = (h ^ (h >>> 16)) >>> 0;
+          const v = 40 + (h % 200);
+          const i = (y * SIZE + x) * 4;
+          img.data[i]     = v;
+          img.data[i + 1] = v;
+          img.data[i + 2] = v;
+          img.data[i + 3] = 255;
+        }
+      }
+      ctx.putImageData(img, 0, 0);
+    }
+    return canvas;
+  }
+
+  function applyTexture() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.material) return;
+    const canvas = buildProceduralCanvas(texPattern, texTiles);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.needsUpdate = true;
+    if (mesh.material.map) mesh.material.map.dispose();
+    mesh.material.map = texture;
+    // Texture overrides color tint; keep a slight white tint so the texture's
+    // own colors come through.
+    mesh.material.color.set(0xffffff);
+    mesh.material.needsUpdate = true;
+  }
+
+  function removeTexture() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.material) return;
+    if (mesh.material.map) {
+      mesh.material.map.dispose();
+      mesh.material.map = null;
+      mesh.material.needsUpdate = true;
+    }
   }
 
   /*
@@ -1210,6 +1316,59 @@ function WorkbenchStudio() {
             </button>
           </div>
         )}
+
+        <div className="property-section" data-studio-section="texture">
+          <h3 className="property-header">Texture · UV</h3>
+          <div className="property-row">
+            <span className="property-label">Pattern</span>
+            <select
+              className="property-input"
+              data-studio-texture="pattern"
+              value={texPattern}
+              onChange={e => setTexPattern(e.target.value)}
+            >
+              <option value="checker">Checkerboard</option>
+              <option value="brick">Brick</option>
+              <option value="grid">Grid</option>
+              <option value="noise">Procedural Noise</option>
+            </select>
+          </div>
+          <div className="property-row">
+            <span className="property-label">Tiles</span>
+            <input
+              type="range"
+              min="2"
+              max="32"
+              step="1"
+              data-studio-texture="tiles"
+              value={texTiles}
+              onChange={e => setTexTiles(Number(e.target.value))}
+              style={{ flex: 1 }}
+            />
+            <span
+              data-studio-texture-readout="tiles"
+              style={{ marginLeft: '6px', fontSize: '10px', fontFamily: 'monospace', minWidth: '32px', textAlign: 'right' }}
+            >
+              {texTiles}
+            </span>
+          </div>
+          <button
+            className="property-button"
+            data-studio-action="apply-texture"
+            onClick={applyTexture}
+            disabled={!selectedKind}
+          >
+            Apply Texture
+          </button>
+          <button
+            className="property-button"
+            data-studio-action="remove-texture"
+            onClick={removeTexture}
+            disabled={!selectedKind}
+          >
+            Remove Texture
+          </button>
+        </div>
 
         <div className="property-section" data-studio-section="physics">
           <h3 className="property-header">
