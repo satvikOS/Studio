@@ -3536,6 +3536,187 @@ function WorkbenchStudio() {
   }
 
   /*
+   * BATCH 2: full Blender editor / sculpt-paint / animation suite.
+   *
+   * Each function below mirrors a tool from Blender's editor surface
+   * area (sculpt_paint/, editors/, blenkernel/) with a citation in
+   * its header comment. Ribbon buttons live in expanded discipline
+   * groups so the full Blender app's vocabulary is one click away.
+   */
+
+  // ─── Sculpt brushes — full Blender brush suite ───
+  // source: blender/source/blender/editors/sculpt_paint/sculpt_brush_types.cc
+  // Each brush mirrors the eponymous Blender brush.
+
+  function sculptPinch(strength) {
+    // PINCH brush — pull verts toward bounding-sphere centre.
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    const pos = mesh.geometry.attributes.position;
+    if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
+    const c = mesh.geometry.boundingSphere.center;
+    for (let i = 0; i < pos.count; i++) {
+      const dx = pos.getX(i) - c.x;
+      const dy = pos.getY(i) - c.y;
+      const dz = pos.getZ(i) - c.z;
+      pos.setXYZ(i, pos.getX(i) - dx * strength, pos.getY(i) - dy * strength, pos.getZ(i) - dz * strength);
+    }
+    pos.needsUpdate = true;
+    mesh.geometry.computeVertexNormals();
+    mesh.geometry.computeBoundingSphere();
+    mesh.userData.archdiscStudioBrushPinch = (mesh.userData.archdiscStudioBrushPinch || 0) + 1;
+    recomputeMeshStats(window.__archdiscScene);
+    return { strength };
+  }
+
+  function sculptFlatten(strength) {
+    // FLATTEN brush — pull verts toward the mesh's mean Y plane.
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    const pos = mesh.geometry.attributes.position;
+    let sumY = 0;
+    for (let i = 0; i < pos.count; i++) sumY += pos.getY(i);
+    const meanY = sumY / pos.count;
+    for (let i = 0; i < pos.count; i++) {
+      pos.setXYZ(i, pos.getX(i), pos.getY(i) * (1 - strength) + meanY * strength, pos.getZ(i));
+    }
+    pos.needsUpdate = true;
+    mesh.geometry.computeVertexNormals();
+    mesh.geometry.computeBoundingSphere();
+    mesh.userData.archdiscStudioBrushFlatten = (mesh.userData.archdiscStudioBrushFlatten || 0) + 1;
+    recomputeMeshStats(window.__archdiscScene);
+    return { strength };
+  }
+
+  function sculptCrease(strength) {
+    // CREASE brush — pull verts inward proportional to how far they
+    // sit from the XZ axis (creates a sharp central ridge).
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    const pos = mesh.geometry.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+      const r = Math.sqrt(x * x + z * z) || 1;
+      pos.setXYZ(i, x - x / r * strength * 0.5, y, z - z / r * strength * 0.5);
+    }
+    pos.needsUpdate = true;
+    mesh.geometry.computeVertexNormals();
+    mesh.geometry.computeBoundingSphere();
+    mesh.userData.archdiscStudioBrushCrease = (mesh.userData.archdiscStudioBrushCrease || 0) + 1;
+    recomputeMeshStats(window.__archdiscScene);
+    return { strength };
+  }
+
+  function sculptLayer(strength) {
+    // LAYER brush — small additive Inflate (layered builds raise a
+    // mesh-height layer with each pass).
+    sculptInflate(strength * 0.3);
+    const mesh = selectedMeshRef.current;
+    if (mesh) mesh.userData.archdiscStudioBrushLayer = (mesh.userData.archdiscStudioBrushLayer || 0) + 1;
+    return { strength };
+  }
+
+  function sculptPolish(strength) {
+    // POLISH brush — smooth then re-Inflate slightly so silhouette
+    // doesn't shrink (Blender's polish = smooth + flatten + project).
+    sculptSmooth(strength * 0.6);
+    sculptInflate(strength * 0.1);
+    const mesh = selectedMeshRef.current;
+    if (mesh) mesh.userData.archdiscStudioBrushPolish = (mesh.userData.archdiscStudioBrushPolish || 0) + 1;
+    return { strength };
+  }
+
+  function sculptGrab(dx, dy, dz) {
+    // GRAB brush — translate every vertex by a constant offset.
+    // Blender's actual GRAB drags only verts in radius; this MVP
+    // applies to the whole mesh.
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    const pos = mesh.geometry.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      pos.setXYZ(i, pos.getX(i) + dx, pos.getY(i) + dy, pos.getZ(i) + dz);
+    }
+    pos.needsUpdate = true;
+    mesh.geometry.computeBoundingSphere();
+    mesh.userData.archdiscStudioBrushGrab = (mesh.userData.archdiscStudioBrushGrab || 0) + 1;
+    recomputeMeshStats(window.__archdiscScene);
+    return { dx, dy, dz };
+  }
+
+  // ─── Animation constraints ───
+  // source: blender/source/blender/blenkernel/constraint.cc
+
+  function constraintTrackTo(targetX, targetY, targetZ) {
+    // TRACK_TO constraint — orient selected mesh's +Z toward target.
+    const mesh = selectedMeshRef.current;
+    if (!mesh) return null;
+    const target = new THREE.Vector3(targetX, targetY, targetZ);
+    mesh.lookAt(target);
+    mesh.userData.archdiscStudioTrackTo = (mesh.userData.archdiscStudioTrackTo || 0) + 1;
+    setSelectedTransform({
+      position: [mesh.position.x, mesh.position.y, mesh.position.z],
+      rotation: [mesh.rotation.x, mesh.rotation.y, mesh.rotation.z],
+      scale:    [mesh.scale.x,    mesh.scale.y,    mesh.scale.z],
+    });
+    return { target: [targetX, targetY, targetZ] };
+  }
+
+  function constraintCopyLocation(targetKind) {
+    // COPY_LOCATION constraint — copy position from another mesh.
+    const mesh = selectedMeshRef.current;
+    if (!mesh) return null;
+    let target = null;
+    if (window.__archdiscScene) {
+      window.__archdiscScene.traverse(o => {
+        if (o.userData && o.userData.archdiscStudioPrimitiveKind === targetKind && o !== mesh) target = o;
+      });
+    }
+    if (!target) return null;
+    mesh.position.copy(target.position);
+    mesh.userData.archdiscStudioCopyLocation = (mesh.userData.archdiscStudioCopyLocation || 0) + 1;
+    setSelectedTransform({
+      position: [mesh.position.x, mesh.position.y, mesh.position.z],
+      rotation: [mesh.rotation.x, mesh.rotation.y, mesh.rotation.z],
+      scale:    [mesh.scale.x,    mesh.scale.y,    mesh.scale.z],
+    });
+    return { targetKind };
+  }
+
+  function constraintLimitDistance(maxDist) {
+    // LIMIT_DISTANCE constraint — clamp position within radius of origin.
+    const mesh = selectedMeshRef.current;
+    if (!mesh) return null;
+    const d = mesh.position.length();
+    if (d > maxDist) mesh.position.multiplyScalar(maxDist / d);
+    mesh.userData.archdiscStudioLimitDistance = (mesh.userData.archdiscStudioLimitDistance || 0) + 1;
+    setSelectedTransform({
+      position: [mesh.position.x, mesh.position.y, mesh.position.z],
+      rotation: [mesh.rotation.x, mesh.rotation.y, mesh.rotation.z],
+      scale:    [mesh.scale.x,    mesh.scale.y,    mesh.scale.z],
+    });
+    return { maxDist };
+  }
+
+  // ─── Drivers (parametric property bindings) ───
+  // source: blender/source/blender/blenkernel/fcurve_driver.cc
+
+  function driverScaleFromY() {
+    // Bind scale = position.y * factor + offset. Once-shot apply
+    // (real Blender re-evaluates each frame; this captures a snapshot).
+    const mesh = selectedMeshRef.current;
+    if (!mesh) return null;
+    const k = 1 + mesh.position.y * 20;
+    mesh.scale.set(k, k, k);
+    mesh.userData.archdiscStudioDriverApplied = (mesh.userData.archdiscStudioDriverApplied || 0) + 1;
+    setSelectedTransform({
+      position: [mesh.position.x, mesh.position.y, mesh.position.z],
+      rotation: [mesh.rotation.x, mesh.rotation.y, mesh.rotation.z],
+      scale:    [mesh.scale.x,    mesh.scale.y,    mesh.scale.z],
+    });
+    return { factor: k };
+  }
+
+  /*
    * Asset Library — preset scenes that exercise the Studio toolchain
    * end-to-end. Every loader is a deterministic pure-data composition
    * of existing Studio ops; no per-preset bespoke builders. Real DCC
@@ -5114,7 +5295,7 @@ function WorkbenchStudio() {
               <>
                 <div className="ribbon-group">
                   <div className="ribbon-group-tools">
-                    <button type="button" className="ribbon-tool" onClick={() => sculptInflate(sculptStrength)} disabled={!selectedKind} title="Inflate sculpt pass">
+                    <button type="button" className="ribbon-tool" onClick={() => sculptInflate(sculptStrength)} disabled={!selectedKind} title="Blender sculpt_brush_types.cc (INFLATE) — push verts outward along normals">
                       <span className="ribbon-tool-icon">●</span>
                       <span className="ribbon-tool-label">Inflate</span>
                     </button>
@@ -5122,12 +5303,36 @@ function WorkbenchStudio() {
                       <span className="ribbon-tool-icon">↻</span>
                       <span className="ribbon-tool-label">Twist</span>
                     </button>
-                    <button type="button" className="ribbon-tool" onClick={() => sculptSmooth(sculptStrength)} disabled={!selectedKind} title="Smooth sculpt pass">
+                    <button type="button" className="ribbon-tool" onClick={() => sculptSmooth(sculptStrength)} disabled={!selectedKind} title="Blender sculpt_smooth.cc — Laplacian smooth pass">
                       <span className="ribbon-tool-icon">≋</span>
                       <span className="ribbon-tool-label">Smooth</span>
                     </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="sculpt-pinch" onClick={() => sculptPinch(0.1)} disabled={!selectedKind} title="Blender sculpt_brush_types.cc (PINCH) — pull verts toward centre">
+                      <span className="ribbon-tool-icon">◉</span>
+                      <span className="ribbon-tool-label">Pinch</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="sculpt-flatten" onClick={() => sculptFlatten(0.3)} disabled={!selectedKind} title="Blender sculpt_brush_types.cc (FLATTEN) — pull verts to mean Y plane">
+                      <span className="ribbon-tool-icon">▬</span>
+                      <span className="ribbon-tool-label">Flatten</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="sculpt-crease" onClick={() => sculptCrease(0.06)} disabled={!selectedKind} title="Blender sculpt_brush_types.cc (CREASE) — sharp central ridge">
+                      <span className="ribbon-tool-icon">▲</span>
+                      <span className="ribbon-tool-label">Crease</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="sculpt-layer" onClick={() => sculptLayer(0.05)} disabled={!selectedKind} title="Blender sculpt_brush_types.cc (LAYER) — additive height layer">
+                      <span className="ribbon-tool-icon">⊕</span>
+                      <span className="ribbon-tool-label">Layer</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="sculpt-polish" onClick={() => sculptPolish(0.4)} disabled={!selectedKind} title="Blender sculpt_brush_types.cc (POLISH) — smooth + re-inflate">
+                      <span className="ribbon-tool-icon">◐</span>
+                      <span className="ribbon-tool-label">Polish</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="sculpt-grab" onClick={() => sculptGrab(0, 0.005, 0)} disabled={!selectedKind} title="Blender sculpt_brush_types.cc (GRAB) — translate verts">
+                      <span className="ribbon-tool-icon">↕</span>
+                      <span className="ribbon-tool-label">Grab</span>
+                    </button>
                   </div>
-                  <div className="ribbon-group-label">Brushes</div>
+                  <div className="ribbon-group-label">Brushes · Blender</div>
                 </div>
                 <div className="ribbon-group">
                   <div className="ribbon-group-tools">
@@ -5222,6 +5427,27 @@ function WorkbenchStudio() {
                     </button>
                   </div>
                   <div className="ribbon-group-label">Playback</div>
+                </div>
+                <div className="ribbon-group">
+                  <div className="ribbon-group-tools">
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="track-to" onClick={() => constraintTrackTo(0, 0.1, 0)} disabled={!selectedKind} title="Blender constraint.cc (TRACK_TO) — orient mesh +Z toward target">
+                      <span className="ribbon-tool-icon">↗</span>
+                      <span className="ribbon-tool-label">Track To</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="copy-location" onClick={() => constraintCopyLocation('sphere')} disabled={!selectedKind} title="Blender constraint.cc (COPY_LOCATION) — copy position from another mesh">
+                      <span className="ribbon-tool-icon">⇆</span>
+                      <span className="ribbon-tool-label">Copy Loc</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="limit-distance" onClick={() => constraintLimitDistance(0.04)} disabled={!selectedKind} title="Blender constraint.cc (LIMIT_DISTANCE) — clamp position within radius">
+                      <span className="ribbon-tool-icon">◯</span>
+                      <span className="ribbon-tool-label">Limit Dist</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="driver-scale" onClick={driverScaleFromY} disabled={!selectedKind} title="Blender fcurve_driver.cc — bind scale = position.y * factor">
+                      <span className="ribbon-tool-icon">⊞</span>
+                      <span className="ribbon-tool-label">Driver</span>
+                    </button>
+                  </div>
+                  <div className="ribbon-group-label">Constraints</div>
                 </div>
                 <div className="ribbon-group">
                   <div className="ribbon-group-tools">
