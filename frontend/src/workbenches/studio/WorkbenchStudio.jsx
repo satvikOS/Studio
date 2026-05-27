@@ -1245,6 +1245,52 @@ function WorkbenchStudio() {
   }
 
   /*
+   * Three-Point cinematic lighting preset — warm key (front-right),
+   * cool fill (front-left, lower intensity), magenta rim (back). One
+   * click clears any prior Studio lights + drops these three at
+   * canonical angles.
+   */
+  function applyThreePointLighting() {
+    const scene = window.__archdiscScene;
+    if (!scene) return;
+    // Clear existing in one pass (avoiding clearCinematicLights's
+    // setLightCount(0) → addCinematicLight's setLightCount(c+1) race
+    // where all three lights would compute the same index).
+    const toRemove = [];
+    scene.traverse(o => {
+      if (o.userData && (o.userData.archdiscStudioLight || o.userData.archdiscStudioLightHelper)) {
+        toRemove.push(o);
+      }
+    });
+    for (const o of toRemove) scene.remove(o);
+
+    const PRESET = [
+      { idx: 0, color: '#ffb56b', intensity: 2.4 }, // warm key
+      { idx: 1, color: '#6bb5ff', intensity: 1.6 }, // cool fill
+      { idx: 2, color: '#d469c4', intensity: 1.0 }, // magenta rim
+    ];
+    for (const p of PRESET) {
+      const light = new THREE.PointLight(new THREE.Color(p.color), p.intensity, 0.5, 2);
+      const angle = p.idx * (Math.PI * 2 / 5) + 0.4;
+      const r = PRIMITIVE_SIZE * 2.2;
+      light.position.set(
+        Math.cos(angle) * r,
+        PRIMITIVE_SIZE * (0.6 + (p.idx % 3) * 0.5),
+        Math.sin(angle) * r,
+      );
+      light.userData.archdiscStudioLight = true;
+      light.name = `studio-light-3point-${p.idx}`;
+      scene.add(light);
+      try {
+        const helper = new THREE.PointLightHelper(light, PRIMITIVE_SIZE * 0.06, light.color);
+        helper.userData.archdiscStudioLightHelper = true;
+        scene.add(helper);
+      } catch (_) {}
+    }
+    setLightCount(3);
+  }
+
+  /*
    * Mirror modifier — clone the selected mesh's geometry, flip the
    * clone across the chosen axis, invert winding to preserve outward
    * normals, merge the original + mirrored back into a single geometry.
@@ -2887,6 +2933,14 @@ function WorkbenchStudio() {
             disabled={lightCount === 0}
           >
             Clear All Lights
+          </button>
+          <button
+            className="property-button"
+            data-studio-action="three-point-preset"
+            onClick={applyThreePointLighting}
+            style={{ marginTop: '4px' }}
+          >
+            Apply 3-Point Cinematic
           </button>
         </div>
 
