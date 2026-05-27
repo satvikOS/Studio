@@ -3635,6 +3635,118 @@ function WorkbenchStudio() {
       {/* CENTER VIEWPORT — three.js scene (shared component reused from Mech) */}
       <main className="workbench-viewport" style={{ position: 'relative' }}>
         <Viewport3D canvasId="render-canvas-studio" domain="studio" />
+        {/* Empty-state hero — when the scene has no primitives, show a
+            big Studio welcome card centered over the viewport with
+            quick-start buttons. Hidden the moment the user adds anything. */}
+        {primitiveCount === 0 && (
+          <div
+            data-studio-empty-hero
+            style={{
+              position: 'absolute',
+              left: '50%',
+              top: '50%',
+              transform: 'translate(-50%, -50%)',
+              padding: '24px 32px',
+              minWidth: '320px',
+              background: 'linear-gradient(160deg, rgba(40,212,212,0.10) 0%, rgba(13,13,20,0.92) 100%)',
+              border: '1px solid rgba(40,212,212,0.32)',
+              borderRadius: '14px',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.4), 0 0 24px rgba(40,212,212,0.15)',
+              backdropFilter: 'blur(8px)',
+              textAlign: 'center',
+              color: '#e9ecef',
+              fontFamily: 'system-ui, -apple-system, sans-serif',
+              zIndex: 5,
+              pointerEvents: 'auto',
+            }}
+          >
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '10px',
+              marginBottom: '6px',
+            }}>
+              <Wand2 size={22} style={{ color: '#28d4d4', filter: 'drop-shadow(0 0 8px rgba(40,212,212,0.6))' }} />
+              <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 700, letterSpacing: '0.5px' }}>
+                ArchDisc <span style={{ color: '#28d4d4' }}>Studio</span>
+              </h2>
+            </div>
+            <p style={{ margin: '0 0 16px 0', fontSize: '12px', opacity: 0.65, lineHeight: 1.5 }}>
+              3D content creation — modelling · sculpting · rigging · animation ·<br />
+              VFX · simulation · texturing · rendering
+            </p>
+            <div
+              data-studio-hero-actions
+              style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}
+            >
+              <button
+                data-studio-hero-action="add-cube"
+                onClick={() => addPrimitive('cube')}
+                style={{
+                  background: 'rgba(40,212,212,0.18)',
+                  border: '1px solid rgba(40,212,212,0.55)',
+                  color: '#28d4d4',
+                  fontSize: '11.5px',
+                  fontWeight: 600,
+                  padding: '8px 14px',
+                  borderRadius: '7px',
+                  cursor: 'pointer',
+                  transition: 'background 0.15s, box-shadow 0.15s',
+                }}
+                onMouseEnter={e => { e.target.style.background = 'rgba(40,212,212,0.32)'; e.target.style.boxShadow = '0 0 14px rgba(40,212,212,0.4)'; }}
+                onMouseLeave={e => { e.target.style.background = 'rgba(40,212,212,0.18)'; e.target.style.boxShadow = 'none'; }}
+              >
+                + Add Cube
+              </button>
+              <button
+                data-studio-hero-action="load-preset"
+                onClick={() => loadPreset('crystal-garden')}
+                style={{
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.18)',
+                  color: '#d4dadf',
+                  fontSize: '11.5px',
+                  padding: '8px 14px',
+                  borderRadius: '7px',
+                  cursor: 'pointer',
+                  transition: 'background 0.15s',
+                }}
+                onMouseEnter={e => { e.target.style.background = 'rgba(255,255,255,0.10)'; }}
+                onMouseLeave={e => { e.target.style.background = 'rgba(255,255,255,0.04)'; }}
+              >
+                Load Crystal Garden
+              </button>
+              <button
+                data-studio-hero-action="load-suzanne"
+                onClick={() => addPrimitive('suzanne')}
+                style={{
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.18)',
+                  color: '#d4dadf',
+                  fontSize: '11.5px',
+                  padding: '8px 14px',
+                  borderRadius: '7px',
+                  cursor: 'pointer',
+                  transition: 'background 0.15s',
+                }}
+                onMouseEnter={e => { e.target.style.background = 'rgba(255,255,255,0.10)'; }}
+                onMouseLeave={e => { e.target.style.background = 'rgba(255,255,255,0.04)'; }}
+              >
+                Spawn Suzanne
+              </button>
+            </div>
+            <p style={{
+              margin: '14px 0 0 0',
+              fontSize: '9.5px',
+              opacity: 0.45,
+              fontFamily: 'monospace',
+              letterSpacing: '0.6px',
+              textTransform: 'uppercase',
+            }}>
+              Or pick any tool from the ribbon above
+            </p>
+          </div>
+        )}
         {/* Studio status bar — always-visible scene stats overlaid on the
             bottom of the viewport. Floats over the renderer canvas so the
             same readout follows the user across every discipline tab. */}
