@@ -8161,19 +8161,31 @@ function WorkbenchStudio() {
              Tabs are now real .ribbon-tab buttons inside .ribbon-tabs;
              content is .ribbon-content with .ribbon-group sections.
 
-             Force the ribbon container + placeholder to a strict
-             168px height with overflow:hidden so the LEFT TOOLBAR
-             and viewport start at exactly y=168 (the value the
-             inherited workbench-tools rule expects via
-             `top: var(--ribbon-height)`). Without this, the ribbon
-             would auto-grow with content and the viewport+tools
-             would shift down. */
+             Studio's ribbon is hard-clamped to a SMALLER 132px so
+             the viewport tools + viewport canvas sit flush with the
+             ribbon-bottom no matter how many tool groups the active
+             discipline carries. The inherited workbench-tools rule
+             uses `top: var(--ribbon-height)`, so we override the
+             --ribbon-height variable inside Studio's scope to match. */
+          body:has([data-studio-properties="studio"]) {
+            --ribbon-height: 132px !important;
+          }
           body:has([data-studio-properties="studio"]) .workbench-ribbon-placeholder,
           body:has([data-studio-properties="studio"]) .ribbon-container {
-            height: 168px !important;
-            max-height: 168px !important;
-            min-height: 168px !important;
+            height: 132px !important;
+            max-height: 132px !important;
+            min-height: 132px !important;
             overflow: hidden !important;
+          }
+          /* The grid stage's "ribbon-row" auto-sizes to its child.
+             Force the row's child (.ribbon-container) to fixed 132px
+             via direct sibling constraint so the main-row + viewport
+             stay flush. */
+          body:has([data-studio-properties="studio"]) .workbench-stage > .ribbon-container,
+          body:has([data-studio-properties="studio"]) .workbench-stage > .workbench-ribbon-placeholder {
+            height: 132px !important;
+            max-height: 132px !important;
+            min-height: 132px !important;
           }
           body:has([data-studio-properties="studio"]) .ribbon-container {
             background: #000000 !important;
@@ -8213,7 +8225,7 @@ function WorkbenchStudio() {
           }
           body:has([data-studio-properties="studio"]) .ribbon-content {
             background: #050505 !important;
-            padding: 6px 8px !important;
+            padding: 4px 8px !important;
             display: flex !important;
             gap: 0 !important;
             flex-wrap: nowrap !important;
@@ -8222,8 +8234,8 @@ function WorkbenchStudio() {
             overflow-y: hidden !important;
             scroll-behavior: smooth;
             flex: 1 1 auto !important;
-            height: 144px !important;     /* 168 (container) - 24 (tabs) */
-            max-height: 144px !important;
+            height: 108px !important;     /* 132 container - 24 tabs */
+            max-height: 108px !important;
           }
           /* Thin teal-tinted scrollbar for the ribbon strip so users
              can see when more groups are off-screen. */
@@ -8249,8 +8261,20 @@ function WorkbenchStudio() {
              visible; extra tools wrap inside the group, not into
              a 3rd horizontal lane. */
           body:has([data-studio-properties="studio"]) .ribbon-group-tools {
-            max-height: 110px !important;
+            max-height: 80px !important;
             overflow-y: hidden;
+          }
+          /* Tighter ribbon tools so 2 rows fit in 80px. */
+          body:has([data-studio-properties="studio"]) .ribbon-tool {
+            min-width: 50px !important;
+            max-width: 64px !important;
+            padding: 3px 4px !important;
+          }
+          body:has([data-studio-properties="studio"]) .ribbon-tool-icon {
+            font-size: 14px !important;
+          }
+          body:has([data-studio-properties="studio"]) .ribbon-tool-label {
+            font-size: 9px !important;
           }
           body:has([data-studio-properties="studio"]) .ribbon-group:last-child {
             border-right: none !important;
