@@ -4134,6 +4134,36 @@ function WorkbenchStudio() {
               {vertexCount.toLocaleString()} v
             </span>
           </div>
+          {/* Selected-mesh pill — only when something is selected. Mirrors
+              the discipline pill so the active object is always one glance
+              away from the user. */}
+          {selectedKind && (
+            <div
+              data-studio-banner-selected
+              style={{
+                marginTop: '8px',
+                padding: '5px 10px',
+                background: 'rgba(255,241,118,0.10)',
+                border: '1px solid rgba(255,241,118,0.32)',
+                borderRadius: '6px',
+                fontSize: '10.5px',
+                fontFamily: 'monospace',
+                color: '#fff176',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+            >
+              <MousePointer2 size={11} style={{ flexShrink: 0 }} />
+              <span style={{ opacity: 0.75 }}>Selected</span>
+              <span style={{ fontWeight: 600, textTransform: 'capitalize' }}>{selectedKind}</span>
+              {vertexCount > 0 && (
+                <span style={{ marginLeft: 'auto', opacity: 0.7 }}>
+                  {vertexCount.toLocaleString()}v
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Outliner — scene tree at the top of the right rail. Lists every
