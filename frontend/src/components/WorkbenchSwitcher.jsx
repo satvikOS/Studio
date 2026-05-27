@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Cog, Building2, Gamepad2, Car, Cpu, ChevronDown } from 'lucide-react';
+import { Palette, Cog, Building2, Gamepad2, Car, Cpu, ChevronDown } from 'lucide-react';
 import '../styles/workbench-switcher.css';
 
 /**
@@ -11,6 +11,12 @@ function WorkbenchSwitcher({ activeWorkbench, onSwitchWorkbench }) {
     const dropdownRef = useRef(null);
 
     const workbenches = [
+        {
+            id: 'studio',
+            name: 'ArchDisc Studio',
+            icon: Palette,
+            description: '3D modelling, sculpting, animation, VFX, simulation, rendering (forked from Blender)'
+        },
         {
             id: 'mechanical-cad',
             name: 'Mechanical CAD',

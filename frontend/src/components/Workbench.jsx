@@ -4,6 +4,7 @@ import Topbar from './Topbar';
 import StatusBarPro from './StatusBarPro';
 import './StatusBarPro.css';
 import WorkbenchSwitcher from './WorkbenchSwitcher';
+import WorkbenchStudio from '../workbenches/studio/WorkbenchStudio';
 import WorkbenchMechanical from '../workbenches/mechanical-cad/WorkbenchMechanical';
 import WorkbenchArchitecture from '../workbenches/architecture-bim/WorkbenchArchitecture';
 import WorkbenchGaming from '../workbenches/gaming-vfx/WorkbenchGaming';
@@ -28,7 +29,7 @@ import '../styles/workbench.css';
  * The Topbar provides application-level menus (File, Edit, View, Tools, Help).
  */
 function WorkbenchContainer() {
-    const [activeWorkbench, setActiveWorkbench] = useState('mechanical-cad');
+    const [activeWorkbench, setActiveWorkbench] = useState('studio');
     const [isOnline, setIsOnline] = useState(true);
     const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
     const [toasts, setToasts] = useState([]);
@@ -156,17 +157,19 @@ function WorkbenchContainer() {
 
     const renderWorkbench = () => {
         switch (activeWorkbench) {
+            case 'studio': return <WorkbenchStudio />;
             case 'mechanical-cad': return <WorkbenchMechanical />;
             case 'architecture-bim': return <WorkbenchArchitecture />;
             case 'gaming-vfx': return <WorkbenchGaming />;
             case 'automotive': return <WorkbenchAutomotive />;
             case 'electronics': return <WorkbenchElectronics />;
-            default: return <WorkbenchMechanical />;
+            default: return <WorkbenchStudio />;
         }
     };
 
     // Command palette actions
     const getCommandActions = () => [
+        { id: 'switch-studio', label: 'Switch to ArchDisc Studio', category: 'Workbench', action: () => setActiveWorkbench('studio') },
         { id: 'switch-mechanical', label: 'Switch to Mechanical CAD', category: 'Workbench', action: () => setActiveWorkbench('mechanical-cad') },
         { id: 'switch-architecture', label: 'Switch to Architecture & BIM', category: 'Workbench', action: () => setActiveWorkbench('architecture-bim') },
         { id: 'switch-gaming', label: 'Switch to Gaming & VFX', category: 'Workbench', action: () => setActiveWorkbench('gaming-vfx') },
