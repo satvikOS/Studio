@@ -3536,6 +3536,208 @@ function WorkbenchStudio() {
   }
 
   /*
+   * BATCH 5: more geometry nodes + bake ops + particle presets + world.
+   *
+   * source paths:
+   *   blender/source/blender/nodes/geometry/nodes/         (more GN nodes)
+   *   blender/source/blender/render/intern/bake.cc          (bake ops)
+   *   blender/source/blender/blenkernel/particle*.cc       (particle presets)
+   *   blender/source/blender/blenkernel/world.cc            (world shading)
+   */
+
+  // ─── More Geometry Nodes ───
+  // source: blender/source/blender/nodes/geometry/nodes/
+
+  function geometryNodesSetPosition(amount) {
+    // node_geo_set_position.cc — set absolute position via expression.
+    // MVP: nudge every vert by sin(idx) * amount.
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    const pos = mesh.geometry.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      pos.setXYZ(
+        i,
+        pos.getX(i) + Math.sin(i * 0.7) * amount,
+        pos.getY(i) + Math.sin(i * 0.5) * amount,
+        pos.getZ(i) + Math.sin(i * 0.9) * amount,
+      );
+    }
+    pos.needsUpdate = true;
+    mesh.geometry.computeVertexNormals();
+    mesh.geometry.computeBoundingSphere();
+    mesh.userData.archdiscStudioGnSetPosition = (mesh.userData.archdiscStudioGnSetPosition || 0) + 1;
+    recomputeMeshStats(window.__archdiscScene);
+    return { amount };
+  }
+
+  function geometryNodesBoundingBox() {
+    // node_geo_bounding_box.cc — output bbox as a new wireframe cube.
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+    const bb = mesh.geometry.boundingBox;
+    const w = bb.max.x - bb.min.x;
+    const h = bb.max.y - bb.min.y;
+    const d = bb.max.z - bb.min.z;
+    const box = new THREE.BoxGeometry(w, h, d);
+    const mat = new THREE.MeshStandardMaterial({ color: 0x808080, wireframe: true });
+    const bboxMesh = new THREE.Mesh(box, mat);
+    bboxMesh.position.set(
+      mesh.position.x + (bb.max.x + bb.min.x) / 2,
+      mesh.position.y + (bb.max.y + bb.min.y) / 2,
+      mesh.position.z + (bb.max.z + bb.min.z) / 2,
+    );
+    bboxMesh.userData.archdiscStudioPrimitive = true;
+    bboxMesh.userData.archdiscStudioPrimitiveKind = 'gn-bbox';
+    window.__archdiscScene.add(bboxMesh);
+    primitiveStackRef.current.push(bboxMesh);
+    setPrimitiveCount(primitiveStackRef.current.length);
+    recomputeMeshStats(window.__archdiscScene);
+    mesh.userData.archdiscStudioGnBoundingBox = (mesh.userData.archdiscStudioGnBoundingBox || 0) + 1;
+    return { size: [w, h, d] };
+  }
+
+  function geometryNodesTransform(tx, ty, tz, scaleK) {
+    // node_geo_transform_geometry.cc — apply translate+scale matrix.
+    const mesh = selectedMeshRef.current;
+    if (!mesh) return null;
+    mesh.position.x += tx;
+    mesh.position.y += ty;
+    mesh.position.z += tz;
+    mesh.scale.multiplyScalar(scaleK);
+    mesh.userData.archdiscStudioGnTransform = (mesh.userData.archdiscStudioGnTransform || 0) + 1;
+    setSelectedTransform({
+      position: [mesh.position.x, mesh.position.y, mesh.position.z],
+      rotation: [mesh.rotation.x, mesh.rotation.y, mesh.rotation.z],
+      scale:    [mesh.scale.x,    mesh.scale.y,    mesh.scale.z],
+    });
+    return { tx, ty, tz, scaleK };
+  }
+
+  // ─── Bake Operations ───
+  // source: blender/source/blender/render/intern/bake.cc
+
+  function bakeOp(target) {
+    // Bake vertex colors based on chosen attribute. Plays the role
+    // of Blender's bake-to-vertex-color path.
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    const pos = mesh.geometry.attributes.position;
+    if (!mesh.geometry.attributes.normal) mesh.geometry.computeVertexNormals();
+    const nrm = mesh.geometry.attributes.normal;
+    const colors = new Float32Array(pos.count * 3);
+    if (target === 'ao') {
+      // bake.cc (AO mode): approximate AO via average neighbour normal
+      // dot with vertex normal — concave areas score lower (darker).
+      if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
+      const c = mesh.geometry.boundingSphere.center;
+      for (let i = 0; i < pos.count; i++) {
+        const dx = pos.getX(i) - c.x;
+        const dy = pos.getY(i) - c.y;
+        const dz = pos.getZ(i) - c.z;
+        const d = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
+        const nDotR = (nrm.getX(i) * dx + nrm.getY(i) * dy + nrm.getZ(i) * dz) / d;
+        const ao = Math.max(0.2, nDotR); // darker on concave/inward
+        colors[i * 3]     = ao;
+        colors[i * 3 + 1] = ao;
+        colors[i * 3 + 2] = ao;
+      }
+    } else if (target === 'normals') {
+      // bake.cc (NORMALS mode): visualise vertex normals as RGB.
+      for (let i = 0; i < pos.count; i++) {
+        colors[i * 3]     = nrm.getX(i) * 0.5 + 0.5;
+        colors[i * 3 + 1] = nrm.getY(i) * 0.5 + 0.5;
+        colors[i * 3 + 2] = nrm.getZ(i) * 0.5 + 0.5;
+      }
+    } else if (target === 'position') {
+      // bake.cc (POSITION mode): per-vertex world position as RGB.
+      if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+      const bb = mesh.geometry.boundingBox;
+      const sx = bb.max.x - bb.min.x || 1;
+      const sy = bb.max.y - bb.min.y || 1;
+      const sz = bb.max.z - bb.min.z || 1;
+      for (let i = 0; i < pos.count; i++) {
+        colors[i * 3]     = (pos.getX(i) - bb.min.x) / sx;
+        colors[i * 3 + 1] = (pos.getY(i) - bb.min.y) / sy;
+        colors[i * 3 + 2] = (pos.getZ(i) - bb.min.z) / sz;
+      }
+    }
+    mesh.geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    mesh.material.vertexColors = true;
+    mesh.material.needsUpdate = true;
+    mesh.userData.archdiscStudioBaked = target;
+    return { target };
+  }
+
+  // ─── Particle Effect Presets ───
+  // source: blender/source/blender/blenkernel/particle_system.cc
+
+  function particlePreset(name) {
+    // Spawn a configured Points cloud mirroring a real-world effect.
+    const scene = window.__archdiscScene;
+    if (!scene) return null;
+    const counts = { fire: 800, smoke: 1200, sparkle: 500 };
+    const colors = { fire: 0xff7e3a, smoke: 0x808080, sparkle: 0xe6e6e6 };
+    const sizes  = { fire: 0.0025, smoke: 0.005, sparkle: 0.0012 };
+    const count = counts[name] || 500;
+    const positions = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+      const t = i / count;
+      const phi = Math.PI * (3 - Math.sqrt(5));
+      const r = 0.025 * Math.sqrt(t);
+      const theta = phi * i;
+      positions[i * 3]     = r * Math.cos(theta);
+      positions[i * 3 + 1] = t * 0.05 + Math.sin(i * 0.7) * 0.005;
+      positions[i * 3 + 2] = r * Math.sin(theta);
+    }
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geom.computeBoundingSphere();
+    const mat = new THREE.PointsMaterial({
+      color: colors[name] || 0xc0c0c0,
+      size: sizes[name] || 0.002,
+      transparent: name !== 'sparkle',
+      opacity: name === 'smoke' ? 0.4 : 1,
+    });
+    const points = new THREE.Points(geom, mat);
+    points.userData.archdiscStudioPrimitive = true;
+    points.userData.archdiscStudioPrimitiveKind = 'particle-' + name;
+    scene.add(points);
+    primitiveStackRef.current.push(points);
+    setPrimitiveCount(primitiveStackRef.current.length);
+    recomputeMeshStats(scene);
+    return { name, count };
+  }
+
+  // ─── World Shading ───
+  // source: blender/source/blender/blenkernel/world.cc
+
+  function worldShading(mode) {
+    const vp = window.__archdiscViewport;
+    if (!vp) return null;
+    if (mode === 'hdri-sky') {
+      // Gradient background mimicking an HDRI sky.
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 256;
+      const ctx = canvas.getContext('2d');
+      const grad = ctx.createLinearGradient(0, 0, 0, 256);
+      grad.addColorStop(0, '#0a0a0a');
+      grad.addColorStop(0.5, '#1a1a1a');
+      grad.addColorStop(1, '#2a2a2a');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 256, 256);
+      const tex = new THREE.CanvasTexture(canvas);
+      vp.scene.background = tex;
+    } else if (mode === 'solid') {
+      vp.scene.background = new THREE.Color(0x0a0a0a);
+    } else if (mode === 'fog') {
+      vp.scene.fog = new THREE.Fog(0x0a0a0a, 0.05, 0.3);
+    }
+    if (vp.scene.userData) vp.scene.userData.archdiscStudioWorldShading = mode;
+    return { mode };
+  }
+
+  /*
    * BATCH 4: compositor + procedural materials + light types.
    *
    * source paths:
@@ -5607,8 +5809,32 @@ function WorkbenchStudio() {
                     <button type="button" className="ribbon-tool" data-studio-ribbon-action="gn-join" onClick={geometryNodesJoin} disabled={primitiveCount < 2} title="Blender node_geo_join_geometry.cc — merge all Studio meshes">
                       <span className="ribbon-tool-icon">⊕</span><span className="ribbon-tool-label">Join Geom</span>
                     </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="gn-set-pos" onClick={() => geometryNodesSetPosition(0.002)} disabled={!selectedKind} title="Blender node_geo_set_position.cc">
+                      <span className="ribbon-tool-icon">⇉</span><span className="ribbon-tool-label">Set Pos</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="gn-bbox" onClick={geometryNodesBoundingBox} disabled={!selectedKind} title="Blender node_geo_bounding_box.cc">
+                      <span className="ribbon-tool-icon">▢</span><span className="ribbon-tool-label">BBox Geo</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="gn-transform" onClick={() => geometryNodesTransform(0.005, 0, 0, 1.1)} disabled={!selectedKind} title="Blender node_geo_transform_geometry.cc">
+                      <span className="ribbon-tool-icon">⇲</span><span className="ribbon-tool-label">Transform</span>
+                    </button>
                   </div>
                   <div className="ribbon-group-label">Geometry Nodes</div>
+                </div>
+
+                <div className="ribbon-group">
+                  <div className="ribbon-group-tools">
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="bake-ao" onClick={() => bakeOp('ao')} disabled={!selectedKind} title="Blender render/intern/bake.cc — bake AO to vertex colors">
+                      <span className="ribbon-tool-icon">◐</span><span className="ribbon-tool-label">Bake AO</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="bake-normals" onClick={() => bakeOp('normals')} disabled={!selectedKind} title="Blender bake.cc — vertex colors = RGB of normals">
+                      <span className="ribbon-tool-icon">⇈</span><span className="ribbon-tool-label">Bake N</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="bake-position" onClick={() => bakeOp('position')} disabled={!selectedKind} title="Blender bake.cc — vertex colors = RGB of positions">
+                      <span className="ribbon-tool-icon">⊞</span><span className="ribbon-tool-label">Bake Pos</span>
+                    </button>
+                  </div>
+                  <div className="ribbon-group-label">Bake</div>
                 </div>
                 <div className="ribbon-group">
                   <div className="ribbon-group-tools">
@@ -5889,8 +6115,17 @@ function WorkbenchStudio() {
                       <span className="ribbon-tool-icon">⨈</span>
                       <span className="ribbon-tool-label">Hair</span>
                     </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="preset-fire" onClick={() => particlePreset('fire')} title="Blender blenkernel/particle_system.cc — fire preset">
+                      <span className="ribbon-tool-icon">⇡</span><span className="ribbon-tool-label">Fire</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="preset-smoke" onClick={() => particlePreset('smoke')} title="Blender blenkernel/particle_system.cc — smoke preset">
+                      <span className="ribbon-tool-icon">≈</span><span className="ribbon-tool-label">Smoke</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="preset-sparkle" onClick={() => particlePreset('sparkle')} title="Blender blenkernel/particle_system.cc — sparkle preset">
+                      <span className="ribbon-tool-icon">✦</span><span className="ribbon-tool-label">Sparkle</span>
+                    </button>
                   </div>
-                  <div className="ribbon-group-label">Particles</div>
+                  <div className="ribbon-group-label">Particles · Presets</div>
                 </div>
                 <div className="ribbon-group">
                   <div className="ribbon-group-tools">
@@ -5973,6 +6208,21 @@ function WorkbenchStudio() {
                     </button>
                   </div>
                   <div className="ribbon-group-label">Lights · Blender</div>
+                </div>
+
+                <div className="ribbon-group">
+                  <div className="ribbon-group-tools">
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="world-hdri" onClick={() => worldShading('hdri-sky')} title="Blender blenkernel/world.cc — HDRI sky gradient">
+                      <span className="ribbon-tool-icon">◐</span><span className="ribbon-tool-label">HDRI</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="world-solid" onClick={() => worldShading('solid')} title="Blender world.cc — solid background">
+                      <span className="ribbon-tool-icon">■</span><span className="ribbon-tool-label">Solid</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="world-fog" onClick={() => worldShading('fog')} title="Blender world.cc — fog volume">
+                      <span className="ribbon-tool-icon">≋</span><span className="ribbon-tool-label">Fog</span>
+                    </button>
+                  </div>
+                  <div className="ribbon-group-label">World</div>
                 </div>
                 <div className="ribbon-group">
                   <div className="ribbon-group-tools">
