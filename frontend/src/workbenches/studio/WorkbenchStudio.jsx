@@ -178,6 +178,9 @@ function WorkbenchStudio() {
   // ArchViz — floor-plan shape + extrude height for one-click building blocks.
   const [floorShape, setFloorShape] = useState('rectangle');
   const [wallHeight, setWallHeight] = useState(0.03);
+  // Lathe / NURBS-style hard-surface — profile + radial segment count.
+  const [latheProfile, setLatheProfile] = useState('vase');
+  const [latheSegments, setLatheSegments] = useState(48);
 
   function recomputeMeshStats(scene) {
     let v = 0;
@@ -539,6 +542,88 @@ function WorkbenchStudio() {
     mesh.userData.archdiscStudioPrimitive = true;
     mesh.userData.archdiscStudioPrimitiveKind = 'text-3d';
     mesh.name = `studio-primitive-text3d-${primitiveCount}`;
+
+    const cols = 4;
+    const i = primitiveCount;
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    mesh.position.set(
+      (col - (cols - 1) / 2) * PRIMITIVE_SIZE * 1.9,
+      0,
+      row * PRIMITIVE_SIZE * 1.9,
+    );
+
+    scene.add(mesh);
+    primitiveStackRef.current.push(mesh);
+    setPrimitiveCount(c => c + 1);
+    recomputeMeshStats(scene);
+  }
+
+  /*
+   * Lathe surface (NURBS-style hard-surface discipline) — revolve a
+   * 2D profile around Y. Built-in profiles: Vase, Goblet, Column.
+   */
+  function buildLatheProfilePoints(kind) {
+    const S = PRIMITIVE_SIZE;
+    if (kind === 'goblet') {
+      return [
+        new THREE.Vector2(0,        0),
+        new THREE.Vector2(S * 0.40, 0),
+        new THREE.Vector2(S * 0.36, S * 0.04),
+        new THREE.Vector2(S * 0.10, S * 0.08),
+        new THREE.Vector2(S * 0.05, S * 0.35),
+        new THREE.Vector2(S * 0.12, S * 0.40),
+        new THREE.Vector2(S * 0.45, S * 0.55),
+        new THREE.Vector2(S * 0.55, S * 0.80),
+        new THREE.Vector2(S * 0.55, S * 0.82),
+      ];
+    }
+    if (kind === 'column') {
+      return [
+        new THREE.Vector2(0,        0),
+        new THREE.Vector2(S * 0.45, 0),
+        new THREE.Vector2(S * 0.45, S * 0.05),
+        new THREE.Vector2(S * 0.30, S * 0.10),
+        new THREE.Vector2(S * 0.30, S * 0.85),
+        new THREE.Vector2(S * 0.45, S * 0.90),
+        new THREE.Vector2(S * 0.45, S * 0.95),
+        new THREE.Vector2(0,        S * 0.95),
+      ];
+    }
+    // vase (default)
+    return [
+      new THREE.Vector2(0,        0),
+      new THREE.Vector2(S * 0.35, 0),
+      new THREE.Vector2(S * 0.45, S * 0.05),
+      new THREE.Vector2(S * 0.50, S * 0.30),
+      new THREE.Vector2(S * 0.40, S * 0.55),
+      new THREE.Vector2(S * 0.25, S * 0.72),
+      new THREE.Vector2(S * 0.28, S * 0.80),
+      new THREE.Vector2(S * 0.32, S * 0.82),
+      new THREE.Vector2(S * 0.32, S * 0.83),
+    ];
+  }
+
+  function addLatheSurface() {
+    const scene = window.__archdiscScene;
+    if (!scene) return;
+    const profile = buildLatheProfilePoints(latheProfile);
+    const segs = Math.max(8, Math.min(128, Math.floor(latheSegments)));
+    const geometry = new THREE.LatheGeometry(profile, segs, 0, Math.PI * 2);
+    geometry.center();
+    geometry.computeVertexNormals();
+    const material = new THREE.MeshStandardMaterial({
+      color: 0xa8d8e8,
+      metalness: 0.35,
+      roughness: 0.25,
+      side: THREE.DoubleSide,
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.userData.archdiscStudioPrimitive = true;
+    mesh.userData.archdiscStudioPrimitiveKind = `lathe-${latheProfile}`;
+    mesh.name = `studio-primitive-lathe-${latheProfile}-${primitiveCount}`;
 
     const cols = 4;
     const i = primitiveCount;
@@ -998,6 +1083,49 @@ function WorkbenchStudio() {
             </button>
           </div>
         )}
+
+        <div className="property-section" data-studio-section="lathe">
+          <h3 className="property-header">Hard Surface · Lathe</h3>
+          <div className="property-row">
+            <span className="property-label">Profile</span>
+            <select
+              className="property-input"
+              data-studio-lathe="profile"
+              value={latheProfile}
+              onChange={e => setLatheProfile(e.target.value)}
+            >
+              <option value="vase">Vase</option>
+              <option value="goblet">Goblet</option>
+              <option value="column">Column</option>
+            </select>
+          </div>
+          <div className="property-row">
+            <span className="property-label">Segments</span>
+            <input
+              type="range"
+              min="8"
+              max="128"
+              step="2"
+              data-studio-lathe="segments"
+              value={latheSegments}
+              onChange={e => setLatheSegments(Number(e.target.value))}
+              style={{ flex: 1 }}
+            />
+            <span
+              data-studio-lathe-readout="segments"
+              style={{ marginLeft: '6px', fontSize: '10px', fontFamily: 'monospace', minWidth: '40px', textAlign: 'right' }}
+            >
+              {latheSegments}
+            </span>
+          </div>
+          <button
+            className="property-button"
+            data-studio-action="add-lathe"
+            onClick={addLatheSurface}
+          >
+            Add Lathe Surface
+          </button>
+        </div>
 
         <div className="property-section" data-studio-section="archviz">
           <h3 className="property-header">ArchViz · Floor Plan</h3>
