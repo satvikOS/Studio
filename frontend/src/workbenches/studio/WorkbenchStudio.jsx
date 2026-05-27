@@ -120,6 +120,10 @@ function WorkbenchStudio() {
   const [matRoughness, setMatRoughness] = useState(0.45);
   const [matEmissive, setMatEmissive]   = useState(0.0);
   const [matWireframe, setMatWireframe] = useState(false);
+  // Animation — auto-rotates the selected mesh in real time.
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [animSpeedDegPerSec, setAnimSpeedDegPerSec] = useState(90);
+  const animRafRef = useRef(null);
 
   function recomputeMeshStats(scene) {
     let v = 0;
@@ -428,6 +432,45 @@ function WorkbenchStudio() {
     const mesh = selectedMeshRef.current;
     if (mesh && mesh.material) { mesh.material.wireframe = !!checked; mesh.material.needsUpdate = true; }
   }
+
+  /*
+   * Animation — rAF loop that rotates the currently selected mesh
+   * around Y at animSpeedDegPerSec. Stops on toggle, on selection
+   * change to no-mesh, or on unmount.
+   */
+  useEffect(() => {
+    if (!isAnimating) {
+      if (animRafRef.current) {
+        cancelAnimationFrame(animRafRef.current);
+        animRafRef.current = null;
+      }
+      return;
+    }
+    let last = performance.now();
+    const tick = (now) => {
+      const dtSec = (now - last) / 1000;
+      last = now;
+      const mesh = selectedMeshRef.current;
+      if (mesh) {
+        const deltaRad = (animSpeedDegPerSec * Math.PI / 180) * dtSec;
+        mesh.rotation.y += deltaRad;
+        // Keep panel readout in sync (cheap — only fires when animating).
+        setSelectedTransform({
+          position: [mesh.position.x, mesh.position.y, mesh.position.z],
+          rotation: [mesh.rotation.x, mesh.rotation.y, mesh.rotation.z],
+          scale:    [mesh.scale.x,    mesh.scale.y,    mesh.scale.z],
+        });
+      }
+      animRafRef.current = requestAnimationFrame(tick);
+    };
+    animRafRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (animRafRef.current) {
+        cancelAnimationFrame(animRafRef.current);
+        animRafRef.current = null;
+      }
+    };
+  }, [isAnimating, animSpeedDegPerSec]);
   // Keep the latest deleteSelectedMesh available to setup-scoped listeners.
   const deleteSelectedMeshRef = useRef(deleteSelectedMesh);
   useEffect(() => { deleteSelectedMeshRef.current = deleteSelectedMesh; });
@@ -598,6 +641,45 @@ function WorkbenchStudio() {
             </button>
           </div>
         )}
+
+        <div className="property-section" data-studio-section="animation">
+          <h3 className="property-header">
+            Animation
+            <span
+              data-studio-animation-state
+              style={{ float: 'right', opacity: 0.6, fontSize: '11px', fontWeight: 'normal' }}
+            >
+              {isAnimating ? 'playing' : 'idle'}
+            </span>
+          </h3>
+          <div className="property-row">
+            <span className="property-label">Speed</span>
+            <input
+              type="range"
+              min="0"
+              max="720"
+              step="10"
+              data-studio-animation="speed"
+              value={animSpeedDegPerSec}
+              onChange={e => setAnimSpeedDegPerSec(Number(e.target.value))}
+              style={{ flex: 1 }}
+            />
+            <span
+              data-studio-animation-readout="speed"
+              style={{ marginLeft: '6px', fontSize: '10px', fontFamily: 'monospace', minWidth: '52px', textAlign: 'right' }}
+            >
+              {animSpeedDegPerSec} °/s
+            </span>
+          </div>
+          <button
+            className="property-button"
+            data-studio-action="toggle-animation"
+            onClick={() => setIsAnimating(v => !v)}
+            disabled={!selectedKind && !isAnimating}
+          >
+            {isAnimating ? 'Stop Animation' : 'Animate Selected'}
+          </button>
+        </div>
 
         {selectedKind && (
           <div className="property-section" data-studio-section="material">
