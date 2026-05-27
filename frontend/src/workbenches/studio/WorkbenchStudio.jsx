@@ -4390,46 +4390,46 @@ function WorkbenchStudio() {
             background: #000000;
           }
 
-          /* Section card — soft background panel, rounded edges, breathing room. */
+          /* Section panel — flat, edge-to-edge, matte-black. Matches the
+             stacked-panel pattern Mech uses in its workbench-properties
+             aside (DesignHistory + PartBrowser + FeatureTree etc.). No
+             rounded card chrome, no hover-glow — just dense data
+             surface. */
           [data-studio-properties="studio"] .property-section {
-            background: linear-gradient(180deg, rgba(255,255,255,0.025) 0%, rgba(255,255,255,0.01) 100%);
-            border: 1px solid rgba(255,255,255,0.045);
-            border-radius: 8px;
-            padding: 10px 12px;
-            margin: 6px 10px 8px 10px;
-            transition: border-color 0.15s, background 0.15s;
+            background: #050505;
+            border: none;
+            border-top: 1px solid rgba(255,255,255,0.04);
+            border-radius: 0;
+            padding: 8px 12px;
+            margin: 0;
+            transition: none;
           }
           [data-studio-properties="studio"] .property-section:hover {
-            border-color: rgba(255,255,255,0.18);
-            background: linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%);
+            background: #060606;
+          }
+          [data-studio-properties="studio"] .property-section:first-of-type {
+            border-top: none;
           }
 
-          /* Section header — flex layout with stripe + uppercase title.
-             ::before stripe is recoloured per-section by the rules below. */
+          /* Section header — Mech-style small caps, no decorative stripe.
+             Click-toggles collapse via the chevron on the right. */
           [data-studio-properties="studio"] .property-header {
             display: flex;
             align-items: center;
-            gap: 8px;
-            margin: 0 0 8px 0;
+            gap: 6px;
+            margin: 0 0 6px 0;
             padding: 2px 0;
-            border-bottom: 1px solid rgba(255,255,255,0.05);
             text-transform: uppercase;
-            font-size: 10.5px;
+            font-size: 10px;
+            font-weight: 600;
             letter-spacing: 0.7px;
-            color: #d4dadf;
+            color: #95a0a8;
             cursor: pointer;
             user-select: none;
           }
           [data-studio-properties="studio"] .property-header::before {
-            content: '';
-            display: inline-block;
-            width: 3px;
-            height: 12px;
-            background: #e6e6e6;
-            border-radius: 2px;
-            flex-shrink: 0;
+            content: none;
           }
-          /* Collapsed state: section body hidden, header stays. */
           [data-studio-properties="studio"] .property-section[data-studio-collapsed="true"] > *:not(.property-header) {
             display: none !important;
           }
@@ -4440,7 +4440,7 @@ function WorkbenchStudio() {
             content: '▾';
             margin-left: auto;
             font-size: 10px;
-            opacity: 0.55;
+            opacity: 0.4;
             transition: transform 0.2s;
           }
           [data-studio-properties="studio"] .property-section[data-studio-collapsed="true"] .property-header::after {

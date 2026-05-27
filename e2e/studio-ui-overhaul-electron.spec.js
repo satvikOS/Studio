@@ -53,29 +53,25 @@ test('Studio UI overhaul — discipline colors, collapsible sections, banner sta
   await expect(win.locator('[data-studio-banner-stat="prims"]')).toContainText('3 prim');
   await win.screenshot({ path: path.join(OUT, '01-with-3-primitives.png'), fullPage: false });
 
-  // ---- Verify section card styling exists (background + border) ----
+  // ---- Verify flat-panel section styling (matte black, no rounded
+  //      card chrome — matches Mech's stacked-panel pattern) ----
   const sectionStyle = await win.evaluate(() => {
     const sec = document.querySelector('[data-studio-properties="studio"] [data-studio-section="mesh"]');
     if (!sec) return null;
     const cs = window.getComputedStyle(sec);
     return {
       borderRadius: cs.borderRadius,
-      backgroundImage: cs.backgroundImage,
+      backgroundColor: cs.backgroundColor,
+      borderTopWidth: cs.borderTopWidth,
     };
   });
   expect(sectionStyle).not.toBeNull();
-  expect(sectionStyle.borderRadius).not.toBe('0px');
-  // Has linear-gradient (string contains gradient).
-  expect(sectionStyle.backgroundImage).toMatch(/linear-gradient/);
-
-  // ---- Verify per-section stripe color is set ----
-  const aiStripeColor = await win.evaluate(() => {
-    const sec = document.querySelector('[data-studio-properties="studio"] [data-studio-section="ai"] .property-header');
-    if (!sec) return null;
-    const cs = window.getComputedStyle(sec, '::before');
-    return cs.background; // includes color in shorthand
-  });
-  expect(aiStripeColor).toBeTruthy();
+  // Flat panel — no rounded corners.
+  expect(sectionStyle.borderRadius).toBe('0px');
+  // Matte black background.
+  expect(sectionStyle.backgroundColor).toMatch(/^rgb/);
+  // Top divider line.
+  expect(parseFloat(sectionStyle.borderTopWidth)).toBeGreaterThanOrEqual(0);
 
   // ---- Click "Mesh" section header to collapse, verify children hidden ----
   // The mesh section has multiple buttons. Before collapse: visible.
