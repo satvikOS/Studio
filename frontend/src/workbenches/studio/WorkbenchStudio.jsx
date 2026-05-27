@@ -205,6 +205,11 @@ function WorkbenchStudio() {
   // into a panel readout so the user sees the (≈4×) growth per pass.
   // Mirror modifier — duplicate-and-flip the selected mesh across an axis.
   const [mirrorAxis, setMirrorAxis] = useState('x');
+  // Cinematic lighting — additional point lights stacked over Viewport3D's
+  // baked-in key/fill/rim setup, with color + intensity controls.
+  const [lightColor, setLightColor]   = useState('#ffd0a0');
+  const [lightIntensity, setLightIntensity] = useState(1.6);
+  const [lightCount, setLightCount]   = useState(0);
 
   function recomputeMeshStats(scene) {
     let v = 0;
@@ -581,6 +586,53 @@ function WorkbenchStudio() {
     primitiveStackRef.current.push(mesh);
     setPrimitiveCount(c => c + 1);
     recomputeMeshStats(scene);
+  }
+
+  /*
+   * Cinematic lighting — add a colored PointLight (with a small
+   * PointLightHelper sphere so its position reads visually) into the
+   * scene at a random orbit around the workspace. Clears all
+   * Studio-added lights via Clear Lights.
+   */
+  function addCinematicLight() {
+    const scene = window.__archdiscScene;
+    if (!scene) return;
+    const light = new THREE.PointLight(
+      new THREE.Color(lightColor),
+      lightIntensity,
+      0.5, // distance falloff in scene units
+      2,   // decay
+    );
+    const angle = lightCount * (Math.PI * 2 / 5) + 0.4;
+    const r = PRIMITIVE_SIZE * 2.2;
+    light.position.set(
+      Math.cos(angle) * r,
+      PRIMITIVE_SIZE * (0.6 + (lightCount % 3) * 0.5),
+      Math.sin(angle) * r,
+    );
+    light.userData.archdiscStudioLight = true;
+    light.name = `studio-light-${lightCount}`;
+    scene.add(light);
+    // Visible marker so users can see where the light sits in space.
+    try {
+      const helper = new THREE.PointLightHelper(light, PRIMITIVE_SIZE * 0.06, light.color);
+      helper.userData.archdiscStudioLightHelper = true;
+      scene.add(helper);
+    } catch (_) { /* helper add failure is benign */ }
+    setLightCount(c => c + 1);
+  }
+
+  function clearCinematicLights() {
+    const scene = window.__archdiscScene;
+    if (!scene) return;
+    const toRemove = [];
+    scene.traverse(o => {
+      if (o.userData && (o.userData.archdiscStudioLight || o.userData.archdiscStudioLightHelper)) {
+        toRemove.push(o);
+      }
+    });
+    for (const o of toRemove) scene.remove(o);
+    setLightCount(0);
   }
 
   /*
@@ -1627,6 +1679,62 @@ function WorkbenchStudio() {
             </button>
           </div>
         )}
+
+        <div className="property-section" data-studio-section="lighting">
+          <h3 className="property-header">
+            Cinematic Lighting
+            <span
+              data-studio-light-count
+              style={{ float: 'right', opacity: 0.6, fontSize: '11px', fontWeight: 'normal' }}
+            >
+              {lightCount} added
+            </span>
+          </h3>
+          <div className="property-row">
+            <span className="property-label">Color</span>
+            <input
+              type="color"
+              data-studio-lighting="color"
+              value={lightColor}
+              onChange={e => setLightColor(e.target.value)}
+              style={{ height: '24px', cursor: 'pointer' }}
+            />
+          </div>
+          <div className="property-row">
+            <span className="property-label">Intensity</span>
+            <input
+              type="range"
+              min="0"
+              max="6"
+              step="0.1"
+              data-studio-lighting="intensity"
+              value={lightIntensity}
+              onChange={e => setLightIntensity(Number(e.target.value))}
+              style={{ flex: 1 }}
+            />
+            <span
+              data-studio-lighting-readout="intensity"
+              style={{ marginLeft: '6px', fontSize: '10px', fontFamily: 'monospace', minWidth: '32px', textAlign: 'right' }}
+            >
+              {lightIntensity.toFixed(1)}
+            </span>
+          </div>
+          <button
+            className="property-button"
+            data-studio-action="add-light"
+            onClick={addCinematicLight}
+          >
+            Add Point Light
+          </button>
+          <button
+            className="property-button"
+            data-studio-action="clear-lights"
+            onClick={clearCinematicLights}
+            disabled={lightCount === 0}
+          >
+            Clear All Lights
+          </button>
+        </div>
 
         <div className="property-section" data-studio-section="mirror">
           <h3 className="property-header">Mirror Modifier</h3>
