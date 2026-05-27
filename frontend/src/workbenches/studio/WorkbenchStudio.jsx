@@ -202,6 +202,14 @@ function WorkbenchStudio() {
   const [latheSegments, setLatheSegments] = useState(48);
   // Rigging / Armature — bone count for the spawned chain.
   const [armatureBones, setArmatureBones] = useState(5);
+  // Face Shape Keys — procedural emotion blends on the selected mesh
+  // (FACEIT-style face rig workflow seen in Video-779). 0..1 weights
+  // accumulate independently; the original vertex positions are
+  // cached per-mesh on userData so unwinding the sliders restores
+  // the source mesh exactly.
+  const [shapeKeySmile,    setShapeKeySmile]    = useState(0);
+  const [shapeKeySurprise, setShapeKeySurprise] = useState(0);
+  const [shapeKeyBrow,     setShapeKeyBrow]     = useState(0);
   // Physics — gravity drop + ground bounce for every primitive in the scene.
   const [isPhysicsActive, setIsPhysicsActive] = useState(false);
   const [physicsG, setPhysicsG]               = useState(9.8);
@@ -1619,6 +1627,101 @@ function WorkbenchStudio() {
   }
 
   /*
+   * Face Shape Keys — procedural emotion deformations applied to the
+   * selected mesh's geometry. Inspired by FACEIT-style face rigging
+   * (Video-779) but driven by mesh-space heuristics rather than a
+   * hand-authored vertex group, so it operates on any primitive:
+   *
+   *   smile     — vertices in the lower half push up + slightly inward.
+   *   surprise  — vertices in the upper half push outward + slightly up.
+   *   brow      — vertices in the upper third translate up.
+   *
+   * Each slider's weight is a blend factor 0..1. Weights are
+   * independent — the three sliders compose linearly. Original vertex
+   * positions are cached the first time a shape key applies, so
+   * sliding every slider back to 0 restores the source mesh exactly.
+   */
+  function applyShapeKeysTo(mesh, weights) {
+    if (!mesh || !mesh.geometry) return;
+    const pos = mesh.geometry.attributes.position;
+    if (!pos) return;
+    if (!mesh.userData.studioShapeKeyOrig) {
+      mesh.userData.studioShapeKeyOrig = new Float32Array(pos.array);
+    }
+    if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+    const bbox = mesh.geometry.boundingBox;
+    const yMin = bbox.min.y, yMax = bbox.max.y;
+    const range = (yMax - yMin) || 1;
+    const yMid = (yMin + yMax) / 2;
+    const orig = mesh.userData.studioShapeKeyOrig;
+    const { smile = 0, surprise = 0, brow = 0 } = weights;
+    const STRENGTH = 0.012;
+    for (let i = 0; i < pos.count; i++) {
+      let x = orig[i * 3];
+      let y = orig[i * 3 + 1];
+      let z = orig[i * 3 + 2];
+      // Normalised y in [0,1] from bottom to top of bbox.
+      const ty = (y - yMin) / range;
+      // smile: vertices BELOW the mid push up and slightly inward.
+      if (smile > 0 && y < yMid) {
+        const t = (yMid - y) / (yMid - yMin || 1); // 0 at mid, 1 at bottom
+        y += smile * STRENGTH * t;
+        x *= 1 - smile * 0.08 * t;
+        z *= 1 - smile * 0.08 * t;
+      }
+      // surprise: vertices ABOVE the mid push outward + slightly up.
+      if (surprise > 0 && y > yMid) {
+        const t = (y - yMid) / (yMax - yMid || 1); // 0 at mid, 1 at top
+        x *= 1 + surprise * 0.20 * t;
+        z *= 1 + surprise * 0.20 * t;
+        y += surprise * STRENGTH * 0.5 * t;
+      }
+      // brow: vertices in the upper third pull straight up.
+      if (brow > 0 && ty > 0.66) {
+        const t = (ty - 0.66) / 0.34;
+        y += brow * STRENGTH * 1.3 * t;
+      }
+      pos.setXYZ(i, x, y, z);
+    }
+    pos.needsUpdate = true;
+    mesh.geometry.computeVertexNormals();
+    mesh.geometry.computeBoundingSphere();
+    recomputeMeshStats(window.__archdiscScene);
+  }
+
+  function updateShapeKey(name, value) {
+    const v = Number(value);
+    const setters = {
+      smile:    setShapeKeySmile,
+      surprise: setShapeKeySurprise,
+      brow:     setShapeKeyBrow,
+    };
+    if (setters[name]) setters[name](v);
+    const mesh = selectedMeshRef.current;
+    if (!mesh) return;
+    applyShapeKeysTo(mesh, {
+      smile:    name === 'smile'    ? v : shapeKeySmile,
+      surprise: name === 'surprise' ? v : shapeKeySurprise,
+      brow:     name === 'brow'     ? v : shapeKeyBrow,
+    });
+  }
+
+  function resetShapeKeys() {
+    setShapeKeySmile(0);
+    setShapeKeySurprise(0);
+    setShapeKeyBrow(0);
+    const mesh = selectedMeshRef.current;
+    if (mesh && mesh.userData.studioShapeKeyOrig) {
+      const pos = mesh.geometry.attributes.position;
+      pos.array.set(mesh.userData.studioShapeKeyOrig);
+      pos.needsUpdate = true;
+      mesh.geometry.computeVertexNormals();
+      mesh.geometry.computeBoundingSphere();
+      recomputeMeshStats(window.__archdiscScene);
+    }
+  }
+
+  /*
    * Rigging / Armature — a straight bone chain spawned as a single
    * merged-geometry mesh (joint spheres + tapered-cylinder bone
    * segments). Single mesh keeps the rest of the pipeline (selection,
@@ -2230,7 +2333,8 @@ function WorkbenchStudio() {
           [data-studio-properties="studio"] [data-studio-section="compositing"],
           [data-studio-properties="studio"] [data-studio-section="scene"],
           [data-studio-properties="studio"] [data-studio-section="boolean"],
-          [data-studio-properties="studio"] [data-studio-section="scatter"] { display: none; }
+          [data-studio-properties="studio"] [data-studio-section="scatter"],
+          [data-studio-properties="studio"] [data-studio-section="shape-keys"] { display: none; }
 
           [data-studio-discipline="modeling"] [data-studio-section="mesh"],
           [data-studio-discipline="modeling"] [data-studio-section="reference"],
@@ -2250,6 +2354,7 @@ function WorkbenchStudio() {
           [data-studio-discipline="sculpting"] [data-studio-section="mirror"],
           [data-studio-discipline="uv-texture"] [data-studio-section="texture"],
           [data-studio-discipline="rigging"] [data-studio-section="armature"],
+          [data-studio-discipline="rigging"] [data-studio-section="shape-keys"],
           [data-studio-discipline="animation"] [data-studio-section="animation"],
           [data-studio-discipline="animation"] [data-studio-section="scene"],
           [data-studio-discipline="vfx-sim"] [data-studio-section="particles"],
@@ -2916,6 +3021,82 @@ function WorkbenchStudio() {
             disabled={isPhysicsActive}
           >
             Reset to Origin
+          </button>
+        </div>
+
+        <div className="property-section" data-studio-section="shape-keys">
+          <h3 className="property-header">Face Shape Keys</h3>
+          <p className="property-label" style={{ opacity: 0.6, fontSize: '11px' }}>
+            FACEIT-style procedural emotion blends. Each slider 0–1
+            composes linearly; Reset restores the source mesh.
+          </p>
+          <div className="property-row">
+            <span className="property-label">Smile</span>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              data-studio-shapekey="smile"
+              value={shapeKeySmile}
+              onChange={e => updateShapeKey('smile', e.target.value)}
+              style={{ flex: 1 }}
+              disabled={!selectedKind}
+            />
+            <span
+              data-studio-shapekey-readout="smile"
+              style={{ marginLeft: '6px', fontSize: '10px', fontFamily: 'monospace', minWidth: '32px', textAlign: 'right' }}
+            >
+              {shapeKeySmile.toFixed(2)}
+            </span>
+          </div>
+          <div className="property-row">
+            <span className="property-label">Surprise</span>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              data-studio-shapekey="surprise"
+              value={shapeKeySurprise}
+              onChange={e => updateShapeKey('surprise', e.target.value)}
+              style={{ flex: 1 }}
+              disabled={!selectedKind}
+            />
+            <span
+              data-studio-shapekey-readout="surprise"
+              style={{ marginLeft: '6px', fontSize: '10px', fontFamily: 'monospace', minWidth: '32px', textAlign: 'right' }}
+            >
+              {shapeKeySurprise.toFixed(2)}
+            </span>
+          </div>
+          <div className="property-row">
+            <span className="property-label">Brow</span>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              data-studio-shapekey="brow"
+              value={shapeKeyBrow}
+              onChange={e => updateShapeKey('brow', e.target.value)}
+              style={{ flex: 1 }}
+              disabled={!selectedKind}
+            />
+            <span
+              data-studio-shapekey-readout="brow"
+              style={{ marginLeft: '6px', fontSize: '10px', fontFamily: 'monospace', minWidth: '32px', textAlign: 'right' }}
+            >
+              {shapeKeyBrow.toFixed(2)}
+            </span>
+          </div>
+          <button
+            className="property-button"
+            data-studio-action="reset-shape-keys"
+            onClick={resetShapeKeys}
+            disabled={!selectedKind}
+          >
+            Reset Shape Keys
           </button>
         </div>
 
