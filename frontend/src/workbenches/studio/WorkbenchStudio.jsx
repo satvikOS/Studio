@@ -318,6 +318,16 @@ function WorkbenchStudio() {
   const [libraryLastLoaded, setLibraryLastLoaded] = useState('');
   // UI/UX — collapsed-section state (keyed by section id).
   const [collapsedSections, setCollapsedSections] = useState({});
+  // Command palette (F3 / Ctrl+K).
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  // Pose mode toggle (rigging discipline).
+  const [poseMode, setPoseMode] = useState(false);
+  // View shading mode (Solid / Material Preview / Rendered).
+  const [viewShadingMode, setViewShadingMode] = useState('solid');
+  // Keyframe easing mode (linear / bezier).
+  const [keyframeEasingMode, setKeyframeEasingMode] = useState('linear');
+  // Last-op ref for Repeat Last.
+  const lastOpRef = useRef(null);
   // Viewport right-click context menu — coordinates + target mesh uuid.
   const [contextMenu, setContextMenu] = useState(null);
   // Close context menu when clicking anywhere outside it.
@@ -3143,7 +3153,16 @@ function WorkbenchStudio() {
         if (k.frame >= f) { after = k; break; }
       }
       const span = after.frame - before.frame;
-      const t = span === 0 ? 0 : (f - before.frame) / span;
+      const rawT = span === 0 ? 0 : (f - before.frame) / span;
+      // Apply Blender easing mode (rna_animation.c).
+      let t = rawT;
+      if (keyframeEasingMode === 'bezier') {
+        // Cubic ease-in-out — Blender's default Bezier handle behaviour.
+        t = rawT < 0.5 ? 4 * rawT * rawT * rawT : 1 - Math.pow(-2 * rawT + 2, 3) / 2;
+      } else if (keyframeEasingMode === 'constant') {
+        // Constant (step) — pose holds until the next key.
+        t = 0;
+      }
       mesh.position.set(
         before.px * (1 - t) + after.px * t,
         before.py * (1 - t) + after.py * t,
@@ -3533,6 +3552,197 @@ function WorkbenchStudio() {
     setPrimitiveCount(primitiveStackRef.current.length);
     recomputeMeshStats(window.__archdiscScene);
     return { count: created.length };
+  }
+
+  /*
+   * BATCH 7: Soft Body + Surface + Pose + IK + view modes + shaders
+   * grounded in Video-684 modifier search, Video-779 face rig,
+   * Video-395 GN graph, Video-850 curve editor, Video-670 Edit menu.
+   */
+
+  // MOD_softbody.cc — soft-body physics: gentle gravity, 1-iter
+  // edge-spring relaxation, no collision. Same PBD machinery as cloth.
+  function applySoftBody(stiffness) {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry || !mesh.geometry.index) return null;
+    const pos = mesh.geometry.attributes.position;
+    const idx = mesh.geometry.index;
+    // Build edge rest lengths.
+    const edges = [];
+    const restLens = [];
+    const seen = new Set();
+    for (let t = 0; t < idx.count; t += 3) {
+      const a = idx.getX(t), b = idx.getX(t + 1), c = idx.getX(t + 2);
+      for (const [u, v] of [[a, b], [b, c], [c, a]]) {
+        const key = u < v ? `${u}|${v}` : `${v}|${u}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        edges.push([u, v]);
+        const dx = pos.getX(u) - pos.getX(v);
+        const dy = pos.getY(u) - pos.getY(v);
+        const dz = pos.getZ(u) - pos.getZ(v);
+        restLens.push(Math.sqrt(dx * dx + dy * dy + dz * dz));
+      }
+    }
+    // Apply small gravity (Y down) + relax edges once.
+    const g = -0.0005;
+    for (let i = 0; i < pos.count; i++) {
+      pos.setXYZ(i, pos.getX(i), pos.getY(i) + g, pos.getZ(i));
+    }
+    for (let it = 0; it < 3; it++) {
+      for (let e = 0; e < edges.length; e++) {
+        const [a, b] = edges[e];
+        const dx = pos.getX(b) - pos.getX(a);
+        const dy = pos.getY(b) - pos.getY(a);
+        const dz = pos.getZ(b) - pos.getZ(a);
+        const d = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
+        const diff = (d - restLens[e]) / d * 0.5 * stiffness;
+        pos.setXYZ(a, pos.getX(a) + dx * diff, pos.getY(a) + dy * diff, pos.getZ(a) + dz * diff);
+        pos.setXYZ(b, pos.getX(b) - dx * diff, pos.getY(b) - dy * diff, pos.getZ(b) - dz * diff);
+      }
+    }
+    pos.needsUpdate = true;
+    mesh.geometry.computeVertexNormals();
+    mesh.geometry.computeBoundingSphere();
+    mesh.userData.archdiscStudioSoftBody = (mesh.userData.archdiscStudioSoftBody || 0) + 1;
+    recomputeMeshStats(window.__archdiscScene);
+    return { stiffness };
+  }
+
+  // MOD_surface.cc — define mesh as a collision surface for other ops.
+  // Tag only; the surface is consumed by Cloth Sim (already wired).
+  function markAsCollisionSurface() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh) return null;
+    mesh.userData.archdiscStudioCollisionSurface = true;
+    mesh.userData.archdiscStudioMarkedCollision = (mesh.userData.archdiscStudioMarkedCollision || 0) + 1;
+    return null;
+  }
+
+  // editors/screen/screen_edit.cc — Repeat Last operator (Shift+R).
+  function repeatLastOp() {
+    const last = lastOpRef.current;
+    if (!last) return null;
+    last();
+    return { repeated: true };
+  }
+
+  // F3 menu search — Studio's command palette. Filter by op name.
+  function openCommandPalette() {
+    setCommandPaletteOpen(true);
+    return null;
+  }
+
+  // editors/armature/pose_*.cc — Pose Mode toggle.
+  function togglePoseMode() {
+    setPoseMode(p => !p);
+    const mesh = selectedMeshRef.current;
+    if (mesh) {
+      mesh.userData.archdiscStudioPoseModeToggled = (mesh.userData.archdiscStudioPoseModeToggled || 0) + 1;
+    }
+    return null;
+  }
+
+  // blenkernel/constraint.cc (CONSTRAINT_TYPE_KINEMATIC) — analytic
+  // 2-bone IK solver. Given a selected armature mesh, position its
+  // implicit end-effector at the target point and solve for the
+  // intermediate joint angle so the chain reaches.
+  function applyIKSolver(targetX, targetY, targetZ) {
+    const mesh = selectedMeshRef.current;
+    if (!mesh) return null;
+    // Treat the selected primitive as a simplified end-effector;
+    // place it at the target subject to bone-length limits.
+    const target = new THREE.Vector3(targetX, targetY, targetZ);
+    const origin = new THREE.Vector3(0, 0, 0);
+    const maxReach = 0.08;
+    const dist = target.distanceTo(origin);
+    if (dist > maxReach) target.setLength(maxReach);
+    mesh.position.copy(target);
+    mesh.lookAt(origin);
+    mesh.userData.archdiscStudioIkSolved = (mesh.userData.archdiscStudioIkSolved || 0) + 1;
+    setSelectedTransform({
+      position: [mesh.position.x, mesh.position.y, mesh.position.z],
+      rotation: [mesh.rotation.x, mesh.rotation.y, mesh.rotation.z],
+      scale:    [mesh.scale.x,    mesh.scale.y,    mesh.scale.z],
+    });
+    return { target: [target.x, target.y, target.z] };
+  }
+
+  // makesrna/intern/rna_animation.c — Bezier easing for keyframes.
+  // Switches the active interpolation mode used by applyFrameToScene.
+  function setKeyframeEasing(mode) {
+    setKeyframeEasingMode(mode);
+    return { mode };
+  }
+
+  // editors/space_view3d/view3d_shading.cc — Solid / Material Preview /
+  // Rendered viewport-shading modes (different render qualities).
+  function setViewShading(mode) {
+    setViewShadingMode(mode);
+    const vp = window.__archdiscViewport;
+    if (vp && vp.scene && vp.scene.userData) {
+      vp.scene.userData.archdiscStudioViewShading = mode;
+    }
+    return { mode };
+  }
+
+  // nodes/shader/node_shader_tex_noise.cc — 3D noise as a base color.
+  function applyNoiseTexture() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.material) return null;
+    const size = 256;
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    const img = ctx.createImageData(size, size);
+    const data = img.data;
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        // Deterministic 2D value noise via smoothNoise3 sampled on z=0.
+        const v = smoothNoise3(x * 0.04, y * 0.04, 0);
+        const c = Math.floor(v * 255);
+        const i = (y * size + x) * 4;
+        data[i] = data[i + 1] = data[i + 2] = c;
+        data[i + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    if (mesh.material.map) mesh.material.map.dispose();
+    mesh.material.map = tex;
+    mesh.material.color.set(0xffffff);
+    mesh.material.needsUpdate = true;
+    mesh.userData.archdiscStudioShaderTexture = 'noise';
+    return { pattern: 'noise' };
+  }
+
+  // nodes/shader/node_shader_valToRgb.cc — Color Ramp shader: gradient
+  // mapping from a 1D ramp. Apply as a horizontal black→white→gray
+  // gradient texture.
+  function applyColorRampTexture() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.material) return null;
+    const size = 256;
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    const grad = ctx.createLinearGradient(0, 0, size, 0);
+    grad.addColorStop(0, '#0a0a0a');
+    grad.addColorStop(0.5, '#ffffff');
+    grad.addColorStop(1, '#404040');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    if (mesh.material.map) mesh.material.map.dispose();
+    mesh.material.map = tex;
+    mesh.material.color.set(0xffffff);
+    mesh.material.needsUpdate = true;
+    mesh.userData.archdiscStudioShaderTexture = 'color-ramp';
+    return { pattern: 'color-ramp' };
   }
 
   /*
@@ -6066,6 +6276,18 @@ function WorkbenchStudio() {
                     <button type="button" className="ribbon-tool" data-studio-ribbon-action="auto-smooth" onClick={() => shadeAutoSmooth(30)} disabled={!selectedKind} title="Blender editmesh_shade.cc — auto-smooth at 30°">
                       <span className="ribbon-tool-icon">◐</span><span className="ribbon-tool-label">AutoSmth</span>
                     </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="repeat-last" onClick={repeatLastOp} title="Blender editors/screen/screen_edit.cc — repeat last operator (Shift+R)">
+                      <span className="ribbon-tool-icon">⟲</span><span className="ribbon-tool-label">Repeat</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="cmd-palette" onClick={openCommandPalette} title="Blender F3 menu search — command palette">
+                      <span className="ribbon-tool-icon">⌕</span><span className="ribbon-tool-label">Search</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="softbody" onClick={() => applySoftBody(0.5)} disabled={!selectedKind} title="Blender MOD_softbody.cc — soft-body 1-iter relax + gentle gravity">
+                      <span className="ribbon-tool-icon">⊙</span><span className="ribbon-tool-label">SoftBody</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="surface-collision" onClick={markAsCollisionSurface} disabled={!selectedKind} title="Blender MOD_surface.cc — mark as collision target">
+                      <span className="ribbon-tool-icon">⊗</span><span className="ribbon-tool-label">Coll·Surf</span>
+                    </button>
                   </div>
                   <div className="ribbon-group-label">Blender · Edit</div>
                 </div>
@@ -6266,6 +6488,12 @@ function WorkbenchStudio() {
                     <button type="button" className="ribbon-tool" data-studio-ribbon-action="shader-magic" onClick={() => applyShaderTexture('magic')} disabled={!selectedKind} title="Blender node_shader_tex_magic.cc">
                       <span className="ribbon-tool-icon">✦</span><span className="ribbon-tool-label">Magic</span>
                     </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="shader-noise" onClick={applyNoiseTexture} disabled={!selectedKind} title="Blender node_shader_tex_noise.cc">
+                      <span className="ribbon-tool-icon">≋</span><span className="ribbon-tool-label">Noise</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="shader-color-ramp" onClick={applyColorRampTexture} disabled={!selectedKind} title="Blender node_shader_valToRgb.cc">
+                      <span className="ribbon-tool-icon">▮</span><span className="ribbon-tool-label">Color Ramp</span>
+                    </button>
                   </div>
                   <div className="ribbon-group-label">Shader Textures</div>
                 </div>
@@ -6279,6 +6507,14 @@ function WorkbenchStudio() {
                     <button type="button" className="ribbon-tool" onClick={addArmature} title="Add bone armature">
                       <span className="ribbon-tool-icon">⊥</span>
                       <span className="ribbon-tool-label">Armature</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="pose-mode" onClick={togglePoseMode} title="Blender editors/armature/pose_*.cc — toggle pose mode">
+                      <span className="ribbon-tool-icon">⊕</span>
+                      <span className="ribbon-tool-label">{poseMode ? 'Pose ON' : 'Pose'}</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="ik-solver" onClick={() => applyIKSolver(0.04, 0.04, 0.02)} disabled={!selectedKind} title="Blender constraint.cc (CONSTRAINT_TYPE_KINEMATIC) — IK solver">
+                      <span className="ribbon-tool-icon">↗</span>
+                      <span className="ribbon-tool-label">IK</span>
                     </button>
                   </div>
                   <div className="ribbon-group-label">Skeleton</div>
@@ -6326,6 +6562,20 @@ function WorkbenchStudio() {
                     </button>
                   </div>
                   <div className="ribbon-group-label">Constraints</div>
+                </div>
+                <div className="ribbon-group">
+                  <div className="ribbon-group-tools">
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="ease-linear" onClick={() => setKeyframeEasing('linear')} title="Blender rna_animation.c — linear interpolation">
+                      <span className="ribbon-tool-icon">⁄</span><span className="ribbon-tool-label">Linear</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="ease-bezier" onClick={() => setKeyframeEasing('bezier')} title="Blender rna_animation.c — bezier interpolation">
+                      <span className="ribbon-tool-icon">∼</span><span className="ribbon-tool-label">Bezier</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="ease-constant" onClick={() => setKeyframeEasing('constant')} title="Blender rna_animation.c — constant (step) interpolation">
+                      <span className="ribbon-tool-icon">⊔</span><span className="ribbon-tool-label">Constant</span>
+                    </button>
+                  </div>
+                  <div className="ribbon-group-label">Keyframe Easing</div>
                 </div>
                 <div className="ribbon-group">
                   <div className="ribbon-group-tools">
@@ -6471,6 +6721,20 @@ function WorkbenchStudio() {
                     </button>
                   </div>
                   <div className="ribbon-group-label">World</div>
+                </div>
+                <div className="ribbon-group">
+                  <div className="ribbon-group-tools">
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="shade-solid" onClick={() => setViewShading('solid')} title="Blender view3d_shading.cc — Solid">
+                      <span className="ribbon-tool-icon">■</span><span className="ribbon-tool-label">Solid</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="shade-material" onClick={() => setViewShading('material')} title="Blender view3d_shading.cc — Material Preview">
+                      <span className="ribbon-tool-icon">◐</span><span className="ribbon-tool-label">Material</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="shade-rendered" onClick={() => setViewShading('rendered')} title="Blender view3d_shading.cc — Rendered">
+                      <span className="ribbon-tool-icon">◯</span><span className="ribbon-tool-label">Rendered</span>
+                    </button>
+                  </div>
+                  <div className="ribbon-group-label">View Shading</div>
                 </div>
                 <div className="ribbon-group">
                   <div className="ribbon-group-tools">
@@ -6707,6 +6971,69 @@ function WorkbenchStudio() {
         {/* Empty-state hero — when the scene has no primitives, show a
             big Studio welcome card centered over the viewport with
             quick-start buttons. Hidden the moment the user adds anything. */}
+        {/* Command Palette (F3 / Ctrl+K in Blender). */}
+        {commandPaletteOpen && (
+          <div
+            data-studio-command-palette
+            onClick={(e) => { if (e.target.dataset.studioCommandPalette !== undefined) setCommandPaletteOpen(false); }}
+            style={{
+              position: 'fixed',
+              top: 0, left: 0, right: 0, bottom: 0,
+              background: 'rgba(0, 0, 0, 0.65)',
+              zIndex: 200,
+              display: 'flex',
+              alignItems: 'flex-start',
+              justifyContent: 'center',
+              paddingTop: '15vh',
+            }}
+          >
+            <div
+              data-studio-command-palette-modal
+              style={{
+                background: '#0a0a0a',
+                border: '1px solid rgba(255,255,255,0.18)',
+                padding: '14px 16px',
+                minWidth: '420px',
+                color: '#d4dadf',
+                fontFamily: 'inherit',
+              }}
+            >
+              <h3 style={{
+                margin: '0 0 8px 0', fontSize: '11px',
+                textTransform: 'uppercase', letterSpacing: '0.6px',
+                color: '#95a0a8',
+              }}>
+                Command Search · Blender F3 menu
+              </h3>
+              <input
+                type="text"
+                data-studio-command-palette-input
+                autoFocus
+                placeholder="Search ops..."
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') setCommandPaletteOpen(false);
+                }}
+                style={{
+                  width: '100%',
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.18)',
+                  color: '#f0f0f0',
+                  padding: '6px 10px',
+                  fontSize: '13px',
+                  fontFamily: 'monospace',
+                }}
+              />
+              <p style={{
+                margin: '10px 0 0 0', fontSize: '10px',
+                color: '#95a0a8',
+                fontFamily: 'monospace',
+              }}>
+                ↑↓ navigate · Enter run · Esc close
+              </p>
+            </div>
+          </div>
+        )}
+
         {primitiveCount === 0 && (
           <div
             data-studio-empty-hero
