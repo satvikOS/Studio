@@ -179,6 +179,20 @@ function WorkbenchStudio() {
   const [matRoughness, setMatRoughness] = useState(0.45);
   const [matEmissive, setMatEmissive]   = useState(0.0);
   const [matWireframe, setMatWireframe] = useState(false);
+  // Material presets — Substance-Painter / KeyShot-style one-click PBR
+  // material library: nine named values that drop in color + metalness
+  // + roughness + opacity together.
+  const MATERIAL_PRESETS = [
+    { id: 'gold',     label: 'Gold',     color: '#d4af37', metalness: 0.90, roughness: 0.18, opacity: 1 },
+    { id: 'silver',   label: 'Silver',   color: '#c5c8cf', metalness: 0.95, roughness: 0.15, opacity: 1 },
+    { id: 'chrome',   label: 'Chrome',   color: '#e8e8ed', metalness: 0.98, roughness: 0.05, opacity: 1 },
+    { id: 'copper',   label: 'Copper',   color: '#b87333', metalness: 0.85, roughness: 0.28, opacity: 1 },
+    { id: 'glass',    label: 'Glass',    color: '#dde9f0', metalness: 0.00, roughness: 0.05, opacity: 0.55 },
+    { id: 'plastic',  label: 'Plastic',  color: '#e63946', metalness: 0.00, roughness: 0.40, opacity: 1 },
+    { id: 'rubber',   label: 'Rubber',   color: '#222426', metalness: 0.00, roughness: 0.95, opacity: 1 },
+    { id: 'concrete', label: 'Concrete', color: '#909090', metalness: 0.00, roughness: 0.90, opacity: 1 },
+    { id: 'wood',     label: 'Wood',     color: '#8b6f47', metalness: 0.00, roughness: 0.75, opacity: 1 },
+  ];
   // Animation — auto-rotates the selected mesh in real time.
   const [isAnimating, setIsAnimating] = useState(false);
   const [animSpeedDegPerSec, setAnimSpeedDegPerSec] = useState(90);
@@ -638,6 +652,27 @@ function WorkbenchStudio() {
     setMatWireframe(checked);
     const mesh = selectedMeshRef.current;
     if (mesh && mesh.material) { mesh.material.wireframe = !!checked; mesh.material.needsUpdate = true; }
+  }
+
+  function applyMaterialPreset(preset) {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.material) return;
+    mesh.material.color.set(preset.color);
+    mesh.material.metalness = preset.metalness;
+    mesh.material.roughness = preset.roughness;
+    if (preset.opacity < 1) {
+      mesh.material.transparent = true;
+      mesh.material.opacity = preset.opacity;
+    } else {
+      mesh.material.transparent = false;
+      mesh.material.opacity = 1;
+    }
+    mesh.material.needsUpdate = true;
+    // Mirror into the React-side controls so sliders / picker reflect
+    // the preset's values.
+    setMatColor(preset.color);
+    setMatMetalness(preset.metalness);
+    setMatRoughness(preset.roughness);
   }
 
   /*
@@ -3527,6 +3562,38 @@ function WorkbenchStudio() {
                 onChange={e => applyMatWireframe(e.target.checked)}
                 style={{ cursor: 'pointer' }}
               />
+            </div>
+            <div
+              data-studio-material-presets
+              style={{
+                marginTop: '8px',
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: '4px',
+              }}
+            >
+              {MATERIAL_PRESETS.map(p => (
+                <button
+                  key={p.id}
+                  type="button"
+                  data-studio-material-preset={p.id}
+                  title={`${p.label} — metal ${p.metalness} · rough ${p.roughness}`}
+                  onClick={() => applyMaterialPreset(p)}
+                  style={{
+                    padding: '4px 2px',
+                    background: p.color,
+                    color: p.metalness > 0.5 ? '#1a1a1a' : '#ffffff',
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    borderRadius: '3px',
+                    cursor: 'pointer',
+                    fontSize: '10px',
+                    fontWeight: 600,
+                    textShadow: p.metalness > 0.5 ? 'none' : '0 1px 2px rgba(0,0,0,0.6)',
+                  }}
+                >
+                  {p.label}
+                </button>
+              ))}
             </div>
           </div>
         )}
