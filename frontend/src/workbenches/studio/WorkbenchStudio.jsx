@@ -1642,6 +1642,141 @@ function WorkbenchStudio() {
   }
 
   /*
+   * Solidify modifier — give thickness to a surface mesh.
+   *
+   * Blender source: blender/source/blender/modifiers/intern/MOD_solidify.cc
+   *
+   * Algorithm:
+   *   1. Clone the mesh (outer shell).
+   *   2. Clone again, offset positions along inward normals by
+   *      `thickness` to make an inner shell.
+   *   3. Flip the inner shell's triangle winding so its normals
+   *      point outward.
+   *   4. Merge outer + inner into one geometry.
+   *
+   * Caveats vs Blender's reference:
+   *   - Blender also stitches edges between outer & inner along
+   *     boundary loops; this MVP relies on closed meshes (the
+   *     vendored Suzanne/Teapot are closed) so no boundary stitching
+   *     is required to look correct.
+   */
+  function solidifyModifier(thickness) {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    const orig = mesh.geometry;
+    if (!orig.attributes.normal) orig.computeVertexNormals();
+    const outer = orig.clone();
+    const inner = orig.clone();
+    const pos = inner.attributes.position;
+    const nrm = inner.attributes.normal;
+    for (let i = 0; i < pos.count; i++) {
+      pos.setXYZ(
+        i,
+        pos.getX(i) - nrm.getX(i) * thickness,
+        pos.getY(i) - nrm.getY(i) * thickness,
+        pos.getZ(i) - nrm.getZ(i) * thickness,
+      );
+    }
+    pos.needsUpdate = true;
+    // Flip winding so inner shell normals face outward.
+    if (inner.index) {
+      const idx = inner.index.array;
+      for (let i = 0; i < idx.length; i += 3) {
+        const t = idx[i]; idx[i] = idx[i + 1]; idx[i + 1] = t;
+      }
+      inner.index.needsUpdate = true;
+    }
+    inner.computeVertexNormals();
+    const merged = mergeGeometries([outer, inner]);
+    merged.computeVertexNormals();
+    merged.computeBoundingSphere();
+    mesh.geometry.dispose();
+    mesh.geometry = merged;
+    mesh.userData.archdiscStudioSolidified = (mesh.userData.archdiscStudioSolidified || 0) + 1;
+    recomputeMeshStats(window.__archdiscScene);
+    return { thickness, vertCount: merged.attributes.position.count };
+  }
+
+  /*
+   * Cast modifier — push vertices toward a target primitive shape.
+   *
+   * Blender source: blender/source/blender/modifiers/intern/MOD_cast.cc
+   *
+   * The `amount` slider blends each vertex toward its target
+   * projection on the chosen reference shape (sphere or cuboid).
+   * 0 = identity, 1 = full cast.
+   */
+  function castToShape(targetShape, amount) {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    const pos = mesh.geometry.attributes.position;
+    if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
+    if (!mesh.geometry.boundingBox)    mesh.geometry.computeBoundingBox();
+    const bs = mesh.geometry.boundingSphere;
+    const bb = mesh.geometry.boundingBox;
+    const cx = bs.center.x, cy = bs.center.y, cz = bs.center.z;
+    const radius = bs.radius;
+    const halfX = (bb.max.x - bb.min.x) / 2;
+    const halfY = (bb.max.y - bb.min.y) / 2;
+    const halfZ = (bb.max.z - bb.min.z) / 2;
+    for (let i = 0; i < pos.count; i++) {
+      const dx = pos.getX(i) - cx;
+      const dy = pos.getY(i) - cy;
+      const dz = pos.getZ(i) - cz;
+      let tx, ty, tz;
+      if (targetShape === 'sphere') {
+        const d = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
+        const f = radius / d;
+        tx = dx * f; ty = dy * f; tz = dz * f;
+      } else { // cuboid
+        const m = Math.max(Math.abs(dx / halfX), Math.abs(dy / halfY), Math.abs(dz / halfZ)) || 1;
+        tx = dx / m; ty = dy / m; tz = dz / m;
+      }
+      pos.setXYZ(
+        i,
+        cx + dx * (1 - amount) + tx * amount,
+        cy + dy * (1 - amount) + ty * amount,
+        cz + dz * (1 - amount) + tz * amount,
+      );
+    }
+    pos.needsUpdate = true;
+    mesh.geometry.computeVertexNormals();
+    mesh.geometry.computeBoundingSphere();
+    mesh.userData.archdiscStudioCast = (mesh.userData.archdiscStudioCast || 0) + 1;
+    recomputeMeshStats(window.__archdiscScene);
+    return { targetShape, amount };
+  }
+
+  /*
+   * Wave modifier — sinusoidal radial displacement along Y.
+   *
+   * Blender source: blender/source/blender/modifiers/intern/MOD_wave.cc
+   *
+   * Y_new = Y + sin(r * freq + phase) * amp     where  r = sqrt(x² + z²)
+   *
+   * Real Blender wave can animate over time; this MVP applies once
+   * per click (the user can re-apply with different phases or wire
+   * the call into a rAF tick).
+   */
+  function applyWave(amplitude, frequency, phase = 0) {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    const pos = mesh.geometry.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), z = pos.getZ(i);
+      const r = Math.sqrt(x * x + z * z);
+      const y = pos.getY(i) + Math.sin(r * frequency + phase) * amplitude;
+      pos.setXYZ(i, x, y, z);
+    }
+    pos.needsUpdate = true;
+    mesh.geometry.computeVertexNormals();
+    mesh.geometry.computeBoundingSphere();
+    mesh.userData.archdiscStudioWaved = (mesh.userData.archdiscStudioWaved || 0) + 1;
+    recomputeMeshStats(window.__archdiscScene);
+    return { amplitude, frequency };
+  }
+
+  /*
    * Loop subdivision — Charles Loop's smooth subdivision scheme.
    *
    * Topology: every triangle becomes four (same as midpoint subdivision).
@@ -3867,6 +4002,56 @@ function WorkbenchStudio() {
                     </button>
                   </div>
                   <div className="ribbon-group-label">Modifiers</div>
+                </div>
+
+                <div className="ribbon-group">
+                  <div className="ribbon-group-tools">
+                    <button
+                      type="button"
+                      className="ribbon-tool"
+                      data-studio-ribbon-action="solidify"
+                      onClick={() => solidifyModifier(0.003)}
+                      disabled={!selectedKind}
+                      title="Blender MOD_solidify — give thickness to selected surface"
+                    >
+                      <span className="ribbon-tool-icon">▣</span>
+                      <span className="ribbon-tool-label">Solidify</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="ribbon-tool"
+                      data-studio-ribbon-action="cast-sphere"
+                      onClick={() => castToShape('sphere', 0.6)}
+                      disabled={!selectedKind}
+                      title="Blender MOD_cast — push verts toward bounding sphere"
+                    >
+                      <span className="ribbon-tool-icon">◯</span>
+                      <span className="ribbon-tool-label">Cast→Sph</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="ribbon-tool"
+                      data-studio-ribbon-action="cast-cuboid"
+                      onClick={() => castToShape('cuboid', 0.6)}
+                      disabled={!selectedKind}
+                      title="Blender MOD_cast — push verts toward bounding cuboid"
+                    >
+                      <span className="ribbon-tool-icon">▢</span>
+                      <span className="ribbon-tool-label">Cast→Cub</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="ribbon-tool"
+                      data-studio-ribbon-action="wave"
+                      onClick={() => applyWave(0.004, 200)}
+                      disabled={!selectedKind}
+                      title="Blender MOD_wave — sinusoidal radial Y displacement"
+                    >
+                      <span className="ribbon-tool-icon">≈</span>
+                      <span className="ribbon-tool-label">Wave</span>
+                    </button>
+                  </div>
+                  <div className="ribbon-group-label">Blender · Mods</div>
                 </div>
                 <div className="ribbon-group">
                   <div className="ribbon-group-tools">
