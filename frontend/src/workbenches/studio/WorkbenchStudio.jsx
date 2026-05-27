@@ -183,6 +183,11 @@ function WorkbenchStudio() {
   const [latheSegments, setLatheSegments] = useState(48);
   // Rigging / Armature — bone count for the spawned chain.
   const [armatureBones, setArmatureBones] = useState(5);
+  // Physics — gravity drop + ground bounce for every primitive in the scene.
+  const [isPhysicsActive, setIsPhysicsActive] = useState(false);
+  const [physicsG, setPhysicsG]               = useState(9.8);
+  const [physicsRestitution, setPhysicsRestitution] = useState(0.55);
+  const physicsRafRef = useRef(null);
 
   function recomputeMeshStats(scene) {
     let v = 0;
@@ -559,6 +564,67 @@ function WorkbenchStudio() {
     primitiveStackRef.current.push(mesh);
     setPrimitiveCount(c => c + 1);
     recomputeMeshStats(scene);
+  }
+
+  /*
+   * Physics — vertical gravity drop with a single ground plane and
+   * energy-losing bounces. Stores per-mesh velocity on userData so
+   * primitives spawned mid-sim seamlessly join the loop. Stops on
+   * toggle off / unmount.
+   */
+  const GROUND_Y = -0.045; // -45 mm — clearance below the workbench axes triad
+  function physicsTick(dt) {
+    const scene = window.__archdiscScene;
+    if (!scene) return;
+    const g = physicsG;
+    const r = physicsRestitution;
+    scene.traverse(o => {
+      if (!o.userData || !o.userData.archdiscStudioPrimitive) return;
+      const v = o.userData.studioVelocity || (o.userData.studioVelocity = [0, 0, 0]);
+      v[1] -= g * dt;
+      o.position.y += v[1] * dt;
+      if (o.position.y < GROUND_Y) {
+        o.position.y = GROUND_Y;
+        v[1] = -v[1] * r;
+        // Settle threshold so primitives stop micro-bouncing forever.
+        if (Math.abs(v[1]) < 0.04) v[1] = 0;
+      }
+    });
+  }
+
+  useEffect(() => {
+    if (!isPhysicsActive) {
+      if (physicsRafRef.current) {
+        cancelAnimationFrame(physicsRafRef.current);
+        physicsRafRef.current = null;
+      }
+      return;
+    }
+    let last = performance.now();
+    const tick = (now) => {
+      const dt = Math.min(0.05, (now - last) / 1000); // cap dt so a tab-switch can't fling primitives
+      last = now;
+      physicsTick(dt);
+      physicsRafRef.current = requestAnimationFrame(tick);
+    };
+    physicsRafRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (physicsRafRef.current) {
+        cancelAnimationFrame(physicsRafRef.current);
+        physicsRafRef.current = null;
+      }
+    };
+  }, [isPhysicsActive, physicsG, physicsRestitution]);
+
+  function resetPhysics() {
+    const scene = window.__archdiscScene;
+    if (!scene) return;
+    scene.traverse(o => {
+      if (o.userData && o.userData.archdiscStudioPrimitive) {
+        o.userData.studioVelocity = [0, 0, 0];
+        o.position.y = 0;
+      }
+    });
   }
 
   /*
@@ -1144,6 +1210,71 @@ function WorkbenchStudio() {
             </button>
           </div>
         )}
+
+        <div className="property-section" data-studio-section="physics">
+          <h3 className="property-header">
+            Physics
+            <span
+              data-studio-physics-state
+              style={{ float: 'right', opacity: 0.6, fontSize: '11px', fontWeight: 'normal' }}
+            >
+              {isPhysicsActive ? 'simulating' : 'idle'}
+            </span>
+          </h3>
+          <div className="property-row">
+            <span className="property-label">Gravity</span>
+            <input
+              type="range"
+              min="0"
+              max="20"
+              step="0.1"
+              data-studio-physics="gravity"
+              value={physicsG}
+              onChange={e => setPhysicsG(Number(e.target.value))}
+              style={{ flex: 1 }}
+            />
+            <span
+              data-studio-physics-readout="gravity"
+              style={{ marginLeft: '6px', fontSize: '10px', fontFamily: 'monospace', minWidth: '52px', textAlign: 'right' }}
+            >
+              {physicsG.toFixed(1)} m/s²
+            </span>
+          </div>
+          <div className="property-row">
+            <span className="property-label">Bounce</span>
+            <input
+              type="range"
+              min="0"
+              max="0.95"
+              step="0.01"
+              data-studio-physics="restitution"
+              value={physicsRestitution}
+              onChange={e => setPhysicsRestitution(Number(e.target.value))}
+              style={{ flex: 1 }}
+            />
+            <span
+              data-studio-physics-readout="restitution"
+              style={{ marginLeft: '6px', fontSize: '10px', fontFamily: 'monospace', minWidth: '40px', textAlign: 'right' }}
+            >
+              {physicsRestitution.toFixed(2)}
+            </span>
+          </div>
+          <button
+            className="property-button"
+            data-studio-action="toggle-physics"
+            onClick={() => setIsPhysicsActive(v => !v)}
+          >
+            {isPhysicsActive ? 'Pause Physics' : 'Drop with Gravity'}
+          </button>
+          <button
+            className="property-button"
+            data-studio-action="reset-physics"
+            onClick={resetPhysics}
+            disabled={isPhysicsActive}
+          >
+            Reset to Origin
+          </button>
+        </div>
 
         <div className="property-section" data-studio-section="armature">
           <h3 className="property-header">Rigging · Armature</h3>
