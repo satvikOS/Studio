@@ -1,4 +1,4 @@
-name: Build ArchDisc Desktop App
+name: Build ArchDisc Studio Desktop App
 
 # Auto-build + publish on EVERY push to `archdisc`. Each push produces a
 # published GitHub Release carrying the 3 platform installers PLUS the
@@ -11,10 +11,12 @@ name: Build ArchDisc Desktop App
 #                       (zip is REQUIRED for macOS auto-update)
 #   - ubuntu-latest  -> .AppImage                  (latest-linux.yml)
 #
-# Versioning: package.json version is stamped to 1.0.<run_number> before
-# electron-builder runs, so every push yields a unique, monotonically
-# increasing version. electron-updater compares versions to decide
-# whether to upgrade.
+# Versioning: package.json version is stamped to 1.0.<run_number + 346>
+# before electron-builder runs. The +346 offset skips past Mech's last
+# tag (v1.0.346) so Studio's release numbering continues monotonically
+# from where Mech's history left off — the two repos share the early
+# commit lineage but produce independent installers / update channels.
+# electron-updater compares versions to decide whether to upgrade.
 #
 # Code signing: builds are UNSIGNED. Windows shows SmartScreen warnings;
 # macOS Gatekeeper blocks first launch (right-click > Open to bypass) and
@@ -77,12 +79,13 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-electron-builder-
 
-      # Per-commit version: 1.0.<run_number>. Always increases, so
-      # electron-updater always sees field installs as outdated.
+      # Per-commit version: 1.0.<run_number + 346>. Offset skips Mech's
+      # tag history so Studio's first build is v1.0.347. Always increases,
+      # so electron-updater always sees field installs as outdated.
       - name: Stamp per-commit version
         shell: bash
         run: |
-          VERSION="1.0.${{ github.run_number }}"
+          VERSION="1.0.${{ github.run_number + 346 }}"
           echo "Stamping version $VERSION"
           node -e "const fs=require('fs');const p=require('./package.json');p.version='$VERSION';fs.writeFileSync('./package.json',JSON.stringify(p,null,2)+'\n');"
           node -e "console.log('package.json version is now', require('./package.json').version)"

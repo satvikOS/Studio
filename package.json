@@ -1,7 +1,7 @@
 {
-  "name": "archdisc-Mech",
+  "name": "archdisc-studio",
   "version": "1.0.0",
-  "description": "ArchDisc - Professional 3D Architectural Design Platform",
+  "description": "ArchDisc Studio — 3D content creation, animation, VFX, sculpting, simulation, and gaming engine. Second workstation in the ArchDisc Universe.",
   "type": "commonjs",
   "main": "electron/main.js",
   "scripts": {
@@ -14,13 +14,19 @@
     "vercel-build": "cd frontend && npm run build"
   },
   "keywords": [
-    "architecture",
     "3d",
-    "design",
+    "modeling",
+    "sculpting",
+    "animation",
+    "rigging",
+    "vfx",
+    "simulation",
+    "rendering",
+    "gaming",
     "ai"
   ],
   "author": "",
-  "license": "ISC",
+  "license": "GPL-3.0-or-later",
   "dependencies": {
     "@google-cloud/vertexai": "^1.7.0",
     "@google/generative-ai": "^0.24.1",
