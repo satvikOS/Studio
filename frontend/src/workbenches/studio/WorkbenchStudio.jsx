@@ -227,11 +227,16 @@ function WorkbenchStudio() {
   const [lightColor, setLightColor]   = useState('#ffd0a0');
   const [lightIntensity, setLightIntensity] = useState(1.6);
   const [lightCount, setLightCount]   = useState(0);
-  // AI prompt stub — simple keyword router as a first preview of the
-  // AI plug-and-play orchestration (real planner comes later; this is
-  // the harness it will eventually drive).
-  const [aiPrompt, setAiPrompt] = useState('add a cube and a torus knot');
-  const [aiLog, setAiLog]       = useState([]);
+  // AI prompt — the keyword router now decomposes the prompt into a
+  // numbered plan, displays it, then executes each step sequentially
+  // (with the right discipline-tab auto-switched per step). Closer
+  // to the eventual Clarifier→Planner→Verifier shape from Mech's AI
+  // scaffold, on the same "prompt → action list → actions fire" harness.
+  const [aiPrompt, setAiPrompt]       = useState('add a cube and a sphere then spin them then render');
+  const [aiLog, setAiLog]             = useState([]);
+  const [aiPlan, setAiPlan]           = useState([]);     // current plan steps
+  const [aiPlanIndex, setAiPlanIndex] = useState(-1);     // current step (-1 = idle)
+  const [aiRunning, setAiRunning]     = useState(false);
   // Reference Plane — image-against-photo workflow seen in Videos 29 + 402.
   // For an MVP we generate a deterministic procedural "reference grid"
   // canvas (labeled cross-hairs); next slice swaps in a real file picker.
@@ -875,22 +880,28 @@ function WorkbenchStudio() {
   }
 
   /*
-   * AI Prompt Stub — keyword-route the user's natural-language prompt
-   * to existing Studio actions. This is intentionally a thin shim —
-   * future slices replace the keyword router with the real
-   * Clarifier → Planner → Verifier loop from Mech's AI scaffold.
-   * The harness it drives (string in → action list out → actions fire)
-   * is the durable contract; only the parser swaps.
+   * AI Planner shim — decompose a natural-language prompt into an
+   * ordered plan of (label, run, tab) steps, then execute the plan
+   * one step at a time with the matching discipline-tab auto-selected
+   * per step. Each step shows up in a UI list with the current step
+   * highlighted; aiRunning gates the Run button while a plan is
+   * executing so users can't double-fire.
+   *
+   * The parser is still keyword-route + substring-aware (longest needle
+   * first); the durable contract is the plan-then-execute harness,
+   * which the real Clarifier/Planner/Verifier loop will plug into.
    */
-  function runAiPrompt() {
-    const raw = (aiPrompt || '').trim();
-    if (!raw) return;
+  function planFromPrompt(raw) {
     const p = raw.toLowerCase();
-    const actions = [];
-    // Primitives — order ABSOLUTELY MATTERS: longer / more-specific
-    // needles come first so "voxel cube" matches "voxel-cube" without
-    // also matching "cube". After a needle hits, its substring is
-    // blanked out of `remaining` so shorter terms don't re-match.
+    const plan = [];
+    // 1. Compose / clear come first if requested.
+    if (/clear|empty|wipe/.test(p)) {
+      plan.push({ label: 'Clear scene',   tab: 'modeling', run: () => clearScene() });
+    }
+    if (/demo|compose/.test(p)) {
+      plan.push({ label: 'Compose demo scene', tab: 'modeling', run: () => composeDemoScene() });
+    }
+    // 2. Primitive additions, longest needle first.
     const primKinds = [
       ['voxel sphere', 'voxel-sphere'],
       ['voxel cube',   'voxel-cube'],
@@ -910,79 +921,85 @@ function WorkbenchStudio() {
     let remaining = p;
     for (const [needle, kind] of primKinds) {
       if (remaining.includes(needle)) {
-        actions.push(`add ${needle}`);
-        addPrimitive(kind);
+        plan.push({ label: `Add ${needle}`, tab: 'modeling', run: () => addPrimitive(kind) });
         remaining = remaining.split(needle).join(' ');
       }
     }
     if (/tree/.test(p)) {
-      actions.push('generate procedural tree');
-      generateProceduralTree();
+      plan.push({ label: 'Generate procedural tree', tab: 'modeling', run: () => generateProceduralTree() });
     }
     if (/lathe|vase|goblet|column/.test(p)) {
-      if (/vase/.test(p))   setLatheProfile('vase');
-      if (/goblet/.test(p)) setLatheProfile('goblet');
-      if (/column/.test(p)) setLatheProfile('column');
-      actions.push('add lathe surface');
-      addLatheSurface();
+      const profile = /vase/.test(p) ? 'vase' : /goblet/.test(p) ? 'goblet' : 'column';
+      plan.push({ label: `Add lathe (${profile})`, tab: 'modeling', run: () => { setLatheProfile(profile); addLatheSurface(); } });
     }
     if (/floor plan|building|extrude/.test(p)) {
-      if (/l[- ]?shape/.test(p)) setFloorShape('L-shape');
-      if (/u[- ]?shape/.test(p)) setFloorShape('U-shape');
-      actions.push('extrude floor plan');
-      extrudeFloorPlan();
-    }
-    if (/particle/.test(p)) {
-      actions.push('spawn particle cloud');
-      spawnParticles();
+      const shape = /l[- ]?shape/.test(p) ? 'L-shape' : /u[- ]?shape/.test(p) ? 'U-shape' : 'rectangle';
+      plan.push({ label: `Extrude ${shape} floor plan`, tab: 'modeling', run: () => { setFloorShape(shape); extrudeFloorPlan(); } });
     }
     if (/armature|bone/.test(p)) {
-      actions.push('add bone chain');
-      addArmature();
+      plan.push({ label: 'Add bone chain', tab: 'rigging', run: () => addArmature() });
     }
-    // Animation / physics
-    if (/spin|rotate|animate/.test(p) && !/stop/.test(p)) {
-      actions.push('start animation');
-      setIsAnimating(true);
+    if (/particle/.test(p)) {
+      plan.push({ label: 'Spawn particle cloud', tab: 'vfx-sim', run: () => spawnParticles() });
     }
-    if (/stop|pause/.test(p)) {
-      actions.push('stop animation');
-      setIsAnimating(false);
+    if (/light/.test(p)) {
+      plan.push({ label: 'Add cinematic light', tab: 'rendering', run: () => addCinematicLight() });
     }
     if (/drop|gravity|fall/.test(p)) {
-      actions.push('drop with gravity');
-      setIsPhysicsActive(true);
+      plan.push({ label: 'Drop with gravity', tab: 'vfx-sim', run: () => setIsPhysicsActive(true) });
     }
     if (/reset/.test(p)) {
-      actions.push('reset to origin');
-      resetPhysics();
-      setIsPhysicsActive(false);
+      plan.push({ label: 'Reset to origin', tab: 'vfx-sim', run: () => { resetPhysics(); setIsPhysicsActive(false); } });
     }
-    // Lighting
-    if (/light/.test(p)) {
-      actions.push('add cinematic light');
-      addCinematicLight();
+    if (/spin|rotate|animate/.test(p) && !/stop/.test(p)) {
+      plan.push({ label: 'Start animation', tab: 'animation', run: () => setIsAnimating(true) });
     }
-    // Rendering / compositing
-    if (/render|capture|screenshot/.test(p)) {
-      actions.push('capture render');
-      captureRender();
+    if (/stop|pause/.test(p)) {
+      plan.push({ label: 'Stop animation', tab: 'animation', run: () => setIsAnimating(false) });
     }
     if (/showreel|turntable|four[- ]?view/.test(p)) {
-      actions.push('capture showreel');
-      captureShowreel();
+      plan.push({ label: 'Capture 4-view showreel', tab: 'rendering', run: () => captureShowreel() });
+    } else if (/render|capture|screenshot/.test(p)) {
+      plan.push({ label: 'Capture render', tab: 'rendering', run: () => captureRender() });
     }
-    // Scene management
-    if (/clear|empty|wipe/.test(p)) {
-      actions.push('clear scene');
-      clearScene();
+    return plan;
+  }
+
+  async function runAiPrompt() {
+    if (aiRunning) return;
+    const raw = (aiPrompt || '').trim();
+    if (!raw) return;
+    const plan = planFromPrompt(raw);
+    setAiPlan(plan);
+    if (plan.length === 0) {
+      setAiLog(l => l.concat([{ prompt: raw, actions: ['(no matching keywords — try: add cube, spin, drop, render)'], ts: new Date().toLocaleTimeString() }]));
+      return;
     }
-    if (/demo|compose/.test(p)) {
-      actions.push('compose demo scene');
-      composeDemoScene();
+    setAiRunning(true);
+    setAiPlanIndex(-1);
+    for (let i = 0; i < plan.length; i++) {
+      const step = plan[i];
+      setAiPlanIndex(i);
+      // Switch the discipline tab so the user sees the right panel
+      // light up while the step runs.
+      setActiveTab(step.tab);
+      // Brief wait so the user can watch each step land.
+      await new Promise(r => setTimeout(r, 350));
+      try {
+        step.run();
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn('[studio:ai] step failed', step.label, err && err.message);
+      }
+      await new Promise(r => setTimeout(r, 200));
     }
-    if (actions.length === 0) actions.push('(no matching keywords — try: add cube, spin, drop, render)');
-    setAiLog(l => l.concat([{ prompt: raw, actions, ts: new Date().toLocaleTimeString() }]));
+    setAiPlanIndex(-1);
+    setAiRunning(false);
+    setAiLog(l => l.concat([{
+      prompt: raw,
+      actions: plan.map(s => s.label),
+      ts: new Date().toLocaleTimeString(),
+    }]));
   }
 
   /*
@@ -2104,10 +2121,43 @@ function WorkbenchStudio() {
             className="property-button"
             data-studio-action="run-ai-prompt"
             onClick={runAiPrompt}
-            disabled={!aiPrompt.trim()}
+            disabled={!aiPrompt.trim() || aiRunning}
           >
-            Run Prompt
+            {aiRunning ? 'Running…' : 'Run Prompt'}
           </button>
+          {aiPlan.length > 0 && aiRunning && (
+            <div
+              data-studio-ai-plan
+              style={{
+                marginTop: '6px',
+                fontSize: '10px',
+                fontFamily: 'monospace',
+                background: 'rgba(255,255,255,0.04)',
+                padding: '4px 6px',
+                borderRadius: '4px',
+              }}
+            >
+              <div style={{ opacity: 0.6, marginBottom: '2px' }}>Plan ({aiPlan.length} steps)</div>
+              {aiPlan.map((step, i) => (
+                <div
+                  key={i}
+                  data-studio-ai-plan-step={i}
+                  data-studio-ai-plan-state={
+                    i < aiPlanIndex ? 'done' :
+                    i === aiPlanIndex ? 'active' : 'pending'
+                  }
+                  style={{
+                    padding: '2px 0',
+                    opacity: i < aiPlanIndex ? 0.5 : 1,
+                    color: i === aiPlanIndex ? '#ff4d6d' : 'inherit',
+                    fontWeight: i === aiPlanIndex ? 'bold' : 'normal',
+                  }}
+                >
+                  {i < aiPlanIndex ? '✓' : i === aiPlanIndex ? '▶' : ' '} {i + 1}. {step.label}
+                </div>
+              ))}
+            </div>
+          )}
           {aiLog.length > 0 && (
             <div
               data-studio-ai-log
