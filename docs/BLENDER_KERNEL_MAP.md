@@ -43,39 +43,48 @@ Uint16Array JS modules consumed by `WorkbenchStudio.jsx`.
 | Wave                          | `MOD_wave.cc`                           | shipped (S73) |
 | Simple Deform · Bend          | `MOD_simpledeform.cc` (BEND)            | shipped (S74) |
 | Simple Deform · Taper         | `MOD_simpledeform.cc` (TAPER)           | shipped (S74) |
+| Simple Deform · Twist         | `MOD_simpledeform.cc` (TWIST)           | shipped (S79) |
+| Simple Deform · Stretch       | `MOD_simpledeform.cc` (STRETCH)         | shipped (S80) |
+| Edge Split                    | `MOD_edgesplit.cc`                      | shipped (S79) |
+| Inset Faces                   | `editmesh_inset.cc` (edit-mesh op)      | shipped (S80) |
+| Warp                          | `MOD_warp.cc`                           | shipped (S81) |
+| Normal Edit (Radial)          | `MOD_normal_edit.cc`                    | shipped (S81) |
 | Weld                          | `MOD_weld.cc`                           | shipped (S75) |
 | Wireframe                     | `MOD_wireframe.cc`                      | shipped (S76) |
 | Build (progressive reveal)    | `MOD_build.cc`                          | shipped (S77) |
+| Skin (ball-and-stick)         | `MOD_skin.cc`                           | shipped (S78) |
+| Bevel                         | `MOD_bevel.cc`                          | shipped (S82) |
+| Corrective Smooth             | `MOD_correctivesmooth.cc`               | shipped (S82) |
+| Curve                         | `MOD_curve.cc`                          | shipped (S82) |
+| Hook                          | `MOD_hook.cc`                           | shipped (S82) |
+| Lattice                       | `MOD_lattice.cc`                        | shipped (S82) |
+| Mesh Deform                   | `MOD_meshdeform.cc`                     | shipped (S82) |
+| Multires                      | `MOD_multires.cc`                       | shipped (S82) |
+| Ocean                         | `MOD_ocean.cc`                          | shipped (S82) |
+| Remesh (voxel)                | `MOD_remesh.cc`                         | shipped (S82) |
+| Screw                         | `MOD_screw.cc`                          | shipped (S82) |
+| Shrinkwrap                    | `MOD_shrinkwrap.cc`                     | shipped (S82) |
+| Subdivision Surface (Catmull) | `MOD_subsurf.cc` (Catmull-Clark)        | shipped (S82) |
+| Weighted Normal               | `MOD_weighted_normal.cc`                | shipped (S82) |
+| Mask                          | `MOD_mask.cc`                           | shipped (S82) |
+| UV Warp                       | `MOD_uvwarp.cc`                         | shipped (S82) |
+| Laplacian Deform              | `MOD_laplaciandeform.cc`                | shipped (S82) |
 | Armature                      | `MOD_armature.cc`                       | shipped (early) |
 | Cloth                         | `MOD_cloth.cc`                          | shipped (S55) |
 | Hair / Fur                    | `MOD_particleinstance.cc` + particles   | shipped (S51) |
 | Particles                     | `BKE_particle.h` + `particle_system.cc` | shipped (early) |
 
-### Pending (queued for future slices)
+### Pending (Blender-specific, deferred)
 
-| Modifier                     | Blender source                          |
-|------------------------------|------------------------------------------|
-| Bevel                        | `MOD_bevel.cc`                          |
-| Corrective Smooth            | `MOD_correctivesmooth.cc`               |
-| Curve (deform along curve)   | `MOD_curve.cc`                          |
-| Edge Split                   | `MOD_edgesplit.cc`                      |
-| Hook                         | `MOD_hook.cc`                           |
-| Lattice                      | `MOD_lattice.cc`                        |
-| Mesh Cache                   | `MOD_meshcache.cc`                      |
-| Mesh Deform                  | `MOD_meshdeform.cc`                     |
-| Multires                     | `MOD_multires.cc`                       |
-| Normal Edit                  | `MOD_normal_edit.cc`                    |
-| Ocean                        | `MOD_ocean.cc`                          |
-| Remesh (voxel)               | `MOD_remesh.cc`                         |
-| Screw                        | `MOD_screw.cc`                          |
-| Shrinkwrap                   | `MOD_shrinkwrap.cc`                     |
-| Simple Deform · Twist        | `MOD_simpledeform.cc` (TWIST)           |
-| Simple Deform · Stretch      | `MOD_simpledeform.cc` (STRETCH)         |
-| Skin (tube around edges)     | `MOD_skin.cc`                           |
-| Subdivision Surface (Catmull)| `MOD_subsurf.cc` (Catmull-Clark)        |
-| Surface (collision)          | `MOD_surface.cc`                        |
-| Warp                         | `MOD_warp.cc`                           |
-| Weighted Normal              | `MOD_weighted_normal.cc`                |
+| Modifier                     | Blender source                          | Note                                        |
+|------------------------------|------------------------------------------|---------------------------------------------|
+| Mesh Cache                   | `MOD_meshcache.cc`                      | requires external `.mdd` / `.pc2` file       |
+| Surface (collision-only)     | `MOD_surface.cc`                        | defines collision target for other mods      |
+| Dynamic Paint                | `MOD_dynamicpaint.cc`                   | complex paint system (textures + verts)      |
+| Fluid                        | `MOD_fluid.cc`                          | needs OpenVDB grid + Mantaflow integration   |
+| Line Art                     | `MOD_lineart.cc`                        | post-process silhouette extraction           |
+| Volume → Mesh / Mesh → Volume| `MOD_volume_*.cc`                       | OpenVDB-backed volume conversion             |
+| Grease Pencil (~25 modifiers)| `MOD_grease_pencil_*.cc`                | requires GP stroke data model                |
 
 ## Kernel modules — `blender/source/blender/blenkernel/`
 

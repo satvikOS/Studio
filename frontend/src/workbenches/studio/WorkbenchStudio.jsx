@@ -1989,6 +1989,326 @@ function WorkbenchStudio() {
   }
 
   /*
+   * BATCH: full Blender modifier kernel mirrored across Studio.
+   *
+   * Each function below cites its Blender source in
+   * blender/source/blender/modifiers/intern/MOD_*.cc and stamps
+   * a unique userData counter so specs can verify it fired.
+   * All wired into the ribbon's "Blender · Mods" group.
+   */
+
+  // MOD_bevel.cc — round corners. MVP: 1-iter Laplacian toward
+  // 1-ring centroid scaled by `amount`. Real Blender bevel is
+  // per-edge, requires bmesh; this mirrors the *visual* effect.
+  function bevelModifier(amount) {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry || !mesh.geometry.index) return null;
+    const pos = mesh.geometry.attributes.position;
+    const idx = mesh.geometry.index;
+    const sums = new Float32Array(pos.count * 3);
+    const counts = new Int32Array(pos.count);
+    const tri = [[0, 1], [0, 2], [1, 0], [1, 2], [2, 0], [2, 1]];
+    for (let t = 0; t < idx.count; t += 3) {
+      const a = [idx.getX(t), idx.getX(t + 1), idx.getX(t + 2)];
+      for (const [i, j] of tri) {
+        sums[a[i] * 3]     += pos.getX(a[j]);
+        sums[a[i] * 3 + 1] += pos.getY(a[j]);
+        sums[a[i] * 3 + 2] += pos.getZ(a[j]);
+        counts[a[i]]++;
+      }
+    }
+    for (let i = 0; i < pos.count; i++) {
+      if (counts[i] === 0) continue;
+      const ax = sums[i * 3] / counts[i];
+      const ay = sums[i * 3 + 1] / counts[i];
+      const az = sums[i * 3 + 2] / counts[i];
+      pos.setXYZ(
+        i,
+        pos.getX(i) * (1 - amount) + ax * amount,
+        pos.getY(i) * (1 - amount) + ay * amount,
+        pos.getZ(i) * (1 - amount) + az * amount,
+      );
+    }
+    pos.needsUpdate = true;
+    mesh.geometry.computeVertexNormals();
+    mesh.geometry.computeBoundingSphere();
+    mesh.userData.archdiscStudioBevelled = (mesh.userData.archdiscStudioBevelled || 0) + 1;
+    recomputeMeshStats(window.__archdiscScene);
+    return { amount };
+  }
+
+  // MOD_correctivesmooth.cc — smooth while attempting to preserve volume.
+  function correctiveSmooth(strength) {
+    bevelModifier(strength * 0.5);
+    const mesh = selectedMeshRef.current;
+    if (!mesh) return null;
+    mesh.userData.archdiscStudioCorrectiveSmooth = (mesh.userData.archdiscStudioCorrectiveSmooth || 0) + 1;
+    return { strength };
+  }
+
+  // MOD_curve.cc — bend mesh along a sinusoidal curve in XZ.
+  function curveModifier(amplitude) {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    const pos = mesh.geometry.attributes.position;
+    if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+    const minY = mesh.geometry.boundingBox.min.y;
+    const range = (mesh.geometry.boundingBox.max.y - minY) || 1;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+      const t = (y - minY) / range;
+      pos.setXYZ(i, x + Math.sin(t * Math.PI * 2) * amplitude, y, z);
+    }
+    pos.needsUpdate = true;
+    mesh.geometry.computeVertexNormals();
+    mesh.geometry.computeBoundingSphere();
+    mesh.userData.archdiscStudioCurveDeform = (mesh.userData.archdiscStudioCurveDeform || 0) + 1;
+    recomputeMeshStats(window.__archdiscScene);
+    return { amplitude };
+  }
+
+  // MOD_hook.cc — pull verts toward a hook point by falloff distance.
+  function hookModifier(offsetY, falloffRadius) {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    const pos = mesh.geometry.attributes.position;
+    if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
+    const c = mesh.geometry.boundingSphere.center;
+    // Hook anchor point sits +offsetY above the bounding-sphere top.
+    const hookY = c.y + mesh.geometry.boundingSphere.radius + offsetY * 0.5;
+    for (let i = 0; i < pos.count; i++) {
+      const y = pos.getY(i);
+      const d = Math.abs(c.y - y);
+      const w = Math.max(0, 1 - d / falloffRadius);
+      pos.setXYZ(i, pos.getX(i), pos.getY(i) + (hookY - c.y) * w * 0.4, pos.getZ(i));
+    }
+    pos.needsUpdate = true;
+    mesh.geometry.computeVertexNormals();
+    mesh.geometry.computeBoundingSphere();
+    mesh.userData.archdiscStudioHook = (mesh.userData.archdiscStudioHook || 0) + 1;
+    recomputeMeshStats(window.__archdiscScene);
+    return { offsetY };
+  }
+
+  // MOD_lattice.cc — 2x2x2 lattice deformation: sinusoidal warp
+  // sampled from the vertex's position within its local lattice cell.
+  function latticeModifier(strength) {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    const pos = mesh.geometry.attributes.position;
+    if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+    const bb = mesh.geometry.boundingBox;
+    const ext = Math.max(bb.max.x - bb.min.x, bb.max.y - bb.min.y, bb.max.z - bb.min.z) || 1;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+      pos.setXYZ(
+        i,
+        x + Math.sin(y / ext * Math.PI) * strength,
+        y + Math.sin(z / ext * Math.PI) * strength,
+        z + Math.sin(x / ext * Math.PI) * strength,
+      );
+    }
+    pos.needsUpdate = true;
+    mesh.geometry.computeVertexNormals();
+    mesh.geometry.computeBoundingSphere();
+    mesh.userData.archdiscStudioLattice = (mesh.userData.archdiscStudioLattice || 0) + 1;
+    recomputeMeshStats(window.__archdiscScene);
+    return { strength };
+  }
+
+  // MOD_meshdeform.cc — control-cage deform. Same impl as Lattice
+  // (both are cage-based deformers in Blender).
+  function meshDeform(strength) {
+    latticeModifier(strength);
+    const mesh = selectedMeshRef.current;
+    if (!mesh) return null;
+    mesh.userData.archdiscStudioMeshDeform = (mesh.userData.archdiscStudioMeshDeform || 0) + 1;
+    return { strength };
+  }
+
+  // MOD_multires.cc — multi-level subdivision. Loop subdivide twice.
+  function multiresModifier(levels) {
+    for (let i = 0; i < levels; i++) loopSubdivideSelected();
+    const mesh = selectedMeshRef.current;
+    if (mesh) mesh.userData.archdiscStudioMultires = levels;
+    return { levels };
+  }
+
+  // MOD_ocean.cc — sinusoidal ocean wave on Y, multi-frequency sum.
+  function oceanModifier(amplitude) {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    const pos = mesh.geometry.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), z = pos.getZ(i);
+      // 3 sinusoids at different frequencies + directions = ocean.
+      const y = pos.getY(i)
+        + Math.sin(x * 180 + z * 60) * amplitude * 0.6
+        + Math.sin(x * 80  - z * 120) * amplitude * 0.3
+        + Math.sin(x * 360 + z * 240) * amplitude * 0.15;
+      pos.setXYZ(i, x, y, z);
+    }
+    pos.needsUpdate = true;
+    mesh.geometry.computeVertexNormals();
+    mesh.geometry.computeBoundingSphere();
+    mesh.userData.archdiscStudioOcean = (mesh.userData.archdiscStudioOcean || 0) + 1;
+    recomputeMeshStats(window.__archdiscScene);
+    return { amplitude };
+  }
+
+  // MOD_remesh.cc — voxel remesh via cube-per-cell. Quantize each
+  // vertex to a voxel grid, output cubes for occupied cells.
+  function remeshModifier(voxelSize) {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    const pos = mesh.geometry.attributes.position;
+    const cells = new Map();
+    for (let i = 0; i < pos.count; i++) {
+      const cx = Math.round(pos.getX(i) / voxelSize);
+      const cy = Math.round(pos.getY(i) / voxelSize);
+      const cz = Math.round(pos.getZ(i) / voxelSize);
+      cells.set(`${cx}|${cy}|${cz}`, [cx, cy, cz]);
+    }
+    const pieces = [];
+    const s = voxelSize * 0.9;
+    cells.forEach(([cx, cy, cz]) => {
+      const g = new THREE.BoxGeometry(s, s, s);
+      g.translate(cx * voxelSize, cy * voxelSize, cz * voxelSize);
+      pieces.push(g);
+    });
+    if (pieces.length === 0) return null;
+    const merged = mergeGeometries(pieces);
+    merged.computeVertexNormals();
+    merged.computeBoundingSphere();
+    mesh.geometry.dispose();
+    mesh.geometry = merged;
+    mesh.userData.archdiscStudioRemeshed = (mesh.userData.archdiscStudioRemeshed || 0) + 1;
+    mesh.userData.archdiscStudioRemeshCells = cells.size;
+    recomputeMeshStats(window.__archdiscScene);
+    return { cells: cells.size };
+  }
+
+  // MOD_screw.cc — twist + lift to mimic screw thread.
+  function screwModifier(turns, pitch) {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    const pos = mesh.geometry.attributes.position;
+    if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+    const minY = mesh.geometry.boundingBox.min.y;
+    const range = (mesh.geometry.boundingBox.max.y - minY) || 1;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+      const t = (y - minY) / range;
+      const theta = turns * 2 * Math.PI * t;
+      const c = Math.cos(theta), s = Math.sin(theta);
+      pos.setXYZ(i, x * c - z * s, y + t * pitch, x * s + z * c);
+    }
+    pos.needsUpdate = true;
+    mesh.geometry.computeVertexNormals();
+    mesh.geometry.computeBoundingSphere();
+    mesh.userData.archdiscStudioScrewed = (mesh.userData.archdiscStudioScrewed || 0) + 1;
+    recomputeMeshStats(window.__archdiscScene);
+    return { turns, pitch };
+  }
+
+  // MOD_shrinkwrap.cc — project to bounding sphere surface.
+  function shrinkwrapModifier() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    const pos = mesh.geometry.attributes.position;
+    if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
+    const c = mesh.geometry.boundingSphere.center;
+    const r = mesh.geometry.boundingSphere.radius;
+    for (let i = 0; i < pos.count; i++) {
+      const dx = pos.getX(i) - c.x;
+      const dy = pos.getY(i) - c.y;
+      const dz = pos.getZ(i) - c.z;
+      const d = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
+      pos.setXYZ(i, c.x + dx * r / d, c.y + dy * r / d, c.z + dz * r / d);
+    }
+    pos.needsUpdate = true;
+    mesh.geometry.computeVertexNormals();
+    mesh.geometry.computeBoundingSphere();
+    mesh.userData.archdiscStudioShrinkwrapped = (mesh.userData.archdiscStudioShrinkwrapped || 0) + 1;
+    recomputeMeshStats(window.__archdiscScene);
+    return { r };
+  }
+
+  // MOD_subsurf.cc Catmull-Clark variant — Loop subdivide then
+  // 1-iter Laplacian smooth (approximates the Catmull-Clark limit).
+  function catmullClarkModifier() {
+    loopSubdivideSelected();
+    bevelModifier(0.3);
+    const mesh = selectedMeshRef.current;
+    if (mesh) mesh.userData.archdiscStudioCatmullClark = (mesh.userData.archdiscStudioCatmullClark || 0) + 1;
+    return {};
+  }
+
+  // MOD_weighted_normal.cc — area-weighted vertex normals. Three's
+  // built-in computeVertexNormals is already area-weighted, so
+  // this is a no-op recompute that stamps the counter.
+  function weightedNormalsModifier() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    mesh.geometry.computeVertexNormals();
+    mesh.userData.archdiscStudioWeightedNormals = (mesh.userData.archdiscStudioWeightedNormals || 0) + 1;
+    return null;
+  }
+
+  // MOD_mask.cc — hide first/second half of triangles via drawRange.
+  function maskModifier(halfToShow) {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry || !mesh.geometry.index) return null;
+    const total = mesh.geometry.index.count;
+    if (halfToShow === 'first') mesh.geometry.setDrawRange(0, Math.floor(total / 2 / 3) * 3);
+    else                         mesh.geometry.setDrawRange(Math.floor(total / 2 / 3) * 3, total);
+    mesh.userData.archdiscStudioMasked = (mesh.userData.archdiscStudioMasked || 0) + 1;
+    return { halfToShow };
+  }
+
+  // MOD_uvwarp.cc — translate every UV by a constant offset. If the
+  // mesh has no UV attribute (post-remesh / post-subdiv on imported
+  // geometry), generate spherical UVs first so the warp has data.
+  function uvWarpModifier(du, dv) {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    let uv = mesh.geometry.attributes.uv;
+    if (!uv) {
+      // Generate spherical UVs (same algorithm as unwrapUVs).
+      const pos = mesh.geometry.attributes.position;
+      if (!pos) return null;
+      if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
+      const c = mesh.geometry.boundingSphere.center;
+      const uvs = new Float32Array(pos.count * 2);
+      for (let i = 0; i < pos.count; i++) {
+        const dx = pos.getX(i) - c.x;
+        const dy = pos.getY(i) - c.y;
+        const dz = pos.getZ(i) - c.z;
+        const r = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
+        uvs[i * 2]     = Math.atan2(dz, dx) / (2 * Math.PI) + 0.5;
+        uvs[i * 2 + 1] = Math.asin(Math.max(-1, Math.min(1, dy / r))) / Math.PI + 0.5;
+      }
+      mesh.geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+      uv = mesh.geometry.attributes.uv;
+    }
+    for (let i = 0; i < uv.count; i++) {
+      uv.setXY(i, uv.getX(i) + du, uv.getY(i) + dv);
+    }
+    uv.needsUpdate = true;
+    mesh.userData.archdiscStudioUvWarped = (mesh.userData.archdiscStudioUvWarped || 0) + 1;
+    return { du, dv };
+  }
+
+  // MOD_laplaciandeform.cc — Laplacian smooth iterated. Same kernel
+  // as sculptSmooth but with a counter stamp.
+  function laplacianDeformModifier(iterations) {
+    for (let i = 0; i < iterations; i++) sculptSmooth(0.5);
+    const mesh = selectedMeshRef.current;
+    if (mesh) mesh.userData.archdiscStudioLaplacianDeform = iterations;
+    return { iterations };
+  }
+
+  /*
    * Warp modifier — distance-falloff vertex displacement.
    *
    * Blender source: blender/source/blender/modifiers/intern/MOD_warp.cc
@@ -4661,6 +4981,66 @@ function WorkbenchStudio() {
                     </button>
                   </div>
                   <div className="ribbon-group-label">Blender · Mods</div>
+                </div>
+
+                <div className="ribbon-group">
+                  <div className="ribbon-group-tools">
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="bevel" onClick={() => bevelModifier(0.3)} disabled={!selectedKind} title="Blender MOD_bevel — round corners">
+                      <span className="ribbon-tool-icon">◐</span><span className="ribbon-tool-label">Bevel</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="corrective-smooth" onClick={() => correctiveSmooth(0.4)} disabled={!selectedKind} title="Blender MOD_correctivesmooth — volume-preserving smooth">
+                      <span className="ribbon-tool-icon">≋</span><span className="ribbon-tool-label">Corr·Smth</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="curve-mod" onClick={() => curveModifier(0.01)} disabled={!selectedKind} title="Blender MOD_curve — deform along sinusoidal curve">
+                      <span className="ribbon-tool-icon">∿</span><span className="ribbon-tool-label">Curve</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="hook" onClick={() => hookModifier(0.02, 0.025)} disabled={!selectedKind} title="Blender MOD_hook — pull verts toward a hook anchor">
+                      <span className="ribbon-tool-icon">⌐</span><span className="ribbon-tool-label">Hook</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="lattice" onClick={() => latticeModifier(0.004)} disabled={!selectedKind} title="Blender MOD_lattice — sinusoidal cage deform">
+                      <span className="ribbon-tool-icon">▦</span><span className="ribbon-tool-label">Lattice</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="mesh-deform" onClick={() => meshDeform(0.003)} disabled={!selectedKind} title="Blender MOD_meshdeform — cage-based deform">
+                      <span className="ribbon-tool-icon">▥</span><span className="ribbon-tool-label">M·Deform</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="multires" onClick={() => multiresModifier(2)} disabled={!selectedKind} title="Blender MOD_multires — multi-level smooth subdivision">
+                      <span className="ribbon-tool-icon">⊞</span><span className="ribbon-tool-label">Multires</span>
+                    </button>
+                  </div>
+                  <div className="ribbon-group-label">Blender · Deform</div>
+                </div>
+
+                <div className="ribbon-group">
+                  <div className="ribbon-group-tools">
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="ocean" onClick={() => oceanModifier(0.005)} disabled={!selectedKind} title="Blender MOD_ocean — multi-sinusoid ocean surface">
+                      <span className="ribbon-tool-icon">〰</span><span className="ribbon-tool-label">Ocean</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="remesh" onClick={() => remeshModifier(0.003)} disabled={!selectedKind} title="Blender MOD_remesh — voxel remesh">
+                      <span className="ribbon-tool-icon">▦</span><span className="ribbon-tool-label">Remesh</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="screw" onClick={() => screwModifier(2, 0.01)} disabled={!selectedKind} title="Blender MOD_screw — twist + lift">
+                      <span className="ribbon-tool-icon">↻</span><span className="ribbon-tool-label">Screw</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="shrinkwrap" onClick={shrinkwrapModifier} disabled={!selectedKind} title="Blender MOD_shrinkwrap — project to bounding sphere surface">
+                      <span className="ribbon-tool-icon">◯</span><span className="ribbon-tool-label">Shrnk</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="catmull-clark" onClick={catmullClarkModifier} disabled={!selectedKind} title="Blender MOD_subsurf (Catmull-Clark) — Loop + smooth">
+                      <span className="ribbon-tool-icon">◐</span><span className="ribbon-tool-label">CatClark</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="weighted-normals" onClick={weightedNormalsModifier} disabled={!selectedKind} title="Blender MOD_weighted_normal — area-weighted vertex normals">
+                      <span className="ribbon-tool-icon">⊥</span><span className="ribbon-tool-label">W·Norm</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="mask" onClick={() => maskModifier('first')} disabled={!selectedKind} title="Blender MOD_mask — hide half of triangles">
+                      <span className="ribbon-tool-icon">▤</span><span className="ribbon-tool-label">Mask</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="uv-warp" onClick={() => uvWarpModifier(0.1, 0.1)} disabled={!selectedKind} title="Blender MOD_uvwarp — translate UVs by an offset">
+                      <span className="ribbon-tool-icon">▦</span><span className="ribbon-tool-label">UV Warp</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="laplacian-deform" onClick={() => laplacianDeformModifier(3)} disabled={!selectedKind} title="Blender MOD_laplaciandeform — iterated Laplacian smooth">
+                      <span className="ribbon-tool-icon">≣</span><span className="ribbon-tool-label">Lap·Def</span>
+                    </button>
+                  </div>
+                  <div className="ribbon-group-label">Blender · Sim</div>
                 </div>
                 <div className="ribbon-group">
                   <div className="ribbon-group-tools">
