@@ -172,6 +172,9 @@ function WorkbenchStudio() {
   const [text3dSize, setText3dSize] = useState(0.012);
   const fontRef = useRef(null);
   const [fontReady, setFontReady] = useState(false);
+  // Particles / VFX — count + size for one-shot particle-cloud spawns.
+  const [particleCount, setParticleCount] = useState(800);
+  const [particleSize, setParticleSize] = useState(0.0015);
 
   function recomputeMeshStats(scene) {
     let v = 0;
@@ -551,6 +554,70 @@ function WorkbenchStudio() {
   }
 
   /*
+   * Particles — a one-shot THREE.Points spawn that drops a colored
+   * particle cloud (uniformly distributed inside a sphere, warm-hue
+   * vertex colors). Lives in the scene as a Studio primitive so it
+   * counts in Mesh stats, can be Cleared / Deleted-Last, and rides
+   * the Animation rAF loop as a unit (point clouds rotate just like
+   * meshes when their parent transform spins).
+   */
+  function spawnParticles() {
+    const scene = window.__archdiscScene;
+    if (!scene) return;
+    const n = Math.max(1, Math.floor(particleCount));
+    const positions = new Float32Array(n * 3);
+    const colors    = new Float32Array(n * 3);
+    const R = PRIMITIVE_SIZE * 0.8;
+    const tempColor = new THREE.Color();
+    for (let i = 0; i < n; i++) {
+      // Uniform-in-volume sample inside a sphere via inverse CDF.
+      const u = Math.random(), v = Math.random();
+      const theta = u * 2 * Math.PI;
+      const phi = Math.acos(2 * v - 1);
+      const r = R * Math.cbrt(Math.random());
+      positions[i * 3]     = r * Math.sin(phi) * Math.cos(theta);
+      positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+      positions[i * 3 + 2] = r * Math.cos(phi);
+      // Warm palette (red/orange/gold).
+      const hue = 0.03 + Math.random() * 0.13;
+      tempColor.setHSL(hue, 0.9, 0.45 + Math.random() * 0.35);
+      colors[i * 3]     = tempColor.r;
+      colors[i * 3 + 1] = tempColor.g;
+      colors[i * 3 + 2] = tempColor.b;
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color',    new THREE.BufferAttribute(colors, 3));
+    const material = new THREE.PointsMaterial({
+      size: particleSize,
+      vertexColors: true,
+      sizeAttenuation: true,
+      transparent: true,
+      opacity: 0.92,
+      depthWrite: false,
+    });
+    const points = new THREE.Points(geometry, material);
+    points.userData.archdiscStudioPrimitive = true;
+    points.userData.archdiscStudioPrimitiveKind = 'particles';
+    points.name = `studio-primitive-particles-${primitiveCount}`;
+
+    const cols = 4;
+    const i = primitiveCount;
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    points.position.set(
+      (col - (cols - 1) / 2) * PRIMITIVE_SIZE * 1.9,
+      0,
+      row * PRIMITIVE_SIZE * 1.9,
+    );
+
+    scene.add(points);
+    primitiveStackRef.current.push(points);
+    setPrimitiveCount(c => c + 1);
+    recomputeMeshStats(scene);
+  }
+
+  /*
    * Sculpt brushes — procedural full-mesh deformations applied to the
    * selected mesh's geometry. These are the digital-clay primitives
    * Studio's Sculpting discipline starts from; per-vertex brushable
@@ -848,6 +915,55 @@ function WorkbenchStudio() {
             </button>
           </div>
         )}
+
+        <div className="property-section" data-studio-section="particles">
+          <h3 className="property-header">Particles / VFX</h3>
+          <div className="property-row">
+            <span className="property-label">Count</span>
+            <input
+              type="range"
+              min="50"
+              max="5000"
+              step="50"
+              data-studio-particles="count"
+              value={particleCount}
+              onChange={e => setParticleCount(Number(e.target.value))}
+              style={{ flex: 1 }}
+            />
+            <span
+              data-studio-particles-readout="count"
+              style={{ marginLeft: '6px', fontSize: '10px', fontFamily: 'monospace', minWidth: '48px', textAlign: 'right' }}
+            >
+              {particleCount}
+            </span>
+          </div>
+          <div className="property-row">
+            <span className="property-label">Size</span>
+            <input
+              type="range"
+              min="0.0005"
+              max="0.005"
+              step="0.0001"
+              data-studio-particles="size"
+              value={particleSize}
+              onChange={e => setParticleSize(Number(e.target.value))}
+              style={{ flex: 1 }}
+            />
+            <span
+              data-studio-particles-readout="size"
+              style={{ marginLeft: '6px', fontSize: '10px', fontFamily: 'monospace', minWidth: '48px', textAlign: 'right' }}
+            >
+              {(particleSize * 1000).toFixed(2)} mm
+            </span>
+          </div>
+          <button
+            className="property-button"
+            data-studio-action="spawn-particles"
+            onClick={spawnParticles}
+          >
+            Spawn Particle Cloud
+          </button>
+        </div>
 
         <div className="property-section" data-studio-section="text3d">
           <h3 className="property-header">
