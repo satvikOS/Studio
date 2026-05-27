@@ -198,6 +198,9 @@ function WorkbenchStudio() {
   // geometry into N positioned + scaled + rotated instances.
   const [instanceCount, setInstanceCount]   = useState(500);
   const [instanceRadius, setInstanceRadius] = useState(0.08);
+  // Compositing — post-process the last captured render thumbnail
+  // through a canvas filter and append the result as a new thumbnail.
+  const [compositeFilter, setCompositeFilter] = useState('grayscale(100%)');
 
   function recomputeMeshStats(scene) {
     let v = 0;
@@ -574,6 +577,40 @@ function WorkbenchStudio() {
     primitiveStackRef.current.push(mesh);
     setPrimitiveCount(c => c + 1);
     recomputeMeshStats(scene);
+  }
+
+  /*
+   * Compositing — take the most recent Render thumbnail, redraw it
+   * through a CSS-filter-style canvas filter (grayscale/sepia/invert/
+   * blur/contrast), append the filtered result as a new thumbnail
+   * with a "+filter" annotation in its engine label. Lets the user
+   * non-destructively iterate on color grades.
+   */
+  function postProcessLastRender() {
+    const lastIdx = renders.length - 1;
+    if (lastIdx < 0) return;
+    const src = renders[lastIdx];
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width  = img.width || 512;
+      canvas.height = img.height || 512;
+      const ctx = canvas.getContext('2d');
+      // Canvas 2D filter is supported in Chromium (Electron); apply
+      // identity if the browser doesn't support it (graceful no-op).
+      try { ctx.filter = compositeFilter; } catch (_) { /* identity */ }
+      ctx.drawImage(img, 0, 0);
+      const filteredDataUrl = canvas.toDataURL('image/png');
+      setRenders(rs => rs.concat([{
+        dataUrl: filteredDataUrl,
+        ts:      new Date().toLocaleTimeString(),
+        samples: src.samples,
+        engine:  `${src.engine}+${compositeFilter}`,
+        w:       canvas.width,
+        h:       canvas.height,
+      }]));
+    };
+    img.src = src.dataUrl;
   }
 
   /*
@@ -1464,6 +1501,35 @@ function WorkbenchStudio() {
             </button>
           </div>
         )}
+
+        <div className="property-section" data-studio-section="compositing">
+          <h3 className="property-header">Compositing</h3>
+          <div className="property-row">
+            <span className="property-label">Filter</span>
+            <select
+              className="property-input"
+              data-studio-compositing="filter"
+              value={compositeFilter}
+              onChange={e => setCompositeFilter(e.target.value)}
+            >
+              <option value="grayscale(100%)">Grayscale</option>
+              <option value="sepia(100%)">Sepia</option>
+              <option value="invert(100%)">Invert</option>
+              <option value="blur(3px)">Blur (3 px)</option>
+              <option value="contrast(180%)">Contrast 180%</option>
+              <option value="hue-rotate(120deg)">Hue Rotate 120°</option>
+              <option value="saturate(2.5)">Saturate 2.5×</option>
+            </select>
+          </div>
+          <button
+            className="property-button"
+            data-studio-action="post-process"
+            onClick={postProcessLastRender}
+            disabled={renders.length === 0}
+          >
+            Post-Process Last Render
+          </button>
+        </div>
 
         <div className="property-section" data-studio-section="instancing">
           <h3 className="property-header">Instancing · Swarm</h3>
