@@ -175,6 +175,9 @@ function WorkbenchStudio() {
   // Particles / VFX — count + size for one-shot particle-cloud spawns.
   const [particleCount, setParticleCount] = useState(800);
   const [particleSize, setParticleSize] = useState(0.0015);
+  // ArchViz — floor-plan shape + extrude height for one-click building blocks.
+  const [floorShape, setFloorShape] = useState('rectangle');
+  const [wallHeight, setWallHeight] = useState(0.03);
 
   function recomputeMeshStats(scene) {
     let v = 0;
@@ -554,6 +557,86 @@ function WorkbenchStudio() {
   }
 
   /*
+   * ArchViz — extruded floor-plan footprints (rectangle / L-shape /
+   * U-shape) — pick a shape + height, click Extrude → one building
+   * block lands as a Studio primitive. Same downstream pipeline
+   * (selection, material, sculpt) applies.
+   */
+  function buildFloorPlanShape(kind) {
+    const S = PRIMITIVE_SIZE * 1.6;
+    const shape = new THREE.Shape();
+    if (kind === 'L-shape') {
+      shape.moveTo(0, 0);
+      shape.lineTo(S, 0);
+      shape.lineTo(S, S * 0.4);
+      shape.lineTo(S * 0.4, S * 0.4);
+      shape.lineTo(S * 0.4, S);
+      shape.lineTo(0, S);
+      shape.lineTo(0, 0);
+    } else if (kind === 'U-shape') {
+      shape.moveTo(0, 0);
+      shape.lineTo(S, 0);
+      shape.lineTo(S, S);
+      shape.lineTo(S * 0.7, S);
+      shape.lineTo(S * 0.7, S * 0.4);
+      shape.lineTo(S * 0.3, S * 0.4);
+      shape.lineTo(S * 0.3, S);
+      shape.lineTo(0, S);
+      shape.lineTo(0, 0);
+    } else {
+      // rectangle (default)
+      shape.moveTo(0, 0);
+      shape.lineTo(S, 0);
+      shape.lineTo(S, S * 0.6);
+      shape.lineTo(0, S * 0.6);
+      shape.lineTo(0, 0);
+    }
+    return shape;
+  }
+
+  function extrudeFloorPlan() {
+    const scene = window.__archdiscScene;
+    if (!scene) return;
+    const shape = buildFloorPlanShape(floorShape);
+    const geometry = new THREE.ExtrudeGeometry(shape, {
+      depth: wallHeight,
+      bevelEnabled: false,
+      steps: 1,
+    });
+    // ExtrudeGeometry extrudes along +Z; rotate -π/2 around X so the
+    // extrusion axis becomes scene-Y (up).
+    geometry.rotateX(-Math.PI / 2);
+    geometry.center();
+    geometry.computeVertexNormals();
+    const material = new THREE.MeshStandardMaterial({
+      color: 0xc4b9a8,
+      metalness: 0.0,
+      roughness: 0.85,
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.userData.archdiscStudioPrimitive = true;
+    mesh.userData.archdiscStudioPrimitiveKind = `floor-plan-${floorShape}`;
+    mesh.name = `studio-primitive-floorplan-${floorShape}-${primitiveCount}`;
+
+    const cols = 4;
+    const i = primitiveCount;
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    mesh.position.set(
+      (col - (cols - 1) / 2) * PRIMITIVE_SIZE * 1.9,
+      0,
+      row * PRIMITIVE_SIZE * 1.9,
+    );
+
+    scene.add(mesh);
+    primitiveStackRef.current.push(mesh);
+    setPrimitiveCount(c => c + 1);
+    recomputeMeshStats(scene);
+  }
+
+  /*
    * Particles — a one-shot THREE.Points spawn that drops a colored
    * particle cloud (uniformly distributed inside a sphere, warm-hue
    * vertex colors). Lives in the scene as a Studio primitive so it
@@ -915,6 +998,49 @@ function WorkbenchStudio() {
             </button>
           </div>
         )}
+
+        <div className="property-section" data-studio-section="archviz">
+          <h3 className="property-header">ArchViz · Floor Plan</h3>
+          <div className="property-row">
+            <span className="property-label">Shape</span>
+            <select
+              className="property-input"
+              data-studio-archviz="shape"
+              value={floorShape}
+              onChange={e => setFloorShape(e.target.value)}
+            >
+              <option value="rectangle">Rectangle</option>
+              <option value="L-shape">L-Shape</option>
+              <option value="U-shape">U-Shape</option>
+            </select>
+          </div>
+          <div className="property-row">
+            <span className="property-label">Height</span>
+            <input
+              type="range"
+              min="0.005"
+              max="0.06"
+              step="0.001"
+              data-studio-archviz="height"
+              value={wallHeight}
+              onChange={e => setWallHeight(Number(e.target.value))}
+              style={{ flex: 1 }}
+            />
+            <span
+              data-studio-archviz-readout="height"
+              style={{ marginLeft: '6px', fontSize: '10px', fontFamily: 'monospace', minWidth: '52px', textAlign: 'right' }}
+            >
+              {(wallHeight * 1000).toFixed(1)} mm
+            </span>
+          </div>
+          <button
+            className="property-button"
+            data-studio-action="extrude-floorplan"
+            onClick={extrudeFloorPlan}
+          >
+            Extrude Floor Plan
+          </button>
+        </div>
 
         <div className="property-section" data-studio-section="particles">
           <h3 className="property-header">Particles / VFX</h3>
