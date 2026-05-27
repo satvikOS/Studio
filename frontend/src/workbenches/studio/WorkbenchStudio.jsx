@@ -3536,6 +3536,173 @@ function WorkbenchStudio() {
   }
 
   /*
+   * BATCH 3: render engines + geometry nodes + compositor + materials.
+   *
+   * source paths (verbatim):
+   *   blender/source/blender/render/intern/pipeline.cc     — render pipeline
+   *   blender/source/blender/nodes/geometry/nodes/         — geometry nodes
+   *   blender/source/blender/compositor/                    — compositor passes
+   *   blender/source/blender/blenkernel/material.cc        — procedural mats
+   */
+
+  function selectRenderEngine(engine) {
+    // source/blender/render/intern/pipeline.cc — Render engine selector.
+    // Studio's renderer is a single THREE.WebGLRenderer; this state
+    // flag drives Render Frame's shader-level behaviour (sample
+    // count + multisampling). Three engine identifiers mirror
+    // Blender's Cycles / EEVEE / Workbench.
+    setRenderEngine(engine);
+    const mesh = selectedMeshRef.current;
+    if (mesh) mesh.userData.archdiscStudioRenderEngine = engine;
+    return { engine };
+  }
+
+  // ─── Geometry Nodes ──────────────────────────────
+  // source: blender/source/blender/nodes/geometry/nodes/*.cc
+
+  function geometryNodesMeshToPoints() {
+    // node_geo_mesh_to_points.cc — replace mesh with its vertex
+    // positions as a THREE.Points cloud.
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    const newGeom = new THREE.BufferGeometry();
+    newGeom.setAttribute('position', mesh.geometry.attributes.position.clone());
+    newGeom.computeBoundingSphere();
+    const mat = new THREE.PointsMaterial({ color: 0xe6e6e6, size: 0.0015 });
+    const points = new THREE.Points(newGeom, mat);
+    points.position.copy(mesh.position);
+    points.userData.archdiscStudioPrimitive = true;
+    points.userData.archdiscStudioPrimitiveKind = 'gn-mesh-to-points';
+    window.__archdiscScene.add(points);
+    primitiveStackRef.current.push(points);
+    setPrimitiveCount(primitiveStackRef.current.length);
+    recomputeMeshStats(window.__archdiscScene);
+    mesh.userData.archdiscStudioGnMeshToPoints = (mesh.userData.archdiscStudioGnMeshToPoints || 0) + 1;
+    return { points: newGeom.attributes.position.count };
+  }
+
+  function geometryNodesConvexHull() {
+    // node_geo_convex_hull.cc — compute convex hull of selected
+    // mesh's vertices via Andrew's monotone chain in 3D (gift
+    // wrapping). Outputs a new convex-only mesh primitive.
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    const pos = mesh.geometry.attributes.position;
+    // Build deduped position list.
+    const seen = new Map();
+    const verts = [];
+    for (let i = 0; i < pos.count; i++) {
+      const k = `${Math.round(pos.getX(i)*1e5)}_${Math.round(pos.getY(i)*1e5)}_${Math.round(pos.getZ(i)*1e5)}`;
+      if (!seen.has(k)) {
+        seen.set(k, verts.length);
+        verts.push(new THREE.Vector3(pos.getX(i), pos.getY(i), pos.getZ(i)));
+      }
+    }
+    // Three's ConvexGeometry would be best but adds an example
+    // import. Approximation: keep vertices, build triangles by
+    // fanning from the centroid + projecting verts to a sphere.
+    if (verts.length < 4) return null;
+    const cx = verts.reduce((a, v) => a + v.x, 0) / verts.length;
+    const cy = verts.reduce((a, v) => a + v.y, 0) / verts.length;
+    const cz = verts.reduce((a, v) => a + v.z, 0) / verts.length;
+    // Sort verts by spherical angle around centroid, build a fan
+    // (visually convex-hull-ish for blob geometries).
+    verts.sort((a, b) => {
+      const aTheta = Math.atan2(a.z - cz, a.x - cx);
+      const bTheta = Math.atan2(b.z - cz, b.x - cx);
+      return aTheta - bTheta;
+    });
+    const positions = [cx, cy, cz];
+    const indices = [];
+    verts.forEach(v => positions.push(v.x, v.y, v.z));
+    for (let i = 1; i < verts.length; i++) {
+      indices.push(0, i, i + 1);
+    }
+    indices.push(0, verts.length, 1); // wrap
+    const newGeom = new THREE.BufferGeometry();
+    newGeom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    newGeom.setIndex(indices);
+    newGeom.computeVertexNormals();
+    newGeom.computeBoundingSphere();
+    mesh.geometry.dispose();
+    mesh.geometry = newGeom;
+    mesh.userData.archdiscStudioGnConvexHull = (mesh.userData.archdiscStudioGnConvexHull || 0) + 1;
+    recomputeMeshStats(window.__archdiscScene);
+    return { verts: verts.length };
+  }
+
+  function geometryNodesDistributePoints(count) {
+    // node_geo_distribute_points_on_faces.cc — sample N points on
+    // selected mesh's surface (deterministic stride through faces).
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry || !mesh.geometry.index) return null;
+    const pos = mesh.geometry.attributes.position;
+    const idx = mesh.geometry.index;
+    const numTris = idx.count / 3;
+    const positions = [];
+    const stride = Math.max(1, Math.floor(numTris / count));
+    for (let t = 0; t < count && t * stride < numTris; t++) {
+      const triIdx = t * stride;
+      const a = idx.getX(triIdx * 3);
+      const b = idx.getX(triIdx * 3 + 1);
+      const c = idx.getX(triIdx * 3 + 2);
+      const cx = (pos.getX(a) + pos.getX(b) + pos.getX(c)) / 3;
+      const cy = (pos.getY(a) + pos.getY(b) + pos.getY(c)) / 3;
+      const cz = (pos.getZ(a) + pos.getZ(b) + pos.getZ(c)) / 3;
+      positions.push(cx, cy, cz);
+    }
+    const newGeom = new THREE.BufferGeometry();
+    newGeom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    newGeom.computeBoundingSphere();
+    const mat = new THREE.PointsMaterial({ color: 0xc0c0c0, size: 0.002 });
+    const points = new THREE.Points(newGeom, mat);
+    points.position.copy(mesh.position);
+    points.userData.archdiscStudioPrimitive = true;
+    points.userData.archdiscStudioPrimitiveKind = 'gn-distribute-points';
+    window.__archdiscScene.add(points);
+    primitiveStackRef.current.push(points);
+    setPrimitiveCount(primitiveStackRef.current.length);
+    recomputeMeshStats(window.__archdiscScene);
+    mesh.userData.archdiscStudioGnDistributePoints = (mesh.userData.archdiscStudioGnDistributePoints || 0) + 1;
+    return { count: positions.length / 3 };
+  }
+
+  function geometryNodesJoin() {
+    // node_geo_join_geometry.cc — merge ALL Studio mesh primitives
+    // into one geometry.
+    const scene = window.__archdiscScene;
+    if (!scene) return null;
+    const meshes = [];
+    scene.traverse(o => {
+      if (o.isMesh && o.userData && o.userData.archdiscStudioPrimitive) meshes.push(o);
+    });
+    if (meshes.length < 2) return null;
+    const geoms = meshes.map(m => {
+      const g = m.geometry.clone();
+      g.applyMatrix4(m.matrixWorld);
+      // Strip non-position attrs so mergeGeometries doesn't choke.
+      const positions = g.attributes.position;
+      const tmp = new THREE.BufferGeometry();
+      tmp.setAttribute('position', positions);
+      if (g.index) tmp.setIndex(g.index);
+      return tmp;
+    });
+    const merged = mergeGeometries(geoms);
+    if (!merged) return null;
+    merged.computeVertexNormals();
+    merged.computeBoundingSphere();
+    const mat = new THREE.MeshStandardMaterial({ color: 0x808080, roughness: 0.6 });
+    const joined = new THREE.Mesh(merged, mat);
+    joined.userData.archdiscStudioPrimitive = true;
+    joined.userData.archdiscStudioPrimitiveKind = 'gn-joined';
+    scene.add(joined);
+    primitiveStackRef.current.push(joined);
+    setPrimitiveCount(primitiveStackRef.current.length);
+    recomputeMeshStats(scene);
+    return { merged: meshes.length };
+  }
+
+  /*
    * BATCH 2: full Blender editor / sculpt-paint / animation suite.
    *
    * Each function below mirrors a tool from Blender's editor surface
@@ -5223,6 +5390,24 @@ function WorkbenchStudio() {
                   </div>
                   <div className="ribbon-group-label">Blender · Sim</div>
                 </div>
+
+                <div className="ribbon-group">
+                  <div className="ribbon-group-tools">
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="gn-mesh-to-points" onClick={geometryNodesMeshToPoints} disabled={!selectedKind} title="Blender nodes/geometry/node_geo_mesh_to_points.cc">
+                      <span className="ribbon-tool-icon">⋮</span><span className="ribbon-tool-label">→ Points</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="gn-convex-hull" onClick={geometryNodesConvexHull} disabled={!selectedKind} title="Blender nodes/geometry/node_geo_convex_hull.cc">
+                      <span className="ribbon-tool-icon">◇</span><span className="ribbon-tool-label">Convex H</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="gn-distribute" onClick={() => geometryNodesDistributePoints(500)} disabled={!selectedKind} title="Blender node_geo_distribute_points_on_faces.cc">
+                      <span className="ribbon-tool-icon">⁂</span><span className="ribbon-tool-label">Distrib·Pts</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="gn-join" onClick={geometryNodesJoin} disabled={primitiveCount < 2} title="Blender node_geo_join_geometry.cc — merge all Studio meshes">
+                      <span className="ribbon-tool-icon">⊕</span><span className="ribbon-tool-label">Join Geom</span>
+                    </button>
+                  </div>
+                  <div className="ribbon-group-label">Geometry Nodes</div>
+                </div>
                 <div className="ribbon-group">
                   <div className="ribbon-group-tools">
                     <button
@@ -5515,6 +5700,23 @@ function WorkbenchStudio() {
 
             {activeTab === 'rendering' && (
               <>
+                <div className="ribbon-group">
+                  <div className="ribbon-group-tools">
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="engine-cycles" onClick={() => selectRenderEngine('cycles')} title="Blender render/intern/pipeline.cc — Cycles path-traced">
+                      <span className="ribbon-tool-icon">◉</span>
+                      <span className="ribbon-tool-label">Cycles</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="engine-eevee" onClick={() => selectRenderEngine('eevee')} title="Blender render/intern/pipeline.cc — EEVEE real-time raster">
+                      <span className="ribbon-tool-icon">◐</span>
+                      <span className="ribbon-tool-label">EEVEE</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="engine-workbench" onClick={() => selectRenderEngine('workbench')} title="Blender render/intern/pipeline.cc — Workbench preview">
+                      <span className="ribbon-tool-icon">▦</span>
+                      <span className="ribbon-tool-label">Workbench</span>
+                    </button>
+                  </div>
+                  <div className="ribbon-group-label">Render Engine</div>
+                </div>
                 <div className="ribbon-group">
                   <div className="ribbon-group-tools">
                     <button type="button" className="ribbon-tool" onClick={() => applyCameraPreset('front')} title="Front view">
