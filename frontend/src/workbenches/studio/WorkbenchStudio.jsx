@@ -10,6 +10,7 @@ import {
   MousePointer2, Move, RotateCw, Maximize2,
   Box, Mountain, PaintBucket, Bone, Play, Sparkles, Camera,
   Palette, Layers, Lightbulb, Image as ImageIcon, Wand2,
+  Brush, Grid3x3, SlidersHorizontal,
 } from 'lucide-react';
 import Viewport3D from '../../components/Viewport3D';
 
@@ -118,14 +119,14 @@ const PRIMITIVE_KINDS = [
  * and-play planner) would.
  */
 const DISCIPLINE_TABS = [
-  { id: 'modeling',    label: 'Modeling' },
-  { id: 'sculpting',   label: 'Sculpting' },
-  { id: 'uv-texture',  label: 'UV / Texture' },
-  { id: 'rigging',     label: 'Rigging' },
-  { id: 'animation',   label: 'Animation' },
-  { id: 'vfx-sim',     label: 'VFX / Sim' },
-  { id: 'rendering',   label: 'Rendering' },
-  { id: 'compositing', label: 'Compositing' },
+  { id: 'modeling',    label: 'Modeling',     Icon: Box },
+  { id: 'sculpting',   label: 'Sculpting',    Icon: Brush },
+  { id: 'uv-texture',  label: 'UV / Texture', Icon: Grid3x3 },
+  { id: 'rigging',     label: 'Rigging',      Icon: Bone },
+  { id: 'animation',   label: 'Animation',    Icon: Play },
+  { id: 'vfx-sim',     label: 'VFX / Sim',    Icon: Sparkles },
+  { id: 'rendering',   label: 'Rendering',    Icon: Camera },
+  { id: 'compositing', label: 'Compositing',  Icon: SlidersHorizontal },
 ];
 
 const TOOL_BUTTONS = [
@@ -2050,19 +2051,24 @@ function WorkbenchStudio() {
         data-archdisc-ribbon-placeholder="studio"
       >
         <div className="workbench-ribbon-placeholder-tabs">
-          {DISCIPLINE_TABS.map(tab => (
-            <span
-              key={tab.id}
-              className={
-                'workbench-ribbon-placeholder-tab'
-                + (tab.id === activeTab ? ' active' : '')
-              }
-              data-studio-discipline={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-            >
-              {tab.label}
-            </span>
-          ))}
+          {DISCIPLINE_TABS.map(tab => {
+            const TabIcon = tab.Icon;
+            return (
+              <span
+                key={tab.id}
+                className={
+                  'workbench-ribbon-placeholder-tab'
+                  + (tab.id === activeTab ? ' active' : '')
+                }
+                data-studio-discipline={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+              >
+                {TabIcon && <TabIcon size={12} style={{ opacity: 0.75 }} />}
+                {tab.label}
+              </span>
+            );
+          })}
         </div>
         <div className="workbench-ribbon-placeholder-body">
           {activeTab === 'modeling' ? (
