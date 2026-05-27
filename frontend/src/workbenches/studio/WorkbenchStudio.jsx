@@ -181,6 +181,8 @@ function WorkbenchStudio() {
   // Lathe / NURBS-style hard-surface — profile + radial segment count.
   const [latheProfile, setLatheProfile] = useState('vase');
   const [latheSegments, setLatheSegments] = useState(48);
+  // Rigging / Armature — bone count for the spawned chain.
+  const [armatureBones, setArmatureBones] = useState(5);
 
   function recomputeMeshStats(scene) {
     let v = 0;
@@ -542,6 +544,65 @@ function WorkbenchStudio() {
     mesh.userData.archdiscStudioPrimitive = true;
     mesh.userData.archdiscStudioPrimitiveKind = 'text-3d';
     mesh.name = `studio-primitive-text3d-${primitiveCount}`;
+
+    const cols = 4;
+    const i = primitiveCount;
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    mesh.position.set(
+      (col - (cols - 1) / 2) * PRIMITIVE_SIZE * 1.9,
+      0,
+      row * PRIMITIVE_SIZE * 1.9,
+    );
+
+    scene.add(mesh);
+    primitiveStackRef.current.push(mesh);
+    setPrimitiveCount(c => c + 1);
+    recomputeMeshStats(scene);
+  }
+
+  /*
+   * Rigging / Armature — a straight bone chain spawned as a single
+   * merged-geometry mesh (joint spheres + tapered-cylinder bone
+   * segments). Single mesh keeps the rest of the pipeline (selection,
+   * sculpt, animation, delete) operating exactly as for primitives.
+   * Pose-able bone hierarchies + IK arrive in a later slice.
+   */
+  function addArmature() {
+    const scene = window.__archdiscScene;
+    if (!scene) return;
+    const S = PRIMITIVE_SIZE;
+    const bones = Math.max(2, Math.min(16, Math.floor(armatureBones)));
+    const total = S * 1.1;
+    const boneLen = total / bones;
+    const pieces = [];
+    // Joint spheres at each level (bones+1 joints for a bones-long chain).
+    for (let i = 0; i <= bones; i++) {
+      const sphere = new THREE.SphereGeometry(boneLen * 0.22, 14, 10);
+      sphere.translate(0, i * boneLen, 0);
+      pieces.push(sphere);
+    }
+    // Tapered cylinder for each bone segment.
+    for (let i = 0; i < bones; i++) {
+      const cyl = new THREE.CylinderGeometry(boneLen * 0.14, boneLen * 0.09, boneLen, 10);
+      cyl.translate(0, i * boneLen + boneLen * 0.5, 0);
+      pieces.push(cyl);
+    }
+    const merged = mergeGeometries(pieces);
+    merged.center();
+    merged.computeVertexNormals();
+    const material = new THREE.MeshStandardMaterial({
+      color: 0xc97f4a,
+      metalness: 0.32,
+      roughness: 0.42,
+    });
+    const mesh = new THREE.Mesh(merged, material);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.userData.archdiscStudioPrimitive = true;
+    mesh.userData.archdiscStudioPrimitiveKind = 'armature';
+    mesh.userData.archdiscStudioArmatureBones = bones;
+    mesh.name = `studio-primitive-armature-${bones}-${primitiveCount}`;
 
     const cols = 4;
     const i = primitiveCount;
@@ -1083,6 +1144,36 @@ function WorkbenchStudio() {
             </button>
           </div>
         )}
+
+        <div className="property-section" data-studio-section="armature">
+          <h3 className="property-header">Rigging · Armature</h3>
+          <div className="property-row">
+            <span className="property-label">Bones</span>
+            <input
+              type="range"
+              min="2"
+              max="16"
+              step="1"
+              data-studio-armature="bones"
+              value={armatureBones}
+              onChange={e => setArmatureBones(Number(e.target.value))}
+              style={{ flex: 1 }}
+            />
+            <span
+              data-studio-armature-readout="bones"
+              style={{ marginLeft: '6px', fontSize: '10px', fontFamily: 'monospace', minWidth: '32px', textAlign: 'right' }}
+            >
+              {armatureBones}
+            </span>
+          </div>
+          <button
+            className="property-button"
+            data-studio-action="add-armature"
+            onClick={addArmature}
+          >
+            Add Bone Chain
+          </button>
+        </div>
 
         <div className="property-section" data-studio-section="lathe">
           <h3 className="property-header">Hard Surface · Lathe</h3>
