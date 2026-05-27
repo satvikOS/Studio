@@ -1989,6 +1989,78 @@ function WorkbenchStudio() {
   }
 
   /*
+   * Simple Deform — Stretch modifier (volume-preserving Y stretch).
+   *
+   * Blender source: blender/source/blender/modifiers/intern/MOD_simpledeform.cc
+   * (mode == MOD_SIMPLEDEFORM_MODE_STRETCH)
+   *
+   * Scales Y by `factor` and XZ by 1/sqrt(factor) so the mesh
+   * volume stays (approximately) constant. factor > 1 elongates,
+   * factor < 1 squashes.
+   */
+  function stretchDeform(factor) {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    const pos = mesh.geometry.attributes.position;
+    if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
+    const cy = mesh.geometry.boundingSphere.center.y;
+    const xzScale = 1 / Math.sqrt(Math.max(factor, 1e-6));
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+      pos.setXYZ(
+        i,
+        x * xzScale,
+        cy + (y - cy) * factor,
+        z * xzScale,
+      );
+    }
+    pos.needsUpdate = true;
+    mesh.geometry.computeVertexNormals();
+    mesh.geometry.computeBoundingSphere();
+    mesh.userData.archdiscStudioStretched = (mesh.userData.archdiscStudioStretched || 0) + 1;
+    recomputeMeshStats(window.__archdiscScene);
+    return { factor };
+  }
+
+  /*
+   * Inset Faces — shrink each face toward its centroid.
+   *
+   * Blender source: blender/source/blender/editors/mesh/editmesh_inset.cc
+   * (NOTE: Blender's Inset is an EDIT-MESH operator, not a modifier.
+   *  This MVP applies the per-face shrink globally, which gives the
+   *  "exploded panels" look — gaps appear between faces.)
+   *
+   * For each triangle (after toNonIndexed so corners are unique):
+   *   centroid = (a + b + c) / 3
+   *   newCorner = oldCorner * (1 - k) + centroid * k
+   */
+  function insetFaces(amount) {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    let g = mesh.geometry;
+    if (g.index) g = g.toNonIndexed();
+    const pos = g.attributes.position;
+    const k = amount;
+    for (let t = 0; t < pos.count; t += 3) {
+      const ax = pos.getX(t),     ay = pos.getY(t),     az = pos.getZ(t);
+      const bx = pos.getX(t + 1), by = pos.getY(t + 1), bz = pos.getZ(t + 1);
+      const cx = pos.getX(t + 2), cy = pos.getY(t + 2), cz = pos.getZ(t + 2);
+      const mx = (ax + bx + cx) / 3, my = (ay + by + cy) / 3, mz = (az + bz + cz) / 3;
+      pos.setXYZ(t,     ax * (1 - k) + mx * k, ay * (1 - k) + my * k, az * (1 - k) + mz * k);
+      pos.setXYZ(t + 1, bx * (1 - k) + mx * k, by * (1 - k) + my * k, bz * (1 - k) + mz * k);
+      pos.setXYZ(t + 2, cx * (1 - k) + mx * k, cy * (1 - k) + my * k, cz * (1 - k) + mz * k);
+    }
+    pos.needsUpdate = true;
+    g.computeVertexNormals();
+    g.computeBoundingSphere();
+    mesh.geometry.dispose();
+    mesh.geometry = g;
+    mesh.userData.archdiscStudioInset = (mesh.userData.archdiscStudioInset || 0) + 1;
+    recomputeMeshStats(window.__archdiscScene);
+    return { amount, verts: pos.count };
+  }
+
+  /*
    * Simple Deform — Twist modifier (axial rotation along Y).
    *
    * Blender source: blender/source/blender/modifiers/intern/MOD_simpledeform.cc
@@ -4472,6 +4544,28 @@ function WorkbenchStudio() {
                     >
                       <span className="ribbon-tool-icon">⊟</span>
                       <span className="ribbon-tool-label">EdgeSplit</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="ribbon-tool"
+                      data-studio-ribbon-action="stretch"
+                      onClick={() => stretchDeform(1.6)}
+                      disabled={!selectedKind}
+                      title="Blender MOD_simpledeform (STRETCH) — volume-preserving Y stretch"
+                    >
+                      <span className="ribbon-tool-icon">↕</span>
+                      <span className="ribbon-tool-label">Stretch</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="ribbon-tool"
+                      data-studio-ribbon-action="inset"
+                      onClick={() => insetFaces(0.3)}
+                      disabled={!selectedKind}
+                      title="Blender editmesh_inset — shrink each face toward centroid"
+                    >
+                      <span className="ribbon-tool-icon">⊡</span>
+                      <span className="ribbon-tool-label">Inset</span>
                     </button>
                   </div>
                   <div className="ribbon-group-label">Blender · Mods</div>
