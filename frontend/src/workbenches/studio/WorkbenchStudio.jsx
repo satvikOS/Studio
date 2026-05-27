@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js';
+import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js';
 import {
   MousePointer2, Move, RotateCw, Maximize2,
   Box, Mountain, PaintBucket, Bone, Play, Sparkles, Camera,
@@ -164,6 +166,12 @@ function WorkbenchStudio() {
   const animRafRef = useRef(null);
   // Sculpting — strength of one click of an Inflate/Twist/Smooth pass.
   const [sculptStrength, setSculptStrength] = useState(0.1);
+  // Text 3D (Motion Graphics discipline) — typography rendered as an
+  // extruded TextGeometry mesh.
+  const [text3dInput, setText3dInput] = useState('Studio');
+  const [text3dSize, setText3dSize] = useState(0.012);
+  const fontRef = useRef(null);
+  const [fontReady, setFontReady] = useState(false);
 
   function recomputeMeshStats(scene) {
     let v = 0;
@@ -474,6 +482,75 @@ function WorkbenchStudio() {
   }
 
   /*
+   * Text 3D — async load the bundled Droid Sans typeface (copied to
+   * /fonts/ by frontend/public so Vite serves it in dev AND ships it
+   * in dist for packaged Electron). Font is cached in a ref; UI exposes
+   * fontReady so the Add Text button only enables once loadable.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    const loader = new FontLoader();
+    loader.load(
+      'fonts/droid_sans_regular.typeface.json',
+      (font) => {
+        if (cancelled) return;
+        fontRef.current = font;
+        setFontReady(true);
+      },
+      undefined,
+      (err) => {
+        // Font load failed (offline, missing asset, etc.) — leave fontReady
+        // false so the Add Text button stays disabled.
+        // eslint-disable-next-line no-console
+        console.warn('[studio] font load failed', err);
+      },
+    );
+    return () => { cancelled = true; };
+  }, []);
+
+  function addText3D() {
+    const scene = window.__archdiscScene;
+    if (!scene || !fontRef.current || !text3dInput) return;
+    const geometry = new TextGeometry(text3dInput, {
+      font: fontRef.current,
+      size: text3dSize,
+      depth: text3dSize * 0.3,
+      curveSegments: 6,
+      bevelEnabled: true,
+      bevelThickness: text3dSize * 0.02,
+      bevelSize: text3dSize * 0.015,
+      bevelSegments: 2,
+    });
+    geometry.center();
+    const material = new THREE.MeshStandardMaterial({
+      color: 0xd4af37,
+      metalness: 0.55,
+      roughness: 0.28,
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.userData.archdiscStudioPrimitive = true;
+    mesh.userData.archdiscStudioPrimitiveKind = 'text-3d';
+    mesh.name = `studio-primitive-text3d-${primitiveCount}`;
+
+    const cols = 4;
+    const i = primitiveCount;
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    mesh.position.set(
+      (col - (cols - 1) / 2) * PRIMITIVE_SIZE * 1.9,
+      0,
+      row * PRIMITIVE_SIZE * 1.9,
+    );
+
+    scene.add(mesh);
+    primitiveStackRef.current.push(mesh);
+    setPrimitiveCount(c => c + 1);
+    recomputeMeshStats(scene);
+  }
+
+  /*
    * Sculpt brushes — procedural full-mesh deformations applied to the
    * selected mesh's geometry. These are the digital-clay primitives
    * Studio's Sculpting discipline starts from; per-vertex brushable
@@ -771,6 +848,56 @@ function WorkbenchStudio() {
             </button>
           </div>
         )}
+
+        <div className="property-section" data-studio-section="text3d">
+          <h3 className="property-header">
+            Text 3D
+            <span
+              data-studio-font-state
+              style={{ float: 'right', opacity: 0.6, fontSize: '11px', fontWeight: 'normal' }}
+            >
+              {fontReady ? 'font ready' : 'loading…'}
+            </span>
+          </h3>
+          <div className="property-row">
+            <span className="property-label">Text</span>
+            <input
+              type="text"
+              className="property-input"
+              data-studio-text3d="input"
+              value={text3dInput}
+              onChange={e => setText3dInput(e.target.value)}
+              maxLength={32}
+            />
+          </div>
+          <div className="property-row">
+            <span className="property-label">Size</span>
+            <input
+              type="range"
+              min="0.005"
+              max="0.04"
+              step="0.001"
+              data-studio-text3d="size"
+              value={text3dSize}
+              onChange={e => setText3dSize(Number(e.target.value))}
+              style={{ flex: 1 }}
+            />
+            <span
+              data-studio-text3d-readout="size"
+              style={{ marginLeft: '6px', fontSize: '10px', fontFamily: 'monospace', minWidth: '52px', textAlign: 'right' }}
+            >
+              {(text3dSize * 1000).toFixed(1)} mm
+            </span>
+          </div>
+          <button
+            className="property-button"
+            data-studio-action="add-text3d"
+            onClick={addText3D}
+            disabled={!fontReady || !text3dInput.trim()}
+          >
+            Add 3D Text
+          </button>
+        </div>
 
         <div className="property-section" data-studio-section="sculpting">
           <h3 className="property-header">Sculpting</h3>
