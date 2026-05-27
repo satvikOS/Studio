@@ -23,9 +23,10 @@ test-*.js
 # Local LLM credentials — NEVER commit
 .llm-credentials.local.json
 
-# Build output (root-anchored so vendored upstream sources — e.g. Blender's
+# Build output (per-location so vendored upstream sources — e.g. Blender's
 # intern/libmv/libmv/build/build_config.h — are not accidentally excluded)
 /dist/
+frontend/dist/
 /build/
 .vite/
 

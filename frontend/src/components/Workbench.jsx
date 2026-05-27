@@ -187,7 +187,7 @@ function WorkbenchContainer() {
                 {/* TOP HEADER - Application menus + utility actions */}
                 <header className="workbench-header">
                     <div className="header-brand">
-                        <h1 className="workbench-title">ArchDisc</h1>
+                        <h1 className="workbench-title">ArchDisc Studio</h1>
                         <span
                             className={`status-indicator ${isOnline ? 'online' : 'offline'}`}
                             title={isOnline ? 'Connected' : 'Offline'}

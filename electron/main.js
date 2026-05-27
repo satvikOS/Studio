@@ -61,7 +61,7 @@ function createWindow() {
     height: 1080,
     minWidth: 1280,
     minHeight: 720,
-    title: 'ArchDisc — AI-Powered CAD Platform',
+    title: 'ArchDisc Studio — 3D Content Creation Platform',
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -89,9 +89,9 @@ function createWindow() {
   // Application menu
   const menu = Menu.buildFromTemplate([
     {
-      label: 'ArchDisc',
+      label: 'ArchDisc Studio',
       submenu: [
-        { label: 'About ArchDisc', click: () => showAbout() },
+        { label: 'About ArchDisc Studio', click: () => showAbout() },
         { type: 'separator' },
         { label: 'Preferences', accelerator: 'CmdOrCtrl+,', click: () => {} },
         { type: 'separator' },
@@ -150,7 +150,7 @@ function createWindow() {
         { label: 'Documentation', click: () => shell.openExternal('https://archdisc.com/docs') },
         { label: 'Keyboard Shortcuts', click: () => {} },
         { type: 'separator' },
-        { label: 'About ArchDisc', click: () => showAbout() },
+        { label: 'About ArchDisc Studio', click: () => showAbout() },
       ]
     },
   ]);
@@ -163,9 +163,14 @@ function showAbout() {
   const { dialog } = require('electron');
   dialog.showMessageBox(mainWindow, {
     type: 'info',
-    title: 'About ArchDisc',
-    message: 'ArchDisc — AI-Powered CAD Platform',
-    detail: `Version 1.0.0\n\nProprietary B-Rep Geometry Kernel\n40+ modules, 8700+ lines\n\nBuilt with ArchDisc Technology`,
+    title: 'About ArchDisc Studio',
+    message: 'ArchDisc Studio — 3D Content Creation Platform',
+    detail:
+      `Version ${app.getVersion()}\n\n` +
+      `3D modelling · sculpting · rigging · animation · VFX · simulation · ` +
+      `texturing · rendering · motion graphics · ArchViz · game-asset authoring\n\n` +
+      `Forked from Blender (GPL-3.0); see NOTICE.md for attribution.\n\n` +
+      `The ArchDisc Universe — Studio workstation.`,
     buttons: ['OK'],
   });
 }

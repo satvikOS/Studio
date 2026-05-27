@@ -202,7 +202,7 @@ export default function Topbar() {
         { label: 'Report Bug', action: () => console.log('Report Bug') },
         { label: 'Feature Request', action: () => console.log('Feature Request') },
         { type: 'separator' },
-        { label: 'About ArchDisc', action: () => console.log('About') },
+        { label: 'About ArchDisc Studio', action: () => console.log('About') },
         { label: 'Check for Updates', action: () => console.log('Updates') },
       ],
     },
