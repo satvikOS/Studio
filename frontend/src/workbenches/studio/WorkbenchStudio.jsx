@@ -3536,6 +3536,208 @@ function WorkbenchStudio() {
   }
 
   /*
+   * BATCH 4: compositor + procedural materials + light types.
+   *
+   * source paths:
+   *   blender/source/blender/compositor/operations/         — compositor passes
+   *   blender/source/blender/nodes/shader/nodes/             — shader textures
+   *   blender/source/blender/blenkernel/light.cc            — light types
+   */
+
+  // ─── Compositor effect filters ───
+  // source: blender/source/blender/compositor/operations/COM_*.cc
+
+  function compositorEffect(effect) {
+    // Apply effect to the last rendered frame, append as a new
+    // render thumbnail. Each effect mirrors a Blender compositor op.
+    if (renders.length === 0) return null;
+    const src = renders[renders.length - 1];
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width  = img.width || 512;
+      canvas.height = img.height || 512;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      ctx.drawImage(img, 0, 0);
+      if (effect === 'bloom') {
+        // COM_GlareNode.cc — bloom: blur + brighten + composite
+        ctx.filter = 'blur(8px) brightness(1.4)';
+        ctx.globalCompositeOperation = 'screen';
+        ctx.drawImage(canvas, 0, 0);
+        ctx.filter = 'none';
+        ctx.globalCompositeOperation = 'source-over';
+      } else if (effect === 'vignette') {
+        // COM_VignetteOperation: radial darkening from edges.
+        const grad = ctx.createRadialGradient(
+          canvas.width / 2, canvas.height / 2, canvas.width * 0.3,
+          canvas.width / 2, canvas.height / 2, canvas.width * 0.7,
+        );
+        grad.addColorStop(0, 'rgba(0,0,0,0)');
+        grad.addColorStop(1, 'rgba(0,0,0,0.7)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      } else if (effect === 'pixelate') {
+        // COM_PixelateOperation: downsample + upsample without smoothing.
+        const sm = document.createElement('canvas');
+        sm.width = canvas.width / 12;
+        sm.height = canvas.height / 12;
+        const smCtx = sm.getContext('2d');
+        smCtx.drawImage(canvas, 0, 0, sm.width, sm.height);
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(sm, 0, 0, canvas.width, canvas.height);
+      } else if (effect === 'lens-distortion') {
+        // COM_LensDistortionOperation: barrel distortion via canvas
+        // transform of a copy.
+        const copy = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.save();
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        ctx.scale(1.05, 1.05);
+        ctx.translate(-canvas.width / 2, -canvas.height / 2);
+        ctx.putImageData(copy, 0, 0);
+        ctx.restore();
+      } else if (effect === 'chromatic-ab') {
+        // COM_LensDistortionOperation chromatic mode: shift R+B channels.
+        ctx.globalCompositeOperation = 'screen';
+        ctx.globalAlpha = 0.5;
+        ctx.drawImage(canvas, -4, 0);
+        ctx.drawImage(canvas, 4, 0);
+        ctx.globalAlpha = 1;
+        ctx.globalCompositeOperation = 'source-over';
+      }
+      const outDataUrl = canvas.toDataURL('image/png');
+      setRenders(r => [...r, { dataUrl: outDataUrl, engine: `${src.engine || 'cycles'}+${effect}` }]);
+    };
+    img.src = src.dataUrl;
+    return { effect };
+  }
+
+  // ─── Procedural shader textures ───
+  // source: blender/source/blender/nodes/shader/nodes/node_shader_tex_*.cc
+
+  function applyShaderTexture(pattern) {
+    // Builds a procedural canvas texture mirroring a Blender shader
+    // texture node (Voronoi, Wave, Brick, Magic). Applies to selected
+    // mesh's material.
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.material) return null;
+    const size = 256;
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    const img = ctx.createImageData(size, size);
+    const data = img.data;
+    if (pattern === 'voronoi') {
+      // node_shader_tex_voronoi.cc — Voronoi via Fibonacci seed grid.
+      const seeds = [];
+      for (let i = 0; i < 16; i++) {
+        const phi = Math.PI * (3 - Math.sqrt(5));
+        seeds.push([
+          (Math.sin(i * phi) * 0.5 + 0.5) * size,
+          (Math.cos(i * phi * 1.3) * 0.5 + 0.5) * size,
+        ]);
+      }
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          let minD = Infinity;
+          for (const [sx, sy] of seeds) {
+            const d = (x - sx) * (x - sx) + (y - sy) * (y - sy);
+            if (d < minD) minD = d;
+          }
+          const v = Math.min(255, Math.sqrt(minD) * 4);
+          const i = (y * size + x) * 4;
+          data[i] = data[i + 1] = data[i + 2] = v;
+          data[i + 3] = 255;
+        }
+      }
+    } else if (pattern === 'wave') {
+      // node_shader_tex_wave.cc — sinusoidal stripes.
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          const v = (Math.sin((x + y) * 0.15) * 0.5 + 0.5) * 255;
+          const i = (y * size + x) * 4;
+          data[i] = data[i + 1] = data[i + 2] = v;
+          data[i + 3] = 255;
+        }
+      }
+    } else if (pattern === 'brick') {
+      // node_shader_tex_brick.cc — staggered brick pattern.
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          const row = Math.floor(y / 24);
+          const offset = (row % 2) * 24;
+          const col = Math.floor((x + offset) / 48);
+          const inX = (x + offset) % 48;
+          const inY = y % 24;
+          const isMortar = inX < 2 || inY < 2;
+          const v = isMortar ? 32 : 200;
+          const i = (y * size + x) * 4;
+          data[i] = data[i + 1] = data[i + 2] = v;
+          data[i + 3] = 255;
+        }
+      }
+    } else if (pattern === 'magic') {
+      // node_shader_tex_magic.cc — chaotic interference pattern.
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          const u = x / size, v = y / size;
+          const a = Math.sin((u + v) * Math.PI * 8) +
+                    Math.cos(u * Math.PI * 12 - v * Math.PI * 6);
+          const i = (y * size + x) * 4;
+          data[i]     = Math.floor((Math.sin(a) * 0.5 + 0.5) * 255);
+          data[i + 1] = Math.floor((Math.cos(a) * 0.5 + 0.5) * 255);
+          data[i + 2] = Math.floor((Math.sin(a * 1.7) * 0.5 + 0.5) * 255);
+          data[i + 3] = 255;
+        }
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.needsUpdate = true;
+    if (mesh.material.map) mesh.material.map.dispose();
+    mesh.material.map = texture;
+    mesh.material.color.set(0xffffff);
+    mesh.material.needsUpdate = true;
+    mesh.userData.archdiscStudioShaderTexture = pattern;
+    return { pattern };
+  }
+
+  // ─── Blender light types ───
+  // source: blender/source/blender/blenkernel/light.cc
+
+  function addBlenderLight(type) {
+    const scene = window.__archdiscScene;
+    if (!scene) return null;
+    let light = null;
+    if (type === 'point') {
+      light = new THREE.PointLight(0xffffff, 0.8, 0.2);
+      light.position.set(0.04, 0.04, 0.04);
+    } else if (type === 'sun') {
+      // Blender Sun = THREE.DirectionalLight.
+      light = new THREE.DirectionalLight(0xffffff, 0.6);
+      light.position.set(0.1, 0.15, 0.05);
+    } else if (type === 'spot') {
+      light = new THREE.SpotLight(0xffffff, 1.2, 0.3, Math.PI / 6, 0.4);
+      light.position.set(0, 0.08, 0.06);
+      light.target.position.set(0, 0, 0);
+      scene.add(light.target);
+    } else if (type === 'area') {
+      light = new THREE.RectAreaLight(0xffffff, 1.5, 0.04, 0.04);
+      light.position.set(0, 0.06, 0.05);
+      light.lookAt(0, 0, 0);
+    }
+    if (!light) return null;
+    light.userData.archdiscStudioLight = true;
+    light.userData.archdiscStudioLightType = type;
+    scene.add(light);
+    setLightCount(c => c + 1);
+    return { type };
+  }
+
+  /*
    * BATCH 3: render engines + geometry nodes + compositor + materials.
    *
    * source paths (verbatim):
@@ -5565,7 +5767,7 @@ function WorkbenchStudio() {
                 </div>
                 <div className="ribbon-group">
                   <div className="ribbon-group-tools">
-                    <button type="button" className="ribbon-tool" onClick={applyTexture} disabled={!selectedKind} title="Apply procedural texture">
+                    <button type="button" className="ribbon-tool" onClick={applyTexture} disabled={!selectedKind} title="Apply checker/grid/brick texture from panel">
                       <span className="ribbon-tool-icon">▦</span>
                       <span className="ribbon-tool-label">Apply</span>
                     </button>
@@ -5575,6 +5777,23 @@ function WorkbenchStudio() {
                     </button>
                   </div>
                   <div className="ribbon-group-label">Texture</div>
+                </div>
+                <div className="ribbon-group">
+                  <div className="ribbon-group-tools">
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="shader-voronoi" onClick={() => applyShaderTexture('voronoi')} disabled={!selectedKind} title="Blender nodes/shader/node_shader_tex_voronoi.cc">
+                      <span className="ribbon-tool-icon">⬡</span><span className="ribbon-tool-label">Voronoi</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="shader-wave" onClick={() => applyShaderTexture('wave')} disabled={!selectedKind} title="Blender node_shader_tex_wave.cc">
+                      <span className="ribbon-tool-icon">∿</span><span className="ribbon-tool-label">Wave</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="shader-brick" onClick={() => applyShaderTexture('brick')} disabled={!selectedKind} title="Blender node_shader_tex_brick.cc">
+                      <span className="ribbon-tool-icon">▥</span><span className="ribbon-tool-label">Brick</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="shader-magic" onClick={() => applyShaderTexture('magic')} disabled={!selectedKind} title="Blender node_shader_tex_magic.cc">
+                      <span className="ribbon-tool-icon">✦</span><span className="ribbon-tool-label">Magic</span>
+                    </button>
+                  </div>
+                  <div className="ribbon-group-label">Shader Textures</div>
                 </div>
               </>
             )}
@@ -5740,8 +5959,20 @@ function WorkbenchStudio() {
                       <span className="ribbon-tool-icon">✶</span>
                       <span className="ribbon-tool-label">3-Point</span>
                     </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="light-point" onClick={() => addBlenderLight('point')} title="Blender blenkernel/light.cc — Point light">
+                      <span className="ribbon-tool-icon">●</span><span className="ribbon-tool-label">Point</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="light-sun" onClick={() => addBlenderLight('sun')} title="Blender blenkernel/light.cc — Sun (directional)">
+                      <span className="ribbon-tool-icon">☉</span><span className="ribbon-tool-label">Sun</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="light-spot" onClick={() => addBlenderLight('spot')} title="Blender blenkernel/light.cc — Spot">
+                      <span className="ribbon-tool-icon">⊻</span><span className="ribbon-tool-label">Spot</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="light-area" onClick={() => addBlenderLight('area')} title="Blender blenkernel/light.cc — Area (rectangle)">
+                      <span className="ribbon-tool-icon">▢</span><span className="ribbon-tool-label">Area</span>
+                    </button>
                   </div>
-                  <div className="ribbon-group-label">Lights</div>
+                  <div className="ribbon-group-label">Lights · Blender</div>
                 </div>
                 <div className="ribbon-group">
                   <div className="ribbon-group-tools">
@@ -5764,15 +5995,37 @@ function WorkbenchStudio() {
             )}
 
             {activeTab === 'compositing' && (
-              <div className="ribbon-group">
-                <div className="ribbon-group-tools">
-                  <button type="button" className="ribbon-tool" onClick={postProcessLastRender} disabled={renders.length === 0} title="Apply filter to last render">
-                    <span className="ribbon-tool-icon">◐</span>
-                    <span className="ribbon-tool-label">Apply Filter</span>
-                  </button>
+              <>
+                <div className="ribbon-group">
+                  <div className="ribbon-group-tools">
+                    <button type="button" className="ribbon-tool" onClick={postProcessLastRender} disabled={renders.length === 0} title="Apply CSS filter to last render">
+                      <span className="ribbon-tool-icon">◐</span>
+                      <span className="ribbon-tool-label">Filter</span>
+                    </button>
+                  </div>
+                  <div className="ribbon-group-label">Filters</div>
                 </div>
-                <div className="ribbon-group-label">Filters</div>
-              </div>
+                <div className="ribbon-group">
+                  <div className="ribbon-group-tools">
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="comp-bloom" onClick={() => compositorEffect('bloom')} disabled={renders.length === 0} title="Blender compositor/operations/COM_GlareNode.cc — bloom">
+                      <span className="ribbon-tool-icon">☀</span><span className="ribbon-tool-label">Bloom</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="comp-vignette" onClick={() => compositorEffect('vignette')} disabled={renders.length === 0} title="Blender compositor — vignette">
+                      <span className="ribbon-tool-icon">◍</span><span className="ribbon-tool-label">Vignette</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="comp-pixelate" onClick={() => compositorEffect('pixelate')} disabled={renders.length === 0} title="Blender COM_PixelateOperation">
+                      <span className="ribbon-tool-icon">▦</span><span className="ribbon-tool-label">Pixelate</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="comp-lens" onClick={() => compositorEffect('lens-distortion')} disabled={renders.length === 0} title="Blender COM_LensDistortionOperation">
+                      <span className="ribbon-tool-icon">◯</span><span className="ribbon-tool-label">Lens</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="comp-chromatic" onClick={() => compositorEffect('chromatic-ab')} disabled={renders.length === 0} title="Blender lens-distortion chromatic mode">
+                      <span className="ribbon-tool-icon">▥</span><span className="ribbon-tool-label">Chr·Ab</span>
+                    </button>
+                  </div>
+                  <div className="ribbon-group-label">Blender · Composite</div>
+                </div>
+              </>
             )}
           </div>
         </div>
