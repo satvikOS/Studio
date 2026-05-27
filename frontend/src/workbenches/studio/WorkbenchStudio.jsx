@@ -250,6 +250,13 @@ function WorkbenchStudio() {
   const animRafRef = useRef(null);
   // Sculpting — strength of one click of an Inflate/Twist/Smooth pass.
   const [sculptStrength, setSculptStrength] = useState(0.1);
+  // Click-paint brush — when active, viewport clicks PUSH/PULL/SMOOTH
+  // vertices near the click point instead of selecting.
+  const [brushActive, setBrushActive]     = useState(false);
+  const [brushMode, setBrushMode]         = useState('push');
+  const [brushRadius, setBrushRadius]     = useState(0.012);
+  const [brushFalloffStrength, setBrushFalloffStrength] = useState(0.4);
+  const brushStateRef = useRef({ active: false, mode: 'push', radius: 0.012, strength: 0.4 });
   // Scene I/O — save / load the current Studio primitives + lights to a
   // self-contained JSON string. In-state cache for the MVP; a follow-up
   // wires this through Electron's file picker.
@@ -802,6 +809,15 @@ function WorkbenchStudio() {
           }
         });
         const hits = raycaster.intersectObjects(studioMeshes, false);
+        // BRUSH MODE — click PAINTS vertex deformation onto the hit
+        // mesh instead of selecting. Reads brush params via a ref so
+        // setup-scoped listeners see live state.
+        const brush = brushStateRef.current;
+        if (brush.active && hits.length > 0) {
+          const hit = hits[0];
+          paintBrushAt(hit.object, hit.point, brush);
+          return;
+        }
         if (hits.length > 0) {
           selectMesh(hits[0].object);
         } else {
@@ -2340,6 +2356,102 @@ function WorkbenchStudio() {
   }
 
   /*
+   * Click-paint brush — when sculpt brush mode is active, clicks on a
+   * mesh's surface displace vertices within radius around the hit
+   * point, weighted by smooth-quartic falloff. Three modes:
+   *   push   — outward along surface normal at hit point
+   *   pull   — inward along the same normal
+   *   smooth — toward the centroid of neighbouring vertices
+   * The vertex positions are mutated in place; subsequent clicks
+   * accumulate.
+   */
+  function paintBrushAt(mesh, hitPoint, brush) {
+    if (!mesh || !mesh.geometry || !mesh.geometry.attributes.position) return;
+    const pos = mesh.geometry.attributes.position;
+    // Convert hit point to mesh-local coords so we can compare to local
+    // vertex positions directly.
+    const localHit = mesh.worldToLocal(hitPoint.clone());
+    // Pre-compute the surface normal at the hit point — use the local
+    // bounding-sphere-centroid direction as a coarse fallback. For most
+    // closed convex-ish primitives this matches the actual outward normal.
+    const normal = localHit.clone();
+    if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
+    const center = mesh.geometry.boundingSphere ? mesh.geometry.boundingSphere.center : new THREE.Vector3();
+    normal.sub(center).normalize();
+    const r = brush.radius;
+    const k = brush.strength * brush.radius * 0.5;
+    if (brush.mode === 'smooth' && mesh.geometry.index) {
+      // Laplacian-towards-neighbours within radius.
+      const idx = mesh.geometry.index;
+      const sums = new Float32Array(pos.count * 3);
+      const counts = new Int32Array(pos.count);
+      const tri = [[0, 1], [0, 2], [1, 0], [1, 2], [2, 0], [2, 1]];
+      for (let t = 0; t < idx.count; t += 3) {
+        const a = [idx.getX(t), idx.getX(t + 1), idx.getX(t + 2)];
+        for (const [i, j] of tri) {
+          const vi = a[i], vj = a[j];
+          sums[vi * 3]     += pos.getX(vj);
+          sums[vi * 3 + 1] += pos.getY(vj);
+          sums[vi * 3 + 2] += pos.getZ(vj);
+          counts[vi]++;
+        }
+      }
+      for (let i = 0; i < pos.count; i++) {
+        const dx = pos.getX(i) - localHit.x;
+        const dy = pos.getY(i) - localHit.y;
+        const dz = pos.getZ(i) - localHit.z;
+        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (dist > r || counts[i] === 0) continue;
+        const tn = dist / r;
+        const falloff = (1 - tn * tn) * (1 - tn * tn);
+        const w = brush.strength * falloff;
+        const ax = sums[i * 3]     / counts[i];
+        const ay = sums[i * 3 + 1] / counts[i];
+        const az = sums[i * 3 + 2] / counts[i];
+        pos.setXYZ(
+          i,
+          pos.getX(i) * (1 - w) + ax * w,
+          pos.getY(i) * (1 - w) + ay * w,
+          pos.getZ(i) * (1 - w) + az * w,
+        );
+      }
+    } else {
+      const sign = brush.mode === 'pull' ? -1 : 1;
+      for (let i = 0; i < pos.count; i++) {
+        const dx = pos.getX(i) - localHit.x;
+        const dy = pos.getY(i) - localHit.y;
+        const dz = pos.getZ(i) - localHit.z;
+        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (dist > r) continue;
+        const tn = dist / r;
+        const falloff = (1 - tn * tn) * (1 - tn * tn);
+        const w = sign * k * falloff;
+        pos.setXYZ(
+          i,
+          pos.getX(i) + normal.x * w,
+          pos.getY(i) + normal.y * w,
+          pos.getZ(i) + normal.z * w,
+        );
+      }
+    }
+    pos.needsUpdate = true;
+    mesh.geometry.computeVertexNormals();
+    mesh.geometry.computeBoundingSphere();
+    recomputeMeshStats(window.__archdiscScene);
+  }
+
+  // Sync brush state into the ref so the setup-scoped pointerdown sees
+  // the latest values without depending on closure refresh.
+  useEffect(() => {
+    brushStateRef.current = {
+      active:   brushActive,
+      mode:     brushMode,
+      radius:   brushRadius,
+      strength: brushFalloffStrength,
+    };
+  }, [brushActive, brushMode, brushRadius, brushFalloffStrength]);
+
+  /*
    * Sculpt brushes — procedural full-mesh deformations applied to the
    * selected mesh's geometry. These are the digital-clay primitives
    * Studio's Sculpting discipline starts from; per-vertex brushable
@@ -3846,6 +3958,72 @@ function WorkbenchStudio() {
           >
             Smooth
           </button>
+
+          <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+            <p className="property-label" style={{ opacity: 0.6, fontSize: '11px', margin: '0 0 4px 0' }}>
+              Click-paint brush — when active, viewport clicks deform
+              vertices around the hit point with smooth falloff.
+            </p>
+            <div className="property-row">
+              <span className="property-label">Brush</span>
+              <input
+                type="checkbox"
+                data-studio-brush="active"
+                checked={brushActive}
+                onChange={e => setBrushActive(e.target.checked)}
+                style={{ cursor: 'pointer' }}
+              />
+              <select
+                className="property-input"
+                data-studio-brush="mode"
+                value={brushMode}
+                onChange={e => setBrushMode(e.target.value)}
+                style={{ marginLeft: '6px' }}
+              >
+                <option value="push">Push</option>
+                <option value="pull">Pull</option>
+                <option value="smooth">Smooth</option>
+              </select>
+            </div>
+            <div className="property-row">
+              <span className="property-label">Radius</span>
+              <input
+                type="range"
+                min="0.003"
+                max="0.04"
+                step="0.001"
+                data-studio-brush="radius"
+                value={brushRadius}
+                onChange={e => setBrushRadius(Number(e.target.value))}
+                style={{ flex: 1 }}
+              />
+              <span
+                data-studio-brush-readout="radius"
+                style={{ marginLeft: '6px', fontSize: '10px', fontFamily: 'monospace', minWidth: '40px', textAlign: 'right' }}
+              >
+                {(brushRadius * 1000).toFixed(1)} mm
+              </span>
+            </div>
+            <div className="property-row">
+              <span className="property-label">Strength</span>
+              <input
+                type="range"
+                min="0.05"
+                max="1"
+                step="0.05"
+                data-studio-brush="strength"
+                value={brushFalloffStrength}
+                onChange={e => setBrushFalloffStrength(Number(e.target.value))}
+                style={{ flex: 1 }}
+              />
+              <span
+                data-studio-brush-readout="strength"
+                style={{ marginLeft: '6px', fontSize: '10px', fontFamily: 'monospace', minWidth: '40px', textAlign: 'right' }}
+              >
+                {brushFalloffStrength.toFixed(2)}
+              </span>
+            </div>
+          </div>
         </div>
 
         <div className="property-section" data-studio-section="animation">
