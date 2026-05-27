@@ -267,6 +267,9 @@ function WorkbenchStudio() {
   // Hair / fur — instanced strands rooted on a surface mesh.
   const [hairCount,  setHairCount]  = useState(800);
   const [hairLength, setHairLength] = useState(0.008);
+  // Cell fracture / shatter — split selected mesh into N spatial chunks.
+  const [fractureChunks, setFractureChunks] = useState(12);
+  const [fractureExplode, setFractureExplode] = useState(0.006);
   // Display modes — view-time toggles for wireframe, bounding-box,
   // and vertex-normals visualization on Studio primitives.
   const [displayWireframe,   setDisplayWireframe]   = useState(false);
@@ -1919,6 +1922,114 @@ function WorkbenchStudio() {
       mesh.material.map = null;
       mesh.material.needsUpdate = true;
     }
+  }
+
+  /*
+   * Cell Fracture / Voronoi Shatter — split a mesh into N spatial chunks
+   * along Voronoi-like cell boundaries, optionally offset outward
+   * (explode) for a destruction VFX look. Deterministic: same seed
+   * count + same explode produce identical chunks across runs.
+   *
+   * Algorithm:
+   *   1. Build N Fibonacci-sphere seed points around the mesh's
+   *      bounding-sphere centroid at the bounding-sphere radius.
+   *   2. For each triangle, assign it to the seed nearest its
+   *      centroid (1-NN classification — Voronoi partition).
+   *   3. Build one BufferGeometry per chunk, copying only the
+   *      vertices it actually uses (renumber the index buffer).
+   *   4. Offset each chunk along its (seed - centroid) direction
+   *      by `explode` metres.
+   *   5. Drop the original mesh; the chunks replace it 1-to-N.
+   */
+  function fractureSelected(chunkCount, explode) {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry || !mesh.geometry.index) return null;
+    const pos = mesh.geometry.attributes.position;
+    const idx = mesh.geometry.index;
+    if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
+    const r = mesh.geometry.boundingSphere.radius;
+    const cx = mesh.geometry.boundingSphere.center.x;
+    const cy = mesh.geometry.boundingSphere.center.y;
+    const cz = mesh.geometry.boundingSphere.center.z;
+    // Fibonacci-sphere seeds around the centroid.
+    const GA = Math.PI * (3 - Math.sqrt(5));
+    const seeds = [];
+    for (let i = 0; i < chunkCount; i++) {
+      const yT = 1 - (i / Math.max(1, chunkCount - 1)) * 2;
+      const rad = Math.sqrt(Math.max(0, 1 - yT * yT));
+      const theta = GA * i;
+      seeds.push([
+        cx + r * Math.cos(theta) * rad,
+        cy + r * yT,
+        cz + r * Math.sin(theta) * rad,
+      ]);
+    }
+    // Partition triangles by nearest seed.
+    const chunks = Array.from({ length: chunkCount }, () => []);
+    const numTris = idx.count / 3;
+    for (let t = 0; t < numTris; t++) {
+      const a = idx.getX(t * 3), b = idx.getX(t * 3 + 1), c = idx.getX(t * 3 + 2);
+      const tx = (pos.getX(a) + pos.getX(b) + pos.getX(c)) / 3;
+      const ty = (pos.getY(a) + pos.getY(b) + pos.getY(c)) / 3;
+      const tz = (pos.getZ(a) + pos.getZ(b) + pos.getZ(c)) / 3;
+      let bestSeed = 0, bestDist = Infinity;
+      for (let s = 0; s < chunkCount; s++) {
+        const dx = tx - seeds[s][0], dy = ty - seeds[s][1], dz = tz - seeds[s][2];
+        const d = dx * dx + dy * dy + dz * dz;
+        if (d < bestDist) { bestDist = d; bestSeed = s; }
+      }
+      chunks[bestSeed].push(a, b, c);
+    }
+    // Build a mesh per non-empty chunk.
+    const created = [];
+    // Slate chunk colors — deterministic hash of seed index keeps
+    // the visual identifiable across runs.
+    for (let s = 0; s < chunkCount; s++) {
+      if (chunks[s].length === 0) continue;
+      const used = new Set(chunks[s]);
+      const usedArr = Array.from(used).sort((a, b) => a - b);
+      const remap = new Int32Array(pos.count).fill(-1);
+      const positions = [];
+      usedArr.forEach((origIdx, newIdx) => {
+        positions.push(pos.getX(origIdx), pos.getY(origIdx), pos.getZ(origIdx));
+        remap[origIdx] = newIdx;
+      });
+      const indices = chunks[s].map(i => remap[i]);
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      g.setIndex(indices);
+      g.computeVertexNormals();
+      g.computeBoundingSphere();
+      // Slightly varied gray per chunk (hash of seed index, deterministic).
+      const hue = (s * 0.13) % 1;
+      const color = new THREE.Color().setHSL(hue, 0.15, 0.5);
+      const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0.08 });
+      const chunkMesh = new THREE.Mesh(g, mat);
+      chunkMesh.position.copy(mesh.position);
+      // Explode offset along seed-from-centroid direction.
+      const sx = seeds[s][0] - cx;
+      const sy = seeds[s][1] - cy;
+      const sz = seeds[s][2] - cz;
+      const sn = Math.sqrt(sx * sx + sy * sy + sz * sz) || 1;
+      chunkMesh.position.x += (sx / sn) * explode;
+      chunkMesh.position.y += (sy / sn) * explode;
+      chunkMesh.position.z += (sz / sn) * explode;
+      chunkMesh.userData.archdiscStudioPrimitive = true;
+      chunkMesh.userData.archdiscStudioPrimitiveKind = 'fracture-chunk';
+      chunkMesh.userData.archdiscStudioFractureSeed = s;
+      window.__archdiscScene.add(chunkMesh);
+      primitiveStackRef.current.push(chunkMesh);
+      created.push(chunkMesh);
+    }
+    // Remove the source mesh; the chunks replace it.
+    maybeClearSelectionFor(mesh);
+    window.__archdiscScene.remove(mesh);
+    disposeMesh(mesh);
+    const stackIdx = primitiveStackRef.current.indexOf(mesh);
+    if (stackIdx !== -1) primitiveStackRef.current.splice(stackIdx, 1);
+    setPrimitiveCount(primitiveStackRef.current.length);
+    recomputeMeshStats(window.__archdiscScene);
+    return { chunks: created.length, seeds: chunkCount };
   }
 
   /*
@@ -4743,6 +4854,58 @@ function WorkbenchStudio() {
               disabled={!selectedKind}
             >
               Displace · Noise
+            </button>
+          </div>
+
+          <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+            <p className="property-label" style={{ opacity: 0.6, fontSize: '11px', margin: '0 0 4px 0' }}>
+              Cell Fracture · Shatter — split mesh into N spatial chunks.
+            </p>
+            <div className="property-row">
+              <span className="property-label">Chunks</span>
+              <input
+                type="range"
+                min="2"
+                max="24"
+                step="1"
+                data-studio-fracture="chunks"
+                value={fractureChunks}
+                onChange={e => setFractureChunks(Number(e.target.value))}
+                style={{ flex: 1 }}
+              />
+              <span
+                data-studio-fracture-readout="chunks"
+                style={{ marginLeft: '6px', fontSize: '10px', fontFamily: 'monospace', minWidth: '24px', textAlign: 'right' }}
+              >
+                {fractureChunks}
+              </span>
+            </div>
+            <div className="property-row">
+              <span className="property-label">Explode</span>
+              <input
+                type="range"
+                min="0"
+                max="0.025"
+                step="0.0005"
+                data-studio-fracture="explode"
+                value={fractureExplode}
+                onChange={e => setFractureExplode(Number(e.target.value))}
+                style={{ flex: 1 }}
+              />
+              <span
+                data-studio-fracture-readout="explode"
+                style={{ marginLeft: '6px', fontSize: '10px', fontFamily: 'monospace', minWidth: '46px', textAlign: 'right' }}
+              >
+                {(fractureExplode * 1000).toFixed(1)} mm
+              </span>
+            </div>
+            <button
+              className="property-button"
+              data-studio-action="fracture-selected"
+              onClick={() => fractureSelected(fractureChunks, fractureExplode)}
+              disabled={!selectedKind}
+            >
+              Fracture · Shatter Selected
             </button>
           </div>
         </div>
