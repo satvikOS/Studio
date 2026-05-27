@@ -66,5 +66,8 @@ e2e/screenshots/
 *.webm
 *.mov
 
+# Video sampling artefacts (one-shot thumbnails extracted for scope review)
+tools/.video-thumbs/
+
 # AI-orchestration scratch / wakeup notes
 docs/superpowers/notes/custom-occt-build-recon.md

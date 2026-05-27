@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import {
   MousePointer2, Move, RotateCw, Maximize2,
@@ -99,6 +99,24 @@ function WorkbenchStudio() {
   const [renders, setRenders] = useState([]);
   const [renderEngine, setRenderEngine] = useState('cycles');
   const [renderSamples, setRenderSamples] = useState(128);
+  // Selection state — kept in both state (for UI re-render) and a ref
+  // (for closures captured by event listeners).
+  const [selectedKind, setSelectedKind] = useState(null);
+  const [selectedTransform, setSelectedTransform] = useState(null);
+  const selectedMeshRef = useRef(null);
+  // Active transform mode mirrors activeTool for move/rotate/scale.
+  // Drag-to-transform isn't wired yet (separate slice); for now the mode
+  // is reflected in the Selection panel so the user can see what tool is
+  // armed.
+  const [gizmoMode, setGizmoMode] = useState('translate');
+  // Stash of the original material so we can restore on deselect (we
+  // swap to a brighter "selected" material to make the selection visible).
+  const originalMaterialRef = useRef(null);
+  // Wireframe outline overlay (a LineSegments object attached to the
+  // selected mesh as a sibling under the scene) so selection reads as
+  // a clear visual indicator without dragging in the heavy
+  // TransformControls gizmo at this scene's mm-scale.
+  const outlineRef = useRef(null);
 
   function recomputeMeshStats(scene) {
     let v = 0;
@@ -160,11 +178,34 @@ function WorkbenchStudio() {
     }
   }
 
+  function maybeClearSelectionFor(mesh) {
+    if (selectedMeshRef.current === mesh) {
+      // Don't restore swapped material — the mesh is about to be disposed
+      // entirely. Just clear selection state + remove the outline.
+      if (originalMaterialRef.current && mesh.material !== originalMaterialRef.current) {
+        mesh.material.dispose();
+        mesh.material = originalMaterialRef.current;
+      }
+      originalMaterialRef.current = null;
+      selectedMeshRef.current = null;
+      const vp = window.__archdiscViewport;
+      if (vp && outlineRef.current) {
+        vp.scene.remove(outlineRef.current);
+        outlineRef.current.geometry.dispose();
+        outlineRef.current.material.dispose();
+        outlineRef.current = null;
+      }
+      setSelectedKind(null);
+      setSelectedTransform(null);
+    }
+  }
+
   function deleteLastPrimitive() {
     const scene = window.__archdiscScene;
     if (!scene) return;
     const mesh = primitiveStackRef.current.pop();
     if (!mesh) return;
+    maybeClearSelectionFor(mesh);
     scene.remove(mesh);
     disposeMesh(mesh);
     setPrimitiveCount(c => Math.max(0, c - 1));
@@ -175,6 +216,7 @@ function WorkbenchStudio() {
     const scene = window.__archdiscScene;
     if (!scene) return;
     for (const mesh of primitiveStackRef.current) {
+      maybeClearSelectionFor(mesh);
       scene.remove(mesh);
       disposeMesh(mesh);
     }
@@ -215,6 +257,204 @@ function WorkbenchStudio() {
   function clearRenders() {
     setRenders([]);
   }
+
+  /*
+   * Selection wiring — raycaster + outline overlay + Delete key.
+   *
+   * Polls until Viewport3D exposes window.__archdiscViewport, then attaches
+   * a Studio-specific pointer handler that only selects meshes carrying
+   * the archdiscStudioPrimitive marker. The selected mesh gets a vivid
+   * pink material swap PLUS a wireframe outline overlay so the selection
+   * reads cleanly in the viewport. Position/rotation/scale show in the
+   * Selection panel; the activeTool mode (move/rotate/scale) is reflected
+   * in the panel so the user sees what's armed — drag-to-transform wires
+   * in a later slice once a usable gizmo for mm-scale scenes is built.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    let cleanupFn = null;
+
+    function attachOutline(mesh, vp) {
+      // Remove any previous outline first.
+      if (outlineRef.current) {
+        vp.scene.remove(outlineRef.current);
+        outlineRef.current.geometry.dispose();
+        outlineRef.current.material.dispose();
+        outlineRef.current = null;
+      }
+      const edges = new THREE.EdgesGeometry(mesh.geometry, 25);
+      const lineMat = new THREE.LineBasicMaterial({
+        color: 0xffe066,
+        depthTest: false,
+        transparent: true,
+        opacity: 0.95,
+      });
+      const outline = new THREE.LineSegments(edges, lineMat);
+      outline.renderOrder = 999;
+      // Keep outline glued to the mesh's transform.
+      outline.position.copy(mesh.position);
+      outline.rotation.copy(mesh.rotation);
+      outline.scale.copy(mesh.scale);
+      outline.userData.isStudioOutline = true;
+      vp.scene.add(outline);
+      outlineRef.current = outline;
+    }
+
+    function clearOutline(vp) {
+      if (outlineRef.current) {
+        vp.scene.remove(outlineRef.current);
+        outlineRef.current.geometry.dispose();
+        outlineRef.current.material.dispose();
+        outlineRef.current = null;
+      }
+    }
+
+    function setup() {
+      if (cancelled) return;
+      const vp = window.__archdiscViewport;
+      if (!vp || !vp.renderer || !vp.scene || !vp.camera) {
+        setTimeout(setup, 200);
+        return;
+      }
+
+      const selectMesh = (mesh) => {
+        if (selectedMeshRef.current && selectedMeshRef.current !== mesh) {
+          const prev = selectedMeshRef.current;
+          if (originalMaterialRef.current && prev.material !== originalMaterialRef.current) {
+            prev.material.dispose();
+            prev.material = originalMaterialRef.current;
+          }
+        }
+        selectedMeshRef.current = mesh;
+        originalMaterialRef.current = mesh.material;
+        mesh.material = new THREE.MeshStandardMaterial({
+          color: 0xff4d6d,
+          metalness: 0.2,
+          roughness: 0.35,
+          emissive: 0x331122,
+          emissiveIntensity: 0.3,
+        });
+        attachOutline(mesh, vp);
+
+        setSelectedKind(mesh.userData?.archdiscStudioPrimitiveKind || 'unknown');
+        setSelectedTransform({
+          position: [mesh.position.x, mesh.position.y, mesh.position.z],
+          rotation: [mesh.rotation.x, mesh.rotation.y, mesh.rotation.z],
+          scale:    [mesh.scale.x,    mesh.scale.y,    mesh.scale.z],
+        });
+      };
+
+      const deselect = () => {
+        const prev = selectedMeshRef.current;
+        if (prev) {
+          if (originalMaterialRef.current && prev.material !== originalMaterialRef.current) {
+            prev.material.dispose();
+            prev.material = originalMaterialRef.current;
+          }
+        }
+        originalMaterialRef.current = null;
+        selectedMeshRef.current = null;
+        clearOutline(vp);
+        setSelectedKind(null);
+        setSelectedTransform(null);
+      };
+
+      // Expose for the React-side delete + other slices.
+      window.__studioSelectMesh = selectMesh;
+      window.__studioDeselect = deselect;
+
+      const raycaster = new THREE.Raycaster();
+      const onPointerDown = (e) => {
+        if (e.button !== 0) return;
+        const rect = vp.renderer.domElement.getBoundingClientRect();
+        const ndc = new THREE.Vector2(
+          ((e.clientX - rect.left) / rect.width) * 2 - 1,
+          -((e.clientY - rect.top) / rect.height) * 2 + 1,
+        );
+        raycaster.setFromCamera(ndc, vp.camera);
+        const studioMeshes = [];
+        vp.scene.traverse(o => {
+          if (o.isMesh && o.userData && o.userData.archdiscStudioPrimitive) {
+            studioMeshes.push(o);
+          }
+        });
+        const hits = raycaster.intersectObjects(studioMeshes, false);
+        if (hits.length > 0) {
+          selectMesh(hits[0].object);
+        } else {
+          deselect();
+        }
+      };
+      vp.renderer.domElement.addEventListener('pointerdown', onPointerDown);
+
+      const onKeyDown = (e) => {
+        if ((e.key === 'Delete' || e.key === 'Backspace') && selectedMeshRef.current) {
+          const tag = (e.target && e.target.tagName) || '';
+          if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+          e.preventDefault();
+          deleteSelectedMeshRef.current && deleteSelectedMeshRef.current();
+        }
+      };
+      window.addEventListener('keydown', onKeyDown);
+
+      cleanupFn = () => {
+        vp.renderer.domElement.removeEventListener('pointerdown', onPointerDown);
+        window.removeEventListener('keydown', onKeyDown);
+        clearOutline(vp);
+        delete window.__studioSelectMesh;
+        delete window.__studioDeselect;
+      };
+    }
+
+    setup();
+    return () => {
+      cancelled = true;
+      if (cleanupFn) cleanupFn();
+    };
+  }, []);
+
+  // Mirror activeTool → transform mode label (gizmo arrives in a later slice).
+  useEffect(() => {
+    const map = { move: 'translate', rotate: 'rotate', scale: 'scale' };
+    if (map[activeTool]) setGizmoMode(map[activeTool]);
+  }, [activeTool]);
+
+  function deleteSelectedMesh() {
+    const scene = window.__archdiscScene;
+    const vp = window.__archdiscViewport;
+    const mesh = selectedMeshRef.current;
+    if (!scene || !mesh) return;
+
+    // Remove the outline overlay first.
+    if (vp && outlineRef.current) {
+      vp.scene.remove(outlineRef.current);
+      outlineRef.current.geometry.dispose();
+      outlineRef.current.material.dispose();
+      outlineRef.current = null;
+    }
+
+    // Restore original material BEFORE disposing so we don't free
+    // the user's chosen material along with the selected-style swap.
+    if (originalMaterialRef.current && mesh.material !== originalMaterialRef.current) {
+      mesh.material.dispose();
+      mesh.material = originalMaterialRef.current;
+    }
+    originalMaterialRef.current = null;
+
+    scene.remove(mesh);
+    const idx = primitiveStackRef.current.indexOf(mesh);
+    if (idx >= 0) primitiveStackRef.current.splice(idx, 1);
+    disposeMesh(mesh);
+
+    selectedMeshRef.current = null;
+    setSelectedKind(null);
+    setSelectedTransform(null);
+    setPrimitiveCount(c => Math.max(0, c - 1));
+    recomputeMeshStats(scene);
+  }
+  // Keep the latest deleteSelectedMesh available to setup-scoped listeners.
+  const deleteSelectedMeshRef = useRef(deleteSelectedMesh);
+  useEffect(() => { deleteSelectedMeshRef.current = deleteSelectedMesh; });
 
   return (
     <>
@@ -319,6 +559,69 @@ function WorkbenchStudio() {
             Forked from Blender (GPL-3); parity target with Maya, Houdini, ZBrush, Substance, Cinema 4D.
           </p>
         </div>
+
+        {selectedKind && selectedTransform && (
+          <div className="property-section" data-studio-section="selection">
+            <h3 className="property-header">Selection</h3>
+            <div className="property-row">
+              <span className="property-label">Kind</span>
+              <span
+                className="property-input"
+                data-studio-selection="kind"
+                style={{ textAlign: 'right', textTransform: 'capitalize' }}
+              >
+                {selectedKind}
+              </span>
+            </div>
+            <div className="property-row">
+              <span className="property-label">Position</span>
+              <span
+                className="property-input"
+                data-studio-selection="position"
+                style={{ textAlign: 'right', fontSize: '10px', fontFamily: 'monospace' }}
+              >
+                {selectedTransform.position.map(n => n.toFixed(4)).join(', ')}
+              </span>
+            </div>
+            <div className="property-row">
+              <span className="property-label">Rotation</span>
+              <span
+                className="property-input"
+                data-studio-selection="rotation"
+                style={{ textAlign: 'right', fontSize: '10px', fontFamily: 'monospace' }}
+              >
+                {selectedTransform.rotation.map(n => n.toFixed(3)).join(', ')}
+              </span>
+            </div>
+            <div className="property-row">
+              <span className="property-label">Scale</span>
+              <span
+                className="property-input"
+                data-studio-selection="scale"
+                style={{ textAlign: 'right', fontSize: '10px', fontFamily: 'monospace' }}
+              >
+                {selectedTransform.scale.map(n => n.toFixed(3)).join(', ')}
+              </span>
+            </div>
+            <div className="property-row">
+              <span className="property-label">Gizmo</span>
+              <span
+                className="property-input"
+                data-studio-selection="gizmo-mode"
+                style={{ textAlign: 'right' }}
+              >
+                {gizmoMode}
+              </span>
+            </div>
+            <button
+              className="property-button"
+              data-studio-action="delete-selected"
+              onClick={deleteSelectedMesh}
+            >
+              Delete Selected
+            </button>
+          </div>
+        )}
 
         <div className="property-section" data-studio-section="scene">
           <h3 className="property-header">Scene</h3>
