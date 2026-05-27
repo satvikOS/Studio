@@ -3787,11 +3787,11 @@ function WorkbenchStudio() {
               transform: 'translate(-50%, -50%)',
               padding: '24px 32px',
               minWidth: '320px',
-              background: 'linear-gradient(160deg, rgba(40,212,212,0.10) 0%, rgba(13,13,20,0.92) 100%)',
-              border: '1px solid rgba(40,212,212,0.32)',
+              background: 'rgba(8,8,8,0.96)',
+              border: '1px solid rgba(255,255,255,0.32)',
               borderRadius: '14px',
-              boxShadow: '0 8px 32px rgba(0,0,0,0.4), 0 0 24px rgba(40,212,212,0.15)',
-              backdropFilter: 'blur(8px)',
+              boxShadow: 'none',
+              backdropFilter: 'none',
               textAlign: 'center',
               color: '#e9ecef',
               fontFamily: 'system-ui, -apple-system, sans-serif',
@@ -3805,9 +3805,9 @@ function WorkbenchStudio() {
               gap: '10px',
               marginBottom: '6px',
             }}>
-              <Wand2 size={22} style={{ color: '#28d4d4', filter: 'drop-shadow(0 0 8px rgba(40,212,212,0.6))' }} />
+              <Wand2 size={22} style={{ color: '#e6e6e6', filter: 'none' }} />
               <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 700, letterSpacing: '0.5px' }}>
-                ArchDisc <span style={{ color: '#28d4d4' }}>Studio</span>
+                ArchDisc <span style={{ color: '#e6e6e6' }}>Studio</span>
               </h2>
             </div>
             <p style={{ margin: '0 0 16px 0', fontSize: '12px', opacity: 0.65, lineHeight: 1.5 }}>
@@ -3822,9 +3822,9 @@ function WorkbenchStudio() {
                 data-studio-hero-action="add-cube"
                 onClick={() => addPrimitive('cube')}
                 style={{
-                  background: 'rgba(40,212,212,0.18)',
-                  border: '1px solid rgba(40,212,212,0.55)',
-                  color: '#28d4d4',
+                  background: 'rgba(255,255,255,0.18)',
+                  border: '1px solid rgba(255,255,255,0.55)',
+                  color: '#e6e6e6',
                   fontSize: '11.5px',
                   fontWeight: 600,
                   padding: '8px 14px',
@@ -3832,8 +3832,8 @@ function WorkbenchStudio() {
                   cursor: 'pointer',
                   transition: 'background 0.15s, box-shadow 0.15s',
                 }}
-                onMouseEnter={e => { e.target.style.background = 'rgba(40,212,212,0.32)'; e.target.style.boxShadow = '0 0 14px rgba(40,212,212,0.4)'; }}
-                onMouseLeave={e => { e.target.style.background = 'rgba(40,212,212,0.18)'; e.target.style.boxShadow = 'none'; }}
+                onMouseEnter={e => { e.target.style.background = 'rgba(255,255,255,0.18)'; }}
+                onMouseLeave={e => { e.target.style.background = 'rgba(255,255,255,0.10)'; }}
               >
                 + Add Cube
               </button>
@@ -3909,8 +3909,8 @@ function WorkbenchStudio() {
           }}
         >
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-            <Sparkles size={12} style={{ color: '#28d4d4' }} />
-            <span style={{ fontWeight: 600, color: '#28d4d4' }}>STUDIO</span>
+            <Sparkles size={12} style={{ color: '#e6e6e6' }} />
+            <span style={{ fontWeight: 600, color: '#e6e6e6' }}>STUDIO</span>
           </span>
           <span data-studio-status="discipline" style={{ opacity: 0.85, textTransform: 'capitalize' }}>
             {DISCIPLINE_TABS.find(t => t.id === activeTab)?.label || activeTab}
@@ -3929,14 +3929,14 @@ function WorkbenchStudio() {
           </span>
           <span
             data-studio-status="animation"
-            style={{ opacity: isAnimating ? 1 : 0.5, color: isAnimating ? '#7fd49e' : 'inherit' }}
+            style={{ opacity: isAnimating ? 1 : 0.5, color: isAnimating ? '#b0b0b0' : 'inherit' }}
           >
             <Play size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />
             {isAnimating ? 'animating' : 'idle'}
           </span>
           <span
             data-studio-status="physics"
-            style={{ opacity: isPhysicsActive ? 1 : 0.5, color: isPhysicsActive ? '#d4a07f' : 'inherit' }}
+            style={{ opacity: isPhysicsActive ? 1 : 0.5, color: isPhysicsActive ? '#bababa' : 'inherit' }}
           >
             <Mountain size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />
             {isPhysicsActive ? 'simulating' : 'idle'}
@@ -4018,23 +4018,27 @@ function WorkbenchStudio() {
              STUDIO UI/UX OVERHAUL — slice 59 + 60
              ================================================================= */
 
-          /* Override Mech's red accent variables with Studio teal whenever
-             Studio is mounted. Every inherited Mech component that uses
-             --accent-primary (toolbar active states, focus borders,
-             selection highlights, ...) becomes teal automatically. */
+          /* Override Mech's red accent variables with Studio monotone
+             white-on-black whenever Studio is mounted. Matte black
+             surfaces + OLED black background, no glow shadows. */
           body:has([data-studio-properties="studio"]) {
-            --accent-primary: #28d4d4 !important;
-            --accent-primary-muted: rgba(40, 212, 212, 0.15) !important;
-            --accent-primary-border: rgba(40, 212, 212, 0.4) !important;
-            --accent-primary-hover: #5be3e3 !important;
-            --shadow-glow-accent: 0 0 0 2px rgba(40, 212, 212, 0.18) !important;
+            --accent-primary: #e6e6e6 !important;
+            --accent-primary-muted: rgba(255, 255, 255, 0.10) !important;
+            --accent-primary-border: rgba(255, 255, 255, 0.28) !important;
+            --accent-primary-hover: #ffffff !important;
+            --shadow-glow-accent: none !important;
+            --bg-primary: #000000 !important;
+            --bg-secondary: #050505 !important;
+            --bg-tertiary: #0a0a0a !important;
+            --bg-hover: rgba(255, 255, 255, 0.06) !important;
+            --bg-active: rgba(255, 255, 255, 0.10) !important;
           }
 
           /* Properties panel scrolls cleanly; floor + room for the banner. */
           [data-studio-properties="studio"] {
             overflow-y: auto;
             padding-bottom: 32px;
-            background: #0d0d14;
+            background: #000000;
           }
 
           /* Section card — soft background panel, rounded edges, breathing room. */
@@ -4047,8 +4051,8 @@ function WorkbenchStudio() {
             transition: border-color 0.15s, background 0.15s;
           }
           [data-studio-properties="studio"] .property-section:hover {
-            border-color: rgba(40,212,212,0.18);
-            background: linear-gradient(180deg, rgba(40,212,212,0.04) 0%, rgba(40,212,212,0.01) 100%);
+            border-color: rgba(255,255,255,0.18);
+            background: linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%);
           }
 
           /* Section header — flex layout with stripe + uppercase title.
@@ -4072,7 +4076,7 @@ function WorkbenchStudio() {
             display: inline-block;
             width: 3px;
             height: 12px;
-            background: #28d4d4;
+            background: #e6e6e6;
             border-radius: 2px;
             flex-shrink: 0;
           }
@@ -4096,38 +4100,38 @@ function WorkbenchStudio() {
 
           /* Per-section discipline-coloured stripes — gives each panel a
              scannable visual identity. */
-          [data-studio-properties="studio"] [data-studio-section="ai"]            .property-header::before { background: #ff7eb6; }
-          [data-studio-properties="studio"] [data-studio-section="welcome"]       .property-header::before { background: #28d4d4; }
-          [data-studio-properties="studio"] [data-studio-section="library"]       .property-header::before { background: #28d4d4; }
-          [data-studio-properties="studio"] [data-studio-section="selection"]     .property-header::before { background: #fff176; }
-          [data-studio-properties="studio"] [data-studio-section="mesh"]          .property-header::before { background: #28d4d4; }
-          [data-studio-properties="studio"] [data-studio-section="display"]       .property-header::before { background: #7fd4a8; }
-          [data-studio-properties="studio"] [data-studio-section="material"]      .property-header::before { background: #d4a07f; }
-          [data-studio-properties="studio"] [data-studio-section="texture"]       .property-header::before { background: #d4c628; }
-          [data-studio-properties="studio"] [data-studio-section="sculpting"]     .property-header::before { background: #d47fa0; }
-          [data-studio-properties="studio"] [data-studio-section="subdivision"]   .property-header::before { background: #7fd49e; }
-          [data-studio-properties="studio"] [data-studio-section="mirror"]        .property-header::before { background: #28d4d4; }
-          [data-studio-properties="studio"] [data-studio-section="boolean"]       .property-header::before { background: #d47f7f; }
-          [data-studio-properties="studio"] [data-studio-section="scatter"]       .property-header::before { background: #a0d47f; }
-          [data-studio-properties="studio"] [data-studio-section="procedural"]    .property-header::before { background: #d47fd4; }
-          [data-studio-properties="studio"] [data-studio-section="instancing"]    .property-header::before { background: #d4a07f; }
-          [data-studio-properties="studio"] [data-studio-section="text3d"]        .property-header::before { background: #fff176; }
-          [data-studio-properties="studio"] [data-studio-section="archviz"]       .property-header::before { background: #7fa0d4; }
-          [data-studio-properties="studio"] [data-studio-section="lathe"]         .property-header::before { background: #d47fa0; }
+          [data-studio-properties="studio"] [data-studio-section="ai"]            .property-header::before { background: #9a9a9a; }
+          [data-studio-properties="studio"] [data-studio-section="welcome"]       .property-header::before { background: #e6e6e6; }
+          [data-studio-properties="studio"] [data-studio-section="library"]       .property-header::before { background: #e6e6e6; }
+          [data-studio-properties="studio"] [data-studio-section="selection"]     .property-header::before { background: #bfbfbf; }
+          [data-studio-properties="studio"] [data-studio-section="mesh"]          .property-header::before { background: #e6e6e6; }
+          [data-studio-properties="studio"] [data-studio-section="display"]       .property-header::before { background: #c8c8c8; }
+          [data-studio-properties="studio"] [data-studio-section="material"]      .property-header::before { background: #bababa; }
+          [data-studio-properties="studio"] [data-studio-section="texture"]       .property-header::before { background: #a8a8a8; }
+          [data-studio-properties="studio"] [data-studio-section="sculpting"]     .property-header::before { background: #9a9a9a; }
+          [data-studio-properties="studio"] [data-studio-section="subdivision"]   .property-header::before { background: #b0b0b0; }
+          [data-studio-properties="studio"] [data-studio-section="mirror"]        .property-header::before { background: #e6e6e6; }
+          [data-studio-properties="studio"] [data-studio-section="boolean"]       .property-header::before { background: #888888; }
+          [data-studio-properties="studio"] [data-studio-section="scatter"]       .property-header::before { background: #a8a8a8; }
+          [data-studio-properties="studio"] [data-studio-section="procedural"]    .property-header::before { background: #9a9a9a; }
+          [data-studio-properties="studio"] [data-studio-section="instancing"]    .property-header::before { background: #bababa; }
+          [data-studio-properties="studio"] [data-studio-section="text3d"]        .property-header::before { background: #bfbfbf; }
+          [data-studio-properties="studio"] [data-studio-section="archviz"]       .property-header::before { background: #bababa; }
+          [data-studio-properties="studio"] [data-studio-section="lathe"]         .property-header::before { background: #9a9a9a; }
           [data-studio-properties="studio"] [data-studio-section="reference"]     .property-header::before { background: #c0c0c0; }
-          [data-studio-properties="studio"] [data-studio-section="shape-keys"]    .property-header::before { background: #d47fa0; }
-          [data-studio-properties="studio"] [data-studio-section="armature"]      .property-header::before { background: #7fd49e; }
-          [data-studio-properties="studio"] [data-studio-section="animation"]     .property-header::before { background: #d47fa0; }
-          [data-studio-properties="studio"] [data-studio-section="particles"]     .property-header::before { background: #a07fd4; }
-          [data-studio-properties="studio"] [data-studio-section="physics"]       .property-header::before { background: #d4a07f; }
-          [data-studio-properties="studio"] [data-studio-section="render"]        .property-header::before { background: #7fa0d4; }
-          [data-studio-properties="studio"] [data-studio-section="renders"]       .property-header::before { background: #7fa0d4; }
-          [data-studio-properties="studio"] [data-studio-section="lighting"]      .property-header::before { background: #fff176; }
-          [data-studio-properties="studio"] [data-studio-section="compositing"]   .property-header::before { background: #d47f7f; }
-          [data-studio-properties="studio"] [data-studio-section="scene"]         .property-header::before { background: #28d4d4; }
-          [data-studio-properties="studio"] [data-studio-section="scene-io"]      .property-header::before { background: #7fd4a8; }
-          [data-studio-properties="studio"] [data-studio-section="camera"]        .property-header::before { background: #7fa0d4; }
-          [data-studio-properties="studio"] [data-studio-section="export"]        .property-header::before { background: #d4a07f; }
+          [data-studio-properties="studio"] [data-studio-section="shape-keys"]    .property-header::before { background: #9a9a9a; }
+          [data-studio-properties="studio"] [data-studio-section="armature"]      .property-header::before { background: #b0b0b0; }
+          [data-studio-properties="studio"] [data-studio-section="animation"]     .property-header::before { background: #9a9a9a; }
+          [data-studio-properties="studio"] [data-studio-section="particles"]     .property-header::before { background: #9a9a9a; }
+          [data-studio-properties="studio"] [data-studio-section="physics"]       .property-header::before { background: #bababa; }
+          [data-studio-properties="studio"] [data-studio-section="render"]        .property-header::before { background: #bababa; }
+          [data-studio-properties="studio"] [data-studio-section="renders"]       .property-header::before { background: #bababa; }
+          [data-studio-properties="studio"] [data-studio-section="lighting"]      .property-header::before { background: #bfbfbf; }
+          [data-studio-properties="studio"] [data-studio-section="compositing"]   .property-header::before { background: #888888; }
+          [data-studio-properties="studio"] [data-studio-section="scene"]         .property-header::before { background: #e6e6e6; }
+          [data-studio-properties="studio"] [data-studio-section="scene-io"]      .property-header::before { background: #c8c8c8; }
+          [data-studio-properties="studio"] [data-studio-section="camera"]        .property-header::before { background: #bababa; }
+          [data-studio-properties="studio"] [data-studio-section="export"]        .property-header::before { background: #bababa; }
 
           /* Buttons — Studio teal hover glow, smoother transitions. */
           [data-studio-properties="studio"] .property-button {
@@ -4147,13 +4151,12 @@ function WorkbenchStudio() {
             text-align: center;
           }
           [data-studio-properties="studio"] .property-button:hover:not(:disabled) {
-            background: rgba(40,212,212,0.10);
-            border-color: rgba(40,212,212,0.45);
+            background: rgba(255,255,255,0.10);
+            border-color: rgba(255,255,255,0.45);
             color: #f0f6f7;
-            box-shadow: 0 0 12px rgba(40,212,212,0.15);
           }
           [data-studio-properties="studio"] .property-button:active:not(:disabled) {
-            background: rgba(40,212,212,0.20);
+            background: rgba(255,255,255,0.20);
           }
           [data-studio-properties="studio"] .property-button:disabled {
             opacity: 0.35;
@@ -4172,15 +4175,15 @@ function WorkbenchStudio() {
           }
           [data-studio-properties="studio"] .property-input:focus {
             outline: none;
-            border-color: #28d4d4;
-            background: rgba(40,212,212,0.03);
+            border-color: #e6e6e6;
+            background: rgba(255,255,255,0.03);
           }
           [data-studio-properties="studio"] input[type="range"] {
-            accent-color: #28d4d4;
+            accent-color: #e6e6e6;
             height: 4px;
           }
           [data-studio-properties="studio"] input[type="checkbox"] {
-            accent-color: #28d4d4;
+            accent-color: #e6e6e6;
             cursor: pointer;
           }
           [data-studio-properties="studio"] input[type="color"] {
@@ -4220,8 +4223,8 @@ function WorkbenchStudio() {
              tab; the JSX adds an additional data-active flag to the active
              one (next slice). For now hover suffices. */
           body:has([data-studio-properties="studio"]) .workbench-ribbon-placeholder-tabs {
-            background: linear-gradient(180deg, #0e0e16 0%, #0d0d14 100%) !important;
-            border-bottom: 1px solid rgba(40,212,212,0.18) !important;
+            background: linear-gradient(180deg, #0a0a0a 0%, #000000 100%) !important;
+            border-bottom: 1px solid rgba(255,255,255,0.18) !important;
           }
           body:has([data-studio-properties="studio"]) .workbench-ribbon-placeholder-tab {
             position: relative;
@@ -4230,21 +4233,21 @@ function WorkbenchStudio() {
             cursor: pointer;
           }
           body:has([data-studio-properties="studio"]) .workbench-ribbon-placeholder-tab:hover {
-            color: #28d4d4 !important;
-            background: rgba(40,212,212,0.06);
-            border-bottom-color: rgba(40,212,212,0.35) !important;
+            color: #e6e6e6 !important;
+            background: rgba(255,255,255,0.06);
+            border-bottom-color: rgba(255,255,255,0.35) !important;
           }
           /* Active tab — gets data-studio-active="1" on every render. */
           body:has([data-studio-properties="studio"]) .workbench-ribbon-placeholder-tab[data-studio-active="1"] {
-            color: #28d4d4 !important;
-            border-bottom-color: #28d4d4 !important;
-            background: rgba(40,212,212,0.08);
-            text-shadow: 0 0 8px rgba(40,212,212,0.4);
+            color: #e6e6e6 !important;
+            border-bottom-color: #e6e6e6 !important;
+            background: rgba(255,255,255,0.08);
+            text-shadow: none;
           }
 
           /* Ribbon body — primitive-button row + section header strip. */
           body:has([data-studio-properties="studio"]) .workbench-ribbon-placeholder-body {
-            background: #0d0d14 !important;
+            background: #000000 !important;
             font-style: normal !important;
           }
 
@@ -4263,47 +4266,45 @@ function WorkbenchStudio() {
             white-space: nowrap;
           }
           [data-studio-primitive]:hover {
-            background: rgba(40,212,212,0.10);
-            border-color: rgba(40,212,212,0.45);
+            background: rgba(255,255,255,0.10);
+            border-color: rgba(255,255,255,0.45);
             color: #f0f6f7;
-            box-shadow: 0 0 10px rgba(40,212,212,0.18);
           }
           [data-studio-primitive]:active {
-            background: rgba(40,212,212,0.22);
+            background: rgba(255,255,255,0.22);
           }
 
           /* Workbench top header — apply Studio teal accent to the active
              workbench wordmark. */
           body:has([data-studio-properties="studio"]) .workbench-current .workbench-name {
-            color: #28d4d4;
+            color: #e6e6e6;
           }
 
           /* Left viewport tool strip — recolour Mech's pink/red accents
              to Studio teal so hover + active states match. */
           body:has([data-studio-properties="studio"]) .tool-icon-button.active {
-            background: rgba(40,212,212,0.18) !important;
-            color: #28d4d4 !important;
-            box-shadow: 0 0 12px rgba(40,212,212,0.4) !important;
+            background: rgba(255,255,255,0.18) !important;
+            color: #e6e6e6 !important;
           }
           body:has([data-studio-properties="studio"]) .tool-icon-button.active::before {
-            background: #28d4d4 !important;
+            background: #e6e6e6 !important;
           }
           body:has([data-studio-properties="studio"]) .tool-icon-button:hover:not(.active) {
-            background: rgba(40,212,212,0.08) !important;
-            color: #28d4d4 !important;
+            background: rgba(255,255,255,0.08) !important;
+            color: #e6e6e6 !important;
           }
 
           /* Status bar — Studio-teal accent. */
           body:has([data-studio-properties="studio"]) .workbench-statusbar {
-            background: linear-gradient(180deg, #0e0e16 0%, #0d0d14 100%);
-            border-top: 1px solid rgba(40,212,212,0.18);
+            background: linear-gradient(180deg, #0a0a0a 0%, #000000 100%);
+            border-top: 1px solid rgba(255,255,255,0.18);
           }
 
           /* Search input at the top header — Studio-teal focus. */
           body:has([data-studio-properties="studio"]) .header-search input:focus,
           body:has([data-studio-properties="studio"]) .header-search-input:focus {
-            border-color: #28d4d4 !important;
-            box-shadow: 0 0 6px rgba(40,212,212,0.3);
+            border-color: #e6e6e6 !important;
+            box-shadow: none;
           }
 
           /* AI Console: just in case there's a re-mount race, default
@@ -4325,18 +4326,18 @@ function WorkbenchStudio() {
           data-studio-banner
           style={{
             padding: '14px 14px 12px 14px',
-            background: 'linear-gradient(180deg, rgba(40,212,212,0.16) 0%, rgba(40,212,212,0.02) 70%, rgba(0,0,0,0) 100%)',
-            borderBottom: '1px solid rgba(40,212,212,0.18)',
+            background: '#0a0a0a',
+            borderBottom: '1px solid rgba(255,255,255,0.18)',
             marginBottom: '4px',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-            <Wand2 size={18} style={{ color: '#28d4d4', filter: 'drop-shadow(0 0 6px rgba(40,212,212,0.4))' }} />
+            <Wand2 size={18} style={{ color: '#e6e6e6', filter: 'none' }} />
             <h2 style={{
               margin: 0, fontSize: '14px', fontWeight: 700, color: '#f0f6f7',
               letterSpacing: '0.5px',
             }}>
-              ArchDisc <span style={{ color: '#28d4d4' }}>Studio</span>
+              ArchDisc <span style={{ color: '#e6e6e6' }}>Studio</span>
             </h2>
             <span
               data-studio-banner-discipline
@@ -4344,9 +4345,9 @@ function WorkbenchStudio() {
                 marginLeft: 'auto',
                 fontSize: '9.5px',
                 fontFamily: 'monospace',
-                color: '#28d4d4',
-                background: 'rgba(40,212,212,0.12)',
-                border: '1px solid rgba(40,212,212,0.32)',
+                color: '#e6e6e6',
+                background: 'rgba(255,255,255,0.12)',
+                border: '1px solid rgba(255,255,255,0.32)',
                 padding: '3px 8px',
                 borderRadius: '10px',
                 textTransform: 'uppercase',
@@ -4394,12 +4395,12 @@ function WorkbenchStudio() {
               style={{
                 marginTop: '8px',
                 padding: '5px 10px',
-                background: 'rgba(255,241,118,0.10)',
-                border: '1px solid rgba(255,241,118,0.32)',
+                background: 'rgba(191,191,191,0.10)',
+                border: '1px solid rgba(191,191,191,0.32)',
                 borderRadius: '6px',
                 fontSize: '10.5px',
                 fontFamily: 'monospace',
-                color: '#fff176',
+                color: '#bfbfbf',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '6px',
@@ -4483,9 +4484,9 @@ function WorkbenchStudio() {
                         padding: '4px 8px',
                         borderRadius: '4px',
                         background: selectedKind === entry.kind
-                          ? 'rgba(40,212,212,0.18)'
+                          ? 'rgba(255,255,255,0.18)'
                           : 'rgba(255,255,255,0.025)',
-                        color: selectedKind === entry.kind ? '#28d4d4' : '#d4dadf',
+                        color: selectedKind === entry.kind ? '#e6e6e6' : '#d4dadf',
                         fontSize: '11px',
                         fontFamily: 'monospace',
                         display: 'flex',
@@ -4500,7 +4501,7 @@ function WorkbenchStudio() {
                           width: '6px',
                           height: '6px',
                           borderRadius: '50%',
-                          background: entry.isPrimitive ? '#28d4d4' : '#fff176',
+                          background: entry.isPrimitive ? '#e6e6e6' : '#bfbfbf',
                           flexShrink: 0,
                         }}
                       />
@@ -4582,7 +4583,7 @@ function WorkbenchStudio() {
                             opacity: 0.45,
                             fontSize: '13px',
                             padding: '0 4px',
-                            color: '#d47f7f',
+                            color: '#888888',
                             flexShrink: 0,
                           }}
                           title="Delete primitive"
