@@ -4135,6 +4135,112 @@ function WorkbenchStudio() {
             </span>
           </div>
         </div>
+
+        {/* Outliner — scene tree at the top of the right rail. Lists every
+            Studio primitive + light by kind, lets the user click an entry
+            to select that object. Real DCC outliner pattern. */}
+        {(() => {
+          const sceneEntries = [];
+          if (typeof window !== 'undefined' && window.__archdiscScene) {
+            window.__archdiscScene.traverse(o => {
+              if (o.userData && o.userData.archdiscStudioPrimitive) {
+                sceneEntries.push({
+                  uuid: o.uuid,
+                  kind: o.userData.archdiscStudioPrimitiveKind || 'mesh',
+                  isPrimitive: true,
+                });
+              } else if (o.userData && o.userData.archdiscStudioLight && o.isLight) {
+                sceneEntries.push({
+                  uuid: o.uuid,
+                  kind: o.type || 'light',
+                  isPrimitive: false,
+                });
+              }
+            });
+          }
+          // Touch primitiveCount + selectedKind + lightCount + currentFrame
+          // so React re-evaluates the IIFE whenever the scene state changes
+          // (eslint-disable-next-line no-unused-expressions).
+          void primitiveCount; void selectedKind; void lightCount; void currentFrame;
+          return (
+            <div className="property-section" data-studio-section="outliner">
+              <h3 className="property-header">
+                Outliner
+                <span
+                  data-studio-outliner-count
+                  style={{ marginLeft: '8px', opacity: 0.5, fontSize: '10px', fontWeight: 'normal' }}
+                >
+                  {sceneEntries.length} item{sceneEntries.length === 1 ? '' : 's'}
+                </span>
+              </h3>
+              {sceneEntries.length === 0 ? (
+                <p
+                  data-studio-outliner-empty
+                  className="property-label"
+                  style={{ opacity: 0.5, fontSize: '11px', margin: 0 }}
+                >
+                  Scene is empty. Add a primitive from the ribbon or
+                  load a preset from Asset Library below.
+                </p>
+              ) : (
+                <div
+                  data-studio-outliner-list
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '2px',
+                    maxHeight: '140px',
+                    overflowY: 'auto',
+                  }}
+                >
+                  {sceneEntries.map((entry, i) => (
+                    <button
+                      key={entry.uuid}
+                      data-studio-outliner-entry={i}
+                      data-studio-outliner-kind={entry.kind}
+                      onClick={() => {
+                        if (typeof window === 'undefined' || !window.__archdiscScene) return;
+                        const mesh = window.__archdiscScene.getObjectByProperty('uuid', entry.uuid);
+                        if (mesh && window.__studioSelectMesh && entry.isPrimitive) {
+                          window.__studioSelectMesh(mesh);
+                        }
+                      }}
+                      style={{
+                        all: 'unset',
+                        cursor: entry.isPrimitive ? 'pointer' : 'default',
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        background: selectedKind === entry.kind
+                          ? 'rgba(40,212,212,0.18)'
+                          : 'rgba(255,255,255,0.025)',
+                        color: selectedKind === entry.kind ? '#28d4d4' : '#d4dadf',
+                        fontSize: '11px',
+                        fontFamily: 'monospace',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        transition: 'background 0.12s',
+                      }}
+                    >
+                      <span
+                        style={{
+                          display: 'inline-block',
+                          width: '6px',
+                          height: '6px',
+                          borderRadius: '50%',
+                          background: entry.isPrimitive ? '#28d4d4' : '#fff176',
+                          flexShrink: 0,
+                        }}
+                      />
+                      {entry.kind}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         <div className="property-section" data-studio-section="ai">
           <h3 className="property-header">
             AI Prompt
