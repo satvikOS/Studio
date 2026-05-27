@@ -317,6 +317,26 @@ function WorkbenchStudio() {
   const [libraryLastLoaded, setLibraryLastLoaded] = useState('');
   // UI/UX — collapsed-section state (keyed by section id).
   const [collapsedSections, setCollapsedSections] = useState({});
+  // Viewport right-click context menu — coordinates + target mesh uuid.
+  const [contextMenu, setContextMenu] = useState(null);
+  // Close context menu when clicking anywhere outside it.
+  useEffect(() => {
+    if (!contextMenu) return;
+    const closeOnOutside = (e) => {
+      const menu = document.querySelector('[data-studio-context-menu]');
+      if (menu && menu.contains(e.target)) return;
+      setContextMenu(null);
+    };
+    // Fire on the NEXT tick so the right-click that opened the menu
+    // doesn't immediately close it.
+    const t = setTimeout(() => {
+      document.addEventListener('click', closeOnOutside);
+    }, 0);
+    return () => {
+      clearTimeout(t);
+      document.removeEventListener('click', closeOnOutside);
+    };
+  }, [contextMenu]);
   // Display modes — view-time toggles for wireframe, bounding-box,
   // and vertex-normals visualization on Studio primitives.
   const [displayWireframe,   setDisplayWireframe]   = useState(false);
@@ -891,6 +911,33 @@ function WorkbenchStudio() {
       };
       vp.renderer.domElement.addEventListener('pointerdown', onPointerDown);
 
+      // Right-click → context menu. Suppress the browser's native menu.
+      const onContextMenu = (e) => {
+        e.preventDefault();
+        const rect = vp.renderer.domElement.getBoundingClientRect();
+        const ndc = new THREE.Vector2(
+          ((e.clientX - rect.left) / rect.width) * 2 - 1,
+          -((e.clientY - rect.top) / rect.height) * 2 + 1,
+        );
+        raycaster.setFromCamera(ndc, vp.camera);
+        const studioMeshes = [];
+        vp.scene.traverse(o => {
+          if (o.isMesh && o.userData && o.userData.archdiscStudioPrimitive) {
+            studioMeshes.push(o);
+          }
+        });
+        const hits = raycaster.intersectObjects(studioMeshes, false);
+        // Show menu either way — empty area menu has "Add Primitive" only.
+        const target = hits.length > 0 ? hits[0].object : null;
+        if (target) selectMesh(target);
+        setContextMenu({
+          x: e.clientX,
+          y: e.clientY,
+          uuid: target ? target.uuid : null,
+        });
+      };
+      vp.renderer.domElement.addEventListener('contextmenu', onContextMenu);
+
       const onKeyDown = (e) => {
         if ((e.key === 'Delete' || e.key === 'Backspace') && selectedMeshRef.current) {
           const tag = (e.target && e.target.tagName) || '';
@@ -903,6 +950,7 @@ function WorkbenchStudio() {
 
       cleanupFn = () => {
         vp.renderer.domElement.removeEventListener('pointerdown', onPointerDown);
+        vp.renderer.domElement.removeEventListener('contextmenu', onContextMenu);
         window.removeEventListener('keydown', onKeyDown);
         clearOutline();
         delete window.__studioSelectMesh;
@@ -4149,6 +4197,160 @@ function WorkbenchStudio() {
       {/* CENTER VIEWPORT — three.js scene (shared component reused from Mech) */}
       <main className="workbench-viewport" style={{ position: 'relative' }}>
         <Viewport3D canvasId="render-canvas-studio" domain="studio" />
+        {/* Right-click context menu — fires on viewport contextmenu event,
+            offers Studio-specific actions on the picked mesh (Duplicate,
+            Subdivide, Delete, etc.) or generic actions for empty space. */}
+        {contextMenu && (
+          <div
+            data-studio-context-menu
+            onClick={() => setContextMenu(null)}
+            style={{
+              position: 'fixed',
+              left: contextMenu.x,
+              top: contextMenu.y,
+              zIndex: 100,
+              minWidth: '180px',
+              background: '#0a0a0a',
+              border: '1px solid rgba(255,255,255,0.18)',
+              borderRadius: '6px',
+              padding: '4px 0',
+              fontSize: '11px',
+              fontFamily: 'inherit',
+              color: '#d4dadf',
+              boxShadow: 'none',
+            }}
+          >
+            {contextMenu.uuid ? (
+              <>
+                <div
+                  data-studio-context-action="duplicate"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setContextMenu(null);
+                    const src = window.__archdiscScene && window.__archdiscScene.getObjectByProperty('uuid', contextMenu.uuid);
+                    if (!src || !src.isMesh) return;
+                    const clone = new THREE.Mesh(src.geometry.clone(), src.material.clone());
+                    clone.position.copy(src.position);
+                    clone.rotation.copy(src.rotation);
+                    clone.scale.copy(src.scale);
+                    clone.position.x += 0.04; // offset 40mm so it's visible
+                    clone.userData.archdiscStudioPrimitive = true;
+                    clone.userData.archdiscStudioPrimitiveKind = (src.userData.archdiscStudioPrimitiveKind || 'mesh') + '-dup';
+                    window.__archdiscScene.add(clone);
+                    primitiveStackRef.current.push(clone);
+                    setPrimitiveCount(primitiveStackRef.current.length);
+                    recomputeMeshStats(window.__archdiscScene);
+                  }}
+                  style={{ padding: '6px 14px', cursor: 'pointer' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                >
+                  Duplicate
+                </div>
+                <div
+                  data-studio-context-action="subdivide"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setContextMenu(null);
+                    subdivideSelected();
+                  }}
+                  style={{ padding: '6px 14px', cursor: 'pointer' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                >
+                  Subdivide
+                </div>
+                <div
+                  data-studio-context-action="smooth-shading"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setContextMenu(null);
+                    setShading('smooth');
+                  }}
+                  style={{ padding: '6px 14px', cursor: 'pointer' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                >
+                  Shading → Smooth
+                </div>
+                <div
+                  data-studio-context-action="flat-shading"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setContextMenu(null);
+                    setShading('flat');
+                  }}
+                  style={{ padding: '6px 14px', cursor: 'pointer' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                >
+                  Shading → Flat
+                </div>
+                <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', margin: '4px 0' }} />
+                <div
+                  data-studio-context-action="delete"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setContextMenu(null);
+                    const target = window.__archdiscScene && window.__archdiscScene.getObjectByProperty('uuid', contextMenu.uuid);
+                    if (!target) return;
+                    const stack = primitiveStackRef.current;
+                    const idx = stack.indexOf(target);
+                    if (idx !== -1) stack.splice(idx, 1);
+                    if (selectedMeshRef.current === target) {
+                      selectedMeshRef.current = null;
+                      setSelectedKind(null);
+                      setSelectedTransform(null);
+                    }
+                    window.__archdiscScene.remove(target);
+                    if (target.geometry && target.geometry.dispose) target.geometry.dispose();
+                    if (target.material) {
+                      if (Array.isArray(target.material)) target.material.forEach(m => m.dispose && m.dispose());
+                      else if (target.material.dispose) target.material.dispose();
+                    }
+                    setPrimitiveCount(stack.length);
+                    recomputeMeshStats(window.__archdiscScene);
+                  }}
+                  style={{ padding: '6px 14px', cursor: 'pointer', color: '#cccccc' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                >
+                  Delete
+                </div>
+              </>
+            ) : (
+              <>
+                <div
+                  data-studio-context-action="add-cube"
+                  onClick={(e) => { e.stopPropagation(); setContextMenu(null); addPrimitive('cube'); }}
+                  style={{ padding: '6px 14px', cursor: 'pointer' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                >
+                  Add Cube
+                </div>
+                <div
+                  data-studio-context-action="add-sphere"
+                  onClick={(e) => { e.stopPropagation(); setContextMenu(null); addPrimitive('sphere'); }}
+                  style={{ padding: '6px 14px', cursor: 'pointer' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                >
+                  Add Sphere
+                </div>
+                <div
+                  data-studio-context-action="add-suzanne"
+                  onClick={(e) => { e.stopPropagation(); setContextMenu(null); addPrimitive('suzanne'); }}
+                  style={{ padding: '6px 14px', cursor: 'pointer' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                >
+                  Add Suzanne
+                </div>
+              </>
+            )}
+          </div>
+        )}
         {/* Empty-state hero — when the scene has no primitives, show a
             big Studio welcome card centered over the viewport with
             quick-start buttons. Hidden the moment the user adds anything. */}
