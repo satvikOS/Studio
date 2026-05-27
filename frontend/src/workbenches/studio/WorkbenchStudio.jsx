@@ -340,6 +340,32 @@ function WorkbenchStudio() {
   }
 
   /*
+   * Showreel — one-click 4-view auto-capture (front / right / back /
+   * left at +25° elevation). Orbits the camera to each angle, waits
+   * for the rAF render loop to settle, captures via the same path
+   * Render Frame uses. Lets the user produce a product-viz turntable
+   * sheet without orbiting + clicking Render Frame four times.
+   */
+  async function captureShowreel() {
+    const angles = [
+      { az: 0,   el: 25, name: 'front' },
+      { az: 90,  el: 25, name: 'right' },
+      { az: 180, el: 25, name: 'back' },
+      { az: 270, el: 25, name: 'left'  },
+    ];
+    for (const a of angles) {
+      if (typeof window.__archdiscOrbitView === 'function') {
+        window.__archdiscOrbitView(a.az, a.el, 1);
+      }
+      // Wait long enough for OrbitControls damping + a render frame
+      // before we read the pixel buffer.
+      await new Promise(r => setTimeout(r, 220));
+      captureRender();
+      await new Promise(r => setTimeout(r, 80));
+    }
+  }
+
+  /*
    * Selection wiring — raycaster + outline overlay + Delete key.
    *
    * Polls until Viewport3D exposes window.__archdiscViewport, then attaches
@@ -2498,6 +2524,13 @@ function WorkbenchStudio() {
             onClick={captureRender}
           >
             Render Frame
+          </button>
+          <button
+            className="property-button"
+            data-studio-action="capture-showreel"
+            onClick={captureShowreel}
+          >
+            Capture 4-View Showreel
           </button>
           <button className="property-button" disabled>Render Animation</button>
         </div>
