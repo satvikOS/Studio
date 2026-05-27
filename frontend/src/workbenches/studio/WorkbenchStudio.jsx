@@ -270,6 +270,13 @@ function WorkbenchStudio() {
   // Cell fracture / shatter — split selected mesh into N spatial chunks.
   const [fractureChunks, setFractureChunks] = useState(12);
   const [fractureExplode, setFractureExplode] = useState(0.006);
+  // Array modifier — linear or radial duplicate of the selected mesh.
+  const [arrayMode,    setArrayMode]    = useState('linear');
+  const [arrayCount,   setArrayCount]   = useState(8);
+  const [arrayOffsetX, setArrayOffsetX] = useState(0.03);
+  const [arrayOffsetY, setArrayOffsetY] = useState(0);
+  const [arrayOffsetZ, setArrayOffsetZ] = useState(0);
+  const [arrayRadius,  setArrayRadius]  = useState(0.04);
   // Asset library — readout of last-loaded preset.
   const [libraryLastLoaded, setLibraryLastLoaded] = useState('');
   // Display modes — view-time toggles for wireframe, bounding-box,
@@ -1924,6 +1931,46 @@ function WorkbenchStudio() {
       mesh.material.map = null;
       mesh.material.needsUpdate = true;
     }
+  }
+
+  /*
+   * Array modifier — duplicate the selected mesh in a deterministic
+   * pattern. Two modes:
+   *   linear  — N copies translated by (dx, dy, dz)*i along the axis
+   *   radial  — N copies arranged in a ring of radius `radius` around
+   *             the Y-axis through the source mesh's position
+   *
+   * Each duplicate is a real Studio primitive — tagged, pushed to the
+   * primitive stack, swept by Clear Scene.
+   */
+  function arrayModifier(mode, count, offsetX, offsetY, offsetZ, radius) {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    const created = [];
+    const baseKind = mesh.userData.archdiscStudioPrimitiveKind || 'mesh';
+    for (let i = 1; i < count; i++) {
+      const clone = new THREE.Mesh(mesh.geometry.clone(), mesh.material.clone());
+      clone.position.copy(mesh.position);
+      if (mode === 'linear') {
+        clone.position.x += offsetX * i;
+        clone.position.y += offsetY * i;
+        clone.position.z += offsetZ * i;
+      } else if (mode === 'radial') {
+        const theta = (i / count) * Math.PI * 2;
+        clone.position.x += radius * Math.cos(theta);
+        clone.position.z += radius * Math.sin(theta);
+        clone.rotation.y = -theta;
+      }
+      clone.userData.archdiscStudioPrimitive = true;
+      clone.userData.archdiscStudioPrimitiveKind = baseKind + '-array';
+      clone.userData.archdiscStudioArrayIndex = i;
+      window.__archdiscScene.add(clone);
+      primitiveStackRef.current.push(clone);
+      created.push(clone);
+    }
+    setPrimitiveCount(primitiveStackRef.current.length);
+    recomputeMeshStats(window.__archdiscScene);
+    return { count: created.length };
   }
 
   /*
@@ -5005,6 +5052,121 @@ function WorkbenchStudio() {
               disabled={!selectedKind}
             >
               Fracture · Shatter Selected
+            </button>
+          </div>
+
+          <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+            <p className="property-label" style={{ opacity: 0.6, fontSize: '11px', margin: '0 0 4px 0' }}>
+              Array — N copies of selected mesh, linear axis offset or
+              circular ring around Y-axis.
+            </p>
+            <div className="property-row">
+              <span className="property-label">Mode</span>
+              <select
+                className="property-input"
+                data-studio-array="mode"
+                value={arrayMode}
+                onChange={e => setArrayMode(e.target.value)}
+              >
+                <option value="linear">Linear</option>
+                <option value="radial">Radial</option>
+              </select>
+            </div>
+            <div className="property-row">
+              <span className="property-label">Count</span>
+              <input
+                type="range"
+                min="2"
+                max="20"
+                step="1"
+                data-studio-array="count"
+                value={arrayCount}
+                onChange={e => setArrayCount(Number(e.target.value))}
+                style={{ flex: 1 }}
+              />
+              <span
+                data-studio-array-readout="count"
+                style={{ marginLeft: '6px', fontSize: '10px', fontFamily: 'monospace', minWidth: '24px', textAlign: 'right' }}
+              >
+                {arrayCount}
+              </span>
+            </div>
+            {arrayMode === 'linear' ? (
+              <>
+                <div className="property-row">
+                  <span className="property-label">Offset X</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="0.06"
+                    step="0.001"
+                    data-studio-array="offsetX"
+                    value={arrayOffsetX}
+                    onChange={e => setArrayOffsetX(Number(e.target.value))}
+                    style={{ flex: 1 }}
+                  />
+                  <span data-studio-array-readout="offsetX" style={{ marginLeft: '6px', fontSize: '10px', fontFamily: 'monospace', minWidth: '46px', textAlign: 'right' }}>
+                    {(arrayOffsetX * 1000).toFixed(0)} mm
+                  </span>
+                </div>
+                <div className="property-row">
+                  <span className="property-label">Offset Y</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="0.06"
+                    step="0.001"
+                    data-studio-array="offsetY"
+                    value={arrayOffsetY}
+                    onChange={e => setArrayOffsetY(Number(e.target.value))}
+                    style={{ flex: 1 }}
+                  />
+                  <span style={{ marginLeft: '6px', fontSize: '10px', fontFamily: 'monospace', minWidth: '46px', textAlign: 'right' }}>
+                    {(arrayOffsetY * 1000).toFixed(0)} mm
+                  </span>
+                </div>
+                <div className="property-row">
+                  <span className="property-label">Offset Z</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="0.06"
+                    step="0.001"
+                    data-studio-array="offsetZ"
+                    value={arrayOffsetZ}
+                    onChange={e => setArrayOffsetZ(Number(e.target.value))}
+                    style={{ flex: 1 }}
+                  />
+                  <span style={{ marginLeft: '6px', fontSize: '10px', fontFamily: 'monospace', minWidth: '46px', textAlign: 'right' }}>
+                    {(arrayOffsetZ * 1000).toFixed(0)} mm
+                  </span>
+                </div>
+              </>
+            ) : (
+              <div className="property-row">
+                <span className="property-label">Radius</span>
+                <input
+                  type="range"
+                  min="0.01"
+                  max="0.08"
+                  step="0.001"
+                  data-studio-array="radius"
+                  value={arrayRadius}
+                  onChange={e => setArrayRadius(Number(e.target.value))}
+                  style={{ flex: 1 }}
+                />
+                <span data-studio-array-readout="radius" style={{ marginLeft: '6px', fontSize: '10px', fontFamily: 'monospace', minWidth: '46px', textAlign: 'right' }}>
+                  {(arrayRadius * 1000).toFixed(0)} mm
+                </span>
+              </div>
+            )}
+            <button
+              className="property-button"
+              data-studio-action="apply-array"
+              onClick={() => arrayModifier(arrayMode, arrayCount, arrayOffsetX, arrayOffsetY, arrayOffsetZ, arrayRadius)}
+              disabled={!selectedKind}
+            >
+              Apply Array
             </button>
           </div>
         </div>
