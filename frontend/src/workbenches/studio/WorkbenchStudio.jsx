@@ -270,6 +270,10 @@ function WorkbenchStudio() {
   // Cell fracture / shatter — split selected mesh into N spatial chunks.
   const [fractureChunks, setFractureChunks] = useState(12);
   const [fractureExplode, setFractureExplode] = useState(0.006);
+  // Cloth simulation — PBD edge-spring cloth, drops under gravity.
+  const [clothActive, setClothActive] = useState(false);
+  const clothStateRef = useRef(null);
+  const clothRafRef   = useRef(null);
   // Array modifier — linear or radial duplicate of the selected mesh.
   const [arrayMode,    setArrayMode]    = useState('linear');
   const [arrayCount,   setArrayCount]   = useState(8);
@@ -1932,6 +1936,204 @@ function WorkbenchStudio() {
       mesh.material.needsUpdate = true;
     }
   }
+
+  /*
+   * Cloth simulation — Position-Based Dynamics (PBD) edge-spring cloth.
+   *
+   * spawnClothPlane(): builds a 20×20 grid above the scene origin with
+   *   neighbour-connectivity edges (horizontal + vertical), tags it
+   *   as a Studio primitive of kind 'cloth-plane', pins the 4 corners
+   *   so it hangs rather than falls.
+   *
+   * tick(): each frame at 60 fps
+   *   1. apply gravity to every non-pinned vertex velocity
+   *   2. integrate velocity into position
+   *   3. for each edge constraint: project both endpoints toward the
+   *      midpoint so |endpoints| ≈ restLength (one PBD iteration)
+   *   4. for every sphere in the scene: if a cloth vertex is inside
+   *      it, push out to the surface
+   *   5. write back updated positions, recompute normals
+   *
+   * Runs on rAF; stop on toggle off / unmount.
+   */
+  function spawnClothPlane() {
+    const N = 20;
+    const S = PRIMITIVE_SIZE * 2.8; // 84 mm square
+    const step = S / (N - 1);
+    const positions = [];
+    const indices = [];
+    // Vertex grid centred on origin, offset 60 mm above the scene's
+    // typical primitive height so it falls onto whatever sits below.
+    const Y0 = 0.06;
+    for (let r = 0; r < N; r++) {
+      for (let c = 0; c < N; c++) {
+        positions.push(c * step - S / 2, Y0, r * step - S / 2);
+      }
+    }
+    for (let r = 0; r < N - 1; r++) {
+      for (let c = 0; c < N - 1; c++) {
+        const a = r * N + c;
+        const b = r * N + (c + 1);
+        const d = (r + 1) * N + c;
+        const e = (r + 1) * N + (c + 1);
+        // Two triangles per quad; consistent CCW winding for upward-facing.
+        indices.push(a, d, b);
+        indices.push(b, d, e);
+      }
+    }
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geom.setIndex(indices);
+    geom.computeVertexNormals();
+    geom.computeBoundingSphere();
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0xb8324d,
+      roughness: 0.7,
+      metalness: 0.05,
+      side: THREE.DoubleSide,
+    });
+    const mesh = new THREE.Mesh(geom, mat);
+    mesh.userData.archdiscStudioPrimitive = true;
+    mesh.userData.archdiscStudioPrimitiveKind = 'cloth-plane';
+    // Build edge list once + record rest lengths.
+    const edges = [];
+    const rest  = [];
+    const addEdge = (a, b) => {
+      if (a >= b) return;
+      const dx = positions[a * 3] - positions[b * 3];
+      const dy = positions[a * 3 + 1] - positions[b * 3 + 1];
+      const dz = positions[a * 3 + 2] - positions[b * 3 + 2];
+      edges.push([a, b]);
+      rest.push(Math.sqrt(dx * dx + dy * dy + dz * dz));
+    };
+    for (let r = 0; r < N; r++) {
+      for (let c = 0; c < N; c++) {
+        const i = r * N + c;
+        if (c + 1 < N) addEdge(i, r * N + (c + 1));
+        if (r + 1 < N) addEdge(i, (r + 1) * N + c);
+        // Optional diagonal shear edges, two per quad — keeps the cloth
+        // from collapsing into a strip.
+        if (c + 1 < N && r + 1 < N) {
+          addEdge(i, (r + 1) * N + (c + 1));
+          addEdge(r * N + (c + 1), (r + 1) * N + c);
+        }
+      }
+    }
+    const pinned = new Set([
+      0,               // top-left
+      N - 1,           // top-right
+      (N - 1) * N,     // bottom-left
+      N * N - 1,       // bottom-right
+    ]);
+    const vel = new Float32Array(N * N * 3);
+    window.__archdiscScene.add(mesh);
+    primitiveStackRef.current.push(mesh);
+    setPrimitiveCount(primitiveStackRef.current.length);
+    clothStateRef.current = { mesh, edges, rest, pinned, vel, N };
+    recomputeMeshStats(window.__archdiscScene);
+    return { vertices: N * N, edges: edges.length };
+  }
+
+  function tickCloth(dt) {
+    const state = clothStateRef.current;
+    if (!state) return;
+    const { mesh, edges, rest, pinned, vel } = state;
+    const pos = mesh.geometry.attributes.position;
+    const arr = pos.array;
+    const g = 9.8;
+    const damping = 0.98;
+    // 1. Gravity + integrate.
+    for (let i = 0; i < pos.count; i++) {
+      if (pinned.has(i)) continue;
+      vel[i * 3 + 1] -= g * dt;
+      vel[i * 3]     *= damping;
+      vel[i * 3 + 1] *= damping;
+      vel[i * 3 + 2] *= damping;
+      arr[i * 3]     += vel[i * 3]     * dt;
+      arr[i * 3 + 1] += vel[i * 3 + 1] * dt;
+      arr[i * 3 + 2] += vel[i * 3 + 2] * dt;
+    }
+    // 2. PBD constraint projection — 4 iterations.
+    for (let k = 0; k < 4; k++) {
+      for (let e = 0; e < edges.length; e++) {
+        const a = edges[e][0], b = edges[e][1];
+        const dx = arr[b * 3]     - arr[a * 3];
+        const dy = arr[b * 3 + 1] - arr[a * 3 + 1];
+        const dz = arr[b * 3 + 2] - arr[a * 3 + 2];
+        const d = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
+        const diff = (d - rest[e]) / d;
+        // Pinned vertices don't move; partition the correction
+        // entirely onto the non-pinned end.
+        const pinA = pinned.has(a), pinB = pinned.has(b);
+        if (pinA && pinB) continue;
+        const wA = pinA ? 0 : (pinB ? 1 : 0.5);
+        const wB = pinB ? 0 : (pinA ? 1 : 0.5);
+        arr[a * 3]     += dx * diff * wA;
+        arr[a * 3 + 1] += dy * diff * wA;
+        arr[a * 3 + 2] += dz * diff * wA;
+        arr[b * 3]     -= dx * diff * wB;
+        arr[b * 3 + 1] -= dy * diff * wB;
+        arr[b * 3 + 2] -= dz * diff * wB;
+      }
+    }
+    // 3. Sphere collision — push verts out of any Studio sphere.
+    const spheres = [];
+    window.__archdiscScene.traverse(o => {
+      if (o.userData && o.userData.archdiscStudioPrimitive &&
+          o.userData.archdiscStudioPrimitiveKind === 'sphere') {
+        if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere();
+        spheres.push({
+          cx: o.position.x,
+          cy: o.position.y,
+          cz: o.position.z,
+          r:  o.geometry.boundingSphere.radius + 0.001, // 1mm clearance
+        });
+      }
+    });
+    for (const s of spheres) {
+      for (let i = 0; i < pos.count; i++) {
+        if (pinned.has(i)) continue;
+        const dx = arr[i * 3]     - s.cx;
+        const dy = arr[i * 3 + 1] - s.cy;
+        const dz = arr[i * 3 + 2] - s.cz;
+        const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (d < s.r) {
+          const push = (s.r - d) / Math.max(d, 1e-6);
+          arr[i * 3]     += dx * push;
+          arr[i * 3 + 1] += dy * push;
+          arr[i * 3 + 2] += dz * push;
+          // Kill velocity so cloth stays draped.
+          vel[i * 3]     *= 0.4;
+          vel[i * 3 + 1] = 0;
+          vel[i * 3 + 2] *= 0.4;
+        }
+      }
+    }
+    pos.needsUpdate = true;
+    mesh.geometry.computeVertexNormals();
+  }
+
+  useEffect(() => {
+    if (!clothActive) {
+      if (clothRafRef.current) {
+        cancelAnimationFrame(clothRafRef.current);
+        clothRafRef.current = null;
+      }
+      return;
+    }
+    let last = performance.now();
+    const loop = () => {
+      const now = performance.now();
+      const dt = Math.min(0.033, (now - last) / 1000);
+      last = now;
+      tickCloth(dt);
+      clothRafRef.current = requestAnimationFrame(loop);
+    };
+    clothRafRef.current = requestAnimationFrame(loop);
+    return () => {
+      if (clothRafRef.current) cancelAnimationFrame(clothRafRef.current);
+    };
+  }, [clothActive]);
 
   /*
    * Array modifier — duplicate the selected mesh in a deterministic
@@ -4468,6 +4670,36 @@ function WorkbenchStudio() {
           >
             Spawn Particle Cloud
           </button>
+
+          <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+            <p className="property-label" style={{ opacity: 0.6, fontSize: '11px', margin: '0 0 4px 0' }}>
+              Cloth Sim — 20×20 grid with PBD edge-spring constraints.
+              Falls under gravity, collides with any Studio sphere.
+            </p>
+            <button
+              className="property-button"
+              data-studio-action="spawn-cloth"
+              onClick={spawnClothPlane}
+              style={{ margin: '0 0 4px 0' }}
+            >
+              Add Cloth Plane (20×20)
+            </button>
+            <button
+              className="property-button"
+              data-studio-action="toggle-cloth-sim"
+              onClick={() => setClothActive(a => !a)}
+              disabled={!clothStateRef.current}
+            >
+              {clothActive ? 'Stop Cloth Sim' : 'Run Cloth Sim'}
+            </button>
+            <p
+              data-studio-cloth-state
+              className="property-label"
+              style={{ opacity: 0.55, fontSize: '10px', margin: '4px 0 0 0', fontFamily: 'monospace' }}
+            >
+              {clothActive ? 'simulating' : 'idle'}
+            </p>
+          </div>
 
           <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
             <p className="property-label" style={{ opacity: 0.6, fontSize: '11px', margin: '0 0 4px 0' }}>
