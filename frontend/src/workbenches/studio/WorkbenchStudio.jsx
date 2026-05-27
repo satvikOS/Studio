@@ -194,6 +194,10 @@ function WorkbenchStudio() {
   // Procedural — recursive Tree generator parameters.
   const [procTreeDepth, setProcTreeDepth]   = useState(4);
   const [procTreeBranches, setProcTreeBranches] = useState(3);
+  // Instancing (game-asset replication) — clone the selected primitive's
+  // geometry into N positioned + scaled + rotated instances.
+  const [instanceCount, setInstanceCount]   = useState(500);
+  const [instanceRadius, setInstanceRadius] = useState(0.08);
 
   function recomputeMeshStats(scene) {
     let v = 0;
@@ -568,6 +572,63 @@ function WorkbenchStudio() {
 
     scene.add(mesh);
     primitiveStackRef.current.push(mesh);
+    setPrimitiveCount(c => c + 1);
+    recomputeMeshStats(scene);
+  }
+
+  /*
+   * Instanced rendering — clone the selected primitive's geometry +
+   * material into a THREE.InstancedMesh with N positioned, rotated,
+   * randomly-scaled instances scattered in a spherical shell. One
+   * draw call per swarm, irrespective of N. Demonstrates the
+   * AAA-game-asset / Nanite-style massive-replication pattern.
+   */
+  function spawnInstancedSwarm() {
+    const source = selectedMeshRef.current;
+    const scene = window.__archdiscScene;
+    if (!source || !source.geometry || !scene) return;
+    const N = Math.max(10, Math.min(5000, Math.floor(instanceCount)));
+    const R = instanceRadius;
+    const instanced = new THREE.InstancedMesh(source.geometry, source.material, N);
+    const dummy = new THREE.Object3D();
+    for (let i = 0; i < N; i++) {
+      const u = Math.random(), v = Math.random();
+      const theta = u * 2 * Math.PI;
+      const phi   = Math.acos(2 * v - 1);
+      const r     = R * Math.cbrt(0.4 + Math.random() * 0.6);
+      dummy.position.set(
+        r * Math.sin(phi) * Math.cos(theta),
+        r * Math.sin(phi) * Math.sin(theta),
+        r * Math.cos(phi),
+      );
+      const s = 0.4 + Math.random() * 0.8;
+      dummy.scale.set(s, s, s);
+      dummy.rotation.set(
+        Math.random() * Math.PI * 2,
+        Math.random() * Math.PI * 2,
+        Math.random() * Math.PI * 2,
+      );
+      dummy.updateMatrix();
+      instanced.setMatrixAt(i, dummy.matrix);
+    }
+    instanced.instanceMatrix.needsUpdate = true;
+    instanced.userData.archdiscStudioPrimitive = true;
+    instanced.userData.archdiscStudioPrimitiveKind = 'instanced-swarm';
+    instanced.userData.archdiscStudioInstanceCount = N;
+    instanced.name = `studio-primitive-swarm-${N}-${primitiveCount}`;
+
+    const cols = 4;
+    const i = primitiveCount;
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    instanced.position.set(
+      (col - (cols - 1) / 2) * PRIMITIVE_SIZE * 1.9,
+      0,
+      row * PRIMITIVE_SIZE * 1.9,
+    );
+
+    scene.add(instanced);
+    primitiveStackRef.current.push(instanced);
     setPrimitiveCount(c => c + 1);
     recomputeMeshStats(scene);
   }
@@ -1403,6 +1464,56 @@ function WorkbenchStudio() {
             </button>
           </div>
         )}
+
+        <div className="property-section" data-studio-section="instancing">
+          <h3 className="property-header">Instancing · Swarm</h3>
+          <div className="property-row">
+            <span className="property-label">Count</span>
+            <input
+              type="range"
+              min="10"
+              max="5000"
+              step="10"
+              data-studio-instancing="count"
+              value={instanceCount}
+              onChange={e => setInstanceCount(Number(e.target.value))}
+              style={{ flex: 1 }}
+            />
+            <span
+              data-studio-instancing-readout="count"
+              style={{ marginLeft: '6px', fontSize: '10px', fontFamily: 'monospace', minWidth: '44px', textAlign: 'right' }}
+            >
+              {instanceCount}
+            </span>
+          </div>
+          <div className="property-row">
+            <span className="property-label">Radius</span>
+            <input
+              type="range"
+              min="0.02"
+              max="0.2"
+              step="0.005"
+              data-studio-instancing="radius"
+              value={instanceRadius}
+              onChange={e => setInstanceRadius(Number(e.target.value))}
+              style={{ flex: 1 }}
+            />
+            <span
+              data-studio-instancing-readout="radius"
+              style={{ marginLeft: '6px', fontSize: '10px', fontFamily: 'monospace', minWidth: '52px', textAlign: 'right' }}
+            >
+              {(instanceRadius * 1000).toFixed(0)} mm
+            </span>
+          </div>
+          <button
+            className="property-button"
+            data-studio-action="spawn-swarm"
+            onClick={spawnInstancedSwarm}
+            disabled={!selectedKind}
+          >
+            Instance Selected as Swarm
+          </button>
+        </div>
 
         <div className="property-section" data-studio-section="procedural">
           <h3 className="property-header">Procedural · Tree</h3>
