@@ -1777,6 +1777,58 @@ function WorkbenchStudio() {
   }
 
   /*
+   * Weld modifier — merge nearby vertices.
+   *
+   * Blender source: blender/source/blender/modifiers/intern/MOD_weld.cc
+   *
+   * Quantize positions to a grid sized by `tolerance` (m), then
+   * mergeVertices dedupes by attribute equality. Same building
+   * blocks the existing Smooth-shading path uses. Output mesh has
+   * fewer verts + faces wherever the source had near-duplicates.
+   */
+  function weldModifier(tolerance) {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    let g = mesh.geometry;
+    // Quantize positions to the tolerance grid so mergeVertices'
+    // attribute-equality check actually finds duplicates.
+    const positions = new Float32Array(g.attributes.position.array.length);
+    const src = g.attributes.position.array;
+    for (let i = 0; i < src.length; i++) {
+      positions[i] = Math.round(src[i] / tolerance) * tolerance;
+    }
+    const tmp = new THREE.BufferGeometry();
+    tmp.setAttribute('position', new THREE.Float32BufferAttribute(Array.from(positions), 3));
+    if (g.index) tmp.setIndex(Array.from(g.index.array));
+    else {
+      const n = g.attributes.position.count;
+      const idx = new Array(n);
+      for (let i = 0; i < n; i++) idx[i] = i;
+      tmp.setIndex(idx);
+    }
+    const beforeVerts = g.attributes.position.count;
+    const merged = mergeVertices(tmp, tolerance);
+    // Drop degenerate triangles (where dedupe collapsed 2+ corners).
+    const idxArr = merged.index ? Array.from(merged.index.array) : [];
+    const kept = [];
+    for (let t = 0; t < idxArr.length; t += 3) {
+      const a = idxArr[t], b = idxArr[t + 1], c = idxArr[t + 2];
+      if (a === b || b === c || a === c) continue;
+      kept.push(a, b, c);
+    }
+    merged.setIndex(kept);
+    merged.computeVertexNormals();
+    merged.computeBoundingSphere();
+    mesh.geometry.dispose();
+    mesh.geometry = merged;
+    mesh.userData.archdiscStudioWelded = (mesh.userData.archdiscStudioWelded || 0) + 1;
+    mesh.userData.archdiscStudioWeldBefore = beforeVerts;
+    mesh.userData.archdiscStudioWeldAfter  = merged.attributes.position.count;
+    recomputeMeshStats(window.__archdiscScene);
+    return { beforeVerts, afterVerts: merged.attributes.position.count };
+  }
+
+  /*
    * Simple Deform — Bend modifier.
    *
    * Blender source: blender/source/blender/modifiers/intern/MOD_simpledeform.cc
@@ -4134,6 +4186,17 @@ function WorkbenchStudio() {
                     >
                       <span className="ribbon-tool-icon">△</span>
                       <span className="ribbon-tool-label">Taper</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="ribbon-tool"
+                      data-studio-ribbon-action="weld"
+                      onClick={() => weldModifier(0.0005)}
+                      disabled={!selectedKind}
+                      title="Blender MOD_weld — merge vertices within 0.5mm"
+                    >
+                      <span className="ribbon-tool-icon">⊗</span>
+                      <span className="ribbon-tool-label">Weld</span>
                     </button>
                   </div>
                   <div className="ribbon-group-label">Blender · Mods</div>
