@@ -1777,6 +1777,69 @@ function WorkbenchStudio() {
   }
 
   /*
+   * Simple Deform — Bend modifier.
+   *
+   * Blender source: blender/source/blender/modifiers/intern/MOD_simpledeform.cc
+   * (mode == MOD_SIMPLEDEFORM_MODE_BEND)
+   *
+   * Bends the mesh in the XZ plane proportional to the vertex's Y
+   * position. Angle parameter is the total bend in radians applied
+   * over the bounding-sphere height; positive angles curl forward.
+   */
+  function bendDeform(angleRad) {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    const pos = mesh.geometry.attributes.position;
+    if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
+    const r = mesh.geometry.boundingSphere.radius || 1;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+      const t = y / r;
+      const theta = angleRad * t;
+      const c = Math.cos(theta), s = Math.sin(theta);
+      pos.setXYZ(i, x * c - z * s, y, x * s + z * c);
+    }
+    pos.needsUpdate = true;
+    mesh.geometry.computeVertexNormals();
+    mesh.geometry.computeBoundingSphere();
+    mesh.userData.archdiscStudioBent = (mesh.userData.archdiscStudioBent || 0) + 1;
+    recomputeMeshStats(window.__archdiscScene);
+    return { angleRad };
+  }
+
+  /*
+   * Simple Deform — Taper modifier.
+   *
+   * Blender source: blender/source/blender/modifiers/intern/MOD_simpledeform.cc
+   * (mode == MOD_SIMPLEDEFORM_MODE_TAPER)
+   *
+   * Scales XZ by (1 - factor * t) where t is the normalised Y
+   * height in the bounding box. factor = 1 → top fully collapsed
+   * (cone). Negative factors flare outward.
+   */
+  function taperDeform(factor) {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    const pos = mesh.geometry.attributes.position;
+    if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+    const minY = mesh.geometry.boundingBox.min.y;
+    const maxY = mesh.geometry.boundingBox.max.y;
+    const range = (maxY - minY) || 1;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+      const t = (y - minY) / range;
+      const scale = 1 - factor * t;
+      pos.setXYZ(i, x * scale, y, z * scale);
+    }
+    pos.needsUpdate = true;
+    mesh.geometry.computeVertexNormals();
+    mesh.geometry.computeBoundingSphere();
+    mesh.userData.archdiscStudioTapered = (mesh.userData.archdiscStudioTapered || 0) + 1;
+    recomputeMeshStats(window.__archdiscScene);
+    return { factor };
+  }
+
+  /*
    * Loop subdivision — Charles Loop's smooth subdivision scheme.
    *
    * Topology: every triangle becomes four (same as midpoint subdivision).
@@ -4049,6 +4112,28 @@ function WorkbenchStudio() {
                     >
                       <span className="ribbon-tool-icon">≈</span>
                       <span className="ribbon-tool-label">Wave</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="ribbon-tool"
+                      data-studio-ribbon-action="bend"
+                      onClick={() => bendDeform(0.6)}
+                      disabled={!selectedKind}
+                      title="Blender MOD_simpledeform (BEND) — bend XZ proportional to Y"
+                    >
+                      <span className="ribbon-tool-icon">⌒</span>
+                      <span className="ribbon-tool-label">Bend</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="ribbon-tool"
+                      data-studio-ribbon-action="taper"
+                      onClick={() => taperDeform(0.6)}
+                      disabled={!selectedKind}
+                      title="Blender MOD_simpledeform (TAPER) — scale XZ by Y position"
+                    >
+                      <span className="ribbon-tool-icon">△</span>
+                      <span className="ribbon-tool-label">Taper</span>
                     </button>
                   </div>
                   <div className="ribbon-group-label">Blender · Mods</div>
