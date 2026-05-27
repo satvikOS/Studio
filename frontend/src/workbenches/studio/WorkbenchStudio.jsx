@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import * as THREE from 'three';
 import {
   MousePointer2, Move, RotateCw, Maximize2,
@@ -21,23 +21,31 @@ const PRIMITIVE_SIZE = 0.03; // 30 mm, sized to fit Viewport3D's mm-scale CAD ca
 function buildPrimitiveGeometry(kind) {
   const S = PRIMITIVE_SIZE;
   switch (kind) {
-    case 'cube':     return new THREE.BoxGeometry(S, S, S);
-    case 'sphere':   return new THREE.SphereGeometry(S * 0.6, 32, 24);
-    case 'plane':    return new THREE.PlaneGeometry(S * 1.6, S * 1.6);
-    case 'cylinder': return new THREE.CylinderGeometry(S * 0.5, S * 0.5, S, 32);
-    case 'cone':     return new THREE.ConeGeometry(S * 0.55, S, 32);
-    case 'torus':    return new THREE.TorusGeometry(S * 0.5, S * 0.18, 16, 32);
+    case 'cube':         return new THREE.BoxGeometry(S, S, S);
+    case 'sphere':       return new THREE.SphereGeometry(S * 0.6, 32, 24);
+    case 'plane':        return new THREE.PlaneGeometry(S * 1.6, S * 1.6);
+    case 'cylinder':     return new THREE.CylinderGeometry(S * 0.5, S * 0.5, S, 32);
+    case 'cone':         return new THREE.ConeGeometry(S * 0.55, S, 32);
+    case 'torus':        return new THREE.TorusGeometry(S * 0.5, S * 0.18, 16, 32);
+    case 'torus-knot':   return new THREE.TorusKnotGeometry(S * 0.45, S * 0.14, 100, 16);
+    case 'icosahedron':  return new THREE.IcosahedronGeometry(S * 0.6, 0);
+    case 'dodecahedron': return new THREE.DodecahedronGeometry(S * 0.6, 0);
+    case 'tetrahedron':  return new THREE.TetrahedronGeometry(S * 0.7, 0);
     default: return null;
   }
 }
 
 const PRIMITIVE_KINDS = [
-  { id: 'cube',     label: 'Cube' },
-  { id: 'sphere',   label: 'Sphere' },
-  { id: 'plane',    label: 'Plane' },
-  { id: 'cylinder', label: 'Cylinder' },
-  { id: 'cone',     label: 'Cone' },
-  { id: 'torus',    label: 'Torus' },
+  { id: 'cube',         label: 'Cube' },
+  { id: 'sphere',       label: 'Sphere' },
+  { id: 'plane',        label: 'Plane' },
+  { id: 'cylinder',     label: 'Cylinder' },
+  { id: 'cone',         label: 'Cone' },
+  { id: 'torus',        label: 'Torus' },
+  { id: 'torus-knot',   label: 'Torus Knot' },
+  { id: 'icosahedron',  label: 'Icosa' },
+  { id: 'dodecahedron', label: 'Dodeca' },
+  { id: 'tetrahedron',  label: 'Tetra' },
 ];
 
 /**
@@ -82,6 +90,10 @@ function WorkbenchStudio() {
   const [primitiveCount, setPrimitiveCount] = useState(0);
   const [vertexCount, setVertexCount] = useState(0);
   const [faceCount, setFaceCount] = useState(0);
+  // Insertion-order stack of Studio-added meshes — kept in a ref because
+  // mutation doesn't drive any rendering (state primitiveCount mirrors
+  // its length for UI bindings). Used by Delete Last + Clear Scene.
+  const primitiveStackRef = useRef([]);
 
   function recomputeMeshStats(scene) {
     let v = 0;
@@ -130,7 +142,39 @@ function WorkbenchStudio() {
     );
 
     scene.add(mesh);
+    primitiveStackRef.current.push(mesh);
     setPrimitiveCount(c => c + 1);
+    recomputeMeshStats(scene);
+  }
+
+  function disposeMesh(mesh) {
+    if (mesh.geometry && typeof mesh.geometry.dispose === 'function') mesh.geometry.dispose();
+    if (mesh.material) {
+      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      for (const m of mats) if (typeof m.dispose === 'function') m.dispose();
+    }
+  }
+
+  function deleteLastPrimitive() {
+    const scene = window.__archdiscScene;
+    if (!scene) return;
+    const mesh = primitiveStackRef.current.pop();
+    if (!mesh) return;
+    scene.remove(mesh);
+    disposeMesh(mesh);
+    setPrimitiveCount(c => Math.max(0, c - 1));
+    recomputeMeshStats(scene);
+  }
+
+  function clearScene() {
+    const scene = window.__archdiscScene;
+    if (!scene) return;
+    for (const mesh of primitiveStackRef.current) {
+      scene.remove(mesh);
+      disposeMesh(mesh);
+    }
+    primitiveStackRef.current = [];
+    setPrimitiveCount(0);
     recomputeMeshStats(scene);
   }
 
@@ -277,6 +321,22 @@ function WorkbenchStudio() {
               readOnly
             />
           </div>
+          <button
+            className="property-button"
+            data-studio-action="delete-last"
+            onClick={deleteLastPrimitive}
+            disabled={primitiveCount === 0}
+          >
+            Delete Last
+          </button>
+          <button
+            className="property-button"
+            data-studio-action="clear-scene"
+            onClick={clearScene}
+            disabled={primitiveCount === 0}
+          >
+            Clear Scene
+          </button>
           <button className="property-button" disabled>Subdivide</button>
           <button className="property-button" disabled>Retopologize</button>
         </div>
