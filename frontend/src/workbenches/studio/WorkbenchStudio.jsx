@@ -5511,36 +5511,61 @@ function WorkbenchStudio() {
                 {selectedKind}
               </span>
             </div>
-            <div className="property-row">
-              <span className="property-label">Position</span>
-              <span
-                className="property-input"
-                data-studio-selection="position"
-                style={{ textAlign: 'right', fontSize: '10px', fontFamily: 'monospace' }}
-              >
-                {selectedTransform.position.map(n => n.toFixed(4)).join(', ')}
-              </span>
-            </div>
-            <div className="property-row">
-              <span className="property-label">Rotation</span>
-              <span
-                className="property-input"
-                data-studio-selection="rotation"
-                style={{ textAlign: 'right', fontSize: '10px', fontFamily: 'monospace' }}
-              >
-                {selectedTransform.rotation.map(n => n.toFixed(3)).join(', ')}
-              </span>
-            </div>
-            <div className="property-row">
-              <span className="property-label">Scale</span>
-              <span
-                className="property-input"
-                data-studio-selection="scale"
-                style={{ textAlign: 'right', fontSize: '10px', fontFamily: 'monospace' }}
-              >
-                {selectedTransform.scale.map(n => n.toFixed(3)).join(', ')}
-              </span>
-            </div>
+            {/* Editable X/Y/Z transform — numeric inputs let users move,
+                rotate, and scale the selected mesh directly. Mirrors
+                the Properties → Transform panel in real DCC apps. */}
+            {['position', 'rotation', 'scale'].map(axis => {
+              const labels = ['X', 'Y', 'Z'];
+              const stepMap   = { position: 0.005, rotation: 0.05,  scale: 0.05 };
+              const unitMap   = { position: 'mm',  rotation: 'rad', scale: '' };
+              const scaleMap  = { position: 1000,  rotation: 1,     scale: 1 };
+              return (
+                <div key={axis} style={{ marginBottom: '4px' }}>
+                  <div className="property-label" style={{ fontSize: '10px', opacity: 0.55, textTransform: 'capitalize', marginBottom: '2px' }}>
+                    {axis}
+                  </div>
+                  <div style={{ display: 'flex', gap: '3px' }}>
+                    {labels.map((lab, i) => (
+                      <input
+                        key={lab}
+                        type="number"
+                        className="property-input"
+                        data-studio-selection-edit={`${axis}-${lab.toLowerCase()}`}
+                        step={stepMap[axis]}
+                        value={Number(selectedTransform[axis][i].toFixed(5))}
+                        onChange={(e) => {
+                          const mesh = selectedMeshRef.current;
+                          if (!mesh) return;
+                          const v = Number(e.target.value);
+                          if (!isFinite(v)) return;
+                          mesh[axis][lab.toLowerCase()] = v;
+                          setSelectedTransform({
+                            position: [mesh.position.x, mesh.position.y, mesh.position.z],
+                            rotation: [mesh.rotation.x, mesh.rotation.y, mesh.rotation.z],
+                            scale:    [mesh.scale.x,    mesh.scale.y,    mesh.scale.z],
+                          });
+                        }}
+                        style={{
+                          flex: 1, minWidth: 0,
+                          fontSize: '10px',
+                          fontFamily: 'monospace',
+                          padding: '3px 6px',
+                          textAlign: 'right',
+                        }}
+                      />
+                    ))}
+                  </div>
+                  {/* Read-only ARIA-style mirror of the active values for
+                      back-compat with the spec selectors. */}
+                  <span
+                    data-studio-selection={axis}
+                    style={{ display: 'none' }}
+                  >
+                    {selectedTransform[axis].map(n => (axis === 'position' ? n.toFixed(4) : n.toFixed(3))).join(', ')}
+                  </span>
+                </div>
+              );
+            })}
             <div className="property-row">
               <span className="property-label">Gizmo</span>
               <span
