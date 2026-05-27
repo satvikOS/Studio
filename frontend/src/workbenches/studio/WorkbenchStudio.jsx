@@ -8176,8 +8176,23 @@ function WorkbenchStudio() {
             padding: 6px 8px !important;
             display: flex !important;
             gap: 0 !important;
-            flex-wrap: wrap !important;
+            flex-wrap: nowrap !important;
             align-items: flex-start !important;
+            overflow-x: auto !important;
+            overflow-y: hidden !important;
+            scroll-behavior: smooth;
+          }
+          /* Thin teal-tinted scrollbar for the ribbon strip so users
+             can see when more groups are off-screen. */
+          body:has([data-studio-properties="studio"]) .ribbon-content::-webkit-scrollbar {
+            height: 5px;
+          }
+          body:has([data-studio-properties="studio"]) .ribbon-content::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.18);
+            border-radius: 2px;
+          }
+          body:has([data-studio-properties="studio"]) .ribbon-content::-webkit-scrollbar-track {
+            background: transparent;
           }
           body:has([data-studio-properties="studio"]) .ribbon-group {
             border-right: 1px solid rgba(255,255,255,0.05) !important;
@@ -8185,6 +8200,14 @@ function WorkbenchStudio() {
             display: flex !important;
             flex-direction: column !important;
             align-items: stretch !important;
+            flex-shrink: 0 !important;  /* don't squeeze when total > viewport width */
+          }
+          /* Cap each group's tool grid to 2 rows so labels stay
+             visible; extra tools wrap inside the group, not into
+             a 3rd horizontal lane. */
+          body:has([data-studio-properties="studio"]) .ribbon-group-tools {
+            max-height: 110px !important;
+            overflow-y: hidden;
           }
           body:has([data-studio-properties="studio"]) .ribbon-group:last-child {
             border-right: none !important;
