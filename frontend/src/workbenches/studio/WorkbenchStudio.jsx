@@ -3764,8 +3764,20 @@ function WorkbenchStudio() {
           [data-studio-discipline="compositing"] [data-studio-section="renders"] { display: block; }
 
           /* =================================================================
-             STUDIO UI/UX OVERHAUL — slice 59
+             STUDIO UI/UX OVERHAUL — slice 59 + 60
              ================================================================= */
+
+          /* Override Mech's red accent variables with Studio teal whenever
+             Studio is mounted. Every inherited Mech component that uses
+             --accent-primary (toolbar active states, focus borders,
+             selection highlights, ...) becomes teal automatically. */
+          body:has([data-studio-properties="studio"]) {
+            --accent-primary: #28d4d4 !important;
+            --accent-primary-muted: rgba(40, 212, 212, 0.15) !important;
+            --accent-primary-border: rgba(40, 212, 212, 0.4) !important;
+            --accent-primary-hover: #5be3e3 !important;
+            --shadow-glow-accent: 0 0 0 2px rgba(40, 212, 212, 0.18) !important;
+          }
 
           /* Properties panel scrolls cleanly; floor + room for the banner. */
           [data-studio-properties="studio"] {
@@ -4013,6 +4025,45 @@ function WorkbenchStudio() {
              workbench wordmark. */
           body:has([data-studio-properties="studio"]) .workbench-current .workbench-name {
             color: #28d4d4;
+          }
+
+          /* Left viewport tool strip — recolour Mech's pink/red accents
+             to Studio teal so hover + active states match. */
+          body:has([data-studio-properties="studio"]) .tool-icon-button.active {
+            background: rgba(40,212,212,0.18) !important;
+            color: #28d4d4 !important;
+            box-shadow: 0 0 12px rgba(40,212,212,0.4) !important;
+          }
+          body:has([data-studio-properties="studio"]) .tool-icon-button.active::before {
+            background: #28d4d4 !important;
+          }
+          body:has([data-studio-properties="studio"]) .tool-icon-button:hover:not(.active) {
+            background: rgba(40,212,212,0.08) !important;
+            color: #28d4d4 !important;
+          }
+
+          /* Status bar — Studio-teal accent. */
+          body:has([data-studio-properties="studio"]) .workbench-statusbar {
+            background: linear-gradient(180deg, #0e0e16 0%, #0d0d14 100%);
+            border-top: 1px solid rgba(40,212,212,0.18);
+          }
+
+          /* Search input at the top header — Studio-teal focus. */
+          body:has([data-studio-properties="studio"]) .header-search input:focus,
+          body:has([data-studio-properties="studio"]) .header-search-input:focus {
+            border-color: #28d4d4 !important;
+            box-shadow: 0 0 6px rgba(40,212,212,0.3);
+          }
+
+          /* AI Console: just in case there's a re-mount race, default
+             height to 0 + hide visually so layout reflows even if the
+             component re-injects itself. */
+          body:has([data-studio-properties="studio"]) .ai-console,
+          body:has([data-studio-properties="studio"]) .workbench-console {
+            height: 0 !important;
+            min-height: 0 !important;
+            padding: 0 !important;
+            border: none !important;
           }
         `}</style>
 
