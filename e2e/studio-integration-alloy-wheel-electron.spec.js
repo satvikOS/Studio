@@ -18,6 +18,7 @@ import path from 'path';
  */
 
 const OUT = path.resolve(__dirname, 'screenshots', 'studio-integration-alloy-wheel');
+const REF = path.resolve(__dirname, '..', 'tools', '.video-thumbs', 'Video-66_f4.jpg');
 const PI = Math.PI;
 
 async function tab(win, name) { const t = win.locator(`.workbench-ribbon-placeholder-tab[data-studio-discipline="${name}"]`); await t.scrollIntoViewIfNeeded(); await t.click(); await win.waitForTimeout(220); }
@@ -132,6 +133,29 @@ test('Studio Integration — Alloy Wheel (radial-pivot spokes, Video-66 parity)'
   await win.locator('[data-studio-compositing="filter"]').selectOption('contrast(180%)');
   await clickAction(win, 'post-process');
   await win.waitForTimeout(300);
+
+  // ════ SIDE-BY-SIDE PARITY — reference | render (3/4 wheel face) ══
+  await tab(win, 'rendering');
+  await win.evaluate(() => window.__studioFrameAll && window.__studioFrameAll());
+  await win.waitForTimeout(360);
+  await win.evaluate(() => window.__archdiscOrbitView && window.__archdiscOrbitView(30, 36, 1.05));
+  await win.waitForTimeout(400);
+  const vpRect = await win.evaluate(() => { const el = document.querySelector('.workbench-viewport'); const r = el.getBoundingClientRect(); return { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) }; });
+  await win.screenshot({ path: path.join(OUT, '02-render-ref-angle.png'), clip: vpRect });
+  const refB64 = 'data:image/jpeg;base64,' + fs.readFileSync(REF).toString('base64');
+  const rndB64 = 'data:image/png;base64,' + fs.readFileSync(path.join(OUT, '02-render-ref-angle.png')).toString('base64');
+  const composite = await win.evaluate(async ({ refUrl, rndUrl }) => {
+    const load = (u) => new Promise((res) => { const im = new Image(); im.onload = () => res(im); im.src = u; });
+    const [a, b] = await Promise.all([load(refUrl), load(rndUrl)]);
+    const Hh = 760; const aw = a.width * (Hh / a.height), bw = b.width * (Hh / b.height);
+    const c = document.createElement('canvas'); c.width = Math.round(aw + bw + 24); c.height = Hh;
+    const ctx = c.getContext('2d'); ctx.fillStyle = '#0a0a0a'; ctx.fillRect(0, 0, c.width, c.height);
+    ctx.drawImage(a, 0, 0, aw, Hh); ctx.drawImage(b, aw + 24, 0, bw, Hh);
+    ctx.fillStyle = '#fff'; ctx.font = '20px sans-serif';
+    ctx.fillText('REFERENCE (Video-66)', 12, 28); ctx.fillText('ARCHDISC STUDIO', aw + 36, 28);
+    return c.toDataURL('image/png');
+  }, { refUrl: refB64, rndUrl: rndB64 });
+  fs.writeFileSync(path.join(OUT, 'PARITY-side-by-side.png'), Buffer.from(composite.split(',')[1], 'base64'));
 
   // ════ Assertions ════════════════════════════════════════════════
   const state = await win.evaluate(() => {
