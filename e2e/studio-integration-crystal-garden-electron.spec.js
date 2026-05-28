@@ -118,6 +118,12 @@ test('Studio integration — build a Crystal Garden across 8 disciplines', async
       ? m.geometry.index.count / 3
       : m.geometry.attributes.position.count / 3;
   });
+  // Sculpt tools (Strength + Inflate) live in the Sculpting-discipline
+  // properties section, which the panel only reveals when the Sculpting
+  // ribbon tab is active — exactly as a user switches workbenches to
+  // sculpt. Switch in, then back to Modeling for the remaining steps.
+  await win.locator('.workbench-ribbon-placeholder-tab[data-studio-discipline="sculpting"]').click();
+  await win.waitForTimeout(280);
   await win.locator('[data-studio-action="subdivide-selected"]').click();
   await win.waitForTimeout(400);
   await setRange(win, '[data-studio-sculpt="strength"]', '0.18');
@@ -135,6 +141,10 @@ test('Studio integration — build a Crystal Garden across 8 disciplines', async
       : m.geometry.attributes.position.count / 3;
   });
   expect(sphereAfterF).toBe(sphereBaselineF * 4);
+
+  // Back to Modeling for texture / mirror / procedural / text steps.
+  await win.locator('.workbench-ribbon-placeholder-tab[data-studio-discipline="modeling"]').click();
+  await win.waitForTimeout(280);
 
   // === Step 4 — Cube takes a Brick texture (8 tiles) ===
   const cubePos = await screenPosOfMesh(win, 'cube', 0);
@@ -183,6 +193,10 @@ test('Studio integration — build a Crystal Garden across 8 disciplines', async
   await win.screenshot({ path: path.join(OUT, '03-tree-and-text-added.png'), fullPage: false });
 
   // === Step 9 — Three cinematic lights: warm key / cool fill / magenta rim ===
+  // Lighting + render controls live in the Rendering discipline panel.
+  await win.locator('.workbench-ribbon-placeholder-tab[data-studio-discipline="rendering"]').scrollIntoViewIfNeeded();
+  await win.locator('.workbench-ribbon-placeholder-tab[data-studio-discipline="rendering"]').click();
+  await win.waitForTimeout(280);
   await win.locator('[data-studio-lighting="color"]').fill('#ffb56b');
   await setRange(win, '[data-studio-lighting="intensity"]', '2.4');
   await win.locator('[data-studio-action="add-light"]').click();
@@ -209,6 +223,10 @@ test('Studio integration — build a Crystal Garden across 8 disciplines', async
     .toBe(4);
 
   // === Step 11 — Sepia + Contrast post-process passes ===
+  // Post-process filters live in the Compositing discipline panel.
+  await win.locator('.workbench-ribbon-placeholder-tab[data-studio-discipline="compositing"]').scrollIntoViewIfNeeded();
+  await win.locator('.workbench-ribbon-placeholder-tab[data-studio-discipline="compositing"]').click();
+  await win.waitForTimeout(280);
   await win.locator('[data-studio-compositing="filter"]').selectOption('sepia(100%)');
   await win.locator('[data-studio-action="post-process"]').click();
   await expect
