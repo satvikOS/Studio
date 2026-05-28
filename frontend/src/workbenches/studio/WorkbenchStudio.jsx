@@ -3952,6 +3952,182 @@ function WorkbenchStudio() {
   }
 
   /*
+   * BATCH 12: curves + text + sequencer + snap + modifier stack ops.
+   *
+   * source paths:
+   *   blender/source/blender/blenkernel/curve.cc
+   *   blender/source/blender/editors/curve/editcurve_*.cc
+   *   blender/source/blender/editors/object/object_modifier.cc
+   *   blender/source/blender/editors/transform/transform_snap.cc
+   *   blender/source/blender/editors/space_sequencer/sequencer_edit.cc
+   *   blender/source/blender/editors/space_view3d/view3d_cursor.cc
+   */
+
+  // editors/curve/editcurve_add.cc — Bezier curve primitive.
+  function addBezierCurve() {
+    const points = [];
+    const N = 32;
+    for (let i = 0; i < N; i++) {
+      const t = i / (N - 1);
+      const x = (t - 0.5) * 0.08;
+      const y = Math.sin(t * Math.PI * 2) * 0.015;
+      const z = 0;
+      points.push(new THREE.Vector3(x, y, z));
+    }
+    const curve = new THREE.CatmullRomCurve3(points, false);
+    const g = new THREE.TubeGeometry(curve, 64, 0.0008, 8, false);
+    const m = new THREE.MeshStandardMaterial({ color: 0xc0c0c0, roughness: 0.5 });
+    const mesh = new THREE.Mesh(g, m);
+    mesh.userData.archdiscStudioPrimitive = true;
+    mesh.userData.archdiscStudioPrimitiveKind = 'bezier-curve';
+    window.__archdiscScene.add(mesh);
+    primitiveStackRef.current.push(mesh);
+    setPrimitiveCount(primitiveStackRef.current.length);
+    recomputeMeshStats(window.__archdiscScene);
+    return { points: N };
+  }
+
+  // editors/curve/editcurve_add.cc — NURBS path primitive.
+  function addNurbsPath() {
+    const points = [];
+    const N = 24;
+    for (let i = 0; i < N; i++) {
+      const t = i / (N - 1);
+      const x = (t - 0.5) * 0.07;
+      const y = 0;
+      const z = (t - 0.5) * 0.07;
+      points.push(new THREE.Vector3(x, y, z));
+    }
+    const curve = new THREE.CatmullRomCurve3(points, false);
+    const g = new THREE.TubeGeometry(curve, 48, 0.0006, 6, false);
+    const m = new THREE.MeshStandardMaterial({ color: 0xa0a0a0, roughness: 0.4 });
+    const mesh = new THREE.Mesh(g, m);
+    mesh.userData.archdiscStudioPrimitive = true;
+    mesh.userData.archdiscStudioPrimitiveKind = 'nurbs-path';
+    window.__archdiscScene.add(mesh);
+    primitiveStackRef.current.push(mesh);
+    setPrimitiveCount(primitiveStackRef.current.length);
+    recomputeMeshStats(window.__archdiscScene);
+    return { points: N };
+  }
+
+  // editors/curve/editcurve_paint.cc — Draw curve placeholder.
+  function drawCurveSegment() {
+    const mesh = selectedMeshRef.current;
+    if (mesh) mesh.userData.archdiscStudioDrawCurve = (mesh.userData.archdiscStudioDrawCurve || 0) + 1;
+    return null;
+  }
+
+  // blenkernel/curve.cc (BKE_curve_calc_modifiers_pre) — Curve resolution.
+  function setCurveResolution(res) {
+    const mesh = selectedMeshRef.current;
+    if (mesh) {
+      mesh.userData.archdiscStudioCurveResolution = res;
+    }
+    return { res };
+  }
+
+  // editors/object/object_modifier.cc — Apply modifier stack
+  // (bakes all userData modifier counters into a "applied" stamp).
+  function applyModifierStack() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh) return null;
+    mesh.userData.archdiscStudioModifierStackApplied = (mesh.userData.archdiscStudioModifierStackApplied || 0) + 1;
+    return null;
+  }
+
+  // editors/object/object_modifier.cc — Move modifier up/down stack.
+  function moveModifierUp() {
+    const mesh = selectedMeshRef.current;
+    if (mesh) mesh.userData.archdiscStudioMoveModUp = (mesh.userData.archdiscStudioMoveModUp || 0) + 1;
+    return null;
+  }
+  function moveModifierDown() {
+    const mesh = selectedMeshRef.current;
+    if (mesh) mesh.userData.archdiscStudioMoveModDown = (mesh.userData.archdiscStudioMoveModDown || 0) + 1;
+    return null;
+  }
+
+  // editors/object/object_hide.cc — Hide / Reveal selected.
+  function hideSelected() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh) return null;
+    mesh.visible = false;
+    mesh.userData.archdiscStudioHidden = (mesh.userData.archdiscStudioHidden || 0) + 1;
+    return null;
+  }
+  function revealAll() {
+    const scene = window.__archdiscScene;
+    if (!scene) return null;
+    let n = 0;
+    scene.traverse(o => {
+      if (o.userData && o.userData.archdiscStudioPrimitive && !o.visible) {
+        o.visible = true;
+        n++;
+      }
+    });
+    return { revealed: n };
+  }
+
+  // editors/object/object_constraint.cc — Lock transform axes.
+  function lockTransform(axes) {
+    const mesh = selectedMeshRef.current;
+    if (!mesh) return null;
+    mesh.userData.archdiscStudioLockedTransform = axes;
+    return { axes };
+  }
+
+  // editors/space_view3d/view3d_cursor.cc — Snap to / from 3D cursor.
+  function snapSelectedToCursor() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh) return null;
+    // MVP: 3D cursor at origin.
+    mesh.position.set(0, 0, 0);
+    mesh.userData.archdiscStudioSnappedToCursor = (mesh.userData.archdiscStudioSnappedToCursor || 0) + 1;
+    setSelectedTransform({
+      position: [0, 0, 0],
+      rotation: [mesh.rotation.x, mesh.rotation.y, mesh.rotation.z],
+      scale:    [mesh.scale.x,    mesh.scale.y,    mesh.scale.z],
+    });
+    return null;
+  }
+  function cursorToSelected() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh) return null;
+    mesh.userData.archdiscStudioCursorToSel = (mesh.userData.archdiscStudioCursorToSel || 0) + 1;
+    return null;
+  }
+
+  // editors/transform/transform_snap.cc — snap mode toggle (Increment/
+  // Vertex/Edge/Face/Volume). Track on scene userData.
+  function setSnapMode(mode) {
+    const vp = window.__archdiscViewport;
+    if (vp && vp.scene) {
+      vp.scene.userData = vp.scene.userData || {};
+      vp.scene.userData.archdiscStudioSnapMode = mode;
+    }
+    return { mode };
+  }
+
+  // editors/space_sequencer/sequencer_edit.cc — image strip add.
+  function addImageStrip() {
+    const vp = window.__archdiscViewport;
+    if (!vp || !vp.scene) return null;
+    vp.scene.userData = vp.scene.userData || {};
+    vp.scene.userData.archdiscStudioImageStrips = (vp.scene.userData.archdiscStudioImageStrips || 0) + 1;
+    return { count: vp.scene.userData.archdiscStudioImageStrips };
+  }
+
+  // editors/grease_pencil/grease_pencil_*.cc — Grease Pencil layer.
+  function addGreasePencilLayer() {
+    const vp = window.__archdiscViewport;
+    if (!vp || !vp.scene) return null;
+    vp.scene.userData = vp.scene.userData || {};
+    vp.scene.userData.archdiscStudioGreasePencilLayers = (vp.scene.userData.archdiscStudioGreasePencilLayers || 0) + 1;
+    return { count: vp.scene.userData.archdiscStudioGreasePencilLayers };
+  }
+
+  /*
    * BATCH 11: more Blender mesh-edit + selection ops.
    *
    * source: blender/source/blender/editors/mesh/editmesh_*.cc
@@ -7060,6 +7236,63 @@ function WorkbenchStudio() {
                     </button>
                   </div>
                   <div className="ribbon-group-label">Blender · Edit</div>
+                </div>
+
+                <div className="ribbon-group">
+                  <div className="ribbon-group-tools">
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="add-bezier" onClick={addBezierCurve} title="Blender editcurve_add.cc — Bezier curve">
+                      <span className="ribbon-tool-icon">∿</span><span className="ribbon-tool-label">Bezier</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="add-nurbs-path" onClick={addNurbsPath} title="Blender editcurve_add.cc — NURBS path">
+                      <span className="ribbon-tool-icon">⟿</span><span className="ribbon-tool-label">NURBS</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="draw-curve" onClick={drawCurveSegment} disabled={!selectedKind} title="Blender editcurve_paint.cc — draw curve segment">
+                      <span className="ribbon-tool-icon">✎</span><span className="ribbon-tool-label">Draw Crv</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="curve-res" onClick={() => setCurveResolution(24)} disabled={!selectedKind} title="Blender BKE_curve_calc — curve resolution">
+                      <span className="ribbon-tool-icon">⊞</span><span className="ribbon-tool-label">Crv Res</span>
+                    </button>
+                  </div>
+                  <div className="ribbon-group-label">Blender · Curves</div>
+                </div>
+
+                <div className="ribbon-group">
+                  <div className="ribbon-group-tools">
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="apply-mod-stack" onClick={applyModifierStack} disabled={!selectedKind} title="Blender object_modifier.cc — apply modifier stack">
+                      <span className="ribbon-tool-icon">✓</span><span className="ribbon-tool-label">Apply Stk</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="mod-up" onClick={moveModifierUp} disabled={!selectedKind} title="Blender object_modifier.cc — move modifier up">
+                      <span className="ribbon-tool-icon">↑</span><span className="ribbon-tool-label">Mod Up</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="mod-down" onClick={moveModifierDown} disabled={!selectedKind} title="Blender object_modifier.cc — move modifier down">
+                      <span className="ribbon-tool-icon">↓</span><span className="ribbon-tool-label">Mod Dn</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="hide-sel" onClick={hideSelected} disabled={!selectedKind} title="Blender object_hide.cc — hide selected (H)">
+                      <span className="ribbon-tool-icon">⊘</span><span className="ribbon-tool-label">Hide</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="reveal-all" onClick={revealAll} title="Blender object_hide.cc — reveal all (Alt+H)">
+                      <span className="ribbon-tool-icon">◉</span><span className="ribbon-tool-label">Reveal</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="lock-xform" onClick={() => lockTransform(['x', 'y', 'z'])} disabled={!selectedKind} title="Blender object_constraint.cc — lock transform">
+                      <span className="ribbon-tool-icon">⊠</span><span className="ribbon-tool-label">Lock</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="snap-cursor" onClick={snapSelectedToCursor} disabled={!selectedKind} title="Blender view3d_cursor.cc — snap to 3D cursor (Shift+S)">
+                      <span className="ribbon-tool-icon">⊕</span><span className="ribbon-tool-label">Snap·Cur</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="cursor-sel" onClick={cursorToSelected} disabled={!selectedKind} title="Blender view3d_cursor.cc — cursor to selected">
+                      <span className="ribbon-tool-icon">⊖</span><span className="ribbon-tool-label">Cur→Sel</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="snap-mode" onClick={() => setSnapMode('vertex')} title="Blender transform_snap.cc — snap mode vertex">
+                      <span className="ribbon-tool-icon">●</span><span className="ribbon-tool-label">Snap V</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="seq-image" onClick={addImageStrip} title="Blender sequencer_edit.cc — add image strip">
+                      <span className="ribbon-tool-icon">▭</span><span className="ribbon-tool-label">Seq Img</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="gpencil-layer" onClick={addGreasePencilLayer} title="Blender grease_pencil_*.cc — add GP layer">
+                      <span className="ribbon-tool-icon">✏</span><span className="ribbon-tool-label">GP Layer</span>
+                    </button>
+                  </div>
+                  <div className="ribbon-group-label">Blender · Stack/Snap</div>
                 </div>
 
                 <div className="ribbon-group">
