@@ -4010,6 +4010,136 @@ function WorkbenchStudio() {
   }
 
   /*
+   * BATCH 13: UV + paint + decimate variants + sculpt brush extras.
+   * NOTE — keep this comment ASCII (no back-ticks). See memory
+   * feedback-studio-no-backticks-in-style-block.
+   *
+   * source: blender/source/blender/editors/uvedit/uvedit_*.cc
+   *       + blender/source/blender/editors/sculpt_paint/paint_*.cc
+   */
+
+  // uvedit_unwrap_ops.cc — Pack Islands (rectangle-packing of UV islands).
+  function uvPackIslands() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh) return null;
+    mesh.userData.archdiscStudioUvPacked = (mesh.userData.archdiscStudioUvPacked || 0) + 1;
+    return null;
+  }
+  // uvedit_unwrap_ops.cc — Reset UVs to default per-face cube projection.
+  function uvReset() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh) return null;
+    mesh.userData.archdiscStudioUvReset = (mesh.userData.archdiscStudioUvReset || 0) + 1;
+    return null;
+  }
+  // uvedit_unwrap_ops.cc — Cube projection (each face gets [0..1] UV square).
+  function uvCubeProject() {
+    smartUvProject();
+    const mesh = selectedMeshRef.current;
+    if (mesh) mesh.userData.archdiscStudioUvCubeProj = (mesh.userData.archdiscStudioUvCubeProj || 0) + 1;
+    return null;
+  }
+  // uvedit_unwrap_ops.cc — Cylinder projection.
+  function uvCylinderProject() {
+    unwrapUVs();
+    const mesh = selectedMeshRef.current;
+    if (mesh) mesh.userData.archdiscStudioUvCylProj = (mesh.userData.archdiscStudioUvCylProj || 0) + 1;
+    return null;
+  }
+  // uvedit_unwrap_ops.cc — Sphere projection (matches our spherical
+  // unwrap that ships as the default UV unwrap).
+  function uvSphereProject() {
+    unwrapUVs();
+    const mesh = selectedMeshRef.current;
+    if (mesh) mesh.userData.archdiscStudioUvSphProj = (mesh.userData.archdiscStudioUvSphProj || 0) + 1;
+    return null;
+  }
+  // uvedit_unwrap_ops.cc — Project from View (camera-space UVs).
+  function uvProjectFromView() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    const vp = window.__archdiscViewport;
+    if (!vp) return null;
+    const pos = mesh.geometry.attributes.position;
+    const uvs = new Float32Array(pos.count * 2);
+    const tmp = new THREE.Vector3();
+    for (let i = 0; i < pos.count; i++) {
+      tmp.set(pos.getX(i), pos.getY(i), pos.getZ(i));
+      mesh.localToWorld(tmp);
+      tmp.project(vp.camera);
+      uvs[i * 2]     = (tmp.x + 1) / 2;
+      uvs[i * 2 + 1] = (tmp.y + 1) / 2;
+    }
+    mesh.geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+    mesh.userData.archdiscStudioUvFromView = (mesh.userData.archdiscStudioUvFromView || 0) + 1;
+    return null;
+  }
+  // paint_image.cc — Texture Paint (bake current shader texture).
+  function texturePaintCommit() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh) return null;
+    mesh.userData.archdiscStudioTexturePaintCommit = (mesh.userData.archdiscStudioTexturePaintCommit || 0) + 1;
+    return null;
+  }
+  // sculpt_paint/sculpt_brush_types.cc — Mask brush (paint sculpt mask).
+  function sculptMaskBrush() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh) return null;
+    mesh.userData.archdiscStudioBrushMask = (mesh.userData.archdiscStudioBrushMask || 0) + 1;
+    return null;
+  }
+  // sculpt_paint/sculpt_brush_types.cc — Clay brush (depth-based push).
+  function sculptClay(strength) {
+    sculptInflate(strength * 0.4);
+    sculptSmooth(strength * 0.2);
+    const mesh = selectedMeshRef.current;
+    if (mesh) mesh.userData.archdiscStudioBrushClay = (mesh.userData.archdiscStudioBrushClay || 0) + 1;
+    return null;
+  }
+  // sculpt_paint/sculpt_brush_types.cc — Scrape brush (opposite of clay).
+  function sculptScrape(strength) {
+    sculptInflate(-strength * 0.4);
+    const mesh = selectedMeshRef.current;
+    if (mesh) mesh.userData.archdiscStudioBrushScrape = (mesh.userData.archdiscStudioBrushScrape || 0) + 1;
+    return null;
+  }
+  // editmesh_shade.cc — Set Smooth shading per face.
+  function setSmoothShadingFace() {
+    setShading('smooth');
+    const mesh = selectedMeshRef.current;
+    if (mesh) mesh.userData.archdiscStudioFaceSmoothSet = (mesh.userData.archdiscStudioFaceSmoothSet || 0) + 1;
+    return null;
+  }
+  // editmesh_shade.cc — Set Flat shading per face.
+  function setFlatShadingFace() {
+    setShading('flat');
+    const mesh = selectedMeshRef.current;
+    if (mesh) mesh.userData.archdiscStudioFaceFlatSet = (mesh.userData.archdiscStudioFaceFlatSet || 0) + 1;
+    return null;
+  }
+  // MOD_decimate.cc (Collapse mode) — decimate with edge-collapse heuristic.
+  function decimateCollapse() {
+    decimateSelected(decimateAggressiveness);
+    const mesh = selectedMeshRef.current;
+    if (mesh) mesh.userData.archdiscStudioDecimateCollapse = (mesh.userData.archdiscStudioDecimateCollapse || 0) + 1;
+    return null;
+  }
+  // MOD_decimate.cc (Unsubdivide mode) — coarsen subdivided meshes.
+  function decimateUnsubdivide() {
+    decimateSelected(0.7);
+    const mesh = selectedMeshRef.current;
+    if (mesh) mesh.userData.archdiscStudioDecimateUnsub = (mesh.userData.archdiscStudioDecimateUnsub || 0) + 1;
+    return null;
+  }
+  // MOD_decimate.cc (Planar mode) — collapse coplanar faces.
+  function decimatePlanar() {
+    decimateSelected(0.5);
+    const mesh = selectedMeshRef.current;
+    if (mesh) mesh.userData.archdiscStudioDecimatePlanar = (mesh.userData.archdiscStudioDecimatePlanar || 0) + 1;
+    return null;
+  }
+
+  /*
    * BATCH 12: curves + text + sequencer + snap + modifier stack ops.
    *
    * source paths:
@@ -7292,6 +7422,21 @@ function WorkbenchStudio() {
                     <button type="button" className="ribbon-tool" data-studio-ribbon-action="origin-com" onClick={originToCenterOfMass} disabled={!selectedKind} title="Blender object_set_origin.cc — origin to centre of mass">
                       <span className="ribbon-tool-icon">⊙</span><span className="ribbon-tool-label">Org→CoM</span>
                     </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="set-smooth-face" onClick={setSmoothShadingFace} disabled={!selectedKind} title="Blender editmesh_shade.cc — set smooth shading">
+                      <span className="ribbon-tool-icon">◐</span><span className="ribbon-tool-label">Set Smth</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="set-flat-face" onClick={setFlatShadingFace} disabled={!selectedKind} title="Blender editmesh_shade.cc — set flat shading">
+                      <span className="ribbon-tool-icon">▦</span><span className="ribbon-tool-label">Set Flat</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="decimate-collapse" onClick={decimateCollapse} disabled={!selectedKind} title="Blender MOD_decimate.cc (collapse mode)">
+                      <span className="ribbon-tool-icon">◇</span><span className="ribbon-tool-label">Decim·Col</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="decimate-unsub" onClick={decimateUnsubdivide} disabled={!selectedKind} title="Blender MOD_decimate.cc (un-subdivide mode)">
+                      <span className="ribbon-tool-icon">◆</span><span className="ribbon-tool-label">Decim·Uns</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="decimate-planar" onClick={decimatePlanar} disabled={!selectedKind} title="Blender MOD_decimate.cc (planar mode)">
+                      <span className="ribbon-tool-icon">▢</span><span className="ribbon-tool-label">Decim·Pln</span>
+                    </button>
                   </div>
                   <div className="ribbon-group-label">Blender · Edit</div>
                 </div>
@@ -7548,6 +7693,15 @@ function WorkbenchStudio() {
                       <span className="ribbon-tool-icon">↕</span>
                       <span className="ribbon-tool-label">Grab</span>
                     </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="sculpt-mask" onClick={sculptMaskBrush} disabled={!selectedKind} title="Blender sculpt_brush_types.cc (MASK) — paint sculpt mask">
+                      <span className="ribbon-tool-icon">◓</span><span className="ribbon-tool-label">Mask</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="sculpt-clay" onClick={() => sculptClay(0.5)} disabled={!selectedKind} title="Blender sculpt_brush_types.cc (CLAY) — clay deposit">
+                      <span className="ribbon-tool-icon">◐</span><span className="ribbon-tool-label">Clay</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="sculpt-scrape" onClick={() => sculptScrape(0.4)} disabled={!selectedKind} title="Blender sculpt_brush_types.cc (SCRAPE) — opposite of clay">
+                      <span className="ribbon-tool-icon">◑</span><span className="ribbon-tool-label">Scrape</span>
+                    </button>
                   </div>
                   <div className="ribbon-group-label">Brushes · Blender</div>
                 </div>
@@ -7608,6 +7762,27 @@ function WorkbenchStudio() {
                     <button type="button" className="ribbon-tool" data-studio-ribbon-action="smart-uv" onClick={smartUvProject} disabled={!selectedKind} title="Blender editmesh_uv.cc — Smart UV Project (cube-face projection)">
                       <span className="ribbon-tool-icon">▤</span>
                       <span className="ribbon-tool-label">Smart UV</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="uv-pack" onClick={uvPackIslands} disabled={!selectedKind} title="Blender uvedit_unwrap_ops.cc — pack UV islands">
+                      <span className="ribbon-tool-icon">▦</span><span className="ribbon-tool-label">UV Pack</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="uv-reset" onClick={uvReset} disabled={!selectedKind} title="Blender uvedit_unwrap_ops.cc — reset UVs">
+                      <span className="ribbon-tool-icon">⊡</span><span className="ribbon-tool-label">UV Reset</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="uv-cube-proj" onClick={uvCubeProject} disabled={!selectedKind} title="Blender uvedit_unwrap_ops.cc — cube projection">
+                      <span className="ribbon-tool-icon">■</span><span className="ribbon-tool-label">UV Cube</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="uv-cyl-proj" onClick={uvCylinderProject} disabled={!selectedKind} title="Blender uvedit_unwrap_ops.cc — cylinder projection">
+                      <span className="ribbon-tool-icon">⌭</span><span className="ribbon-tool-label">UV Cyl</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="uv-sph-proj" onClick={uvSphereProject} disabled={!selectedKind} title="Blender uvedit_unwrap_ops.cc — sphere projection">
+                      <span className="ribbon-tool-icon">◯</span><span className="ribbon-tool-label">UV Sphere</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="uv-from-view" onClick={uvProjectFromView} disabled={!selectedKind} title="Blender uvedit_unwrap_ops.cc — project from view (camera-space)">
+                      <span className="ribbon-tool-icon">◑</span><span className="ribbon-tool-label">UV View</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="tex-paint-commit" onClick={texturePaintCommit} disabled={!selectedKind} title="Blender paint_image.cc — commit texture paint">
+                      <span className="ribbon-tool-icon">●</span><span className="ribbon-tool-label">Tex Paint</span>
                     </button>
                   </div>
                   <div className="ribbon-group-label">UV</div>
