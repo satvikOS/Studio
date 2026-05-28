@@ -8647,6 +8647,15 @@ function WorkbenchStudio() {
             max-height: 168px !important;
             min-height: 168px !important;
           }
+          /* The inherited stage uses `grid-template-rows: auto 1fr`.
+             That `auto` row sizes to its child's *content* height —
+             which on Studio's many-group tabs balloons past 168px
+             because of inter-group padding + child label heights.
+             Pin the grid row itself to 168px so the rest of the
+             stage (viewport, tools, panel) sit flush. */
+          body:has([data-studio-properties="studio"]) .workbench-stage {
+            grid-template-rows: 168px minmax(0, 1fr) !important;
+          }
           body:has([data-studio-properties="studio"]) .ribbon-container {
             background: #000000 !important;
             border-bottom: 1px solid rgba(255, 255, 255, 0.10) !important;
