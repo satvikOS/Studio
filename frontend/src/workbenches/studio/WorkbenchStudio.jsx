@@ -351,6 +351,64 @@ function WorkbenchStudio() {
     setTimeout(() => clearInterval(t), 5000); // give up after 5s
     return () => clearInterval(t);
   }, []);
+
+  /*
+   * Frame All — fit camera to scene bounding box. Real DCC keypad-period
+   * (Blender) / 'F' (Maya) / 'A' (Cinema 4D) "frame selected/all" op.
+   * Walks every Studio primitive's bounding sphere, computes a union
+   * sphere, then positions camera at a distance that frames it inside
+   * the current FOV with a 1.4x margin.
+   */
+  function frameAllInScene() {
+    const vp = window.__archdiscViewport;
+    if (!vp || !vp.camera || !vp.controls) return null;
+    const scene = window.__archdiscScene || vp.scene;
+    const box = new THREE.Box3();
+    let any = false;
+    scene.traverse(o => {
+      if (o.userData && o.userData.archdiscStudioPrimitive && o.geometry) {
+        const meshBox = new THREE.Box3().setFromObject(o);
+        if (!isFinite(meshBox.min.x) || !isFinite(meshBox.max.x)) return;
+        if (any) box.union(meshBox);
+        else     box.copy(meshBox);
+        any = true;
+      }
+    });
+    if (!any) {
+      // No primitives — return to the default home framing.
+      vp.camera.position.set(0.13, 0.06, 0.13);
+      vp.camera.lookAt(0, 0.005, 0);
+      vp.controls.target.set(0, 0.005, 0);
+    } else {
+      const centre = new THREE.Vector3();
+      box.getCenter(centre);
+      const size = new THREE.Vector3();
+      box.getSize(size);
+      const maxDim = Math.max(size.x, size.y, size.z);
+      // Distance for 45° FOV with 1.4x margin: maxDim / (2 * tan(22.5°))
+      const dist = (maxDim / 2 / Math.tan((vp.camera.fov / 2) * Math.PI / 180)) * 1.4;
+      const dir = new THREE.Vector3(0.7, 0.4, 0.7).normalize();
+      vp.camera.position.copy(centre).addScaledVector(dir, dist);
+      vp.camera.lookAt(centre);
+      vp.controls.target.copy(centre);
+    }
+    vp.controls.update();
+    vp.renderer.render(scene, vp.camera);
+    return null;
+  }
+  // Expose so spec hooks can call it deterministically.
+  useEffect(() => {
+    window.__studioFrameAll = frameAllInScene;
+    return () => { delete window.__studioFrameAll; };
+  });
+  // Auto-frame on primitive count change so the camera always shows
+  // the current scene without the user having to hit Home.
+  useEffect(() => {
+    if (primitiveCount > 0) {
+      const t = setTimeout(() => frameAllInScene(), 60);
+      return () => clearTimeout(t);
+    }
+  }, [primitiveCount]);
   // Viewport right-click context menu — coordinates + target mesh uuid.
   const [contextMenu, setContextMenu] = useState(null);
   // Close context menu when clicking anywhere outside it.
@@ -7427,6 +7485,16 @@ function WorkbenchStudio() {
                     >
                       <span className="ribbon-tool-icon">⌫</span>
                       <span className="ribbon-tool-label">Clear</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="ribbon-tool"
+                      data-studio-action="frame-all"
+                      onClick={frameAllInScene}
+                      title="Blender Numpad-Period / Maya F — frame all primitives"
+                    >
+                      <span className="ribbon-tool-icon">⛶</span>
+                      <span className="ribbon-tool-label">Frame All</span>
                     </button>
                     <span
                       data-studio-primitive-count
