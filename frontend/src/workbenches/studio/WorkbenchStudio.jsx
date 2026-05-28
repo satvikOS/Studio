@@ -8647,8 +8647,8 @@ function WorkbenchStudio() {
             max-height: 168px !important;
             min-height: 168px !important;
           }
-          /* The inherited stage uses `grid-template-rows: auto 1fr`.
-             That `auto` row sizes to its child's *content* height —
+          /* The inherited stage uses grid-template-rows: auto 1fr.
+             That auto row sizes to its child's *content* height —
              which on Studio's many-group tabs balloons past 168px
              because of inter-group padding + child label heights.
              Pin the grid row itself to 168px so the rest of the
