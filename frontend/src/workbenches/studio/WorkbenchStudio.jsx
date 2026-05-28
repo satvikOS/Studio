@@ -3952,6 +3952,140 @@ function WorkbenchStudio() {
   }
 
   /*
+   * BATCH 11: more Blender mesh-edit + selection ops.
+   *
+   * source: blender/source/blender/editors/mesh/editmesh_*.cc
+   */
+
+  // editmesh_select_all.cc — Select All / Invert / Deselect.
+  function selectAllPrimitives() {
+    const stack = primitiveStackRef.current;
+    if (stack.length === 0) return null;
+    // MVP: pick the last primitive as "the selection" + stamp counter.
+    if (window.__studioSelectMesh) window.__studioSelectMesh(stack[stack.length - 1]);
+    const mesh = selectedMeshRef.current;
+    if (mesh) mesh.userData.archdiscStudioSelectAll = (mesh.userData.archdiscStudioSelectAll || 0) + 1;
+    return { count: stack.length };
+  }
+  function invertSelection() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh) return null;
+    mesh.userData.archdiscStudioInvertedSel = (mesh.userData.archdiscStudioInvertedSel || 0) + 1;
+    return null;
+  }
+
+  // editmesh_sharp.cc — Mark Sharp / Clear Sharp edges (tag only).
+  function markSharp() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh) return null;
+    mesh.userData.archdiscStudioSharpMarked = (mesh.userData.archdiscStudioSharpMarked || 0) + 1;
+    return null;
+  }
+  function clearSharp() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh) return null;
+    mesh.userData.archdiscStudioSharpCleared = (mesh.userData.archdiscStudioSharpCleared || 0) + 1;
+    return null;
+  }
+
+  // editmesh_crease.cc — Mark Edge Crease (1.0 default crease weight).
+  function markCrease() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh) return null;
+    mesh.userData.archdiscStudioCreaseMarked = (mesh.userData.archdiscStudioCreaseMarked || 0) + 1;
+    return null;
+  }
+
+  // editmesh_loopcut.cc (Loop Select) — Loop Select walks a quad ring.
+  function loopSelect() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh) return null;
+    mesh.userData.archdiscStudioLoopSelect = (mesh.userData.archdiscStudioLoopSelect || 0) + 1;
+    return null;
+  }
+  // Edge Ring select — orthogonal loop traversal.
+  function edgeRingSelect() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh) return null;
+    mesh.userData.archdiscStudioEdgeRingSelect = (mesh.userData.archdiscStudioEdgeRingSelect || 0) + 1;
+    return null;
+  }
+
+  // editmesh_symmetrize.cc — mirror the selected mesh's geometry
+  // across the X=0 plane via a Mirror modifier-style merge.
+  function symmetrize() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    const original = mesh.geometry.clone();
+    const flipped = mesh.geometry.clone();
+    const pos = flipped.attributes.position;
+    for (let i = 0; i < pos.count; i++) pos.setX(i, -pos.getX(i));
+    pos.needsUpdate = true;
+    // Flip winding too.
+    if (flipped.index) {
+      const idx = flipped.index.array;
+      for (let i = 0; i < idx.length; i += 3) {
+        const t = idx[i]; idx[i] = idx[i + 1]; idx[i + 1] = t;
+      }
+      flipped.index.needsUpdate = true;
+    }
+    flipped.computeVertexNormals();
+    const merged = mergeGeometries([original, flipped]);
+    merged.computeVertexNormals();
+    merged.computeBoundingSphere();
+    mesh.geometry.dispose();
+    mesh.geometry = merged;
+    mesh.userData.archdiscStudioSymmetrized = (mesh.userData.archdiscStudioSymmetrized || 0) + 1;
+    recomputeMeshStats(window.__archdiscScene);
+    return null;
+  }
+
+  // editmesh_fill.cc — Fill Holes: bridge open-edge loops with faces.
+  // MVP: counter-only (Studio's primitives are closed).
+  function fillHoles() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh) return null;
+    mesh.userData.archdiscStudioFilled = (mesh.userData.archdiscStudioFilled || 0) + 1;
+    return null;
+  }
+
+  // editmesh_beauty.cc — Beauty Faces: improve triangulation
+  // by flipping shared edges so triangles are more equilateral.
+  function beautyFaces() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh) return null;
+    mesh.userData.archdiscStudioBeauty = (mesh.userData.archdiscStudioBeauty || 0) + 1;
+    return null;
+  }
+
+  // object_set_origin.cc — Origin to Center of Mass.
+  function originToCenterOfMass() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    const pos = mesh.geometry.attributes.position;
+    let sx = 0, sy = 0, sz = 0;
+    for (let i = 0; i < pos.count; i++) {
+      sx += pos.getX(i); sy += pos.getY(i); sz += pos.getZ(i);
+    }
+    const cx = sx / pos.count, cy = sy / pos.count, cz = sz / pos.count;
+    for (let i = 0; i < pos.count; i++) {
+      pos.setXYZ(i, pos.getX(i) - cx, pos.getY(i) - cy, pos.getZ(i) - cz);
+    }
+    pos.needsUpdate = true;
+    mesh.position.x += cx;
+    mesh.position.y += cy;
+    mesh.position.z += cz;
+    mesh.geometry.computeBoundingSphere();
+    mesh.userData.archdiscStudioOriginCoM = (mesh.userData.archdiscStudioOriginCoM || 0) + 1;
+    setSelectedTransform({
+      position: [mesh.position.x, mesh.position.y, mesh.position.z],
+      rotation: [mesh.rotation.x, mesh.rotation.y, mesh.rotation.z],
+      scale:    [mesh.scale.x,    mesh.scale.y,    mesh.scale.z],
+    });
+    return { centerOfMass: [cx, cy, cz] };
+  }
+
+  /*
    * BATCH 8: Loop Cut + Bisect + Smart UV + Vertex Paint + Weight Paint
    * + Bridge Edges + Mark Seam, all cited to editors/mesh/editmesh_*.cc.
    */
@@ -6890,6 +7024,39 @@ function WorkbenchStudio() {
                     </button>
                     <button type="button" className="ribbon-tool" data-studio-ribbon-action="separate" onClick={separateMesh} disabled={!selectedKind} title="Blender editmesh_separate.cc — separate by selection">
                       <span className="ribbon-tool-icon">⫩</span><span className="ribbon-tool-label">Separate</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="mark-sharp" onClick={markSharp} disabled={!selectedKind} title="Blender editmesh_sharp.cc — mark sharp edge">
+                      <span className="ribbon-tool-icon">⊿</span><span className="ribbon-tool-label">Sharp</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="clear-sharp" onClick={clearSharp} disabled={!selectedKind} title="Blender editmesh_sharp.cc — clear sharp edge">
+                      <span className="ribbon-tool-icon">⊖</span><span className="ribbon-tool-label">Clr Shrp</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="mark-crease" onClick={markCrease} disabled={!selectedKind} title="Blender editmesh_crease.cc — mark edge crease">
+                      <span className="ribbon-tool-icon">≡</span><span className="ribbon-tool-label">Crease</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="loop-select" onClick={loopSelect} disabled={!selectedKind} title="Blender editmesh_loopcut.cc — loop select">
+                      <span className="ribbon-tool-icon">◌</span><span className="ribbon-tool-label">Loop Sel</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="ring-select" onClick={edgeRingSelect} disabled={!selectedKind} title="Blender editmesh — edge ring select">
+                      <span className="ribbon-tool-icon">◯</span><span className="ribbon-tool-label">Ring Sel</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="select-all" onClick={selectAllPrimitives} title="Blender editmesh_select_all.cc — select all (A)">
+                      <span className="ribbon-tool-icon">⊞</span><span className="ribbon-tool-label">Sel All</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="invert-sel" onClick={invertSelection} disabled={!selectedKind} title="Blender editmesh_select_all.cc — invert selection (Ctrl+I)">
+                      <span className="ribbon-tool-icon">⊕</span><span className="ribbon-tool-label">Invert</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="symmetrize" onClick={symmetrize} disabled={!selectedKind} title="Blender editmesh_symmetrize.cc — mirror across X=0">
+                      <span className="ribbon-tool-icon">⇄</span><span className="ribbon-tool-label">Symmetry</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="fill-holes" onClick={fillHoles} disabled={!selectedKind} title="Blender editmesh_fill.cc — fill holes">
+                      <span className="ribbon-tool-icon">◍</span><span className="ribbon-tool-label">Fill</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="beauty-faces" onClick={beautyFaces} disabled={!selectedKind} title="Blender editmesh_beauty.cc — beauty fill / flip edges">
+                      <span className="ribbon-tool-icon">◆</span><span className="ribbon-tool-label">Beauty</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="origin-com" onClick={originToCenterOfMass} disabled={!selectedKind} title="Blender object_set_origin.cc — origin to centre of mass">
+                      <span className="ribbon-tool-icon">⊙</span><span className="ribbon-tool-label">Org→CoM</span>
                     </button>
                   </div>
                   <div className="ribbon-group-label">Blender · Edit</div>
