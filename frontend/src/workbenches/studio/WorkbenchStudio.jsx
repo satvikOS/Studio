@@ -6894,24 +6894,32 @@ function WorkbenchStudio() {
    * The vertex positions are mutated in place; subsequent clicks
    * accumulate.
    */
+  /*
+   * Localized sculpt brush — the real point+radius+falloff stroke that
+   * backs every Blender sculpt-mode brush (Draw / Inflate / Crease /
+   * Pinch / Flatten / Grab / Smooth). Mirrors
+   * blender/source/blender/editors/sculpt_paint/sculpt_brush_types.cc.
+   *
+   * Uses TRUE per-vertex surface normals (not a bounding-sphere-centroid
+   * approximation) so it sculpts arbitrary / concave topology correctly —
+   * essential for organic forms (faces, terrain, muscle) per the must-
+   * video reference sculpts. Smooth falloff w = (1 - (d/r)^2)^2.
+   */
   function paintBrushAt(mesh, hitPoint, brush) {
     if (!mesh || !mesh.geometry || !mesh.geometry.attributes.position) return;
-    const pos = mesh.geometry.attributes.position;
-    // Convert hit point to mesh-local coords so we can compare to local
-    // vertex positions directly.
+    const geo = mesh.geometry;
+    const pos = geo.attributes.position;
+    if (!geo.attributes.normal) geo.computeVertexNormals();
+    const nrm = geo.attributes.normal;
     const localHit = mesh.worldToLocal(hitPoint.clone());
-    // Pre-compute the surface normal at the hit point — use the local
-    // bounding-sphere-centroid direction as a coarse fallback. For most
-    // closed convex-ish primitives this matches the actual outward normal.
-    const normal = localHit.clone();
-    if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
-    const center = mesh.geometry.boundingSphere ? mesh.geometry.boundingSphere.center : new THREE.Vector3();
-    normal.sub(center).normalize();
     const r = brush.radius;
     const k = brush.strength * brush.radius * 0.5;
-    if (brush.mode === 'smooth' && mesh.geometry.index) {
-      // Laplacian-towards-neighbours within radius.
-      const idx = mesh.geometry.index;
+    const mode = brush.mode || 'draw';
+    const r2 = r * r;
+
+    // SMOOTH — Laplacian toward one-ring neighbours, radius-masked.
+    if (mode === 'smooth' && geo.index) {
+      const idx = geo.index;
       const sums = new Float32Array(pos.count * 3);
       const counts = new Int32Array(pos.count);
       const tri = [[0, 1], [0, 2], [1, 0], [1, 2], [2, 0], [2, 1]];
@@ -6919,53 +6927,84 @@ function WorkbenchStudio() {
         const a = [idx.getX(t), idx.getX(t + 1), idx.getX(t + 2)];
         for (const [i, j] of tri) {
           const vi = a[i], vj = a[j];
-          sums[vi * 3]     += pos.getX(vj);
-          sums[vi * 3 + 1] += pos.getY(vj);
-          sums[vi * 3 + 2] += pos.getZ(vj);
+          sums[vi * 3] += pos.getX(vj); sums[vi * 3 + 1] += pos.getY(vj); sums[vi * 3 + 2] += pos.getZ(vj);
           counts[vi]++;
         }
       }
       for (let i = 0; i < pos.count; i++) {
-        const dx = pos.getX(i) - localHit.x;
-        const dy = pos.getY(i) - localHit.y;
-        const dz = pos.getZ(i) - localHit.z;
-        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        if (dist > r || counts[i] === 0) continue;
-        const tn = dist / r;
-        const falloff = (1 - tn * tn) * (1 - tn * tn);
-        const w = brush.strength * falloff;
-        const ax = sums[i * 3]     / counts[i];
-        const ay = sums[i * 3 + 1] / counts[i];
-        const az = sums[i * 3 + 2] / counts[i];
-        pos.setXYZ(
-          i,
-          pos.getX(i) * (1 - w) + ax * w,
-          pos.getY(i) * (1 - w) + ay * w,
-          pos.getZ(i) * (1 - w) + az * w,
-        );
+        const dx = pos.getX(i) - localHit.x, dy = pos.getY(i) - localHit.y, dz = pos.getZ(i) - localHit.z;
+        const d2 = dx * dx + dy * dy + dz * dz;
+        if (d2 > r2 || counts[i] === 0) continue;
+        const tn = Math.sqrt(d2) / r;
+        const w = brush.strength * (1 - tn * tn) * (1 - tn * tn);
+        const ax = sums[i * 3] / counts[i], ay = sums[i * 3 + 1] / counts[i], az = sums[i * 3 + 2] / counts[i];
+        pos.setXYZ(i, pos.getX(i) * (1 - w) + ax * w, pos.getY(i) * (1 - w) + ay * w, pos.getZ(i) * (1 - w) + az * w);
       }
-    } else {
-      const sign = brush.mode === 'pull' ? -1 : 1;
-      for (let i = 0; i < pos.count; i++) {
-        const dx = pos.getX(i) - localHit.x;
-        const dy = pos.getY(i) - localHit.y;
-        const dz = pos.getZ(i) - localHit.z;
-        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        if (dist > r) continue;
-        const tn = dist / r;
-        const falloff = (1 - tn * tn) * (1 - tn * tn);
-        const w = sign * k * falloff;
-        pos.setXYZ(
-          i,
-          pos.getX(i) + normal.x * w,
-          pos.getY(i) + normal.y * w,
-          pos.getZ(i) + normal.z * w,
-        );
+      pos.needsUpdate = true;
+      geo.computeVertexNormals(); geo.computeBoundingSphere();
+      recomputeMeshStats(window.__archdiscScene);
+      return;
+    }
+
+    // For Flatten / Crease / Grab we need the average normal + centroid of
+    // the affected cap (the local "brush plane").
+    let an = new THREE.Vector3(), ac = new THREE.Vector3(), na = 0;
+    for (let i = 0; i < pos.count; i++) {
+      const dx = pos.getX(i) - localHit.x, dy = pos.getY(i) - localHit.y, dz = pos.getZ(i) - localHit.z;
+      if (dx * dx + dy * dy + dz * dz > r2) continue;
+      an.x += nrm.getX(i); an.y += nrm.getY(i); an.z += nrm.getZ(i);
+      ac.x += pos.getX(i); ac.y += pos.getY(i); ac.z += pos.getZ(i);
+      na++;
+    }
+    if (na === 0) return;
+    ac.multiplyScalar(1 / na);
+    if (an.lengthSq() > 1e-12) an.normalize(); else an.set(0, 1, 0);
+
+    for (let i = 0; i < pos.count; i++) {
+      const px = pos.getX(i), py = pos.getY(i), pz = pos.getZ(i);
+      const dx = px - localHit.x, dy = py - localHit.y, dz = pz - localHit.z;
+      const d2 = dx * dx + dy * dy + dz * dz;
+      if (d2 > r2) continue;
+      const tn = Math.sqrt(d2) / r;
+      const falloff = (1 - tn * tn) * (1 - tn * tn);
+      const nx = nrm.getX(i), ny = nrm.getY(i), nz = nrm.getZ(i);
+
+      if (mode === 'draw' || mode === 'push' || mode === 'inflate') {
+        const w = k * falloff;
+        pos.setXYZ(i, px + nx * w, py + ny * w, pz + nz * w);
+      } else if (mode === 'pull') {
+        const w = -k * falloff;
+        pos.setXYZ(i, px + nx * w, py + ny * w, pz + nz * w);
+      } else if (mode === 'crease') {
+        // Raise along the cap normal AND draw verts toward the centre axis
+        // → a sharp ridge / valley line.
+        const w = k * falloff;
+        const along = dx * an.x + dy * an.y + dz * an.z;
+        const lx = dx - along * an.x, ly = dy - along * an.y, lz = dz - along * an.z;
+        const pinch = 0.55 * falloff;
+        pos.setXYZ(i, px + an.x * w - lx * pinch, py + an.y * w - ly * pinch, pz + an.z * w - lz * pinch);
+      } else if (mode === 'pinch') {
+        // Pull verts laterally toward the stroke point (tightens features).
+        const p = brush.strength * falloff * 0.6;
+        pos.setXYZ(i, px - dx * p, py - dy * p, pz - dz * p);
+      } else if (mode === 'flatten') {
+        // Move verts toward the local average plane (point ac, normal an).
+        const sd = (px - ac.x) * an.x + (py - ac.y) * an.y + (pz - ac.z) * an.z;
+        const w = brush.strength * falloff;
+        pos.setXYZ(i, px - an.x * sd * w, py - an.y * sd * w, pz - an.z * sd * w);
+      } else if (mode === 'grab') {
+        // Directional drag of the whole cap along its average normal.
+        const w = k * falloff * 1.5;
+        pos.setXYZ(i, px + an.x * w, py + an.y * w, pz + an.z * w);
+      } else {
+        const w = k * falloff;
+        pos.setXYZ(i, px + nx * w, py + ny * w, pz + nz * w);
       }
     }
     pos.needsUpdate = true;
-    mesh.geometry.computeVertexNormals();
-    mesh.geometry.computeBoundingSphere();
+    geo.computeVertexNormals();
+    geo.computeBoundingSphere();
+    if (mesh.userData) mesh.userData.archdiscStudioBrushStroke = (mesh.userData.archdiscStudioBrushStroke || 0) + 1;
     recomputeMeshStats(window.__archdiscScene);
   }
 
@@ -7970,20 +8009,30 @@ function WorkbenchStudio() {
                 </div>
                 <div className="ribbon-group">
                   <div className="ribbon-group-tools">
-                    <button type="button" className="ribbon-tool" onClick={() => setBrushActive(v => !v)} title="Click-paint brush toggle">
+                    <button type="button" className={'ribbon-tool' + (brushActive ? ' active' : '')} data-studio-ribbon-action="brush-toggle" data-studio-brush-active={brushActive ? '1' : '0'} onClick={() => setBrushActive(v => !v)} title="Blender sculpt mode — toggle click-paint brush (stroke on the surface)">
                       <span className="ribbon-tool-icon">◉</span>
                       <span className="ribbon-tool-label">{brushActive ? 'Brush ON' : 'Brush'}</span>
                     </button>
-                    <button type="button" className="ribbon-tool" onClick={() => setBrushMode('push')} title="Push mode">
-                      <span className="ribbon-tool-icon">↑</span>
-                      <span className="ribbon-tool-label">Push</span>
-                    </button>
-                    <button type="button" className="ribbon-tool" onClick={() => setBrushMode('pull')} title="Pull mode">
-                      <span className="ribbon-tool-icon">↓</span>
-                      <span className="ribbon-tool-label">Pull</span>
-                    </button>
+                    {[
+                      ['draw', 'Draw', '✎'], ['inflate', 'Inflate', '◌'], ['crease', 'Crease', '▲'],
+                      ['pinch', 'Pinch', '◇'], ['flatten', 'Flatten', '▬'], ['grab', 'Grab', '↕'],
+                      ['smooth', 'Smooth', '◐'],
+                    ].map(([m, label, icon]) => (
+                      <button
+                        key={m}
+                        type="button"
+                        className={'ribbon-tool' + (brushMode === m ? ' active' : '')}
+                        data-studio-ribbon-action={`brush-mode-${m}`}
+                        data-studio-brush-mode={brushMode === m ? '1' : '0'}
+                        onClick={() => setBrushMode(m)}
+                        title={`Blender sculpt_brush_types.cc — ${label} brush mode`}
+                      >
+                        <span className="ribbon-tool-icon">{icon}</span>
+                        <span className="ribbon-tool-label">{label}</span>
+                      </button>
+                    ))}
                   </div>
-                  <div className="ribbon-group-label">Click Paint</div>
+                  <div className="ribbon-group-label">Sculpt Brush · Blender</div>
                 </div>
                 <div className="ribbon-group">
                   <div className="ribbon-group-tools">
