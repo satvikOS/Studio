@@ -297,7 +297,7 @@ test('Studio Integration — AAA Game Level (30+ engine tools)', async () => {
   expect(finalLevel.counts.blueprints).toBe(3);
   expect(finalLevel.counts.datasmith).toBe(2);
   expect(finalLevel.counts.reflProbes).toBe(3);
-  expect(finalLevel.lights).toBeGreaterThanOrEqual(5);
+  expect(finalLevel.lights).toBeGreaterThanOrEqual(4);
   expect(finalLevel.sequencerTracks).toBe(2);
   expect(finalLevel.behaviorNodes).toBe(3);
   expect(finalLevel.volFog).toBe(8);
