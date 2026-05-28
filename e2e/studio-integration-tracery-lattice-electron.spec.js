@@ -64,20 +64,20 @@ test('Studio Integration — Gothic Tracery Lattice (Video-741 1:1 parity)', asy
   const cols = 5;                       // arch columns
   const x0 = -((cols - 1) / 2) * cell;  // left column centre
   const rowY = [-0.045, -0.015, 0.015, 0.045];
-  const aScale = [1.0, 2.3, 0.7];        // arch: span one cell, tall lancet
+  const aScale = [1.22, 1.05, 0.7];      // ogee: span one cell, smooth S-curve lobe
 
-  // ════ Arch net — brick-offset rows of lancet arches ═════════════
+  // ════ Ogee net — brick-offset rows of smooth ogee lobes ═════════
   let arches = 0;
   for (let r = 0; r < rowY.length; r++) {
     const offset = (r % 2) * (cell / 2);  // alternate rows shift half a cell
     const n = (r % 2) ? cols - 1 : cols;
     for (let c = 0; c < n; c++) {
       const x = x0 + offset + c * cell;
-      await placeBody(win, 'arch', [x, rowY[r], 0], aScale, r % 2 ? STONE2 : STONE);
+      await placeBody(win, 'ogee', [x, rowY[r], 0], aScale, r % 2 ? STONE2 : STONE);
       arches++;
     }
   }
-  await win.screenshot({ path: path.join(OUT, '01-arch-net.png'), fullPage: false });
+  await win.screenshot({ path: path.join(OUT, '01-ogee-net.png'), fullPage: false });
 
   // ════ Mullions — thin vertical bars on the column lines ══════════
   for (let c = 0; c < cols; c++) {
@@ -130,10 +130,10 @@ test('Studio Integration — Gothic Tracery Lattice (Video-741 1:1 parity)', asy
   // ════ Assertions ════════════════════════════════════════════════
   const state = await win.evaluate(() => {
     const vp = window.__archdiscViewport; let prim = 0, lights = 0, arches = 0;
-    vp.scene.traverse(o => { if (o.userData && o.userData.archdiscStudioPrimitive) { prim++; if (o.userData.archdiscStudioPrimitiveKind === 'arch') arches++; } if (o.userData && o.userData.archdiscStudioLight) lights++; });
+    vp.scene.traverse(o => { if (o.userData && o.userData.archdiscStudioPrimitive) { prim++; if (o.userData.archdiscStudioPrimitiveKind === 'ogee') arches++; } if (o.userData && o.userData.archdiscStudioLight) lights++; });
     return { prim, lights, arches };
   });
-  expect(state.arches).toBeGreaterThanOrEqual(16); // the interlacing arch net
+  expect(state.arches).toBeGreaterThanOrEqual(16); // the interlacing ogee net
   expect(state.prim).toBeGreaterThanOrEqual(28);   // arches + mullions + frame + oculi
   expect(state.lights).toBe(3);
 

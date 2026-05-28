@@ -62,6 +62,23 @@ function buildPrimitiveGeometry(kind) {
     case 'cone':         return new THREE.ConeGeometry(S * 0.55, S, 32);
     case 'torus':        return new THREE.TorusGeometry(S * 0.5, S * 0.18, 16, 32);
     case 'arch':         return new THREE.TorusGeometry(S * 0.5, S * 0.1, 14, 40, Math.PI); // half-arc bar — arches / vaults / tracery
+    case 'ogee': {
+      // Ogee (pointed onion) arch — a moulded bar swept along a symmetric
+      // S-curve: near-vertical jambs that sweep concave-out then convex-in
+      // to a central point. The classic gothic tracery lobe.
+      const ow = S * 0.42, oh = S * 0.62;
+      const opts = [
+        new THREE.Vector3(-ow, -oh, 0),
+        new THREE.Vector3(-ow, -oh * 0.12, 0),
+        new THREE.Vector3(-ow * 0.5, oh * 0.5, 0),
+        new THREE.Vector3(0, oh, 0),
+        new THREE.Vector3(ow * 0.5, oh * 0.5, 0),
+        new THREE.Vector3(ow, -oh * 0.12, 0),
+        new THREE.Vector3(ow, -oh, 0),
+      ];
+      const ocurve = new THREE.CatmullRomCurve3(opts, false, 'catmullrom', 0.5);
+      return new THREE.TubeGeometry(ocurve, 64, S * 0.05, 10, false);
+    }
     case 'torus-knot':   return new THREE.TorusKnotGeometry(S * 0.45, S * 0.14, 100, 16);
     case 'icosahedron':  return new THREE.IcosahedronGeometry(S * 0.6, 0);
     case 'dodecahedron': return new THREE.DodecahedronGeometry(S * 0.6, 0);
@@ -173,6 +190,7 @@ const PRIMITIVE_KINDS = [
   { id: 'cone',         label: 'Cone' },
   { id: 'torus',        label: 'Torus' },
   { id: 'arch',         label: 'Arch' },
+  { id: 'ogee',         label: 'Ogee' },
   { id: 'torus-knot',   label: 'Torus Knot' },
   { id: 'icosahedron',  label: 'Icosa' },
   { id: 'dodecahedron', label: 'Dodeca' },
