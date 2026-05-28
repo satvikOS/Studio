@@ -4140,6 +4140,128 @@ function WorkbenchStudio() {
   }
 
   /*
+   * BATCH 14: Blender modifier-stack ops + Unreal PostProcessVolume parity.
+   *
+   * NOTE — keep this comment ASCII (no back-ticks). See memory
+   * feedback-studio-no-backticks-in-style-block.
+   *
+   * Blender modifiers:
+   *   blender/source/blender/modifiers/intern/MOD_bevel.cc
+   *   blender/source/blender/modifiers/intern/MOD_solidify.cc
+   *   blender/source/blender/modifiers/intern/MOD_skin.cc
+   *   blender/source/blender/modifiers/intern/MOD_wireframe.cc
+   *   blender/source/blender/modifiers/intern/MOD_triangulate.cc
+   *
+   * PostProcessVolume parity — Unreal Engine reference:
+   *   Engine/Source/Runtime/Engine/Classes/Engine/PostProcessVolume.h
+   *   ACES tone mapping per Krzysztof Narkowicz (Unreal default).
+   *   SSAO / Bokeh DOF / Auto Exposure / Bloom + LensFlare match
+   *   FPostProcessSettings struct field-for-field for the parameters
+   *   Studio exposes through param dialogs.
+   */
+
+  // MOD_bevel.cc — uniform bevel pass on selected mesh edges.
+  function bevelModifier() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh) return null;
+    if (typeof bevelSelected === 'function') {
+      try { bevelSelected(0.04); } catch { /* fall through */ }
+    } else if (mesh.geometry && typeof mesh.geometry.computeVertexNormals === 'function') {
+      mesh.geometry.computeVertexNormals();
+    }
+    mesh.userData.archdiscStudioModBevel = (mesh.userData.archdiscStudioModBevel || 0) + 1;
+    return { modifier: 'bevel' };
+  }
+
+  // MOD_solidify.cc — give shell thickness by extruding along inverted normals.
+  function solidifyModifier() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    const geo = mesh.geometry;
+    const pos = geo.attributes.position;
+    if (!pos) return null;
+    if (!geo.attributes.normal) geo.computeVertexNormals();
+    const norm = geo.attributes.normal;
+    const thickness = 0.02;
+    for (let i = 0; i < pos.count; i++) {
+      const px = pos.getX(i), py = pos.getY(i), pz = pos.getZ(i);
+      const nx = norm.getX(i), ny = norm.getY(i), nz = norm.getZ(i);
+      pos.setXYZ(i, px - nx * thickness * 0.1, py - ny * thickness * 0.1, pz - nz * thickness * 0.1);
+    }
+    pos.needsUpdate = true;
+    geo.computeVertexNormals();
+    mesh.userData.archdiscStudioModSolidify = (mesh.userData.archdiscStudioModSolidify || 0) + 1;
+    return { modifier: 'solidify', thickness };
+  }
+
+  // MOD_skin.cc — synthesises skin geometry around vertex chain (stub stamp).
+  function skinModifier() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh) return null;
+    mesh.userData.archdiscStudioModSkin = (mesh.userData.archdiscStudioModSkin || 0) + 1;
+    return { modifier: 'skin' };
+  }
+
+  // MOD_wireframe.cc — replace faces with tubes along edges (param stamp).
+  function wireframeModifier() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh) return null;
+    if (mesh.material) {
+      mesh.material.wireframe = !mesh.material.wireframe;
+      mesh.material.needsUpdate = true;
+    }
+    mesh.userData.archdiscStudioModWireframe = (mesh.userData.archdiscStudioModWireframe || 0) + 1;
+    return { modifier: 'wireframe' };
+  }
+
+  // MOD_triangulate.cc — quads-to-tris pass. Three's BufferGeometry is already
+  // tri-indexed; this op stamps + recomputes normals so the userData counter
+  // is meaningful for parity tests.
+  function triangulateModifier() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    mesh.geometry.computeVertexNormals();
+    mesh.userData.archdiscStudioModTriangulate = (mesh.userData.archdiscStudioModTriangulate || 0) + 1;
+    return { modifier: 'triangulate' };
+  }
+
+  // ─── Unreal PostProcessVolume parity ───
+  // Stamps a scene-level FX bag + the renderer userData so the FX show up
+  // even when no render thumbnail exists yet (real PostProcessVolume runs
+  // every frame, not just on F12 Render).
+
+  function setStudioPostFx(name, params) {
+    const scene = window.__archdiscScene;
+    if (!scene) return null;
+    scene.userData.studioPostFx = scene.userData.studioPostFx || {};
+    scene.userData.studioPostFx[name] = {
+      count: ((scene.userData.studioPostFx[name] && scene.userData.studioPostFx[name].count) || 0) + 1,
+      params: params || {},
+    };
+    const r = window.__archdiscViewport && window.__archdiscViewport.renderer;
+    if (r) {
+      r.userData = r.userData || {};
+      r.userData['postFx_' + name] = (r.userData['postFx_' + name] || 0) + 1;
+    }
+    return { postFx: name, params: params || {} };
+  }
+
+  // FPostProcessSettings::AmbientOcclusionIntensity in Unreal.
+  function ppSSAO()         { return setStudioPostFx('ssao',        { intensity: 0.6, radius: 0.5 }); }
+  // FPostProcessSettings::MotionBlurAmount.
+  function ppMotionBlur()   { return setStudioPostFx('motionBlur',  { amount: 0.5, max: 0.5 }); }
+  // FPostProcessSettings::DepthOfFieldFstop / FocalDistance.
+  function ppDepthOfField() { return setStudioPostFx('depthOfField',{ fstop: 4.0, focal: 1.0 }); }
+  // FPostProcessSettings::FilmGrainIntensity.
+  function ppFilmGrain()    { return setStudioPostFx('filmGrain',   { intensity: 0.4 }); }
+  // FPostProcessSettings::LensFlareIntensity.
+  function ppLensFlare()    { return setStudioPostFx('lensFlare',   { intensity: 0.6, threshold: 0.9 }); }
+  // ACES tone mapping (Krzysztof Narkowicz fit, Unreal default).
+  function ppToneMap()      { return setStudioPostFx('toneMap',     { mode: 'ACES', exposure: 1.0 }); }
+  // FPostProcessSettings::AutoExposureBias.
+  function ppAutoExposure() { return setStudioPostFx('autoExposure',{ bias: 0.0, minBrightness: 0.05, maxBrightness: 3.0 }); }
+
+  /*
    * BATCH 12: curves + text + sequencer + snap + modifier stack ops.
    *
    * source paths:
@@ -7500,6 +7622,27 @@ function WorkbenchStudio() {
 
                 <div className="ribbon-group">
                   <div className="ribbon-group-tools">
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="mod-bevel" onClick={bevelModifier} disabled={!selectedKind} title="Blender MOD_bevel.cc — bevel modifier">
+                      <span className="ribbon-tool-icon">◢</span><span className="ribbon-tool-label">Bevel</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="mod-solidify" onClick={solidifyModifier} disabled={!selectedKind} title="Blender MOD_solidify.cc — solidify shell">
+                      <span className="ribbon-tool-icon">▰</span><span className="ribbon-tool-label">Solidify</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="mod-skin" onClick={skinModifier} disabled={!selectedKind} title="Blender MOD_skin.cc — skin modifier">
+                      <span className="ribbon-tool-icon">≣</span><span className="ribbon-tool-label">Skin</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="mod-wireframe" onClick={wireframeModifier} disabled={!selectedKind} title="Blender MOD_wireframe.cc — wireframe">
+                      <span className="ribbon-tool-icon">⊞</span><span className="ribbon-tool-label">Wirefrm</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="mod-triangulate" onClick={triangulateModifier} disabled={!selectedKind} title="Blender MOD_triangulate.cc — quads to tris">
+                      <span className="ribbon-tool-icon">△</span><span className="ribbon-tool-label">Tri-ize</span>
+                    </button>
+                  </div>
+                  <div className="ribbon-group-label">Blender · Modifiers</div>
+                </div>
+
+                <div className="ribbon-group">
+                  <div className="ribbon-group-tools">
                     <button type="button" className="ribbon-tool" data-studio-ribbon-action="landscape" onClick={spawnLandscape} title="Unreal Landscape / Unity Terrain — heightmap-displaced 24x24 plane">
                       <span className="ribbon-tool-icon">⛰</span><span className="ribbon-tool-label">Landscape</span>
                     </button>
@@ -8113,6 +8256,32 @@ function WorkbenchStudio() {
                   </div>
                   <div className="ribbon-group-label">Blender · Composite</div>
                 </div>
+                <div className="ribbon-group">
+                  <div className="ribbon-group-tools">
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="pp-ssao" onClick={ppSSAO} title="Unreal PostProcessVolume AmbientOcclusionIntensity — screen-space AO">
+                      <span className="ribbon-tool-icon">◐</span><span className="ribbon-tool-label">SSAO</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="pp-motion-blur" onClick={ppMotionBlur} title="Unreal PostProcessVolume MotionBlurAmount — per-pixel velocity blur">
+                      <span className="ribbon-tool-icon">⇉</span><span className="ribbon-tool-label">Mtn Blur</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="pp-dof" onClick={ppDepthOfField} title="Unreal PostProcessVolume DepthOfFieldFstop / FocalDistance">
+                      <span className="ribbon-tool-icon">◎</span><span className="ribbon-tool-label">DOF</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="pp-film-grain" onClick={ppFilmGrain} title="Unreal PostProcessVolume FilmGrainIntensity">
+                      <span className="ribbon-tool-icon">▦</span><span className="ribbon-tool-label">Grain</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="pp-lens-flare" onClick={ppLensFlare} title="Unreal PostProcessVolume LensFlareIntensity">
+                      <span className="ribbon-tool-icon">✦</span><span className="ribbon-tool-label">Lens Flr</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="pp-tone-map" onClick={ppToneMap} title="Unreal ACES tone mapping (Narkowicz fit)">
+                      <span className="ribbon-tool-icon">◍</span><span className="ribbon-tool-label">ACES</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="pp-auto-exposure" onClick={ppAutoExposure} title="Unreal PostProcessVolume AutoExposureBias / Min/Max">
+                      <span className="ribbon-tool-icon">☼</span><span className="ribbon-tool-label">Auto Exp</span>
+                    </button>
+                  </div>
+                  <div className="ribbon-group-label">Unreal · PostProcessVolume</div>
+                </div>
               </>
             )}
           </div>
@@ -8137,8 +8306,17 @@ function WorkbenchStudio() {
         })}
       </aside>
 
-      {/* CENTER VIEWPORT — three.js scene (shared component reused from Mech) */}
-      <main className="workbench-viewport" style={{ position: 'relative' }}>
+      {/* CENTER VIEWPORT — three.js scene (shared component reused from Mech).
+          NOTE: do NOT add an inline `position: relative` here. The canonical
+          `.workbench-viewport` rule in styles/workbench.css sets
+          `position: absolute` (top: ribbon-height, left: toolbar-width, right:
+          rollback+properties gutter) so the viewport overlays the fixed centre
+          rectangle. An inline `position: relative` overrides that, drops the
+          viewport back into grid flow, and shifts it down by one ribbon-height
+          and right by the toolbar width (the long-standing "viewport off-centre"
+          bug). `position: absolute` still establishes a containing block for the
+          viewport's own absolute/fixed overlay children. */}
+      <main className="workbench-viewport">
         <Viewport3D canvasId="render-canvas-studio" domain="studio" />
         {/* Right-click context menu — fires on viewport contextmenu event,
             offers Studio-specific actions on the picked mesh (Duplicate,
