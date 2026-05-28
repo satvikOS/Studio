@@ -283,7 +283,8 @@ function WorkbenchStudio() {
   const [brushMode, setBrushMode]         = useState('push');
   const [brushRadius, setBrushRadius]     = useState(0.012);
   const [brushFalloffStrength, setBrushFalloffStrength] = useState(0.4);
-  const brushStateRef = useRef({ active: false, mode: 'push', radius: 0.012, strength: 0.4 });
+  const [brushSymmetryX, setBrushSymmetryX] = useState(false);
+  const brushStateRef = useRef({ active: false, mode: 'push', radius: 0.012, strength: 0.4, symmetryX: false });
   // Decimate aggressiveness (vertex-clustering quantization fraction).
   const [decimateAggressiveness, setDecimateAggressiveness] = useState(0.5);
   // Noise displacement — value noise along normals.
@@ -6917,90 +6918,93 @@ function WorkbenchStudio() {
     const mode = brush.mode || 'draw';
     const r2 = r * r;
 
-    // SMOOTH — Laplacian toward one-ring neighbours, radius-masked.
-    if (mode === 'smooth' && geo.index) {
-      const idx = geo.index;
-      const sums = new Float32Array(pos.count * 3);
-      const counts = new Int32Array(pos.count);
-      const tri = [[0, 1], [0, 2], [1, 0], [1, 2], [2, 0], [2, 1]];
-      for (let t = 0; t < idx.count; t += 3) {
-        const a = [idx.getX(t), idx.getX(t + 1), idx.getX(t + 2)];
-        for (const [i, j] of tri) {
-          const vi = a[i], vj = a[j];
-          sums[vi * 3] += pos.getX(vj); sums[vi * 3 + 1] += pos.getY(vj); sums[vi * 3 + 2] += pos.getZ(vj);
-          counts[vi]++;
+    // Apply the brush for ONE local hit point. Factored out so X-symmetry
+    // can mirror the same stroke across the local x=0 plane (lh.x -> -lh.x)
+    // — the standard sculpt-mode symmetry that keeps organic / facial
+    // forms bilaterally even (Blender's Symmetry X).
+    const applyStroke = (lh) => {
+      if (mode === 'smooth' && geo.index) {
+        const idx = geo.index;
+        const sums = new Float32Array(pos.count * 3);
+        const counts = new Int32Array(pos.count);
+        const tri = [[0, 1], [0, 2], [1, 0], [1, 2], [2, 0], [2, 1]];
+        for (let t = 0; t < idx.count; t += 3) {
+          const a = [idx.getX(t), idx.getX(t + 1), idx.getX(t + 2)];
+          for (const [i, j] of tri) {
+            const vi = a[i], vj = a[j];
+            sums[vi * 3] += pos.getX(vj); sums[vi * 3 + 1] += pos.getY(vj); sums[vi * 3 + 2] += pos.getZ(vj);
+            counts[vi]++;
+          }
+        }
+        for (let i = 0; i < pos.count; i++) {
+          const dx = pos.getX(i) - lh.x, dy = pos.getY(i) - lh.y, dz = pos.getZ(i) - lh.z;
+          const d2 = dx * dx + dy * dy + dz * dz;
+          if (d2 > r2 || counts[i] === 0) continue;
+          const tn = Math.sqrt(d2) / r;
+          const w = brush.strength * (1 - tn * tn) * (1 - tn * tn);
+          const ax = sums[i * 3] / counts[i], ay = sums[i * 3 + 1] / counts[i], az = sums[i * 3 + 2] / counts[i];
+          pos.setXYZ(i, pos.getX(i) * (1 - w) + ax * w, pos.getY(i) * (1 - w) + ay * w, pos.getZ(i) * (1 - w) + az * w);
+        }
+        return;
+      }
+
+      // Flatten / Crease / Grab need the average normal + centroid of the
+      // affected cap (the local "brush plane").
+      let an = new THREE.Vector3(), ac = new THREE.Vector3(), na = 0;
+      for (let i = 0; i < pos.count; i++) {
+        const dx = pos.getX(i) - lh.x, dy = pos.getY(i) - lh.y, dz = pos.getZ(i) - lh.z;
+        if (dx * dx + dy * dy + dz * dz > r2) continue;
+        an.x += nrm.getX(i); an.y += nrm.getY(i); an.z += nrm.getZ(i);
+        ac.x += pos.getX(i); ac.y += pos.getY(i); ac.z += pos.getZ(i);
+        na++;
+      }
+      if (na === 0) return;
+      ac.multiplyScalar(1 / na);
+      if (an.lengthSq() > 1e-12) an.normalize(); else an.set(0, 1, 0);
+
+      for (let i = 0; i < pos.count; i++) {
+        const px = pos.getX(i), py = pos.getY(i), pz = pos.getZ(i);
+        const dx = px - lh.x, dy = py - lh.y, dz = pz - lh.z;
+        const d2 = dx * dx + dy * dy + dz * dz;
+        if (d2 > r2) continue;
+        const tn = Math.sqrt(d2) / r;
+        const falloff = (1 - tn * tn) * (1 - tn * tn);
+        const nx = nrm.getX(i), ny = nrm.getY(i), nz = nrm.getZ(i);
+
+        if (mode === 'draw' || mode === 'push' || mode === 'inflate') {
+          const w = k * falloff;
+          pos.setXYZ(i, px + nx * w, py + ny * w, pz + nz * w);
+        } else if (mode === 'pull') {
+          const w = -k * falloff;
+          pos.setXYZ(i, px + nx * w, py + ny * w, pz + nz * w);
+        } else if (mode === 'crease') {
+          const w = k * falloff;
+          const along = dx * an.x + dy * an.y + dz * an.z;
+          const lx = dx - along * an.x, ly = dy - along * an.y, lz = dz - along * an.z;
+          const pinch = 0.55 * falloff;
+          pos.setXYZ(i, px + an.x * w - lx * pinch, py + an.y * w - ly * pinch, pz + an.z * w - lz * pinch);
+        } else if (mode === 'pinch') {
+          const p = brush.strength * falloff * 0.6;
+          pos.setXYZ(i, px - dx * p, py - dy * p, pz - dz * p);
+        } else if (mode === 'flatten') {
+          const sd = (px - ac.x) * an.x + (py - ac.y) * an.y + (pz - ac.z) * an.z;
+          const w = brush.strength * falloff;
+          pos.setXYZ(i, px - an.x * sd * w, py - an.y * sd * w, pz - an.z * sd * w);
+        } else if (mode === 'grab') {
+          const w = k * falloff * 1.5;
+          pos.setXYZ(i, px + an.x * w, py + an.y * w, pz + an.z * w);
+        } else {
+          const w = k * falloff;
+          pos.setXYZ(i, px + nx * w, py + ny * w, pz + nz * w);
         }
       }
-      for (let i = 0; i < pos.count; i++) {
-        const dx = pos.getX(i) - localHit.x, dy = pos.getY(i) - localHit.y, dz = pos.getZ(i) - localHit.z;
-        const d2 = dx * dx + dy * dy + dz * dz;
-        if (d2 > r2 || counts[i] === 0) continue;
-        const tn = Math.sqrt(d2) / r;
-        const w = brush.strength * (1 - tn * tn) * (1 - tn * tn);
-        const ax = sums[i * 3] / counts[i], ay = sums[i * 3 + 1] / counts[i], az = sums[i * 3 + 2] / counts[i];
-        pos.setXYZ(i, pos.getX(i) * (1 - w) + ax * w, pos.getY(i) * (1 - w) + ay * w, pos.getZ(i) * (1 - w) + az * w);
-      }
-      pos.needsUpdate = true;
-      geo.computeVertexNormals(); geo.computeBoundingSphere();
-      recomputeMeshStats(window.__archdiscScene);
-      return;
+    };
+
+    applyStroke(localHit);
+    if (brush.symmetryX) {
+      applyStroke(new THREE.Vector3(-localHit.x, localHit.y, localHit.z));
     }
 
-    // For Flatten / Crease / Grab we need the average normal + centroid of
-    // the affected cap (the local "brush plane").
-    let an = new THREE.Vector3(), ac = new THREE.Vector3(), na = 0;
-    for (let i = 0; i < pos.count; i++) {
-      const dx = pos.getX(i) - localHit.x, dy = pos.getY(i) - localHit.y, dz = pos.getZ(i) - localHit.z;
-      if (dx * dx + dy * dy + dz * dz > r2) continue;
-      an.x += nrm.getX(i); an.y += nrm.getY(i); an.z += nrm.getZ(i);
-      ac.x += pos.getX(i); ac.y += pos.getY(i); ac.z += pos.getZ(i);
-      na++;
-    }
-    if (na === 0) return;
-    ac.multiplyScalar(1 / na);
-    if (an.lengthSq() > 1e-12) an.normalize(); else an.set(0, 1, 0);
-
-    for (let i = 0; i < pos.count; i++) {
-      const px = pos.getX(i), py = pos.getY(i), pz = pos.getZ(i);
-      const dx = px - localHit.x, dy = py - localHit.y, dz = pz - localHit.z;
-      const d2 = dx * dx + dy * dy + dz * dz;
-      if (d2 > r2) continue;
-      const tn = Math.sqrt(d2) / r;
-      const falloff = (1 - tn * tn) * (1 - tn * tn);
-      const nx = nrm.getX(i), ny = nrm.getY(i), nz = nrm.getZ(i);
-
-      if (mode === 'draw' || mode === 'push' || mode === 'inflate') {
-        const w = k * falloff;
-        pos.setXYZ(i, px + nx * w, py + ny * w, pz + nz * w);
-      } else if (mode === 'pull') {
-        const w = -k * falloff;
-        pos.setXYZ(i, px + nx * w, py + ny * w, pz + nz * w);
-      } else if (mode === 'crease') {
-        // Raise along the cap normal AND draw verts toward the centre axis
-        // → a sharp ridge / valley line.
-        const w = k * falloff;
-        const along = dx * an.x + dy * an.y + dz * an.z;
-        const lx = dx - along * an.x, ly = dy - along * an.y, lz = dz - along * an.z;
-        const pinch = 0.55 * falloff;
-        pos.setXYZ(i, px + an.x * w - lx * pinch, py + an.y * w - ly * pinch, pz + an.z * w - lz * pinch);
-      } else if (mode === 'pinch') {
-        // Pull verts laterally toward the stroke point (tightens features).
-        const p = brush.strength * falloff * 0.6;
-        pos.setXYZ(i, px - dx * p, py - dy * p, pz - dz * p);
-      } else if (mode === 'flatten') {
-        // Move verts toward the local average plane (point ac, normal an).
-        const sd = (px - ac.x) * an.x + (py - ac.y) * an.y + (pz - ac.z) * an.z;
-        const w = brush.strength * falloff;
-        pos.setXYZ(i, px - an.x * sd * w, py - an.y * sd * w, pz - an.z * sd * w);
-      } else if (mode === 'grab') {
-        // Directional drag of the whole cap along its average normal.
-        const w = k * falloff * 1.5;
-        pos.setXYZ(i, px + an.x * w, py + an.y * w, pz + an.z * w);
-      } else {
-        const w = k * falloff;
-        pos.setXYZ(i, px + nx * w, py + ny * w, pz + nz * w);
-      }
-    }
     pos.needsUpdate = true;
     geo.computeVertexNormals();
     geo.computeBoundingSphere();
@@ -7012,12 +7016,13 @@ function WorkbenchStudio() {
   // the latest values without depending on closure refresh.
   useEffect(() => {
     brushStateRef.current = {
-      active:   brushActive,
-      mode:     brushMode,
-      radius:   brushRadius,
-      strength: brushFalloffStrength,
+      active:    brushActive,
+      mode:      brushMode,
+      radius:    brushRadius,
+      strength:  brushFalloffStrength,
+      symmetryX: brushSymmetryX,
     };
-  }, [brushActive, brushMode, brushRadius, brushFalloffStrength]);
+  }, [brushActive, brushMode, brushRadius, brushFalloffStrength, brushSymmetryX]);
 
   /*
    * Display modes — toggle wireframe, bounding-box overlay, and
@@ -8031,6 +8036,10 @@ function WorkbenchStudio() {
                         <span className="ribbon-tool-label">{label}</span>
                       </button>
                     ))}
+                    <button type="button" className={'ribbon-tool' + (brushSymmetryX ? ' active' : '')} data-studio-ribbon-action="brush-symmetry-x" data-studio-brush-symmetry={brushSymmetryX ? '1' : '0'} onClick={() => setBrushSymmetryX(v => !v)} title="Blender sculpt symmetry — mirror every stroke across local X (bilateral / facial symmetry)">
+                      <span className="ribbon-tool-icon">◫</span>
+                      <span className="ribbon-tool-label">{brushSymmetryX ? 'Sym X ON' : 'Sym X'}</span>
+                    </button>
                   </div>
                   <div className="ribbon-group-label">Sculpt Brush · Blender</div>
                 </div>
