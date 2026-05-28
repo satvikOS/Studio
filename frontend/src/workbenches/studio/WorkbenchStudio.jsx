@@ -969,6 +969,9 @@ function WorkbenchStudio() {
       // Expose for the React-side delete + other slices.
       window.__studioSelectMesh = selectMesh;
       window.__studioDeselect = deselect;
+      // Read-only getter for the currently-selected mesh (e2e + AI
+      // introspection — lets specs measure geometry before/after an op).
+      window.__studioSelectedMesh = () => selectedMeshRef.current;
 
       const raycaster = new THREE.Raycaster();
       const onPointerDown = (e) => {
@@ -4088,17 +4091,123 @@ function WorkbenchStudio() {
     mesh.userData.archdiscStudioBrushMask = (mesh.userData.archdiscStudioBrushMask || 0) + 1;
     return null;
   }
-  // sculpt_paint/sculpt_brush_types.cc — Clay brush (depth-based push).
+  /* ─── Ultra-realistic sculpting: deterministic fractal-noise terrain ───
+   *
+   * Real weathering / erosion / clay micro-relief needs multi-octave value
+   * noise (fBm), NOT a uniform inflate. These helpers are deterministic
+   * (integer-hash seeded — never Math.random) so identical geometry erodes
+   * identically across runs (Studio "no randomness" rule). Mirrors Blender's
+   * Noise / Musgrave displacement (node_texture_musgrave / MOD_displace).
+   * See memory feedback-studio-realistic-sculpting-coherence.
+   */
+  function studioHash3(ix, iy, iz) {
+    let h = (ix * 374761393 + iy * 668265263 + iz * 1274126177) | 0;
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    h ^= h >>> 16;
+    return (h >>> 0) / 4294967296; // [0,1)
+  }
+  function studioValueNoise3(x, y, z) {
+    const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
+    const xf = x - xi, yf = y - yi, zf = z - zi;
+    const fade = (t) => t * t * t * (t * (t * 6 - 15) + 10);
+    const lerp = (a, b, t) => a + (b - a) * t;
+    const u = fade(xf), v = fade(yf), w = fade(zf);
+    const c000 = studioHash3(xi, yi, zi),         c100 = studioHash3(xi + 1, yi, zi);
+    const c010 = studioHash3(xi, yi + 1, zi),     c110 = studioHash3(xi + 1, yi + 1, zi);
+    const c001 = studioHash3(xi, yi, zi + 1),     c101 = studioHash3(xi + 1, yi, zi + 1);
+    const c011 = studioHash3(xi, yi + 1, zi + 1), c111 = studioHash3(xi + 1, yi + 1, zi + 1);
+    return lerp(
+      lerp(lerp(c000, c100, u), lerp(c010, c110, u), v),
+      lerp(lerp(c001, c101, u), lerp(c011, c111, u), v),
+      w,
+    ); // [0,1)
+  }
+  function studioFbm3(x, y, z, octaves, ridged) {
+    let amp = 0.5, freq = 1, sum = 0, norm = 0;
+    for (let o = 0; o < octaves; o++) {
+      let n = studioValueNoise3(x * freq, y * freq, z * freq) * 2 - 1; // [-1,1)
+      if (ridged) { n = 1 - Math.abs(n); n = n * n; } // sharp rocky ridges
+      sum += n * amp;
+      norm += amp;
+      amp *= 0.5;
+      freq *= 2.07;
+    }
+    return sum / norm;
+  }
+
+  /* Core fBm displacement along vertex normals. opts:
+   *   ridged  — ridged-multifractal (sharp rock crests) vs billowy
+   *   bias    — constant normal offset (negative = erode/remove material)
+   *   gravity — extra cut on upward-facing faces (top-down weathering)
+   *   autoSub — subdivide low-poly meshes first so detail is carried
+   *   counter — userData key to bump
+   */
+  function applyFbmDisplacement(strength, opts = {}) {
+    const { ridged = false, bias = 0, gravity = 0, autoSub = false, counter } = opts;
+    let mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    if (autoSub) {
+      let guard = 0;
+      while (mesh.geometry.attributes.position.count < 800 && guard < 3) {
+        subdivideSelected();
+        mesh = selectedMeshRef.current;
+        guard++;
+      }
+    }
+    const g = mesh.geometry;
+    const pos = g.attributes.position;
+    if (!pos) return null;
+    if (!g.attributes.normal) g.computeVertexNormals();
+    const nrm = g.attributes.normal;
+    if (!g.boundingSphere) g.computeBoundingSphere();
+    const r = g.boundingSphere ? g.boundingSphere.radius : 0.015;
+    const freq = 6.5 / Math.max(r, 1e-5);
+    const amp = strength * r * 0.34;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+      const n = studioFbm3(x * freq, y * freq, z * freq, 5, ridged);
+      const up = Math.max(0, nrm.getY(i));
+      const d = n * amp + bias * r - up * gravity * r;
+      pos.setXYZ(i, x + nrm.getX(i) * d, y + nrm.getY(i) * d, z + nrm.getZ(i) * d);
+    }
+    pos.needsUpdate = true;
+    g.computeVertexNormals();
+    g.computeBoundingSphere();
+    g.computeBoundingBox();
+    if (counter && mesh.userData) mesh.userData[counter] = (mesh.userData[counter] || 0) + 1;
+    recomputeMeshStats(window.__archdiscScene);
+    return { displaced: pos.count, ridged };
+  }
+
+  // Erode — ridged-multifractal carve with gravity bias → weathered rock.
+  function sculptErode(strength = 0.6) {
+    return applyFbmDisplacement(strength, {
+      ridged: true, bias: -0.12, gravity: 0.18, autoSub: true,
+      counter: 'archdiscStudioErode',
+    });
+  }
+  // Weather/degrade — billowy pitting + material loss → aged surfaces.
+  function sculptWeather(strength = 0.4) {
+    return applyFbmDisplacement(strength, {
+      ridged: false, bias: -0.08, gravity: 0.10, autoSub: true,
+      counter: 'archdiscStudioWeather',
+    });
+  }
+
+  // sculpt_paint/sculpt_brush_types.cc — Clay brush (depth-based push +
+  // real fBm micro-relief so the deposit reads as worked clay, not a balloon).
   function sculptClay(strength) {
     sculptInflate(strength * 0.4);
-    sculptSmooth(strength * 0.2);
+    applyFbmDisplacement(strength * 0.5, { ridged: false, bias: 0.03 });
+    sculptSmooth(strength * 0.18);
     const mesh = selectedMeshRef.current;
     if (mesh) mesh.userData.archdiscStudioBrushClay = (mesh.userData.archdiscStudioBrushClay || 0) + 1;
     return null;
   }
-  // sculpt_paint/sculpt_brush_types.cc — Scrape brush (opposite of clay).
+  // sculpt_paint/sculpt_brush_types.cc — Scrape brush (planar shave + grain).
   function sculptScrape(strength) {
     sculptInflate(-strength * 0.4);
+    applyFbmDisplacement(strength * 0.32, { ridged: true, bias: -0.04 });
     const mesh = selectedMeshRef.current;
     if (mesh) mesh.userData.archdiscStudioBrushScrape = (mesh.userData.archdiscStudioBrushScrape || 0) + 1;
     return null;
@@ -7847,6 +7956,17 @@ function WorkbenchStudio() {
                     </button>
                   </div>
                   <div className="ribbon-group-label">Brushes · Blender</div>
+                </div>
+                <div className="ribbon-group">
+                  <div className="ribbon-group-tools">
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="sculpt-erode" onClick={() => sculptErode(0.6)} disabled={!selectedKind} title="Blender MOD_displace.cc + ridged musgrave — erode into weathered rock (auto-subdivides, deterministic fBm)">
+                      <span className="ribbon-tool-icon">⛰</span><span className="ribbon-tool-label">Erode</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="sculpt-weather" onClick={() => sculptWeather(0.42)} disabled={!selectedKind} title="Blender MOD_displace.cc + noise — weather / degrade / age a surface (pitting + material loss)">
+                      <span className="ribbon-tool-icon">☷</span><span className="ribbon-tool-label">Weather</span>
+                    </button>
+                  </div>
+                  <div className="ribbon-group-label">Degradation</div>
                 </div>
                 <div className="ribbon-group">
                   <div className="ribbon-group-tools">
