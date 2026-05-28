@@ -61,6 +61,7 @@ function buildPrimitiveGeometry(kind) {
     case 'cylinder':     return new THREE.CylinderGeometry(S * 0.5, S * 0.5, S, 32);
     case 'cone':         return new THREE.ConeGeometry(S * 0.55, S, 32);
     case 'torus':        return new THREE.TorusGeometry(S * 0.5, S * 0.18, 16, 32);
+    case 'arch':         return new THREE.TorusGeometry(S * 0.5, S * 0.1, 14, 40, Math.PI); // half-arc bar — arches / vaults / tracery
     case 'torus-knot':   return new THREE.TorusKnotGeometry(S * 0.45, S * 0.14, 100, 16);
     case 'icosahedron':  return new THREE.IcosahedronGeometry(S * 0.6, 0);
     case 'dodecahedron': return new THREE.DodecahedronGeometry(S * 0.6, 0);
@@ -171,6 +172,7 @@ const PRIMITIVE_KINDS = [
   { id: 'cylinder',     label: 'Cylinder' },
   { id: 'cone',         label: 'Cone' },
   { id: 'torus',        label: 'Torus' },
+  { id: 'arch',         label: 'Arch' },
   { id: 'torus-knot',   label: 'Torus Knot' },
   { id: 'icosahedron',  label: 'Icosa' },
   { id: 'dodecahedron', label: 'Dodeca' },
