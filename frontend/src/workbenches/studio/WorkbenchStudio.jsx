@@ -3626,6 +3626,18 @@ function WorkbenchStudio() {
         clone.position.x += radius * Math.cos(theta);
         clone.position.z += radius * Math.sin(theta);
         clone.rotation.y = -theta;
+      } else if (mode === 'radial-pivot') {
+        // Rotate the clone (position AND orientation) about the vertical
+        // axis through the wheel/part CENTRE (origin), so an off-centre
+        // base feature sweeps around the hub — true radial spokes / gear
+        // teeth / turbine blades / fan vanes, not ring-placed copies.
+        const theta = (i / count) * Math.PI * 2;
+        const c = Math.cos(theta), s = Math.sin(theta);
+        const x0 = mesh.position.x, z0 = mesh.position.z;
+        clone.position.x = x0 * c - z0 * s;
+        clone.position.z = x0 * s + z0 * c;
+        clone.position.y = mesh.position.y;
+        clone.rotation.y = mesh.rotation.y + theta;
       }
       clone.userData.archdiscStudioPrimitive = true;
       clone.userData.archdiscStudioPrimitiveKind = baseKind + '-array';
@@ -11477,7 +11489,8 @@ function WorkbenchStudio() {
                 onChange={e => setArrayMode(e.target.value)}
               >
                 <option value="linear">Linear</option>
-                <option value="radial">Radial</option>
+                <option value="radial">Radial (ring)</option>
+                <option value="radial-pivot">Radial (spokes)</option>
               </select>
             </div>
             <div className="property-row">
