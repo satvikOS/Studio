@@ -64,12 +64,14 @@ test('Studio Integration — Alloy Wheel (radial-pivot spokes, Video-66 parity)'
   // The wheel is built lying flat (axle = world Y) so the radial-pivot
   // array sweeps spokes around the hub in the wheel plane.
 
-  // ════ 1. TIRE — black rubber torus laid flat, weathered tread ═════
+  // ════ 1. TIRE — clean black rubber torus laid flat ══════════════
+  // (No weathering — a lumpy eroded torus was occluding the wheel face
+  // and muddying the spoke star; a clean smooth ring lets the spokes +
+  // glowing rotor read through the opening.)
   await addPrim(win, 'torus');
   await selectLast(win);
   await setXform(win, [0, 0, 0], [PI / 2, 0, 0], [3.4, 3.4, 3.4]);
-  await setMat(win, '#15151a', 0.1, 0.85);
-  await tab(win, 'sculpting'); await clickRibbon(win, 'sculpt-weather'); await tab(win, 'modeling'); // tread grain
+  await setMat(win, '#16161b', 0.1, 0.8);
 
   // ════ 2. RIM BARREL — wide dark disc inside the tire ═════════════
   await addPrim(win, 'cylinder');
@@ -77,26 +79,32 @@ test('Studio Integration — Alloy Wheel (radial-pivot spokes, Video-66 parity)'
   await setXform(win, [0, 0, 0], [0, 0, 0], [2.9, 0.42, 2.9]);
   await setMat(win, '#565660', 0.85, 0.3);
 
-  // ════ 3. SPOKES — one bar swept into a 10-spoke star (radial-pivot) ═
+  // ════ 3. SPOKES — thin crisp bars swept into a 10-spoke star ═════
+  // Thin + near-black + raised clear of the rotor so each spoke reads as
+  // a distinct silhouette against the bright disc behind it.
   await addPrim(win, 'cube');
   await selectLast(win);
-  await setXform(win, [0, 0.004, 0.022], [0, 0, 0], [0.16, 0.22, 1.7]); // a radial bar, hub -> rim
-  await setMat(win, '#3a3a44', 0.9, 0.28);
+  await setXform(win, [0, 0.011, 0.0205], [0, 0, 0], [0.085, 0.16, 1.78]); // a thin radial bar, hub -> rim
+  await setMat(win, '#17171c', 0.92, 0.26);
   await setArray(win, 'radial-pivot', 10, 0);
   await clickAction(win, 'apply-array');
   await win.screenshot({ path: path.join(OUT, '01-spokes.png'), fullPage: false });
 
-  // ════ 4. HUB — central cap ═══════════════════════════════════════
+  // ════ 4. HUB — small near-black centre cap the spokes radiate from ═
   await addPrim(win, 'cylinder');
   await selectLast(win);
-  await setXform(win, [0, 0.008, 0], [0, 0, 0], [0.7, 0.6, 0.7]);
-  await setMat(win, '#26262b', 0.9, 0.3);
+  await setXform(win, [0, 0.013, 0], [0, 0, 0], [0.58, 0.7, 0.58]);
+  await setMat(win, '#17171c', 0.9, 0.3);
 
-  // ════ 5. BRAKE DISC — silver rotor behind the spokes ═════════════
+  // ════ 5. BRAKE DISC — bright silver rotor right behind the spokes ═
   await addPrim(win, 'cylinder');
   await selectLast(win);
-  await setXform(win, [0, -0.005, 0], [0, 0, 0], [2.6, 0.3, 2.6]);
-  await setMat(win, '#c2c6ce', 0.95, 0.25);
+  await setXform(win, [0, -0.001, 0], [0, 0, 0], [2.78, 0.26, 2.78]);
+  await setMat(win, '#cfd3da', 0.4, 0.5);
+  // Make the rotor self-lit so it stays a bright backdrop even though the
+  // cinematic point lights sit low and barely reach the wheel face — the
+  // near-black spokes then silhouette crisply against the glowing disc.
+  await win.evaluate(() => { const el = document.querySelector('[data-studio-material="emissive"]'); if (el) { const S = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set; S.call(el, '1.25'); el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); } });
 
   // ════ 6. BRAKE CALIPER — orange block at the rotor edge ══════════
   await addPrim(win, 'cube');
@@ -138,7 +146,9 @@ test('Studio Integration — Alloy Wheel (radial-pivot spokes, Video-66 parity)'
   await tab(win, 'rendering');
   await win.evaluate(() => window.__studioFrameAll && window.__studioFrameAll());
   await win.waitForTimeout(360);
-  await win.evaluate(() => window.__archdiscOrbitView && window.__archdiscOrbitView(30, 36, 1.05));
+  // Look straight down the axle: the self-lit rotor glows, the thin dark
+  // spokes silhouette into a crisp star, the clean tire rings it.
+  await win.evaluate(() => window.__archdiscOrbitView && window.__archdiscOrbitView(0, 86, 1.0));
   await win.waitForTimeout(400);
   const vpRect = await win.evaluate(() => { const el = document.querySelector('.workbench-viewport'); const r = el.getBoundingClientRect(); return { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) }; });
   await win.screenshot({ path: path.join(OUT, '02-render-ref-angle.png'), clip: vpRect });
