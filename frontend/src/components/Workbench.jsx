@@ -3,13 +3,7 @@ import { Undo2, Redo2, Search, Save, Download } from 'lucide-react';
 import Topbar from './Topbar';
 import StatusBarPro from './StatusBarPro';
 import './StatusBarPro.css';
-import WorkbenchSwitcher from './WorkbenchSwitcher';
 import WorkbenchStudio from '../workbenches/studio/WorkbenchStudio';
-import WorkbenchMechanical from '../workbenches/mechanical-cad/WorkbenchMechanical';
-import WorkbenchArchitecture from '../workbenches/architecture-bim/WorkbenchArchitecture';
-import WorkbenchGaming from '../workbenches/gaming-vfx/WorkbenchGaming';
-import WorkbenchAutomotive from '../workbenches/automotive/WorkbenchAutomotive';
-import WorkbenchElectronics from '../workbenches/electronics/WorkbenchElectronics';
 import AIConsole from './AIConsole';
 import ProjectLibrary from './ProjectLibrary';
 import ComponentInfoPanel from './ComponentInfoPanel';
@@ -29,7 +23,9 @@ import '../styles/workbench.css';
  * The Topbar provides application-level menus (File, Edit, View, Tools, Help).
  */
 function WorkbenchContainer() {
-    const [activeWorkbench, setActiveWorkbench] = useState('studio');
+    // Studio is the only workbench — this repo/app is exclusively ArchDisc
+    // Studio (3D content creation: gaming / VFX / animation / design). The
+    // other (Mech-inherited) workstations have been removed.
     const [isOnline, setIsOnline] = useState(true);
     const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
     const [toasts, setToasts] = useState([]);
@@ -155,26 +151,10 @@ function WorkbenchContainer() {
         addToast('Project saved', 'success', 2000);
     };
 
-    const renderWorkbench = () => {
-        switch (activeWorkbench) {
-            case 'studio': return <WorkbenchStudio />;
-            case 'mechanical-cad': return <WorkbenchMechanical />;
-            case 'architecture-bim': return <WorkbenchArchitecture />;
-            case 'gaming-vfx': return <WorkbenchGaming />;
-            case 'automotive': return <WorkbenchAutomotive />;
-            case 'electronics': return <WorkbenchElectronics />;
-            default: return <WorkbenchStudio />;
-        }
-    };
+    const renderWorkbench = () => <WorkbenchStudio />;
 
     // Command palette actions
     const getCommandActions = () => [
-        { id: 'switch-studio', label: 'Switch to ArchDisc Studio', category: 'Workbench', action: () => setActiveWorkbench('studio') },
-        { id: 'switch-mechanical', label: 'Switch to Mechanical CAD', category: 'Workbench', action: () => setActiveWorkbench('mechanical-cad') },
-        { id: 'switch-architecture', label: 'Switch to Architecture & BIM', category: 'Workbench', action: () => setActiveWorkbench('architecture-bim') },
-        { id: 'switch-gaming', label: 'Switch to Gaming & VFX', category: 'Workbench', action: () => setActiveWorkbench('gaming-vfx') },
-        { id: 'switch-automotive', label: 'Switch to Automotive', category: 'Workbench', action: () => setActiveWorkbench('automotive') },
-        { id: 'switch-electronics', label: 'Switch to Electronics', category: 'Workbench', action: () => setActiveWorkbench('electronics') },
         { id: 'save', label: 'Save Project', category: 'File', shortcut: 'Ctrl+S', action: handleSave },
         { id: 'undo', label: 'Undo', category: 'Edit', shortcut: 'Ctrl+Z', action: handleUndo },
         { id: 'redo', label: 'Redo', category: 'Edit', shortcut: 'Ctrl+Shift+Z', action: handleRedo },
@@ -203,11 +183,13 @@ function WorkbenchContainer() {
                     {/* Application menu bar - File, Edit, View, Tools, Help */}
                     <Topbar />
 
+                    {/* Single-workbench identity label (no switcher — Studio is
+                        the only workbench). Keeps the .workbench-current /
+                        .workbench-name hooks the rest of the app + e2e rely on. */}
                     <div className="header-center">
-                        <WorkbenchSwitcher
-                            activeWorkbench={activeWorkbench}
-                            onSwitchWorkbench={setActiveWorkbench}
-                        />
+                        <div className="workbench-current" data-archdisc-workbench="studio">
+                            <span className="workbench-name">ArchDisc Studio</span>
+                        </div>
                     </div>
 
                     <div className="header-actions">
