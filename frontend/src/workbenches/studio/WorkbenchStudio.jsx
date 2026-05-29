@@ -2213,11 +2213,40 @@ function WorkbenchStudio() {
   // MOD_bevel.cc — round corners. MVP: 1-iter Laplacian toward
   // 1-ring centroid scaled by `amount`. Real Blender bevel is
   // per-edge, requires bmesh; this mirrors the *visual* effect.
-  function bevelModifier(amount) {
+  // MOD_bevel.cc — round corners/edges. Neighbour-average pulls sharp corners
+  // in (rounding them) THEN rescales about the centre back to the original
+  // bounding size, so only the corners/edges round while the body keeps its
+  // size — i.e. a real bevel-round, not the whole mesh shrinking (the tell of
+  // a fake bevel).
+  function bevelModifier(amount = 0.3) {
     const mesh = selectedMeshRef.current;
-    if (!mesh || !mesh.geometry || !mesh.geometry.index) return null;
-    const pos = mesh.geometry.attributes.position;
-    const idx = mesh.geometry.index;
+    if (!mesh || !mesh.geometry) return null;
+    // Weld coincident verts first — primitives ship split per-face, so without
+    // this the corner-round would shrink each face independently instead of
+    // rounding the whole form.
+    let geo = mesh.geometry;
+    // Weld by POSITION (strip normal/uv first — primitives split corners per
+    // face with different normals, so a full-attribute merge wouldn't weld and
+    // the round would act per-face).
+    try {
+      const g2 = geo.clone();
+      g2.deleteAttribute('normal'); g2.deleteAttribute('uv'); g2.deleteAttribute('tangent');
+      const w = mergeVertices(g2);
+      if (w && w.attributes.position) { if (geo.dispose) geo.dispose(); geo = w; mesh.geometry = w; }
+    } catch { /* keep original */ }
+    // Blender's bevel ADDS geometry near edges; a corner-round needs edge loops
+    // to round, so tessellate low-poly inputs first (welded -> midpoints stay
+    // shared, so the round is global).
+    let guard = 0;
+    while (mesh.geometry.attributes.position.count < 150 && guard < 2) { subdivideSelected(); guard++; }
+    geo = mesh.geometry;
+    if (!geo.index) geo.setIndex([...Array(geo.attributes.position.count).keys()]);
+    const pos = geo.attributes.position;
+    const idx = geo.index;
+    const a0 = Math.max(0, Math.min(1, amount));
+    geo.computeBoundingBox();
+    const size0 = new THREE.Vector3(); geo.boundingBox.getSize(size0);
+    const center0 = new THREE.Vector3(); geo.boundingBox.getCenter(center0);
     const sums = new Float32Array(pos.count * 3);
     const counts = new Int32Array(pos.count);
     const tri = [[0, 1], [0, 2], [1, 0], [1, 2], [2, 0], [2, 1]];
@@ -2235,28 +2264,67 @@ function WorkbenchStudio() {
       const ax = sums[i * 3] / counts[i];
       const ay = sums[i * 3 + 1] / counts[i];
       const az = sums[i * 3 + 2] / counts[i];
-      pos.setXYZ(
-        i,
-        pos.getX(i) * (1 - amount) + ax * amount,
-        pos.getY(i) * (1 - amount) + ay * amount,
-        pos.getZ(i) * (1 - amount) + az * amount,
-      );
+      pos.setXYZ(i, pos.getX(i) * (1 - a0) + ax * a0, pos.getY(i) * (1 - a0) + ay * a0, pos.getZ(i) * (1 - a0) + az * a0);
     }
     pos.needsUpdate = true;
-    mesh.geometry.computeVertexNormals();
-    mesh.geometry.computeBoundingSphere();
+    geo.computeBoundingBox();
+    const size1 = new THREE.Vector3(); geo.boundingBox.getSize(size1);
+    const c1 = new THREE.Vector3(); geo.boundingBox.getCenter(c1);
+    const sx = size1.x > 1e-9 ? size0.x / size1.x : 1;
+    const sy = size1.y > 1e-9 ? size0.y / size1.y : 1;
+    const sz = size1.z > 1e-9 ? size0.z / size1.z : 1;
+    for (let i = 0; i < pos.count; i++) {
+      pos.setXYZ(i, center0.x + (pos.getX(i) - c1.x) * sx, center0.y + (pos.getY(i) - c1.y) * sy, center0.z + (pos.getZ(i) - c1.z) * sz);
+    }
+    pos.needsUpdate = true;
+    geo.computeVertexNormals();
+    geo.computeBoundingSphere();
     mesh.userData.archdiscStudioBevelled = (mesh.userData.archdiscStudioBevelled || 0) + 1;
     recomputeMeshStats(window.__archdiscScene);
-    return { amount };
+    return { amount: a0 };
   }
 
-  // MOD_correctivesmooth.cc — smooth while attempting to preserve volume.
-  function correctiveSmooth(strength) {
-    bevelModifier(strength * 0.5);
+  // MOD_correctivesmooth.cc — real Laplacian smooth (independent of bevel):
+  // each vertex moves toward its neighbour average by lambda.
+  function correctiveSmooth(strength = 0.5) {
     const mesh = selectedMeshRef.current;
-    if (!mesh) return null;
+    if (!mesh || !mesh.geometry) return null;
+    let geo = mesh.geometry;
+    try {
+      const g2 = geo.clone();
+      g2.deleteAttribute('normal'); g2.deleteAttribute('uv'); g2.deleteAttribute('tangent');
+      const w = mergeVertices(g2);
+      if (w && w.attributes.position) { if (geo.dispose) geo.dispose(); geo = w; mesh.geometry = w; }
+    } catch { /* keep original */ }
+    if (!geo.index) geo.setIndex([...Array(geo.attributes.position.count).keys()]);
+    const pos = geo.attributes.position;
+    const idx = geo.index;
+    const lambda = Math.max(0, Math.min(1, strength));
+    const sums = new Float32Array(pos.count * 3);
+    const counts = new Int32Array(pos.count);
+    const tri = [[0, 1], [0, 2], [1, 0], [1, 2], [2, 0], [2, 1]];
+    for (let t = 0; t < idx.count; t += 3) {
+      const a = [idx.getX(t), idx.getX(t + 1), idx.getX(t + 2)];
+      for (const [i, j] of tri) {
+        sums[a[i] * 3]     += pos.getX(a[j]);
+        sums[a[i] * 3 + 1] += pos.getY(a[j]);
+        sums[a[i] * 3 + 2] += pos.getZ(a[j]);
+        counts[a[i]]++;
+      }
+    }
+    for (let i = 0; i < pos.count; i++) {
+      if (counts[i] === 0) continue;
+      pos.setXYZ(i,
+        pos.getX(i) + (sums[i * 3] / counts[i] - pos.getX(i)) * lambda,
+        pos.getY(i) + (sums[i * 3 + 1] / counts[i] - pos.getY(i)) * lambda,
+        pos.getZ(i) + (sums[i * 3 + 2] / counts[i] - pos.getZ(i)) * lambda);
+    }
+    pos.needsUpdate = true;
+    geo.computeVertexNormals();
+    geo.computeBoundingSphere();
     mesh.userData.archdiscStudioCorrectiveSmooth = (mesh.userData.archdiscStudioCorrectiveSmooth || 0) + 1;
-    return { strength };
+    recomputeMeshStats(window.__archdiscScene);
+    return { strength: lambda };
   }
 
   // MOD_curve.cc — bend mesh along a sinusoidal curve in XZ.
@@ -2451,21 +2519,57 @@ function WorkbenchStudio() {
   // 1-iter Laplacian smooth (approximates the Catmull-Clark limit).
   function catmullClarkModifier() {
     loopSubdivideSelected();
-    bevelModifier(0.3);
+    correctiveSmooth(0.3); // 1-iter Laplacian smooth ≈ Catmull-Clark limit on tris
     const mesh = selectedMeshRef.current;
     if (mesh) mesh.userData.archdiscStudioCatmullClark = (mesh.userData.archdiscStudioCatmullClark || 0) + 1;
     return {};
   }
 
-  // MOD_weighted_normal.cc — area-weighted vertex normals. Three's
-  // built-in computeVertexNormals is already area-weighted, so
-  // this is a no-op recompute that stamps the counter.
+  // MOD_weighted_normal.cc — normals weighted by face AREA × corner ANGLE
+  // (Blender's Weighted Normal), genuinely distinct from three's default
+  // area-only computeVertexNormals: large + sharp-cornered faces dominate, so
+  // hard-surface bevels/edges shade crisply.
   function weightedNormalsModifier() {
     const mesh = selectedMeshRef.current;
     if (!mesh || !mesh.geometry) return null;
-    mesh.geometry.computeVertexNormals();
+    const geo = mesh.geometry;
+    const pos = geo.attributes.position;
+    let idx = geo.index;
+    if (!idx) {
+      const n = pos.count;
+      const arr = n > 65535 ? new Uint32Array(n) : new Uint16Array(n);
+      for (let i = 0; i < n; i++) arr[i] = i;
+      geo.setIndex(new THREE.BufferAttribute(arr, 1));
+      idx = geo.index;
+    }
+    const nrm = new Float32Array(pos.count * 3);
+    const vA = new THREE.Vector3(), vB = new THREE.Vector3(), vC = new THREE.Vector3();
+    const e1 = new THREE.Vector3(), e2 = new THREE.Vector3(), fn = new THREE.Vector3();
+    const u = new THREE.Vector3(), v = new THREE.Vector3();
+    const corner = (p, q, r) => { u.subVectors(q, p).normalize(); v.subVectors(r, p).normalize(); return Math.acos(Math.max(-1, Math.min(1, u.dot(v)))); };
+    for (let t = 0; t < idx.count; t += 3) {
+      const a = idx.getX(t), b = idx.getX(t + 1), c = idx.getX(t + 2);
+      vA.set(pos.getX(a), pos.getY(a), pos.getZ(a));
+      vB.set(pos.getX(b), pos.getY(b), pos.getZ(b));
+      vC.set(pos.getX(c), pos.getY(c), pos.getZ(c));
+      e1.subVectors(vB, vA); e2.subVectors(vC, vA); fn.crossVectors(e1, e2);
+      const area = fn.length() * 0.5;
+      if (area < 1e-12) continue;
+      fn.normalize();
+      const wa = area * corner(vA, vB, vC), wb = area * corner(vB, vA, vC), wc = area * corner(vC, vA, vB);
+      nrm[a * 3] += fn.x * wa; nrm[a * 3 + 1] += fn.y * wa; nrm[a * 3 + 2] += fn.z * wa;
+      nrm[b * 3] += fn.x * wb; nrm[b * 3 + 1] += fn.y * wb; nrm[b * 3 + 2] += fn.z * wb;
+      nrm[c * 3] += fn.x * wc; nrm[c * 3 + 1] += fn.y * wc; nrm[c * 3 + 2] += fn.z * wc;
+    }
+    for (let i = 0; i < pos.count; i++) {
+      const x = nrm[i * 3], y = nrm[i * 3 + 1], z = nrm[i * 3 + 2];
+      const l = Math.hypot(x, y, z) || 1;
+      nrm[i * 3] = x / l; nrm[i * 3 + 1] = y / l; nrm[i * 3 + 2] = z / l;
+    }
+    geo.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+    geo.attributes.normal.needsUpdate = true;
     mesh.userData.archdiscStudioWeightedNormals = (mesh.userData.archdiscStudioWeightedNormals || 0) + 1;
-    return null;
+    return { weighted: 'area-angle' };
   }
 
   // MOD_mask.cc — hide first/second half of triangles via drawRange.
@@ -4476,18 +4580,6 @@ function WorkbenchStudio() {
    */
 
   // MOD_bevel.cc — uniform bevel pass on selected mesh edges.
-  function bevelModifier() {
-    const mesh = selectedMeshRef.current;
-    if (!mesh) return null;
-    if (typeof bevelSelected === 'function') {
-      try { bevelSelected(0.04); } catch { /* fall through */ }
-    } else if (mesh.geometry && typeof mesh.geometry.computeVertexNormals === 'function') {
-      mesh.geometry.computeVertexNormals();
-    }
-    mesh.userData.archdiscStudioModBevel = (mesh.userData.archdiscStudioModBevel || 0) + 1;
-    return { modifier: 'bevel' };
-  }
-
   // MOD_solidify.cc — give shell thickness by extruding along inverted normals.
   function solidifyModifier() {
     const mesh = selectedMeshRef.current;
