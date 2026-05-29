@@ -38,6 +38,7 @@ tooltips, mirror the tool's algorithm + UX, and update this table.
 | VEX-like expressions | ABSENT | — |
 | Scatter / distribute points | PARTIAL | `geometryNodesDistributePoints` + foliage instancing |
 | Cell fracture / explode | DONE | `MOD_explode` cell fracture |
+| Rigid body dynamics (RBD) | DONE | real rigid-body solver (slice 166) — semi-implicit Euler, 3D momentum + gravity, sphere-proxy pairwise collision with impulse resolution + positional correction (bodies stack/settle, no interpenetration), mass-by-volume, ground + contact friction. Drives the VFX/Sim "Drop" tool; `__studioPhysicsStep`/`__studioPhysicsState` (also Unreal Chaos / Unity PhysX / Blender Rigid Body World). Sphere-proxy collision is the honest scope (not full convex) |
 | Volume / VDB | ABSENT | — |
 
 ## Maya

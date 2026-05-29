@@ -459,6 +459,10 @@ function WorkbenchStudio() {
     window.__studioEvalNodeGraph = (graph) => evalNodeGraphToScene(graph);
     // Material/shader graph: evaluate a shading DAG -> PBR material on selected mesh.
     window.__studioApplyMaterialGraph = (graph) => applyMaterialGraph(graph);
+    // Rigid-body sim: deterministically advance N steps (e2e/Archie, rAF-free) + read state.
+    window.__studioPhysicsStep = (steps, dt) => { const n = steps || 1; const h = dt || 0.016; for (let i = 0; i < n; i++) physicsTick(h); return window.__studioPhysicsState(); };
+    window.__studioPhysicsState = () => { const scene = window.__archdiscScene; if (!scene) return []; return physicsBodies(scene).map(b => ({ name: b.o.name, pos: [b.o.position.x, b.o.position.y, b.o.position.z], vel: [b.v[0], b.v[1], b.v[2]], radius: b.radius })); };
+    window.__studioResetPhysics = () => resetPhysics();
     window.__studioAddNurbsSurface = (opts) => addNurbsSurface(opts);
     // Non-destructive modifier stack (operates on the selected mesh).
     window.__studioModStackAdd = (type, params) => modStackAdd(type, params);
@@ -472,7 +476,7 @@ function WorkbenchStudio() {
     window.__studioReadTexel = (uv, channel) => { const m = selectedMeshRef.current; if (!m) return null; return readTexel(m, { x: uv[0], y: uv[1] }, channel); };
     window.__studioPolyPaintAt = (pt, color, radius) => { const m = selectedMeshRef.current; if (!m) return null; return paintPolyAt(m, new THREE.Vector3(pt[0], pt[1], pt[2]), color || brushPaintColor, radius || 0.012); };
     window.__studioReadVertexColor = (i) => { const m = selectedMeshRef.current; const col = m && m.geometry && m.geometry.attributes.color; if (!col) return null; return [Math.round(col.getX(i) * 255), Math.round(col.getY(i) * 255), Math.round(col.getZ(i) * 255)]; };
-    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioAddNurbsSurface; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; };
+    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioAddNurbsSurface; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; };
   });
   // Auto-frame on primitive count change so the camera always shows
   // the current scene without the user having to hit Home.
@@ -7110,29 +7114,89 @@ function WorkbenchStudio() {
   }
 
   /*
-   * Physics — vertical gravity drop with a single ground plane and
-   * energy-losing bounces. Stores per-mesh velocity on userData so
-   * primitives spawned mid-sim seamlessly join the loop. Stops on
-   * toggle off / unmount.
+   * Rigid-body simulation (Unreal Chaos / Unity PhysX / Blender Rigid Body
+   * World / Houdini RBD). A semi-implicit Euler solver with:
+   *   - 3D linear momentum + gravity,
+   *   - sphere-proxy pairwise collision (broad + narrow phase combined) with
+   *     impulse resolution (restitution) + Baumgarte-style positional
+   *     correction split by inverse mass, so bodies STACK and rest on each
+   *     other instead of interpenetrating,
+   *   - mass proportional to collision volume,
+   *   - a ground plane with restitution + Coulomb-style tangential friction so
+   *     bodies settle rather than skating or bouncing forever.
+   * Sphere-proxy (not full convex) collision is the honest scope — it is the
+   * standard lightweight broadphase, faithful for the primitive set. Per-mesh
+   * velocity lives on userData so primitives spawned mid-sim join the loop.
    */
   const GROUND_Y = -0.045; // -45 mm — clearance below the workbench axes triad
+  const PHYS_FRICTION = 0.45;
+  function physicsBodies(scene) {
+    const bodies = [];
+    scene.traverse(o => {
+      if (!o.userData || !o.userData.archdiscStudioPrimitive) return;
+      if (o.geometry && !o.geometry.boundingSphere) o.geometry.computeBoundingSphere();
+      const br = (o.geometry && o.geometry.boundingSphere) ? o.geometry.boundingSphere.radius : 0.5;
+      const s = Math.max(o.scale.x, o.scale.y, o.scale.z) || 1;
+      const radius = Math.max(1e-3, br * s);
+      const mass = radius * radius * radius; // ∝ volume
+      bodies.push({ o, radius, invMass: 1 / mass, v: o.userData.studioVelocity || (o.userData.studioVelocity = [0, 0, 0]) });
+    });
+    return bodies;
+  }
   function physicsTick(dt) {
     const scene = window.__archdiscScene;
     if (!scene) return;
     const g = physicsG;
     const r = physicsRestitution;
-    scene.traverse(o => {
-      if (!o.userData || !o.userData.archdiscStudioPrimitive) return;
-      const v = o.userData.studioVelocity || (o.userData.studioVelocity = [0, 0, 0]);
-      v[1] -= g * dt;
-      o.position.y += v[1] * dt;
-      if (o.position.y < GROUND_Y) {
-        o.position.y = GROUND_Y;
-        v[1] = -v[1] * r;
-        // Settle threshold so primitives stop micro-bouncing forever.
-        if (Math.abs(v[1]) < 0.04) v[1] = 0;
+    const bodies = physicsBodies(scene);
+    // 1) gravity + integrate (3D).
+    for (const b of bodies) {
+      b.v[1] -= g * dt;
+      b.o.position.x += b.v[0] * dt;
+      b.o.position.y += b.v[1] * dt;
+      b.o.position.z += b.v[2] * dt;
+    }
+    // 2) pairwise sphere collisions — impulse + positional correction.
+    for (let i = 0; i < bodies.length; i++) {
+      for (let j = i + 1; j < bodies.length; j++) {
+        const a = bodies[i], c = bodies[j];
+        let dx = c.o.position.x - a.o.position.x, dy = c.o.position.y - a.o.position.y, dz = c.o.position.z - a.o.position.z;
+        let dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        const minD = a.radius + c.radius;
+        if (dist >= minD) continue;
+        if (dist < 1e-5) { dx = 0; dy = 1; dz = 0; dist = 1e-5; } // co-located: push apart on +Y
+        const nx = dx / dist, ny = dy / dist, nz = dz / dist;
+        const pen = minD - dist;
+        const invSum = a.invMass + c.invMass;
+        const ca = a.invMass / invSum, cc = c.invMass / invSum;
+        a.o.position.x -= nx * pen * ca; a.o.position.y -= ny * pen * ca; a.o.position.z -= nz * pen * ca;
+        c.o.position.x += nx * pen * cc; c.o.position.y += ny * pen * cc; c.o.position.z += nz * pen * cc;
+        const rvx = c.v[0] - a.v[0], rvy = c.v[1] - a.v[1], rvz = c.v[2] - a.v[2];
+        const vn = rvx * nx + rvy * ny + rvz * nz;
+        if (vn < 0) {
+          const jimp = -(1 + r) * vn / invSum;
+          const ix = jimp * nx, iy = jimp * ny, iz = jimp * nz;
+          a.v[0] -= ix * a.invMass; a.v[1] -= iy * a.invMass; a.v[2] -= iz * a.invMass;
+          c.v[0] += ix * c.invMass; c.v[1] += iy * c.invMass; c.v[2] += iz * c.invMass;
+          // tangential friction — damp the slip (tangential) component.
+          const tvx = rvx - vn * nx, tvy = rvy - vn * ny, tvz = rvz - vn * nz;
+          a.v[0] += tvx * PHYS_FRICTION * ca; a.v[1] += tvy * PHYS_FRICTION * ca; a.v[2] += tvz * PHYS_FRICTION * ca;
+          c.v[0] -= tvx * PHYS_FRICTION * cc; c.v[1] -= tvy * PHYS_FRICTION * cc; c.v[2] -= tvz * PHYS_FRICTION * cc;
+        }
       }
-    });
+    }
+    // 3) ground plane — rest each body on the floor by its radius, with
+    //    restitution bounce + horizontal friction + a settle threshold.
+    for (const b of bodies) {
+      const floor = GROUND_Y + b.radius;
+      if (b.o.position.y < floor) {
+        b.o.position.y = floor;
+        if (b.v[1] < 0) b.v[1] = -b.v[1] * r;
+        b.v[0] *= (1 - PHYS_FRICTION * 0.5);
+        b.v[2] *= (1 - PHYS_FRICTION * 0.5);
+        if (Math.abs(b.v[1]) < 0.04) b.v[1] = 0;
+      }
+    }
   }
 
   useEffect(() => {
@@ -9177,7 +9241,7 @@ function WorkbenchStudio() {
                 </div>
                 <div className="ribbon-group">
                   <div className="ribbon-group-tools">
-                    <button type="button" className="ribbon-tool" onClick={() => setIsPhysicsActive(v => !v)} title="Toggle physics gravity sim">
+                    <button type="button" className={'ribbon-tool' + (isPhysicsActive ? ' active' : '')} data-studio-ribbon-action="rigidbody-sim" onClick={() => setIsPhysicsActive(v => !v)} title="Rigid-body simulation (Unreal Chaos / Unity PhysX / Blender Rigid Body World) — gravity + sphere-proxy collision with impulse resolution, stacking and friction">
                       <span className="ribbon-tool-icon">⇓</span>
                       <span className="ribbon-tool-label">{isPhysicsActive ? 'Stop' : 'Drop'}</span>
                     </button>

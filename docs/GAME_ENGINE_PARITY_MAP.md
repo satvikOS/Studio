@@ -87,12 +87,17 @@ This map catalogs every Studio feature with its game-engine counterpart.
 | Bounding Box          | StaticMesh bounds              | Mesh.bounds                |
 | Transform Geometry    | Matrix transform               | Transform component        |
 
-## Shipped engine graph features
+## Shipped engine features
 
 - Material visual graph editor (Unreal Material Editor / Unity Shader Graph /
   Substance Designer) — DONE (slice 165). Node-based PBR material assembly
   (Texture/Color/Scalar/Color Mix -> Material Output channels) on the shared
   node-graph engine; "Material Graph" ribbon toggle + `__studioApplyMaterialGraph`.
+- Chaos / PhysX rigid body simulation — DONE (slice 166). Semi-implicit Euler
+  solver: 3D momentum + gravity, sphere-proxy pairwise collision with impulse
+  resolution + positional correction (bodies stack/settle without
+  interpenetration), mass-by-volume, ground + contact friction. Drives the
+  VFX/Sim "Drop" tool; `__studioPhysicsStep`/`__studioPhysicsState`.
 
 ## Pending engine features (queued)
 
@@ -103,7 +108,6 @@ This map catalogs every Studio feature with its game-engine counterpart.
 - Datasmith-class asset import (FBX, USD, Datasmith)
 - Lightmass baking (Unreal Lightmass / Unity Progressive Lightmapper)
 - World Partition + streaming (Unreal World Partition / Unity Addressables)
-- Chaos / PhysX rigid body simulation
 - Wwise / MetaSounds audio integration
 - Behavior Tree + Blackboard (Unreal AI / Unity Behavior Designer)
 - AR Foundation parity (Unity AR Foundation)
