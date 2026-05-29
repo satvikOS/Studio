@@ -20,6 +20,7 @@ import { evaluateGraph, evalModifierStack, NODE_TYPES } from './nodegraph/nodeGr
 import NodeGraphEditor from './nodegraph/NodeGraphEditor.jsx';
 import { MATERIAL_NODE_TYPES, evalMaterialGraph, materialSeed } from './nodegraph/materialNodes.js';
 import StudioSequencer from './anim/StudioSequencer.jsx';
+import StudioReferenceOverlay from './ref/StudioReferenceOverlay.jsx';
 import { ANIM_STATES, createAnimBP, animBPSetState, animBPStep } from './anim/animBP.js';
 import { BLUEPRINT_NODE_TYPES, runBlueprint, blueprintSeed } from './blueprint/blueprintNodes.js';
 import { NIAGARA_NODE_TYPES, niagaraSeed, evalNiagaraGraph, simulateEmitter } from './vfx/niagaraNodes.js';
@@ -339,6 +340,9 @@ function WorkbenchStudio() {
   const [worldPartitionOn, setWorldPartitionOn] = useState(false); // World-partition streaming active
   const [xrStatus, setXrStatus] = useState(''); // WebXR (AR/VR) session status text
   const [brepStatus, setBrepStatus] = useState(''); // OCCT B-rep boolean status text
+  const [referenceUrl, setReferenceUrl] = useState(null); // top-left reference overlay URL
+  const [referenceVisible, setReferenceVisible] = useState(true);
+  const refFileInputRef = useRef(null);
   const [animBPState, setAnimBPState] = useState('idle'); // Animation state machine current state
   const [animBPPlaying, setAnimBPPlaying] = useState(false);
   const animBPRef = useRef(null); // { machine, base:{x,y,z,ry}, meshUuid }
@@ -515,6 +519,10 @@ function WorkbenchStudio() {
     window.__studioTrimmedSurface = (opts) => addTrimmedSurface(opts);
     window.__studioAddNurbsCurve = (opts) => addNurbsCurve(opts);
     window.__studioBRepBoolean = (opts) => brepBooleanToScene(opts);
+    // Reference overlay: pin a reference video/image in the viewport top-left.
+    window.__studioSetReference = (url, opts) => { setReferenceUrl(url); setReferenceVisible((opts && opts.visible !== undefined) ? opts.visible : true); return { url, visible: true }; };
+    window.__studioClearReference = () => { setReferenceUrl(null); return { cleared: true }; };
+    window.__studioReferenceState = () => ({ url: referenceUrl, visible: referenceVisible });
     // Non-destructive modifier stack (operates on the selected mesh).
     window.__studioModStackAdd = (type, params) => modStackAdd(type, params);
     window.__studioModStackRemove = (i) => modStackRemove(i);
@@ -531,7 +539,7 @@ function WorkbenchStudio() {
     window.__studioReadNormalTexel = (uv) => { const m = selectedMeshRef.current; const nc = m && m.userData && m.userData._normalCanvas; if (!nc) return null; const d = nc.getContext('2d').getImageData(Math.floor(uv[0] * 512), Math.floor((1 - uv[1]) * 512), 1, 1).data; return [d[0], d[1], d[2]]; };
     window.__studioPolyPaintAt = (pt, color, radius) => { const m = selectedMeshRef.current; if (!m) return null; return paintPolyAt(m, new THREE.Vector3(pt[0], pt[1], pt[2]), color || brushPaintColor, radius || 0.012); };
     window.__studioReadVertexColor = (i) => { const m = selectedMeshRef.current; const col = m && m.geometry && m.geometry.attributes.color; if (!col) return null; return [Math.round(col.getX(i) * 255), Math.round(col.getY(i) * 255), Math.round(col.getZ(i) * 255)]; };
-    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioEvalNiagara; delete window.__studioNiagaraStep; delete window.__studioBTTick; delete window.__studioStreamAround; delete window.__studioRevealAll; delete window.__studioAddAudioSource; delete window.__studioSetListener; delete window.__studioAudioState; delete window.__studioXRSupport; delete window.__studioEnterXR; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAnimBPSet; delete window.__studioAnimBPStep; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioTrimmedSurface; delete window.__studioAddNurbsCurve; delete window.__studioBRepBoolean; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioFieldQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; };
+    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioEvalNiagara; delete window.__studioNiagaraStep; delete window.__studioBTTick; delete window.__studioStreamAround; delete window.__studioRevealAll; delete window.__studioAddAudioSource; delete window.__studioSetListener; delete window.__studioAudioState; delete window.__studioXRSupport; delete window.__studioEnterXR; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAnimBPSet; delete window.__studioAnimBPStep; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioTrimmedSurface; delete window.__studioAddNurbsCurve; delete window.__studioBRepBoolean; delete window.__studioSetReference; delete window.__studioClearReference; delete window.__studioReferenceState; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioFieldQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; };
   });
   // Auto-frame on primitive count change so the camera always shows
   // the current scene without the user having to hit Home.
@@ -9178,6 +9186,10 @@ function WorkbenchStudio() {
                     <button type="button" className={'ribbon-tool' + (worldPartitionOn ? ' active' : '')} data-studio-ribbon-action="world-partition" onClick={toggleWorldPartition} title="World Partition / streaming — Unreal World Partition / Unity Addressables (stream scene cells in/out by distance from the camera; toggle off to reveal all)">
                       <span className="ribbon-tool-icon">▣</span><span className="ribbon-tool-label">{worldPartitionOn ? 'Reveal All' : 'World Part'}</span>
                     </button>
+                    <button type="button" className={'ribbon-tool' + (referenceUrl ? ' active' : '')} data-studio-ribbon-action="reference-overlay" onClick={() => { if (referenceUrl) { setReferenceUrl(null); } else { refFileInputRef.current && refFileInputRef.current.click(); } }} title="Reference overlay (top-left of viewport) — load a reference video/image to build alongside; click again to clear">
+                      <span className="ribbon-tool-icon">▭</span><span className="ribbon-tool-label">{referenceUrl ? 'Clear Ref' : 'Reference'}</span>
+                    </button>
+                    <input ref={refFileInputRef} type="file" accept="video/*,image/*" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) { setReferenceUrl(URL.createObjectURL(f)); setReferenceVisible(true); } e.target.value = ''; }} />
                     <button type="button" className="ribbon-tool" data-studio-ribbon-action="dynamesh" onClick={() => dynaMeshSelected(26)} disabled={!selectedKind} title="ZBrush DynaMesh — uniform-topology voxel reskin of the selected mesh">
                       <span className="ribbon-tool-icon">⬢</span><span className="ribbon-tool-label">DynaMesh</span>
                     </button>
@@ -13183,6 +13195,7 @@ function WorkbenchStudio() {
       </aside>
 
       {/* Geometry Node Graph editor — full overlay over the viewport. */}
+      <StudioReferenceOverlay url={referenceUrl} visible={referenceVisible} size={260} />
       <NodeGraphEditor open={nodeGraphOpen} onClose={() => setNodeGraphOpen(false)} onEvaluate={evalNodeGraphToScene} />
       <NodeGraphEditor
         open={materialGraphOpen}
