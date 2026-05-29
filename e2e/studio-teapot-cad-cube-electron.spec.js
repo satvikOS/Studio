@@ -25,7 +25,7 @@ test('Studio Blender X3D import — Teapot + CAD Cube primitives spawn cleanly',
 
   const app = await electron.launch({
     args: [path.join(__dirname, '..', 'electron', 'main.js')],
-    slowMo: 250,
+    slowMo: Number(process.env.STUDIO_SLOWMO) || 2200,
   });
 
   const win = await app.firstWindow();

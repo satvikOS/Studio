@@ -20,7 +20,7 @@ test('Studio AI prompt — natural-language commands fire Studio actions', async
 
   const app = await electron.launch({
     args: [path.join(__dirname, '..', 'electron', 'main.js')],
-    slowMo: 250,
+    slowMo: Number(process.env.STUDIO_SLOWMO) || 2200,
   });
 
   const win = await app.firstWindow();

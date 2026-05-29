@@ -42,7 +42,7 @@ test('Studio three-point cinematic preset — one click → key + fill + rim', a
 
   const app = await electron.launch({
     args: [path.join(__dirname, '..', 'electron', 'main.js')],
-    slowMo: 250,
+    slowMo: Number(process.env.STUDIO_SLOWMO) || 2200,
   });
 
   const win = await app.firstWindow();

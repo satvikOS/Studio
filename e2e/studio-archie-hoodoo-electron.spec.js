@@ -34,7 +34,7 @@ test('Studio — Archie builds a weathered hoodoo rock spire', async () => {
   test.setTimeout(360000);
   fs.mkdirSync(OUT, { recursive: true });
 
-  const app = await electron.launch({ args: [path.join(__dirname, '..', 'electron', 'main.js')], slowMo: 25 });
+  const app = await electron.launch({ args: [path.join(__dirname, '..', 'electron', 'main.js')], slowMo: Number(process.env.STUDIO_SLOWMO) || 220 });
   const win = await app.firstWindow();
   await win.waitForLoadState('domcontentloaded');
   await expect(win.locator('.workbench-current .workbench-name')).toHaveText('ArchDisc Studio', { timeout: 30000 });

@@ -20,7 +20,7 @@ test('Studio — FBX + USD import routes to the real three loaders', async () =>
   test.setTimeout(180000);
   fs.mkdirSync(OUT, { recursive: true });
 
-  const app = await electron.launch({ args: [path.join(__dirname, '..', 'electron', 'main.js')], slowMo: 25 });
+  const app = await electron.launch({ args: [path.join(__dirname, '..', 'electron', 'main.js')], slowMo: Number(process.env.STUDIO_SLOWMO) || 220 });
   const win = await app.firstWindow();
   await win.waitForLoadState('domcontentloaded');
   await expect(win.locator('.workbench-current .workbench-name')).toHaveText('ArchDisc Studio', { timeout: 30000 });
