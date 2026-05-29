@@ -4,6 +4,8 @@ import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferG
 import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js';
 import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js';
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import { VertexNormalsHelper } from 'three/examples/jsm/helpers/VertexNormalsHelper.js';
 import { SUZANNE_POSITIONS, SUZANNE_INDICES } from './SuzanneGeometry.js';
 import { TEAPOT_POSITIONS, TEAPOT_INDICES } from './TeapotGeometry.js';
@@ -427,7 +429,9 @@ function WorkbenchStudio() {
   // Expose so spec hooks can call it deterministically.
   useEffect(() => {
     window.__studioFrameAll = frameAllInScene;
-    return () => { delete window.__studioFrameAll; };
+    window.__studioImportAsset = (format, data) => importAssetFromData(format, data);
+    window.__studioExportGltfString = () => exportGltfString();
+    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; };
   });
   // Auto-frame on primitive count change so the camera always shows
   // the current scene without the user having to hit Home.
@@ -752,6 +756,19 @@ function WorkbenchStudio() {
         },
         { binary: false, onlyVisible: true, embedImages: true },
       );
+    });
+  }
+
+  // Export the current primitives to a glTF JSON string (no download) — used by
+  // the import round-trip + lets Archie hand geometry to other tools in-memory.
+  async function exportGltfString() {
+    const scene = window.__archdiscScene;
+    if (!scene) return null;
+    const tempScene = new THREE.Scene();
+    scene.traverse((o) => { if (o.userData && o.userData.archdiscStudioPrimitive) tempScene.add(o.clone()); });
+    const exporter = new GLTFExporter();
+    return await new Promise((resolve) => {
+      exporter.parse(tempScene, (result) => resolve(JSON.stringify(result)), () => resolve(null), { binary: false, onlyVisible: true, embedImages: true });
     });
   }
 
@@ -3742,21 +3759,96 @@ function WorkbenchStudio() {
   // Unreal Datasmith / Unity FBX / glTF import — placeholder for the
   // import pipeline. Spawns a tetrahedron representing an "imported
   // asset" with the format stamped on userData.
-  function datasmithImport(format) {
+  // Asset import pipeline (Unreal Datasmith / Maya / Blender / Unity interop).
+  // Real three.js GLTFLoader / OBJLoader — imported meshes are baked to world
+  // space, centred + fit to Studio's mm-scale, and registered as first-class
+  // Studio primitives (selectable, transformable, re-exportable) exactly like
+  // addPrimitive's output.
+  function registerImportedMeshes(root, kindLabel) {
     const scene = window.__archdiscScene;
-    if (!scene) return null;
-    const g = new THREE.TetrahedronGeometry(0.012, 0);
-    const m = new THREE.MeshStandardMaterial({ color: 0xa8a8a8, roughness: 0.5 });
-    const asset = new THREE.Mesh(g, m);
-    asset.position.set(-0.04, 0.04, 0.04);
-    asset.userData.archdiscStudioPrimitive = true;
-    asset.userData.archdiscStudioPrimitiveKind = 'datasmith-asset';
-    asset.userData.archdiscStudioImportFormat = format;
-    scene.add(asset);
-    primitiveStackRef.current.push(asset);
+    if (!scene || !root) return 0;
+    root.updateMatrixWorld(true);
+    const collected = [];
+    root.traverse((o) => {
+      if (o.isMesh && o.geometry && o.geometry.attributes && o.geometry.attributes.position) {
+        const geom = o.geometry.clone();
+        geom.applyMatrix4(o.matrixWorld); // bake world transform
+        let color = 0x9098a3;
+        if (o.material && o.material.color) color = o.material.color.getHex();
+        collected.push({ geom, color });
+      }
+    });
+    if (!collected.length) return 0;
+    // Shared centre + uniform fit so multi-mesh assets keep their arrangement.
+    const box = new THREE.Box3();
+    for (const c of collected) { c.geom.computeBoundingBox(); if (c.geom.boundingBox) box.union(c.geom.boundingBox); }
+    const center = new THREE.Vector3(); box.getCenter(center);
+    const size = new THREE.Vector3(); box.getSize(size);
+    const maxDim = Math.max(size.x, size.y, size.z) || 1;
+    const fit = (PRIMITIVE_SIZE * 3) / maxDim;
+    let added = 0;
+    for (const c of collected) {
+      c.geom.translate(-center.x, -center.y, -center.z);
+      c.geom.scale(fit, fit, fit);
+      if (!c.geom.attributes.normal) c.geom.computeVertexNormals();
+      c.geom.computeBoundingSphere();
+      const material = new THREE.MeshStandardMaterial({ color: c.color, metalness: 0.2, roughness: 0.55 });
+      const mesh = new THREE.Mesh(c.geom, material);
+      mesh.castShadow = true; mesh.receiveShadow = true;
+      mesh.userData.archdiscStudioPrimitive = true;
+      mesh.userData.archdiscStudioPrimitiveKind = 'imported';
+      mesh.userData.archdiscStudioImportFormat = kindLabel;
+      mesh.name = `studio-import-${kindLabel}-${primitiveStackRef.current.length}`;
+      scene.add(mesh);
+      primitiveStackRef.current.push(mesh);
+      added++;
+    }
     setPrimitiveCount(primitiveStackRef.current.length);
     recomputeMeshStats(scene);
-    return { format };
+    return added;
+  }
+
+  // Parse asset bytes/text and register. data: OBJ/glTF text, glTF-JSON string,
+  // ArrayBuffer (glb), or a data: URL. Returns {added} (Promise for glTF).
+  function importAssetFromData(format, data) {
+    const fmt = String(format || '').toLowerCase();
+    try {
+      if (fmt === 'obj') {
+        const text = typeof data === 'string' ? data : new TextDecoder().decode(data);
+        return { added: registerImportedMeshes(new OBJLoader().parse(text), 'obj') };
+      }
+      if (fmt === 'gltf' || fmt === 'glb') {
+        return new Promise((resolve) => {
+          const loader = new GLTFLoader();
+          const onLoad = (gltf) => resolve({ added: registerImportedMeshes(gltf.scene, fmt) });
+          const onErr = (e) => resolve({ added: 0, error: String(e && e.message || e) });
+          if (data instanceof ArrayBuffer) loader.parse(data, '', onLoad, onErr);
+          else if (typeof data === 'string' && data.startsWith('data:')) {
+            fetch(data).then((r) => r.arrayBuffer()).then((buf) => loader.parse(buf, '', onLoad, onErr)).catch((e) => resolve({ added: 0, error: String(e) }));
+          } else if (typeof data === 'string') loader.parse(data, '', onLoad, onErr); // glTF JSON text
+          else resolve({ added: 0, error: 'unsupported glTF data' });
+        });
+      }
+      return { added: 0, error: `unsupported format: ${fmt}` };
+    } catch (e) {
+      return { added: 0, error: String(e && e.message || e) };
+    }
+  }
+
+  // Real user flow: open a file picker, read the file, import it.
+  function importAsset(format) {
+    const fmt = String(format || '').toLowerCase();
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = fmt === 'obj' ? '.obj' : '.gltf,.glb';
+    input.onchange = () => {
+      const file = input.files && input.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => importAssetFromData(fmt, reader.result);
+      if (fmt === 'obj') reader.readAsText(file); else reader.readAsArrayBuffer(file);
+    };
+    input.click();
   }
 
   // Unreal Lightmass / Unity Progressive Lightmapper — bake lighting
@@ -7977,8 +8069,11 @@ function WorkbenchStudio() {
                     <button type="button" className="ribbon-tool" data-studio-ribbon-action="behavior-tree" onClick={() => addBehaviorTreeNode('Patrol')} title="Unreal Behavior Tree / Unity Behavior Designer — AI BT node">
                       <span className="ribbon-tool-icon">⌥</span><span className="ribbon-tool-label">BT Node</span>
                     </button>
-                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="datasmith" onClick={() => datasmithImport('fbx')} title="Unreal Datasmith / Unity FBX importer — placeholder asset">
-                      <span className="ribbon-tool-icon">⤓</span><span className="ribbon-tool-label">Datasmith</span>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="import-gltf" onClick={() => importAsset('gltf')} title="Import glTF/GLB — Datasmith/Maya/Blender/Unreal interop (real GLTFLoader)">
+                      <span className="ribbon-tool-icon">⤓</span><span className="ribbon-tool-label">Import glTF</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="import-obj" onClick={() => importAsset('obj')} title="Import OBJ — universal DCC interop (real OBJLoader)">
+                      <span className="ribbon-tool-icon">⤓</span><span className="ribbon-tool-label">Import OBJ</span>
                     </button>
                     <button type="button" className="ribbon-tool" data-studio-ribbon-action="lightmass" onClick={() => lightmassBake(0.7)} disabled={!selectedKind} title="Unreal Lightmass / Unity Progressive Lightmapper — bake lighting to vertex colors">
                       <span className="ribbon-tool-icon">☀</span><span className="ribbon-tool-label">Lightmass</span>
