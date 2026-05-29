@@ -69,7 +69,7 @@ tooltips, mirror the tool's algorithm + UX, and update this table.
 | Capability | Status | Notes / next |
 |------------|--------|--------------|
 | Procedural material graph | PARTIAL | `applyShaderTexture` draws real procedural canvases (Voronoi/Wave/Brick/Magic/Noise) but bakes to a flat image — no node graph, no PBR channel set |
-| PBR texture painting on UVs | STUB | `texturePaintCommit` counter-only |
+| PBR texture painting on UVs | DONE (base colour) | real paint-to-UV-texture — per-mesh CanvasTexture material.map, brush dabs composited at the hit UV, colour picker, `texpaint` brush mode (slice 156). Full PBR channel set (rough/metal/normal) is the next extension |
 | Map baking (AO/normal/position) | PARTIAL | `bakeOp` bakes to vertex colors (not texture maps) |
 
 ## Rhino

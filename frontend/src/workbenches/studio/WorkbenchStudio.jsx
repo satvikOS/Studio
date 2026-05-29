@@ -315,6 +315,7 @@ function WorkbenchStudio() {
   const [brushActive, setBrushActive]     = useState(false);
   const [brushMode, setBrushMode]         = useState('push');
   const [nodeGraphOpen, setNodeGraphOpen] = useState(false); // Geometry Nodes editor overlay
+  const [brushPaintColor, setBrushPaintColor] = useState('#d08a4a'); // Substance-style texture-paint colour
   const [modStackVersion, setModStackVersion] = useState(0); // forces modifier-stack UI refresh
   const [brushRadius, setBrushRadius]     = useState(0.012);
   const [brushFalloffStrength, setBrushFalloffStrength] = useState(0.4);
@@ -457,7 +458,10 @@ function WorkbenchStudio() {
     window.__studioModStackReorder = (i, dir) => modStackReorder(i, dir);
     window.__studioModStackGet = () => { const m = selectedMeshRef.current; return (m && m.userData.archdiscStudioModStack) ? JSON.parse(JSON.stringify(m.userData.archdiscStudioModStack.mods)) : []; };
     window.__studioDynaMesh = (res) => dynaMeshSelected(res);
-    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioAddNurbsSurface; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; };
+    // Substance-style texture paint on the selected mesh's UV map.
+    window.__studioPaintTextureAt = (uv, color, radius) => { const m = selectedMeshRef.current; if (!m) return null; return paintTextureAt(m, { x: uv[0], y: uv[1] }, color || brushPaintColor, radius); };
+    window.__studioReadTexel = (uv) => { const m = selectedMeshRef.current; if (!m) return null; return readTexel(m, { x: uv[0], y: uv[1] }); };
+    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioAddNurbsSurface; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; };
   });
   // Auto-frame on primitive count change so the camera always shows
   // the current scene without the user having to hit Home.
@@ -1225,8 +1229,10 @@ function WorkbenchStudio() {
         const brush = brushStateRef.current;
         if (brush.active && hits.length > 0) {
           const hit = hits[0];
-          // Mask brush paints the protect-mask instead of deforming (ZBrush).
+          // Mask brush paints the protect-mask; texpaint paints into the UV
+          // texture (Substance/Blender texture paint); else deform (sculpt).
           if (brush.mode === 'mask') paintMaskAt(hit.object, hit.point, brush.radius, 1);
+          else if (brush.mode === 'texpaint') { if (hit.uv) paintTextureAt(hit.object, hit.uv, brush.paintColor); }
           else paintBrushAt(hit.object, hit.point, brush);
           return;
         }
@@ -4553,12 +4559,51 @@ function WorkbenchStudio() {
     mesh.userData.archdiscStudioUvFromView = (mesh.userData.archdiscStudioUvFromView || 0) + 1;
     return null;
   }
-  // paint_image.cc — Texture Paint (bake current shader texture).
+  // ── Substance Painter / Blender Texture Paint — real paint-to-UV-texture ──
+  // Each painted mesh gets a CanvasTexture as its material.map; brush dabs are
+  // composited at the hit's UV. Was a counter-only stub before.
+  const TEX_SIZE = 512;
+  function ensureTextureCanvas(mesh, base) {
+    if (!mesh || !mesh.geometry || !mesh.geometry.attributes || !mesh.geometry.attributes.uv) return null; // needs UVs
+    if (!mesh.userData._texCtx) {
+      const c = document.createElement('canvas'); c.width = TEX_SIZE; c.height = TEX_SIZE;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = base || '#9098a3'; ctx.fillRect(0, 0, TEX_SIZE, TEX_SIZE);
+      const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+      mesh.userData._texCanvas = c; mesh.userData._texCtx = ctx; mesh.userData._tex = tex;
+      if (mesh.material) { mesh.material.map = tex; if (mesh.material.color) mesh.material.color.set('#ffffff'); mesh.material.needsUpdate = true; }
+      mesh.userData.archdiscStudioTexturePainted = mesh.userData.archdiscStudioTexturePainted || 0;
+    }
+    return mesh.userData;
+  }
+  function paintTextureAt(mesh, uv, color, radiusPx) {
+    const td = ensureTextureCanvas(mesh);
+    if (!td) return null;
+    const ctx = td._texCtx;
+    const x = uv.x * TEX_SIZE, y = (1 - uv.y) * TEX_SIZE; // flip V to image space
+    const r = radiusPx || 40;
+    const col = new THREE.Color(color || brushPaintColor);
+    const rgb = `${Math.round(col.r * 255)},${Math.round(col.g * 255)},${Math.round(col.b * 255)}`;
+    const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
+    grad.addColorStop(0, `rgba(${rgb},0.95)`); grad.addColorStop(1, `rgba(${rgb},0)`);
+    ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    td._tex.needsUpdate = true;
+    mesh.userData.archdiscStudioTexturePainted = (mesh.userData.archdiscStudioTexturePainted || 0) + 1;
+    return { painted: true };
+  }
+  function readTexel(mesh, uv) {
+    const td = mesh && mesh.userData && mesh.userData._texCtx ? mesh.userData : null;
+    if (!td) return null;
+    const d = td._texCtx.getImageData(Math.floor(uv.x * TEX_SIZE), Math.floor((1 - uv.y) * TEX_SIZE), 1, 1).data;
+    return [d[0], d[1], d[2]];
+  }
+  // Arm the texture-paint brush (drag on the mesh to paint into its UV texture).
   function texturePaintCommit() {
     const mesh = selectedMeshRef.current;
-    if (!mesh) return null;
-    mesh.userData.archdiscStudioTexturePaintCommit = (mesh.userData.archdiscStudioTexturePaintCommit || 0) + 1;
-    return null;
+    if (mesh) ensureTextureCanvas(mesh);
+    setBrushMode('texpaint');
+    setBrushActive(true);
+    return { mode: 'texpaint' };
   }
   // ── ZBrush sculpt MASK (sculpt_paint/sculpt_mask.cc) ──
   // A real per-vertex protect-mask (0 = sculptable, 1 = protected). The brush
@@ -7547,8 +7592,9 @@ function WorkbenchStudio() {
       radius:    brushRadius,
       strength:  brushFalloffStrength,
       symmetryX: brushSymmetryX,
+      paintColor: brushPaintColor,
     };
-  }, [brushActive, brushMode, brushRadius, brushFalloffStrength, brushSymmetryX]);
+  }, [brushActive, brushMode, brushRadius, brushFalloffStrength, brushSymmetryX, brushPaintColor]);
 
   /*
    * Display modes — toggle wireframe, bounding-box overlay, and
@@ -8795,9 +8841,13 @@ function WorkbenchStudio() {
                     <button type="button" className="ribbon-tool" data-studio-ribbon-action="uv-from-view" onClick={uvProjectFromView} disabled={!selectedKind} title="Blender uvedit_unwrap_ops.cc — project from view (camera-space)">
                       <span className="ribbon-tool-icon">◑</span><span className="ribbon-tool-label">UV View</span>
                     </button>
-                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="tex-paint-commit" onClick={texturePaintCommit} disabled={!selectedKind} title="Blender paint_image.cc — commit texture paint">
+                    <button type="button" className={'ribbon-tool' + (brushMode === 'texpaint' && brushActive ? ' active' : '')} data-studio-ribbon-action="tex-paint-commit" onClick={texturePaintCommit} disabled={!selectedKind} title="Substance Painter / Blender paint_image.cc — paint colour into the mesh's UV texture (drag on the mesh)">
                       <span className="ribbon-tool-icon">●</span><span className="ribbon-tool-label">Tex Paint</span>
                     </button>
+                    <label style={{ alignSelf: 'center', display: 'flex', alignItems: 'center', gap: 4, fontSize: '11px', opacity: 0.75, padding: '0 6px' }} title="Texture-paint colour">
+                      <span>Color</span>
+                      <input type="color" value={brushPaintColor} data-studio-texpaint-color onChange={(e) => setBrushPaintColor(e.target.value)} style={{ width: 28, height: 18, background: '#0c0c0c', border: '1px solid #2a2a2a', borderRadius: 2, padding: 0 }} />
+                    </label>
                   </div>
                   <div className="ribbon-group-label">UV</div>
                 </div>
