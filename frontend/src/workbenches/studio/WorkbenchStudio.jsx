@@ -16,6 +16,8 @@ import { getManifold } from '../../foundation/manifoldKernel.js';
 import { geometryToManifold, manifoldToGeometry } from '../../foundation/ManifoldThreeBridge.js';
 import { runArchieLoop, ArchieSkillStore, DEFAULT_CURRICULUM } from '../../ai/ArchieLoop.js';
 import { gridSignature, compareSignatures } from '../../ai/ArchiePerception.js';
+import { findTool, TOOL_REGISTRY } from '../../ai/ToolRegistry.js';
+import { dispatchInApp } from '../../ai/PlanExecutor.js';
 import { evaluateGraph, evalModifierStack, NODE_TYPES } from './nodegraph/nodeGraphEval.js';
 import NodeGraphEditor from './nodegraph/NodeGraphEditor.jsx';
 import { MATERIAL_NODE_TYPES, evalMaterialGraph, materialSeed } from './nodegraph/materialNodes.js';
@@ -8398,21 +8400,98 @@ function WorkbenchStudio() {
   // same engine drives the app and the e2e ("tests are done using Archie").
   const archieSkillStoreRef = useRef(new ArchieSkillStore());
   useEffect(() => {
-    const OP = {
-      'sculpt-erode': () => sculptErode(0.6),
-      'sculpt-weather': () => sculptWeather(0.42),
-      'sculpt-clay': () => sculptClay(0.5),
-      'sculpt-scrape': () => sculptScrape(0.4),
+    // Specialised local handlers — call these in-process rather than
+    // round-tripping through the DOM. Faster + survives off-screen tabs.
+    const LOCAL_OP = {
+      'sculpt-erode':       () => sculptErode(0.6),
+      'sculpt-weather':     () => sculptWeather(0.42),
+      'sculpt-clay':        () => sculptClay(0.5),
+      'sculpt-scrape':      () => sculptScrape(0.4),
       'subdivide-selected': () => subdivideSelected(),
+    };
+    // Universal op dispatch — looks the op up in ToolRegistry and fires
+    // it via the same in-app dispatcher PlanExecutor uses for explicit
+    // plans. Local handlers still take precedence so existing curriculum
+    // ops (sculpt-erode, sculpt-weather, sculpt-clay, sculpt-scrape) keep
+    // the same numerical behaviour they were tuned to.
+    const dispatchOp = (op, params) => {
+      if (LOCAL_OP[op]) { try { LOCAL_OP[op](); } catch (_) { /* op best-effort */ } return; }
+      const meta = findTool(op);
+      if (!meta) return;
+      try { dispatchInApp(meta, params || {}); } catch (_) { /* dispatch best-effort */ }
+    };
+    // Set a property knob through the registry path. Used for material/
+    // brush/sculpt/array/scatter/texture/light per-body inputs.
+    const setKnob = (group, knob, value) => {
+      const meta = findTool(`${group}:${knob}`);
+      if (!meta) return;
+      try { dispatchInApp(meta, { value }); } catch (_) { /* knob best-effort */ }
+    };
+    // Apply scene-level setup once before bodies land — discipline tab,
+    // render engine, world, comp / post-process filters, scene-level ops.
+    const applySceneSetup = (scene) => {
+      if (!scene) return;
+      if (scene.discipline) dispatchOp(`discipline:${scene.discipline}`);
+      if (scene.engine)     dispatchOp(scene.engine);     // engine-eevee / engine-cycles / engine-workbench
+      if (scene.shading)    dispatchOp(scene.shading);    // shade-solid / shade-material / shade-rendered
+      if (scene.world)      dispatchOp(scene.world);      // world-hdri / world-solid / world-fog / world-cell
+      for (const filter of (scene.comp || [])) dispatchOp(filter);
+      for (const op of (scene.ops || []))      dispatchOp(op);
+      for (const light of (scene.lights || [])) {
+        if (light.color != null)     setKnob('lighting', 'color', light.color);
+        if (light.intensity != null) setKnob('lighting', 'intensity', light.intensity);
+        dispatchOp(light.type || 'light-point');
+      }
+    };
+    // Apply per-body knob extras the data-driven recipe declares.
+    const applyBodyKnobs = (b, mesh) => {
+      if (window.__studioSelectMesh) window.__studioSelectMesh(mesh);
+      const m = b.material || {};
+      if (m.color != null)      setKnob('material', 'color',     m.color);
+      if (m.metalness != null)  setKnob('material', 'metalness', m.metalness);
+      if (m.roughness != null)  setKnob('material', 'roughness', m.roughness);
+      if (m.emissive != null)   setKnob('material', 'emissive',  m.emissive);
+      if (m.wireframe != null)  setKnob('material', 'wireframe', m.wireframe ? 'on' : 'off');
+      const s = b.sculpt || {};
+      if (s.strength != null) setKnob('sculpt', 'strength', s.strength);
+      const br = b.brush || {};
+      if (br.mode != null)     setKnob('brush', 'mode',     br.mode);
+      if (br.radius != null)   setKnob('brush', 'radius',   br.radius);
+      if (br.strength != null) setKnob('brush', 'strength', br.strength);
+      if (br.symmetryX)        dispatchOp('brush-symmetry-x');
+      const ar = b.array;
+      if (ar && ar.mode) {
+        setKnob('array', 'mode',  ar.mode);
+        if (ar.count   != null) setKnob('array', 'count',   ar.count);
+        if (ar.radius  != null) setKnob('array', 'radius',  ar.radius);
+        if (ar.offsetX != null) setKnob('array', 'offsetX', ar.offsetX);
+        if (ar.offsetY != null) setKnob('array', 'offsetY', ar.offsetY);
+        if (ar.offsetZ != null) setKnob('array', 'offsetZ', ar.offsetZ);
+        dispatchOp('apply-array');
+      }
+      const sc = b.scatter;
+      if (sc && sc.kind) {
+        setKnob('scatter', 'kind',  sc.kind);
+        if (sc.count != null) setKnob('scatter', 'count', sc.count);
+        if (sc.scale != null) setKnob('scatter', 'scale', sc.scale);
+      }
+      const tx = b.texture;
+      if (tx) {
+        if (tx.pattern != null) setKnob('texture', 'pattern', tx.pattern);
+        if (tx.tiles   != null) setKnob('texture', 'tiles',   tx.tiles);
+        dispatchOp('tex-paint-commit');
+      }
+      for (const mod of (b.mods || [])) dispatchOp(mod.name || mod);
+      for (const op  of (b.ops  || [])) dispatchOp(op);
     };
     const buildBody = (b) => {
       addPrimitive(b.kind);
       const stack = primitiveStackRef.current;
       const mesh = stack[stack.length - 1];
       if (!mesh) return;
-      if (b.pos) mesh.position.set(b.pos[0] || 0, b.pos[1] || 0, b.pos[2] || 0);
-      if (b.scale) mesh.scale.set(b.scale[0] || 1, b.scale[1] || 1, b.scale[2] || 1);
-      if (b.rot) mesh.rotation.set(b.rot[0] || 0, b.rot[1] || 0, b.rot[2] || 0);
+      if (b.pos)   mesh.position.set(b.pos[0]   || 0, b.pos[1]   || 0, b.pos[2]   || 0);
+      if (b.scale) mesh.scale.set   (b.scale[0] || 1, b.scale[1] || 1, b.scale[2] || 1);
+      if (b.rot)   mesh.rotation.set(b.rot[0]   || 0, b.rot[1]   || 0, b.rot[2]   || 0);
       if (b.color && mesh.material && mesh.material.color) mesh.material.color.set(b.color);
       if (b.emissive && mesh.material) {
         mesh.material.emissive = (mesh.material.color || new THREE.Color('#ffffff')).clone();
@@ -8420,13 +8499,11 @@ function WorkbenchStudio() {
       }
       if (mesh.material) mesh.material.needsUpdate = true;
       if (mesh.geometry) mesh.geometry.computeBoundingSphere();
-      if (Array.isArray(b.ops) && b.ops.length) {
-        if (window.__studioSelectMesh) window.__studioSelectMesh(mesh);
-        for (const op of b.ops) { const fn = OP[op]; if (fn) { try { fn(); } catch (_) { /* op best-effort */ } } }
-      }
+      applyBodyKnobs(b, mesh);
     };
     const execute = async (plan) => {
       clearScene();
+      applySceneSetup(plan && plan.scene);
       for (const b of (plan && plan.bodies) || []) buildBody(b);
       if (window.__studioFrameAll) window.__studioFrameAll();
       return { built: ((plan && plan.bodies) || []).length };
@@ -8489,7 +8566,8 @@ function WorkbenchStudio() {
       return perceiveAgainst(plan.reference);
     };
     window.__archieRun = (opts = {}) => runArchieLoop({ execute, verify, perceive, skillStore: archieSkillStoreRef.current, ...opts });
-    window.__archieEngine = { runArchieLoop, ArchieSkillStore, DEFAULT_CURRICULUM, skillStore: archieSkillStoreRef.current };
+    window.__archieEngine = { runArchieLoop, ArchieSkillStore, DEFAULT_CURRICULUM, skillStore: archieSkillStoreRef.current,
+      TOOL_REGISTRY, findTool, dispatchOp, setKnob, applySceneSetup };
     return () => { try { delete window.__archieRun; delete window.__archieEngine; delete window.__archieCaptureRender; delete window.__archiePerceive; } catch (_) { /* cleanup best-effort */ } };
   }, []);
 
