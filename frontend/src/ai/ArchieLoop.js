@@ -139,6 +139,17 @@ export async function runArchieLoop(opts = {}) {
   const {
     execute,
     verify,
+    // perceive(plan, result) -> [0,1] visual similarity of the render to the
+    // goal's reference image. Used only when a goal carries `reference`; this
+    // is the perception step that lets Archie chase VISUAL 1:1 parity.
+    perceive = null,
+    visualWeight = 0.6,
+    // When a goal carries a reference, parity also requires the render to be
+    // at least this visually similar. The NCC+colour comparator tops out near
+    // ~0.86 on a perfect (anti-aliased) rebuild and sits ~0.33 on a different
+    // scene, so 0.72 cleanly separates "this is the reference" from "this is
+    // something else". Structure must be complete AND visual >= visualParity.
+    visualParity = 0.72,
     plan: llmPlanner = null,
     curriculum = DEFAULT_CURRICULUM,
     skillStore = new ArchieSkillStore(),
@@ -182,10 +193,24 @@ export async function runArchieLoop(opts = {}) {
       try { result = await execute(plan); }
       catch (err) { onEvent({ type: 'execute-error', goal, iteration: it, error: String(err) }); break; }
       const v = await verify(plan, result);
-      const score = critique(plan, v);
-      onEvent({ type: 'iteration', goal, iteration: it, score, bodies: v && v.bodies });
+      const structural = critique(plan, v);
+      let visual = null;
+      // Perception step: if the goal has a reference image, READ the render and
+      // score it visually.
+      if (plan && plan.reference && typeof perceive === 'function') {
+        try { visual = await perceive(plan, result); } catch (_) { visual = null; }
+      }
+      // Blended score is for RANKING/skill-banking (best build wins).
+      let score = structural;
+      if (typeof visual === 'number') score = (1 - visualWeight) * structural + visualWeight * visual;
+      onEvent({ type: 'iteration', goal, iteration: it, score, visual, structural, bodies: v && v.bodies });
       if (score > best.score) best = { score, plan: JSON.parse(JSON.stringify(plan)) };
-      if (score >= parityScore) { reachedParity = true; break; }
+      // PARITY decision: structure at/above target, and — when there is a
+      // reference — the render is visually close enough. 1:1-or-better means
+      // both the model AND its appearance match, not a blended number == 1.0.
+      const structOK = structural >= parityScore;
+      const visualOK = (typeof visual !== 'number') ? true : visual >= visualParity;
+      if (structOK && visualOK) { reachedParity = true; break; }
       plan = refinePlan(plan, v); // self-improve within the goal, then retry
     }
 

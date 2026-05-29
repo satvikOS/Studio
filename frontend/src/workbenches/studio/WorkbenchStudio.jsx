@@ -11,6 +11,7 @@ import { COLOR_CUBE_POSITIONS, COLOR_CUBE_INDICES } from './ColorCubeGeometry.js
 import { getManifold } from '../../foundation/manifoldKernel.js';
 import { geometryToManifold, manifoldToGeometry } from '../../foundation/ManifoldThreeBridge.js';
 import { runArchieLoop, ArchieSkillStore, DEFAULT_CURRICULUM } from '../../ai/ArchieLoop.js';
+import { gridSignature, compareSignatures } from '../../ai/ArchiePerception.js';
 import {
   MousePointer2, Move, RotateCw, Maximize2,
   Box, Mountain, PaintBucket, Bone, Play, Sparkles, Camera,
@@ -383,7 +384,12 @@ function WorkbenchStudio() {
    */
   function frameAllInScene() {
     const vp = window.__archdiscViewport;
-    if (!vp || !vp.camera || !vp.controls) return null;
+    // Viewport3D exposes the OrbitControls as `orbitControls` (not `controls`);
+    // guarding/operating on `vp.controls` made this a silent no-op, which also
+    // killed auto-frame-on-add. Resolve the real handle (keep `controls` as a
+    // fallback in case the shape changes).
+    const controls = vp && (vp.orbitControls || vp.controls);
+    if (!vp || !vp.camera || !controls) return null;
     const scene = window.__archdiscScene || vp.scene;
     const box = new THREE.Box3();
     let any = false;
@@ -400,7 +406,7 @@ function WorkbenchStudio() {
       // No primitives — return to the default home framing.
       vp.camera.position.set(0.13, 0.06, 0.13);
       vp.camera.lookAt(0, 0.005, 0);
-      vp.controls.target.set(0, 0.005, 0);
+      controls.target.set(0, 0.005, 0);
     } else {
       const centre = new THREE.Vector3();
       box.getCenter(centre);
@@ -412,9 +418,9 @@ function WorkbenchStudio() {
       const dir = new THREE.Vector3(0.7, 0.4, 0.7).normalize();
       vp.camera.position.copy(centre).addScaledVector(dir, dist);
       vp.camera.lookAt(centre);
-      vp.controls.target.copy(centre);
+      controls.target.copy(centre);
     }
-    vp.controls.update();
+    controls.update();
     vp.renderer.render(scene, vp.camera);
     return null;
   }
@@ -7292,9 +7298,61 @@ function WorkbenchStudio() {
       if (scene) scene.traverse((o) => { if (o.userData && o.userData.archdiscStudioPrimitive) { bodies++; kinds.add(String(o.userData.archdiscStudioPrimitiveKind || '').replace('-array', '')); } });
       return { bodies, kinds: [...kinds] };
     };
-    window.__archieRun = (opts = {}) => runArchieLoop({ execute, verify, skillStore: archieSkillStoreRef.current, ...opts });
+    // ── Perception: capture the viewport render, score it vs a reference ──
+    const captureRender = () => {
+      const vp = window.__archdiscViewport;
+      if (!vp || !vp.renderer || !vp.scene || !vp.camera) return null;
+      vp.renderer.render(vp.scene, vp.camera); // fresh buffer (no preserveDrawingBuffer)
+      try { return vp.renderer.domElement.toDataURL('image/png'); } catch (_) { return null; }
+    };
+    const pixelsOf = (img, W = 128, H = 128) => {
+      const c = document.createElement('canvas'); c.width = W; c.height = H;
+      const ctx = c.getContext('2d'); ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); ctx.drawImage(img, 0, 0, W, H);
+      return { px: ctx.getImageData(0, 0, W, H).data, w: W, h: H };
+    };
+    const loadImg = (u) => new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = u; });
+    // Compare the current render to a reference data URL -> similarity [0,1].
+    const perceiveAgainst = async (refDataUrl, renderDataUrl) => {
+      const rUrl = renderDataUrl || captureRender();
+      // Mirror the last perceived frame + reference into window slots (same
+      // convention as the other __last* introspection hooks) so e2e + AI can
+      // inspect exactly what Archie saw.
+      try { window.__archieLastRender = rUrl; window.__archieLastRef = refDataUrl; } catch (_) { /* introspection slot is best-effort */ }
+      if (!rUrl || !refDataUrl) return 0;
+      const [refImg, frmImg] = await Promise.all([loadImg(refDataUrl), loadImg(rUrl)]);
+      const r = pixelsOf(refImg), f = pixelsOf(frmImg);
+      return compareSignatures(gridSignature(f.px, f.w, f.h, 32), gridSignature(r.px, r.w, r.h, 32));
+    };
+    window.__archieCaptureRender = captureRender;
+    window.__archiePerceive = (refDataUrl, renderDataUrl) => perceiveAgainst(refDataUrl, renderDataUrl);
+    // perceive(plan) for the loop — only meaningful when the goal has a
+    // reference. A reference is captured from a specific camera pose, so we
+    // MUST orbit to that same pose before reading the render — otherwise we
+    // compare the right scene from the wrong angle and parity never triggers.
+    // The goal carries plan.view = [az, el, zoom]; default to a 3/4 view.
+    const perceive = async (plan) => {
+      if (!plan || !plan.reference) return null;
+      const v = Array.isArray(plan.view) ? plan.view : [28, 16, 1.15];
+      // Order matters: the build (addPrimitive/clearScene) schedules React
+      // state whose effects re-frame the camera asynchronously. Wait for that
+      // to settle FIRST. Then frame-all to set a DETERMINISTIC base radius
+      // (orbitView's distance is __orbitBaseRadius * zoom, which otherwise
+      // differs between contexts and renders the object at the wrong size),
+      // then make orbitView the LAST camera write and capture in the very next
+      // synchronous tick so nothing can clobber the pose.
+      await new Promise((r) => setTimeout(r, 180));
+      // frameAll fits the camera to the scene but does NOT refresh the orbit
+      // base radius; orbitView's distance is base*zoom, so we must pin the base
+      // to this freshly-framed distance — otherwise a stale base renders the
+      // object at the wrong size and a matching scene scores low.
+      if (window.__studioFrameAll) window.__studioFrameAll();
+      if (window.__archdiscSetOrbitBase) window.__archdiscSetOrbitBase();
+      if (window.__archdiscOrbitView) window.__archdiscOrbitView(v[0], v[1], v[2]);
+      return perceiveAgainst(plan.reference);
+    };
+    window.__archieRun = (opts = {}) => runArchieLoop({ execute, verify, perceive, skillStore: archieSkillStoreRef.current, ...opts });
     window.__archieEngine = { runArchieLoop, ArchieSkillStore, DEFAULT_CURRICULUM, skillStore: archieSkillStoreRef.current };
-    return () => { try { delete window.__archieRun; delete window.__archieEngine; } catch (_) { /* cleanup best-effort */ } };
+    return () => { try { delete window.__archieRun; delete window.__archieEngine; delete window.__archieCaptureRender; delete window.__archiePerceive; } catch (_) { /* cleanup best-effort */ } };
   }, []);
 
   return (
