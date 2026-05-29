@@ -15,6 +15,7 @@
  */
 import * as THREE from 'three';
 import { mergeVertices, mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { buildNurbsSurfaceGeometry } from '../nurbs/nurbsSurface.js';
 
 const S = 0.03; // PRIMITIVE_SIZE (30 mm), matches WorkbenchStudio
 
@@ -94,6 +95,11 @@ export const NODE_TYPES = {
     label: 'Primitive', inputs: [], outputs: ['geometry'],
     params: [{ key: 'kind', type: 'enum', options: ['cube', 'sphere', 'cylinder', 'cone', 'torus', 'icosahedron'], default: 'cube' }, { key: 'size', type: 'number', default: 1 }],
     eval: (_in, p) => makePrimitive(p.kind || 'cube', p.size == null ? 1 : p.size),
+  },
+  nurbs: {
+    label: 'NURBS Surface', inputs: [], outputs: ['geometry'],
+    params: [{ key: 'amplitude', type: 'number', default: 1.5 }, { key: 'centerWeight', type: 'number', default: 2.2 }],
+    eval: (_in, p) => buildNurbsSurfaceGeometry({ amplitude: p.amplitude == null ? 1.5 : p.amplitude, centerWeight: p.centerWeight == null ? 2.2 : p.centerWeight }),
   },
   transform: {
     label: 'Transform', inputs: ['geometry'], outputs: ['geometry'],

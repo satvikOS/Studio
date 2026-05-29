@@ -44,7 +44,7 @@ tooltips, mirror the tool's algorithm + UX, and update this table.
 
 | Capability | Status | Notes / next |
 |------------|--------|--------------|
-| NURBS surfaces/curves | ABSENT in Studio | real NURBS B-rep exists in `kernel/` but is **not imported** into Studio — wire it (slice planned) |
+| NURBS surfaces/curves | PARTIAL | rational degree-3 tensor-product NURBS SURFACE shipped — ribbon primitive + node-graph node (three Cox-de Boor, slice 153). NURBS curves + exact trimmed B-rep (OCCT booleans) still a separate effort |
 | Deformer stack / node editor | ABSENT | modifiers are destructive one-shots |
 | MASH / instancing | PARTIAL | Array modifier + foliage instancing |
 | Rigging (joints / IK / constraints / skinning) | PARTIAL | armature + IK + constraints shipped (see GAME_ENGINE map) |
@@ -76,7 +76,7 @@ tooltips, mirror the tool's algorithm + UX, and update this table.
 
 | Capability | Status | Notes / next |
 |------------|--------|--------------|
-| NURBS curves / surfaces | ABSENT in Studio | same as Maya — `kernel/` NURBS not wired |
+| NURBS curves / surfaces | PARTIAL | NURBS surface shipped (slice 153, shared with Maya); NURBS curves + trimmed B-rep pending |
 | SubD | PARTIAL | loop / Catmull approximations |
 | Grasshopper (visual node graph) | PARTIAL | the geometry node-graph editor (slice 152) is the Grasshopper-style DAG; needs Rhino-specific NURBS nodes |
 

@@ -16,6 +16,7 @@ import { runArchieLoop, ArchieSkillStore, DEFAULT_CURRICULUM } from '../../ai/Ar
 import { gridSignature, compareSignatures } from '../../ai/ArchiePerception.js';
 import { evaluateGraph, NODE_TYPES } from './nodegraph/nodeGraphEval.js';
 import NodeGraphEditor from './nodegraph/NodeGraphEditor.jsx';
+import { buildNurbsSurfaceGeometry } from './nurbs/nurbsSurface.js';
 import {
   MousePointer2, Move, RotateCw, Maximize2,
   Box, Mountain, PaintBucket, Bone, Play, Sparkles, Camera,
@@ -447,7 +448,8 @@ function WorkbenchStudio() {
     window.__studioBrushStrokeAt = (pt, brush) => { const m = selectedMeshRef.current; if (!m) return null; paintBrushAt(m, new THREE.Vector3(pt[0], pt[1], pt[2]), brush || { mode: 'inflate', radius: 0.06, strength: 0.5 }); return true; };
     // Geometry node graph: evaluate a {nodes,edges} graph -> scene primitive.
     window.__studioEvalNodeGraph = (graph) => evalNodeGraphToScene(graph);
-    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; };
+    window.__studioAddNurbsSurface = (opts) => addNurbsSurface(opts);
+    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioAddNurbsSurface; };
   });
   // Auto-frame on primitive count change so the camera always shows
   // the current scene without the user having to hit Home.
@@ -646,6 +648,29 @@ function WorkbenchStudio() {
     setPrimitiveCount(c => c + 1);
     recomputeMeshStats(scene);
     return { vertices: geometry.attributes.position.count, nodes: (graph.nodes || []).length };
+  }
+
+  // ── NURBS surface (Maya / Rhino / Plasticity) ──
+  // A real rational degree-3 tensor-product NURBS surface, tessellated and
+  // dropped in as a first-class Studio primitive.
+  function addNurbsSurface(opts) {
+    const scene = window.__archdiscScene;
+    if (!scene) return { error: 'no scene' };
+    const geometry = buildNurbsSurfaceGeometry(opts || {});
+    const material = new THREE.MeshStandardMaterial({ color: 0x8a8f98, metalness: 0.15, roughness: 0.55, side: THREE.DoubleSide });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.castShadow = true; mesh.receiveShadow = true;
+    mesh.userData.archdiscStudioPrimitive = true;
+    mesh.userData.archdiscStudioPrimitiveKind = 'nurbs-surface';
+    mesh.userData.archdiscNurbs = geometry.userData.archdiscNurbs;
+    mesh.name = `studio-primitive-nurbs-${primitiveCount}`;
+    const cols = 4, i = primitiveCount;
+    mesh.position.set((i % cols - (cols - 1) / 2) * PRIMITIVE_SIZE * 1.9, 0, Math.floor(i / cols) * PRIMITIVE_SIZE * 1.9);
+    scene.add(mesh);
+    primitiveStackRef.current.push(mesh);
+    setPrimitiveCount(c => c + 1);
+    recomputeMeshStats(scene);
+    return { vertices: geometry.attributes.position.count, nurbs: geometry.userData.archdiscNurbs };
   }
 
   // ── Reference image planes — Blender "Background Images" (editors/
@@ -7819,6 +7844,10 @@ function WorkbenchStudio() {
                         <span className="ribbon-tool-label">{p.label}</span>
                       </button>
                     ))}
+                    <button type="button" className="ribbon-tool" data-studio-primitive="nurbs-surface" onClick={() => addNurbsSurface({})} title="Maya / Rhino / Plasticity — add a rational degree-3 NURBS surface">
+                      <span className="ribbon-tool-icon">+</span>
+                      <span className="ribbon-tool-label">NURBS Surf</span>
+                    </button>
                   </div>
                   <div className="ribbon-group-label">Primitives</div>
                 </div>
