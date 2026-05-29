@@ -338,6 +338,7 @@ function WorkbenchStudio() {
   const [behaviorTreeOpen, setBehaviorTreeOpen] = useState(false); // Behavior tree (AI) graph overlay
   const [worldPartitionOn, setWorldPartitionOn] = useState(false); // World-partition streaming active
   const [xrStatus, setXrStatus] = useState(''); // WebXR (AR/VR) session status text
+  const [brepStatus, setBrepStatus] = useState(''); // OCCT B-rep boolean status text
   const [animBPState, setAnimBPState] = useState('idle'); // Animation state machine current state
   const [animBPPlaying, setAnimBPPlaying] = useState(false);
   const animBPRef = useRef(null); // { machine, base:{x,y,z,ry}, meshUuid }
@@ -513,6 +514,7 @@ function WorkbenchStudio() {
     window.__studioSweepLoft = (opts) => sweepLoft(opts);
     window.__studioTrimmedSurface = (opts) => addTrimmedSurface(opts);
     window.__studioAddNurbsCurve = (opts) => addNurbsCurve(opts);
+    window.__studioBRepBoolean = (opts) => brepBooleanToScene(opts);
     // Non-destructive modifier stack (operates on the selected mesh).
     window.__studioModStackAdd = (type, params) => modStackAdd(type, params);
     window.__studioModStackRemove = (i) => modStackRemove(i);
@@ -529,7 +531,7 @@ function WorkbenchStudio() {
     window.__studioReadNormalTexel = (uv) => { const m = selectedMeshRef.current; const nc = m && m.userData && m.userData._normalCanvas; if (!nc) return null; const d = nc.getContext('2d').getImageData(Math.floor(uv[0] * 512), Math.floor((1 - uv[1]) * 512), 1, 1).data; return [d[0], d[1], d[2]]; };
     window.__studioPolyPaintAt = (pt, color, radius) => { const m = selectedMeshRef.current; if (!m) return null; return paintPolyAt(m, new THREE.Vector3(pt[0], pt[1], pt[2]), color || brushPaintColor, radius || 0.012); };
     window.__studioReadVertexColor = (i) => { const m = selectedMeshRef.current; const col = m && m.geometry && m.geometry.attributes.color; if (!col) return null; return [Math.round(col.getX(i) * 255), Math.round(col.getY(i) * 255), Math.round(col.getZ(i) * 255)]; };
-    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioEvalNiagara; delete window.__studioNiagaraStep; delete window.__studioBTTick; delete window.__studioStreamAround; delete window.__studioRevealAll; delete window.__studioAddAudioSource; delete window.__studioSetListener; delete window.__studioAudioState; delete window.__studioXRSupport; delete window.__studioEnterXR; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAnimBPSet; delete window.__studioAnimBPStep; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioTrimmedSurface; delete window.__studioAddNurbsCurve; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioFieldQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; };
+    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioEvalNiagara; delete window.__studioNiagaraStep; delete window.__studioBTTick; delete window.__studioStreamAround; delete window.__studioRevealAll; delete window.__studioAddAudioSource; delete window.__studioSetListener; delete window.__studioAudioState; delete window.__studioXRSupport; delete window.__studioEnterXR; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAnimBPSet; delete window.__studioAnimBPStep; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioTrimmedSurface; delete window.__studioAddNurbsCurve; delete window.__studioBRepBoolean; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioFieldQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; };
   });
   // Auto-frame on primitive count change so the camera always shows
   // the current scene without the user having to hit Home.
@@ -1051,6 +1053,43 @@ function WorkbenchStudio() {
     setPrimitiveCount(c => c + 1);
     recomputeMeshStats(scene);
     return { vertices: geometry.attributes.position.count, ...geometry.userData.archdiscSweep };
+  }
+
+  // ── Solid B-rep boolean (Rhino / Maya / Plasticity / SolidWorks): real exact
+  //    NURBS-trimmed B-rep cut/fuse/common via the OCCT kernel (opencascade.js,
+  //    prebuilt WASM). LAZY-loaded dynamic import + ?url-emitted wasm asset, so
+  //    the main bundle stays small (the 50 MB kernel only downloads + inits the
+  //    first time a B-rep tool runs). ──
+  async function brepBooleanToScene(opts) {
+    const scene = window.__archdiscScene; if (!scene) return { error: 'no scene' };
+    setBrepStatus('loading kernel');
+    try {
+      const { occtBoolean } = await import('./brep/occtBoolean.js');
+      const r = await occtBoolean(opts || {});
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(r.positions, 3));
+      geo.setIndex(new THREE.BufferAttribute(r.indices, 1));
+      geo.computeVertexNormals(); geo.computeBoundingSphere();
+      const mat = new THREE.MeshStandardMaterial({ color: 0x8a8f98, metalness: 0.2, roughness: 0.5, side: THREE.DoubleSide });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.castShadow = true; mesh.receiveShadow = true;
+      mesh.userData.archdiscStudioPrimitive = true;
+      mesh.userData.archdiscStudioPrimitiveKind = 'brep-boolean';
+      mesh.userData.archdiscBRep = { faces: r.faces, verts: r.verts, tris: r.tris, op: r.op };
+      mesh.name = `studio-primitive-brep-${primitiveCount}`;
+      const cols = 4, i = primitiveCount;
+      mesh.position.set((i % cols - (cols - 1) / 2) * PRIMITIVE_SIZE * 1.9, 0, Math.floor(i / cols) * PRIMITIVE_SIZE * 1.9);
+      scene.add(mesh);
+      primitiveStackRef.current.push(mesh);
+      setPrimitiveCount(c => c + 1);
+      recomputeMeshStats(scene);
+      setBrepStatus(`${r.op}: ${r.faces} faces, ${r.tris} tris`);
+      return { ...r };
+    } catch (e) {
+      const msg = String((e && e.message) || e);
+      setBrepStatus('failed: ' + msg);
+      return { error: msg };
+    }
   }
 
   // ── NURBS curve (Maya / Rhino) — rational degree-3 B-spline curve swept to a
@@ -8514,6 +8553,10 @@ function WorkbenchStudio() {
                     <button type="button" className="ribbon-tool" data-studio-primitive="nurbs-curve" onClick={() => addNurbsCurve({})} title="Maya / Rhino NURBS curve — rational degree-3 B-spline (Cox-de Boor); control-point weights warp the curve">
                       <span className="ribbon-tool-icon">∿</span>
                       <span className="ribbon-tool-label">NURBS Crv</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-primitive="brep-boolean" data-studio-brep-status={brepStatus} onClick={() => brepBooleanToScene({ op: 'cut' })} title="Solid B-rep boolean (Rhino/Maya/Plasticity) — real OCCT NURBS-trimmed cut/fuse/common. First click lazily loads the OCCT WASM kernel.">
+                      <span className="ribbon-tool-icon">⊖</span>
+                      <span className="ribbon-tool-label">B-rep Bool</span>
                     </button>
                   </div>
                   <div className="ribbon-group-label">Primitives</div>

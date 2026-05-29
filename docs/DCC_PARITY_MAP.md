@@ -45,7 +45,7 @@ tooltips, mirror the tool's algorithm + UX, and update this table.
 
 | Capability | Status | Notes / next |
 |------------|--------|--------------|
-| NURBS surfaces/curves | DONE | rational degree-3 tensor-product NURBS SURFACE (slice 153) + rational degree-3 NURBS CURVE (slice 179, `nurbs/nurbsCurve.js` — Cox-de Boor, clamped knots interpolate endpoints, control-point weights warp the curve; "NURBS Crv" ribbon + `__studioAddNurbsCurve`) + TRIMMED surfaces (slice 178). Only solid sewn trimmed-B-rep booleans remain (need a B-rep kernel; mesh CSG already covers solids) |
+| NURBS surfaces/curves | DONE | rational degree-3 tensor-product NURBS SURFACE (slice 153) + rational degree-3 NURBS CURVE (slice 179) + TRIMMED surfaces (slice 178) + SOLID SEWN B-REP BOOLEANS (slice 181, `brep/occtBoolean.js` — real OCCT kernel via opencascade.js, LAZY dynamic import so the main bundle stays small; cut/fuse/common produce exact NURBS-trimmed solids; the box-minus-cylinder cut yields the correct 7-face topology (6 box faces + 1 cylindrical inner wall)). "B-rep Bool" ribbon + `__studioBRepBoolean` |
 | Deformer stack / node editor | DONE | non-destructive modifier stack (slice 154) + the geometry node editor (slice 152) |
 | MASH / instancing | PARTIAL | Array modifier + foliage instancing |
 | Rigging (joints / IK / constraints / skinning) | PARTIAL | armature + IK + constraints shipped (see GAME_ENGINE map) |
@@ -78,7 +78,7 @@ tooltips, mirror the tool's algorithm + UX, and update this table.
 
 | Capability | Status | Notes / next |
 |------------|--------|--------------|
-| NURBS curves / surfaces | DONE | NURBS surface (slice 153) + NURBS CURVE (slice 179, rational degree-3 Cox-de Boor) + TRIMMED surfaces (slice 178, `surf/trimmedSurface.js` — uv-loop trimmed B-rep FACE; "Trim Surf" ribbon). Only solid sewn trimmed-B-rep booleans still need a B-rep kernel (OCCT, removed by de-CAD); mesh CSG booleans already cover solid combination |
+| NURBS curves / surfaces | DONE | NURBS surface (slice 153) + NURBS CURVE (slice 179) + TRIMMED surfaces (slice 178) + SOLID SEWN B-REP BOOLEANS (slice 181, OCCT via opencascade.js, lazy-loaded). The exact-solid-modelling stack is complete |
 | SubD | PARTIAL | loop / Catmull approximations |
 | Grasshopper (visual node graph) | PARTIAL | the geometry node-graph editor (slice 152) is the Grasshopper-style DAG; needs Rhino-specific NURBS nodes |
 
