@@ -106,13 +106,17 @@ This map catalogs every Studio feature with its game-engine counterpart.
   BeginPlay fires and control follows the exec wire through Spawn / Move /
   Rotate / Scale / Set Color nodes acting on the live scene (object data pins
   thread the spawned mesh). "Blueprint" ribbon toggle + `__studioRunBlueprint`.
+- AnimBP state machine (Unreal Animation Blueprint / Unity Animator) — DONE
+  (slice 172). Named locomotion states (idle/walk/run) drive a procedural pose
+  (bob/sway/turn) on the selected mesh with a cross-fade on state change;
+  ribbon state buttons + Play, `__studioAnimBPSet`/`__studioAnimBPStep`.
+- Lightmass / Progressive Lightmapper AO — DONE (slice 171, see DCC map "Map
+  baking"): real hemisphere ray-traced ambient-occlusion bake into vertex colours.
 
 ## Pending engine features (queued)
 
-- AnimBP state machine (Unreal Animation Blueprint / Unity Animator state machine)
 - Niagara emitter graph (separate from Studio's particle presets)
 - Datasmith-class asset import (FBX, USD, Datasmith)
-- Lightmass baking (Unreal Lightmass / Unity Progressive Lightmapper)
 - World Partition + streaming (Unreal World Partition / Unity Addressables)
 - Wwise / MetaSounds audio integration
 - Behavior Tree + Blackboard (Unreal AI / Unity Behavior Designer)

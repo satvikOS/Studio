@@ -20,6 +20,7 @@ import { evaluateGraph, evalModifierStack, NODE_TYPES } from './nodegraph/nodeGr
 import NodeGraphEditor from './nodegraph/NodeGraphEditor.jsx';
 import { MATERIAL_NODE_TYPES, evalMaterialGraph, materialSeed } from './nodegraph/materialNodes.js';
 import StudioSequencer from './anim/StudioSequencer.jsx';
+import { ANIM_STATES, createAnimBP, animBPSetState, animBPStep } from './anim/animBP.js';
 import { BLUEPRINT_NODE_TYPES, runBlueprint, blueprintSeed } from './blueprint/blueprintNodes.js';
 import { buildNurbsSurfaceGeometry } from './nurbs/nurbsSurface.js';
 import { buildSweptGeometry } from './surf/sweepLoft.js';
@@ -326,6 +327,10 @@ function WorkbenchStudio() {
   const [materialGraphOpen, setMaterialGraphOpen] = useState(false); // Material/shader graph overlay
   const [sequencerOpen, setSequencerOpen] = useState(false); // Sequencer/Timeline track-editor dock
   const [blueprintOpen, setBlueprintOpen] = useState(false); // Blueprint/visual-scripting graph overlay
+  const [animBPState, setAnimBPState] = useState('idle'); // Animation state machine current state
+  const [animBPPlaying, setAnimBPPlaying] = useState(false);
+  const animBPRef = useRef(null); // { machine, base:{x,y,z,ry}, meshUuid }
+  const animBPRafRef = useRef(null);
   const [brushPaintColor, setBrushPaintColor] = useState('#d08a4a'); // Substance-style texture-paint colour
   const [brushPaintChannel, setBrushPaintChannel] = useState('color'); // PBR channel: color/roughness/metalness/emissive
   const [modStackVersion, setModStackVersion] = useState(0); // forces modifier-stack UI refresh
@@ -475,6 +480,9 @@ function WorkbenchStudio() {
     window.__studioSetFrame = (f) => { setCurrentFrame(Math.max(0, Math.round(f))); return Math.round(f); };
     window.__studioInsertKeyframeAt = (f) => insertKeyframe(f);
     window.__studioGetKeyframes = () => keyframes.map((k) => ({ ...k }));
+    // Animation state machine (AnimBP): set state + step the locomotion pose.
+    window.__studioAnimBPSet = (name) => animBPSet(name);
+    window.__studioAnimBPStep = (name, dt) => animBPStepOnce(name, dt);
     window.__studioAddNurbsSurface = (opts) => addNurbsSurface(opts);
     window.__studioSweepLoft = (opts) => sweepLoft(opts);
     // Non-destructive modifier stack (operates on the selected mesh).
@@ -492,7 +500,7 @@ function WorkbenchStudio() {
     window.__studioReadNormalTexel = (uv) => { const m = selectedMeshRef.current; const nc = m && m.userData && m.userData._normalCanvas; if (!nc) return null; const d = nc.getContext('2d').getImageData(Math.floor(uv[0] * 512), Math.floor((1 - uv[1]) * 512), 1, 1).data; return [d[0], d[1], d[2]]; };
     window.__studioPolyPaintAt = (pt, color, radius) => { const m = selectedMeshRef.current; if (!m) return null; return paintPolyAt(m, new THREE.Vector3(pt[0], pt[1], pt[2]), color || brushPaintColor, radius || 0.012); };
     window.__studioReadVertexColor = (i) => { const m = selectedMeshRef.current; const col = m && m.geometry && m.geometry.attributes.color; if (!col) return null; return [Math.round(col.getX(i) * 255), Math.round(col.getY(i) * 255), Math.round(col.getZ(i) * 255)]; };
-    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; };
+    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAnimBPSet; delete window.__studioAnimBPStep; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; };
   });
   // Auto-frame on primitive count change so the camera always shows
   // the current scene without the user having to hit Home.
@@ -3775,6 +3783,44 @@ function WorkbenchStudio() {
   useEffect(() => {
     applyFrameToScene(currentFrame);
   }, [currentFrame, keyframes]);
+
+  // ── Animation State Machine (Unreal Animation Blueprint / Unity Animator) ──
+  // Named locomotion states (idle/walk/run) drive a procedural pose on the
+  // selected mesh; switching state cross-fades. The pose offsets the mesh from
+  // a captured base transform so it oscillates in place.
+  function animBPEnsure(mesh) {
+    if (!animBPRef.current || animBPRef.current.meshUuid !== mesh.uuid) {
+      animBPRef.current = { machine: createAnimBP(), base: { x: mesh.position.x, y: mesh.position.y, z: mesh.position.z, ry: mesh.rotation.y }, meshUuid: mesh.uuid };
+    }
+    return animBPRef.current;
+  }
+  function animBPApplyPose(mesh, pose) {
+    const b = animBPRef.current.base;
+    mesh.position.set(b.x + pose.dx, b.y + pose.dy, b.z);
+    mesh.rotation.y = b.ry + pose.ry;
+  }
+  function animBPSet(name) {
+    const mesh = selectedMeshRef.current; if (!mesh) return null;
+    const st = animBPEnsure(mesh);
+    animBPSetState(st.machine, name);
+    setAnimBPState(name);
+    return { state: name };
+  }
+  function animBPStepOnce(name, dt) {
+    const mesh = selectedMeshRef.current; if (!mesh) return null;
+    const st = animBPEnsure(mesh);
+    if (name && name !== st.machine.current) { animBPSetState(st.machine, name); setAnimBPState(name); }
+    const pose = animBPStep(st.machine, dt || 1 / 60);
+    animBPApplyPose(mesh, pose);
+    return { ...pose, y: mesh.position.y, ry: mesh.rotation.y };
+  }
+  useEffect(() => {
+    if (!animBPPlaying) { if (animBPRafRef.current) { cancelAnimationFrame(animBPRafRef.current); animBPRafRef.current = null; } return; }
+    let last = performance.now();
+    const tick = (now) => { const dt = Math.min(0.05, (now - last) / 1000); last = now; animBPStepOnce(null, dt); animBPRafRef.current = requestAnimationFrame(tick); };
+    animBPRafRef.current = requestAnimationFrame(tick);
+    return () => { if (animBPRafRef.current) { cancelAnimationFrame(animBPRafRef.current); animBPRafRef.current = null; } };
+  }, [animBPPlaying]);
 
   /*
    * Motion Path display — for every mesh with ≥2 keyframes, sample
@@ -9248,6 +9294,21 @@ function WorkbenchStudio() {
                     </button>
                   </div>
                   <div className="ribbon-group-label">Playback</div>
+                </div>
+                <div className="ribbon-group">
+                  <div className="ribbon-group-tools">
+                    {['idle', 'walk', 'run'].map((st) => (
+                      <button key={st} type="button" className={'ribbon-tool' + (animBPState === st ? ' active' : '')} data-studio-ribbon-action={`animbp-${st}`} onClick={() => animBPSet(st)} disabled={!selectedKind} title={`Animation Blueprint state '${st}' (Unreal AnimBP / Unity Animator) — cross-fades locomotion pose on the selected mesh`}>
+                        <span className="ribbon-tool-icon">{st === 'idle' ? '◦' : st === 'walk' ? '→' : '⇒'}</span>
+                        <span className="ribbon-tool-label">{st[0].toUpperCase() + st.slice(1)}</span>
+                      </button>
+                    ))}
+                    <button type="button" className={'ribbon-tool' + (animBPPlaying ? ' active' : '')} data-studio-ribbon-action="animbp-play" onClick={() => setAnimBPPlaying(v => !v)} disabled={!selectedKind} title="Play the animation state machine on the selected mesh">
+                      <span className="ribbon-tool-icon">▷</span>
+                      <span className="ribbon-tool-label">{animBPPlaying ? 'Stop' : 'Play SM'}</span>
+                    </button>
+                  </div>
+                  <div className="ribbon-group-label">Anim State Machine</div>
                 </div>
                 <div className="ribbon-group">
                   <div className="ribbon-group-tools">
