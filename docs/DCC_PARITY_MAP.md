@@ -72,7 +72,7 @@ tooltips, mirror the tool's algorithm + UX, and update this table.
 |------------|--------|--------------|
 | Procedural material graph | DONE | node-based MATERIAL/SHADER graph (slice 165) — reuses the geometry DAG engine retargeted to PBR: Texture (deterministic Voronoi/noise/checker/wave/gradient -> CanvasTexture) / Color / Scalar / Color Mix nodes feed a Material Output node that assembles a MeshStandardMaterial (colour / roughness / metalness / emissive / map channels), applied to the selected mesh. Visual editor + `__studioApplyMaterialGraph` hook. (Substance Designer / Unreal Material Editor / Unity Shader Graph.) |
 | PBR texture painting on UVs | DONE | full PBR channel set — paint colour / roughness / metalness / emissive / HEIGHT, each its own CanvasTexture wired to the matching MeshStandardMaterial map; channel selector + colour picker + `texpaint` brush mode (slices 156, 160). Height paints a bumpMap; a Sobel "Height -> Normal" bake derives a tangent-space normalMap (slice 169) — completes the Substance channel set |
-| Map baking (AO/normal/position) | PARTIAL | `bakeOp` bakes to vertex colors (not texture maps) |
+| Map baking (AO/normal/position) | PARTIAL | `bakeOp` bakes to vertex colours. AO is now a REAL hemisphere ray-traced bake (slice 171, Unreal Lightmass / Unity Progressive Lightmapper) — inter-object occlusion + contact + self-occlusion darken, not the old curvature proxy. Normals/position are visualisation bakes. (Baking to texture maps, not vertex colours, is the remaining step.) |
 
 ## Rhino
 

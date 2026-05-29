@@ -23,6 +23,7 @@ import StudioSequencer from './anim/StudioSequencer.jsx';
 import { BLUEPRINT_NODE_TYPES, runBlueprint, blueprintSeed } from './blueprint/blueprintNodes.js';
 import { buildNurbsSurfaceGeometry } from './nurbs/nurbsSurface.js';
 import { buildSweptGeometry } from './surf/sweepLoft.js';
+import { bakeAmbientOcclusion } from './bake/ambientOcclusion.js';
 import { dynaMeshGeometry } from './remesh/dynaMesh.js';
 import { quadRemeshGeometry } from './remesh/quadRemesh.js';
 import {
@@ -487,10 +488,11 @@ function WorkbenchStudio() {
     window.__studioPaintTextureAt = (uv, color, radius, channel) => { const m = selectedMeshRef.current; if (!m) return null; return paintTextureAt(m, { x: uv[0], y: uv[1] }, color || brushPaintColor, radius, channel); };
     window.__studioReadTexel = (uv, channel) => { const m = selectedMeshRef.current; if (!m) return null; return readTexel(m, { x: uv[0], y: uv[1] }, channel); };
     window.__studioBakeNormalFromHeight = (strength) => { const m = selectedMeshRef.current; if (!m) return null; return bakeNormalFromHeight(m, strength); };
+    window.__studioBakeAO = () => bakeOp('ao');
     window.__studioReadNormalTexel = (uv) => { const m = selectedMeshRef.current; const nc = m && m.userData && m.userData._normalCanvas; if (!nc) return null; const d = nc.getContext('2d').getImageData(Math.floor(uv[0] * 512), Math.floor((1 - uv[1]) * 512), 1, 1).data; return [d[0], d[1], d[2]]; };
     window.__studioPolyPaintAt = (pt, color, radius) => { const m = selectedMeshRef.current; if (!m) return null; return paintPolyAt(m, new THREE.Vector3(pt[0], pt[1], pt[2]), color || brushPaintColor, radius || 0.012); };
     window.__studioReadVertexColor = (i) => { const m = selectedMeshRef.current; const col = m && m.geometry && m.geometry.attributes.color; if (!col) return null; return [Math.round(col.getX(i) * 255), Math.round(col.getY(i) * 255), Math.round(col.getZ(i) * 255)]; };
-    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; };
+    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; };
   });
   // Auto-frame on primitive count change so the camera always shows
   // the current scene without the user having to hit Home.
@@ -6131,24 +6133,18 @@ function WorkbenchStudio() {
     const pos = mesh.geometry.attributes.position;
     if (!mesh.geometry.attributes.normal) mesh.geometry.computeVertexNormals();
     const nrm = mesh.geometry.attributes.normal;
-    const colors = new Float32Array(pos.count * 3);
     if (target === 'ao') {
-      // bake.cc (AO mode): approximate AO via average neighbour normal
-      // dot with vertex normal — concave areas score lower (darker).
-      if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
-      const c = mesh.geometry.boundingSphere.center;
-      for (let i = 0; i < pos.count; i++) {
-        const dx = pos.getX(i) - c.x;
-        const dy = pos.getY(i) - c.y;
-        const dz = pos.getZ(i) - c.z;
-        const d = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
-        const nDotR = (nrm.getX(i) * dx + nrm.getY(i) * dy + nrm.getZ(i) * dz) / d;
-        const ao = Math.max(0.2, nDotR); // darker on concave/inward
-        colors[i * 3]     = ao;
-        colors[i * 3 + 1] = ao;
-        colors[i * 3 + 2] = ao;
-      }
-    } else if (target === 'normals') {
+      // Real ray-traced AO bake (Lightmass / Progressive Lightmapper): cast a
+      // hemisphere of rays per vertex and test occlusion against the scene.
+      const scene = window.__archdiscScene;
+      const occluders = [];
+      if (scene) scene.traverse((o) => { if (o.isMesh && o.userData && o.userData.archdiscStudioPrimitive) occluders.push(o); });
+      const r = bakeAmbientOcclusion(mesh, occluders.length ? occluders : [mesh]);
+      mesh.userData.archdiscStudioBaked = 'ao';
+      return { target, ...r };
+    }
+    const colors = new Float32Array(pos.count * 3);
+    if (target === 'normals') {
       // bake.cc (NORMALS mode): visualise vertex normals as RGB.
       for (let i = 0; i < pos.count; i++) {
         colors[i * 3]     = nrm.getX(i) * 0.5 + 0.5;
@@ -8874,7 +8870,7 @@ function WorkbenchStudio() {
 
                 <div className="ribbon-group">
                   <div className="ribbon-group-tools">
-                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="bake-ao" onClick={() => bakeOp('ao')} disabled={!selectedKind} title="Blender render/intern/bake.cc — bake AO to vertex colors">
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="bake-ao" onClick={() => bakeOp('ao')} disabled={!selectedKind} title="Unreal Lightmass / Unity Progressive Lightmapper / Blender bake AO — ray-traced hemisphere AO into vertex colours (crevices + contact + self-occlusion darken)">
                       <span className="ribbon-tool-icon">◐</span><span className="ribbon-tool-label">Bake AO</span>
                     </button>
                     <button type="button" className="ribbon-tool" data-studio-ribbon-action="bake-normals" onClick={() => bakeOp('normals')} disabled={!selectedKind} title="Blender bake.cc — vertex colors = RGB of normals">
