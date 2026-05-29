@@ -17,6 +17,7 @@ import { gridSignature, compareSignatures } from '../../ai/ArchiePerception.js';
 import { evaluateGraph, evalModifierStack, NODE_TYPES } from './nodegraph/nodeGraphEval.js';
 import NodeGraphEditor from './nodegraph/NodeGraphEditor.jsx';
 import { buildNurbsSurfaceGeometry } from './nurbs/nurbsSurface.js';
+import { dynaMeshGeometry } from './remesh/dynaMesh.js';
 import {
   MousePointer2, Move, RotateCw, Maximize2,
   Box, Mountain, PaintBucket, Bone, Play, Sparkles, Camera,
@@ -455,7 +456,8 @@ function WorkbenchStudio() {
     window.__studioModStackRemove = (i) => modStackRemove(i);
     window.__studioModStackReorder = (i, dir) => modStackReorder(i, dir);
     window.__studioModStackGet = () => { const m = selectedMeshRef.current; return (m && m.userData.archdiscStudioModStack) ? JSON.parse(JSON.stringify(m.userData.archdiscStudioModStack.mods)) : []; };
-    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioAddNurbsSurface; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; };
+    window.__studioDynaMesh = (res) => dynaMeshSelected(res);
+    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioAddNurbsSurface; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; };
   });
   // Auto-frame on primitive count change so the camera always shows
   // the current scene without the user having to hit Home.
@@ -683,6 +685,21 @@ function WorkbenchStudio() {
   function modStackToggle(i) { const m = selectedMeshRef.current; if (!m || !m.userData.archdiscStudioModStack) return; const mod = m.userData.archdiscStudioModStack.mods[i]; if (mod) { mod.enabled = mod.enabled === false; reevalModStack(m); setModStackVersion(v => v + 1); } }
   function modStackPopLast() { const m = selectedMeshRef.current; if (!m || !m.userData.archdiscStudioModStack) return; m.userData.archdiscStudioModStack.mods.pop(); reevalModStack(m); setModStackVersion(v => v + 1); }
   const selectedModStack = () => { const m = selectedMeshRef.current; return (m && m.userData.archdiscStudioModStack) ? m.userData.archdiscStudioModStack.mods : []; };
+
+  // ── DynaMesh (ZBrush uniform-topology voxel reskin) ──
+  function dynaMeshSelected(res) {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    const geo = dynaMeshGeometry(mesh.geometry, { resolution: res || 26 });
+    if (geo && geo.attributes.position && geo.attributes.position.count > 0) {
+      if (mesh.geometry) mesh.geometry.dispose();
+      mesh.geometry = geo;
+      mesh.userData.archdiscStudioDynaMesh = geo.userData.archdiscDynaMesh;
+      recomputeMeshStats(window.__archdiscScene);
+      return { vertices: geo.attributes.position.count, ...geo.userData.archdiscDynaMesh };
+    }
+    return { error: 'dynamesh produced no geometry' };
+  }
 
   // ── NURBS surface (Maya / Rhino / Plasticity) ──
   // A real rational degree-3 tensor-product NURBS surface, tessellated and
@@ -8477,6 +8494,9 @@ function WorkbenchStudio() {
                     </button>
                     <button type="button" className={'ribbon-tool' + (nodeGraphOpen ? ' active' : '')} data-studio-ribbon-action="node-editor" onClick={() => setNodeGraphOpen(v => !v)} title="Geometry Node Graph — Houdini SOP / Blender Geometry Nodes / Grasshopper / Substance / Unreal-Unity material+blueprint graph foundation">
                       <span className="ribbon-tool-icon">⬡</span><span className="ribbon-tool-label">Node Editor</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="dynamesh" onClick={() => dynaMeshSelected(26)} disabled={!selectedKind} title="ZBrush DynaMesh — uniform-topology voxel reskin of the selected mesh">
+                      <span className="ribbon-tool-icon">⬢</span><span className="ribbon-tool-label">DynaMesh</span>
                     </button>
                   </div>
                   <div className="ribbon-group-label">Engine · Advanced</div>

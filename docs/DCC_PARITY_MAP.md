@@ -24,7 +24,7 @@ tooltips, mirror the tool's algorithm + UX, and update this table.
 | Erosion / weathering / degradation | DONE | `sculptErode` / `sculptWeather` (deterministic fBm) |
 | Masking (mask buffer) | DONE | real per-vertex protect-mask: `paintMaskAt` + `mask` brush mode; the brush restores masked verts post-stroke; masked areas shade darker; Clear/Invert (slice 151) |
 | Sculpt layers (multi-res levels) | STUB | `sculptLayer` inflate+counter — need a layer stack |
-| DynaMesh (uniform reskin) | ABSENT | only coarse voxel `remeshModifier` |
+| DynaMesh (uniform reskin) | DONE | `dynaMeshGeometry` — voxelise (ray-crossing point-in-mesh) -> watertight cuberille -> weld -> Laplacian smooth; uniform-topology reskin (slice 155) |
 | ZRemesher (quad retopology) | ABSENT | no retopology |
 | Polypaint (vertex paint by brush) | PARTIAL | `vertexPaintGradient` bakes a fixed gradient; need brush paint |
 | Stamp / stencil / alpha brushes | ABSENT | — |
