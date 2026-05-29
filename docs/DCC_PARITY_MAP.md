@@ -45,7 +45,7 @@ tooltips, mirror the tool's algorithm + UX, and update this table.
 
 | Capability | Status | Notes / next |
 |------------|--------|--------------|
-| NURBS surfaces/curves | PARTIAL | rational degree-3 tensor-product NURBS SURFACE shipped — ribbon primitive + node-graph node (three Cox-de Boor, slice 153). NURBS curves + exact trimmed B-rep (OCCT booleans) still a separate effort |
+| NURBS surfaces/curves | DONE | rational degree-3 tensor-product NURBS SURFACE (slice 153) + rational degree-3 NURBS CURVE (slice 179, `nurbs/nurbsCurve.js` — Cox-de Boor, clamped knots interpolate endpoints, control-point weights warp the curve; "NURBS Crv" ribbon + `__studioAddNurbsCurve`) + TRIMMED surfaces (slice 178). Only solid sewn trimmed-B-rep booleans remain (need a B-rep kernel; mesh CSG already covers solids) |
 | Deformer stack / node editor | DONE | non-destructive modifier stack (slice 154) + the geometry node editor (slice 152) |
 | MASH / instancing | PARTIAL | Array modifier + foliage instancing |
 | Rigging (joints / IK / constraints / skinning) | PARTIAL | armature + IK + constraints shipped (see GAME_ENGINE map) |
@@ -78,7 +78,7 @@ tooltips, mirror the tool's algorithm + UX, and update this table.
 
 | Capability | Status | Notes / next |
 |------------|--------|--------------|
-| NURBS curves / surfaces | PARTIAL | NURBS surface shipped (slice 153, shared with Maya); TRIMMED surfaces shipped (slice 178, `surf/trimmedSurface.js` — a parametric patch trimmed by uv loops/holes = a trimmed B-rep FACE; "Trim Surf" ribbon + `__studioTrimmedSurface`). NURBS curves + solid sewn trimmed-B-rep booleans still need a B-rep kernel (OCCT, removed by de-CAD); mesh CSG booleans already cover solid combination |
+| NURBS curves / surfaces | DONE | NURBS surface (slice 153) + NURBS CURVE (slice 179, rational degree-3 Cox-de Boor) + TRIMMED surfaces (slice 178, `surf/trimmedSurface.js` — uv-loop trimmed B-rep FACE; "Trim Surf" ribbon). Only solid sewn trimmed-B-rep booleans still need a B-rep kernel (OCCT, removed by de-CAD); mesh CSG booleans already cover solid combination |
 | SubD | PARTIAL | loop / Catmull approximations |
 | Grasshopper (visual node graph) | PARTIAL | the geometry node-graph editor (slice 152) is the Grasshopper-style DAG; needs Rhino-specific NURBS nodes |
 

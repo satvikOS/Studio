@@ -27,6 +27,7 @@ import { BT_NODE_TYPES, behaviorTreeSeed, tickBehaviorTree } from './ai/behavior
 import { streamAround as wpStreamAround, revealAll as wpRevealAll } from './world/worldPartition.js';
 import { addSource as audioAddSource, setListener as audioSetListener, audioState, sourceCount as audioSourceCount } from './audio/spatialAudio.js';
 import { buildNurbsSurfaceGeometry } from './nurbs/nurbsSurface.js';
+import { buildNurbsCurveGeometry } from './nurbs/nurbsCurve.js';
 import { buildSweptGeometry } from './surf/sweepLoft.js';
 import { buildTrimmedSurface } from './surf/trimmedSurface.js';
 import { bakeAmbientOcclusion } from './bake/ambientOcclusion.js';
@@ -507,6 +508,7 @@ function WorkbenchStudio() {
     window.__studioAddNurbsSurface = (opts) => addNurbsSurface(opts);
     window.__studioSweepLoft = (opts) => sweepLoft(opts);
     window.__studioTrimmedSurface = (opts) => addTrimmedSurface(opts);
+    window.__studioAddNurbsCurve = (opts) => addNurbsCurve(opts);
     // Non-destructive modifier stack (operates on the selected mesh).
     window.__studioModStackAdd = (type, params) => modStackAdd(type, params);
     window.__studioModStackRemove = (i) => modStackRemove(i);
@@ -523,7 +525,7 @@ function WorkbenchStudio() {
     window.__studioReadNormalTexel = (uv) => { const m = selectedMeshRef.current; const nc = m && m.userData && m.userData._normalCanvas; if (!nc) return null; const d = nc.getContext('2d').getImageData(Math.floor(uv[0] * 512), Math.floor((1 - uv[1]) * 512), 1, 1).data; return [d[0], d[1], d[2]]; };
     window.__studioPolyPaintAt = (pt, color, radius) => { const m = selectedMeshRef.current; if (!m) return null; return paintPolyAt(m, new THREE.Vector3(pt[0], pt[1], pt[2]), color || brushPaintColor, radius || 0.012); };
     window.__studioReadVertexColor = (i) => { const m = selectedMeshRef.current; const col = m && m.geometry && m.geometry.attributes.color; if (!col) return null; return [Math.round(col.getX(i) * 255), Math.round(col.getY(i) * 255), Math.round(col.getZ(i) * 255)]; };
-    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioEvalNiagara; delete window.__studioNiagaraStep; delete window.__studioBTTick; delete window.__studioStreamAround; delete window.__studioRevealAll; delete window.__studioAddAudioSource; delete window.__studioSetListener; delete window.__studioAudioState; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAnimBPSet; delete window.__studioAnimBPStep; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioTrimmedSurface; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioFieldQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; };
+    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioEvalNiagara; delete window.__studioNiagaraStep; delete window.__studioBTTick; delete window.__studioStreamAround; delete window.__studioRevealAll; delete window.__studioAddAudioSource; delete window.__studioSetListener; delete window.__studioAudioState; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAnimBPSet; delete window.__studioAnimBPStep; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioTrimmedSurface; delete window.__studioAddNurbsCurve; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioFieldQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; };
   });
   // Auto-frame on primitive count change so the camera always shows
   // the current scene without the user having to hit Home.
@@ -1017,6 +1019,27 @@ function WorkbenchStudio() {
     setPrimitiveCount(c => c + 1);
     recomputeMeshStats(scene);
     return { vertices: geometry.attributes.position.count, ...geometry.userData.archdiscSweep };
+  }
+
+  // ── NURBS curve (Maya / Rhino) — rational degree-3 B-spline curve swept to a
+  //    tube; weights warp the curve toward heavier control points. ──
+  function addNurbsCurve(opts) {
+    const scene = window.__archdiscScene; if (!scene) return { error: 'no scene' };
+    const geometry = buildNurbsCurveGeometry(opts || {});
+    const material = new THREE.MeshStandardMaterial({ color: 0x9098a3, metalness: 0.3, roughness: 0.4 });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.castShadow = true; mesh.receiveShadow = true;
+    mesh.userData.archdiscStudioPrimitive = true;
+    mesh.userData.archdiscStudioPrimitiveKind = 'nurbs-curve';
+    mesh.userData.archdiscNurbsCurve = geometry.userData.archdiscNurbsCurve;
+    mesh.name = `studio-primitive-nurbscurve-${primitiveCount}`;
+    const cols = 4, i = primitiveCount;
+    mesh.position.set((i % cols - (cols - 1) / 2) * PRIMITIVE_SIZE * 1.9, 0, Math.floor(i / cols) * PRIMITIVE_SIZE * 1.9);
+    scene.add(mesh);
+    primitiveStackRef.current.push(mesh);
+    setPrimitiveCount(c => c + 1);
+    recomputeMeshStats(scene);
+    return { vertices: geometry.attributes.position.count, ...geometry.userData.archdiscNurbsCurve };
   }
 
   // ── Trimmed surface (Rhino / Maya trimmed surfaces) — a parametric patch
@@ -8455,6 +8478,10 @@ function WorkbenchStudio() {
                     <button type="button" className="ribbon-tool" data-studio-primitive="trimmed-surface" onClick={() => addTrimmedSurface({})} title="Rhino / Maya trimmed surface — a parametric patch trimmed by uv loops (outer boundary + holes); the face-level building block of a trimmed B-rep">
                       <span className="ribbon-tool-icon">⬡</span>
                       <span className="ribbon-tool-label">Trim Surf</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-primitive="nurbs-curve" onClick={() => addNurbsCurve({})} title="Maya / Rhino NURBS curve — rational degree-3 B-spline (Cox-de Boor); control-point weights warp the curve">
+                      <span className="ribbon-tool-icon">∿</span>
+                      <span className="ribbon-tool-label">NURBS Crv</span>
                     </button>
                   </div>
                   <div className="ribbon-group-label">Primitives</div>
