@@ -27,7 +27,10 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { X, ClipboardCopy, Hammer } from 'lucide-react';
-import { ArchDiscKernel } from '../kernel/brep/ArchDiscKernel.js';
+// CAD kernel decoupled — the cut list is a CAD (sheet-metal / weldment) report
+// the Studio-only app never produces, so the OCCT-backed ArchDiscKernel is
+// replaced by an inert stub (empty report). Severs CutListPanel from kernel/brep.
+const ArchDiscKernel = { brep: { cutList: () => ({ groups: [], totalLines: 0, totalLengthMm: 0 }) } };
 import './CutListPanel.css';
 
 const DEFAULT_ROUNDING = 1;
