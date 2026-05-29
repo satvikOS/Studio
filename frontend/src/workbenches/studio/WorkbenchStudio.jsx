@@ -255,6 +255,11 @@ function WorkbenchStudio() {
   // mutation doesn't drive any rendering (state primitiveCount mirrors
   // its length for UI bindings). Used by Delete Last + Clear Scene.
   const primitiveStackRef = useRef([]);
+  // Reference image planes (Blender "background images" / Maya image planes) —
+  // NOT primitives: excluded from selection, export, sculpt + frame-all.
+  const refPlanesRef = useRef([]);
+  const [refPlaneCount, setRefPlaneCount] = useState(0);
+  const [refPlaneOpacity, setRefPlaneOpacity] = useState(0.6);
   // Render thumbnails captured via the "Render Frame" tool. Each entry:
   //   { dataUrl, ts, samples, engine, w, h }
   const [renders, setRenders] = useState([]);
@@ -431,7 +436,8 @@ function WorkbenchStudio() {
     window.__studioFrameAll = frameAllInScene;
     window.__studioImportAsset = (format, data) => importAssetFromData(format, data);
     window.__studioExportGltfString = () => exportGltfString();
-    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; };
+    window.__studioAddRefPlane = (axis, imageUrl, opts) => addReferenceImagePlane(axis, imageUrl, opts);
+    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; };
   });
   // Auto-frame on primitive count change so the camera always shows
   // the current scene without the user having to hit Home.
@@ -605,6 +611,74 @@ function WorkbenchStudio() {
     primitiveStackRef.current.push(mesh);
     setPrimitiveCount(c => c + 1);
     recomputeMeshStats(scene);
+  }
+
+  // ── Reference image planes — Blender "Background Images" (editors/
+  //    space_view3d, View3DBackgroundImage) / Maya image planes / 3ds Max
+  //    viewport backgrounds. Load a blueprint onto an axis-aligned plane and
+  //    model against it. Ref planes are NOT primitives: selection, export,
+  //    sculpt, and frame-all all ignore them (they key off
+  //    archdiscStudioPrimitive). axis: 'front' (XY) | 'side' (YZ) | 'top' (XZ).
+  function addReferenceImagePlane(axis = 'front', imageUrl = null, opts = {}) {
+    const scene = window.__archdiscScene;
+    if (!scene) return null;
+    const size = opts.size || PRIMITIVE_SIZE * 7;
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0xffffff, map: null, transparent: true,
+      opacity: opts.opacity != null ? opts.opacity : refPlaneOpacity,
+      depthWrite: false, side: THREE.DoubleSide, toneMapped: false,
+    });
+    const plane = new THREE.Mesh(new THREE.PlaneGeometry(size, size), mat);
+    if (axis === 'side') plane.rotation.y = Math.PI / 2;        // YZ, faces +X
+    else if (axis === 'top') plane.rotation.x = -Math.PI / 2;   // XZ, faces +Y
+    const half = size / 2;                                       // front: XY, faces +Z
+    if (axis === 'front') plane.position.set(opts.x || 0, opts.y != null ? opts.y : half * 0.85, opts.z != null ? opts.z : -half);
+    else if (axis === 'side') plane.position.set(opts.x != null ? opts.x : -half, opts.y != null ? opts.y : half * 0.85, opts.z || 0);
+    else plane.position.set(opts.x || 0, opts.y != null ? opts.y : 0, opts.z || 0);
+    plane.renderOrder = -2;
+    plane.userData.archdiscStudioRefPlane = true;
+    plane.userData.archdiscStudioRefAxis = axis;
+    plane.name = `studio-ref-${axis}-${refPlanesRef.current.length}`;
+    scene.add(plane);
+    refPlanesRef.current.push(plane);
+    setRefPlaneCount(refPlanesRef.current.length);
+    if (imageUrl) {
+      new THREE.TextureLoader().load(imageUrl, (tex) => {
+        tex.colorSpace = THREE.SRGBColorSpace;
+        if (tex.image && tex.image.width && tex.image.height) {
+          const a = tex.image.width / tex.image.height; // keep blueprint aspect
+          plane.scale.set(a >= 1 ? 1 : a, a >= 1 ? 1 / a : 1, 1);
+        }
+        mat.map = tex; mat.needsUpdate = true;
+        recomputeMeshStats(scene);
+      });
+    }
+    recomputeMeshStats(scene);
+    return plane;
+  }
+  function addReferencePlaneViaPicker(axis) {
+    const input = document.createElement('input');
+    input.type = 'file'; input.accept = 'image/*';
+    input.onchange = () => {
+      const file = input.files && input.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => addReferenceImagePlane(axis, reader.result);
+      reader.readAsDataURL(file);
+    };
+    input.click();
+  }
+  function setReferencePlanesOpacity(v) {
+    const o = Math.max(0, Math.min(1, Number(v)));
+    setRefPlaneOpacity(o);
+    for (const p of refPlanesRef.current) if (p.material) { p.material.opacity = o; p.material.needsUpdate = true; }
+  }
+  function clearReferencePlanes() {
+    const scene = window.__archdiscScene;
+    for (const p of refPlanesRef.current) { if (scene) scene.remove(p); disposeMesh(p); }
+    refPlanesRef.current = [];
+    setRefPlaneCount(0);
+    if (scene) recomputeMeshStats(scene);
   }
 
   function disposeMesh(mesh) {
@@ -8182,6 +8256,28 @@ function WorkbenchStudio() {
                     </span>
                   </div>
                   <div className="ribbon-group-label">Scene</div>
+                </div>
+
+                <div className="ribbon-group">
+                  <div className="ribbon-group-tools">
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="ref-front" onClick={() => addReferencePlaneViaPicker('front')} title="Blender Background Image (Front) / Maya image plane — load a blueprint to model against">
+                      <span className="ribbon-tool-icon">▢</span><span className="ribbon-tool-label">Front Ref</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="ref-side" onClick={() => addReferencePlaneViaPicker('side')} title="Reference image plane on the side (YZ) axis">
+                      <span className="ribbon-tool-icon">◫</span><span className="ribbon-tool-label">Side Ref</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="ref-top" onClick={() => addReferencePlaneViaPicker('top')} title="Reference image plane on the top (XZ) ground axis">
+                      <span className="ribbon-tool-icon">⬓</span><span className="ribbon-tool-label">Top Ref</span>
+                    </button>
+                    <label style={{ alignSelf: 'center', fontSize: '11px', opacity: 0.7, padding: '0 6px', display: 'flex', flexDirection: 'column', gap: '2px' }} title="Reference plane opacity">
+                      <span>Opacity {Math.round(refPlaneOpacity * 100)}%</span>
+                      <input type="range" min="0" max="1" step="0.05" value={refPlaneOpacity} data-studio-ref="opacity" onChange={(e) => setReferencePlanesOpacity(e.target.value)} style={{ width: '80px' }} />
+                    </label>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="ref-clear" onClick={clearReferencePlanes} disabled={refPlaneCount === 0} title="Remove all reference planes">
+                      <span className="ribbon-tool-icon">⌫</span><span className="ribbon-tool-label">Clear Ref</span>
+                    </button>
+                  </div>
+                  <div className="ribbon-group-label">Reference Image · Blender/Maya</div>
                 </div>
               </>
             )}
