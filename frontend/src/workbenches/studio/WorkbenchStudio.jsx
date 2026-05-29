@@ -20,6 +20,7 @@ import { evaluateGraph, evalModifierStack, NODE_TYPES } from './nodegraph/nodeGr
 import NodeGraphEditor from './nodegraph/NodeGraphEditor.jsx';
 import { MATERIAL_NODE_TYPES, evalMaterialGraph, materialSeed } from './nodegraph/materialNodes.js';
 import StudioSequencer from './anim/StudioSequencer.jsx';
+import { BLUEPRINT_NODE_TYPES, runBlueprint, blueprintSeed } from './blueprint/blueprintNodes.js';
 import { buildNurbsSurfaceGeometry } from './nurbs/nurbsSurface.js';
 import { dynaMeshGeometry } from './remesh/dynaMesh.js';
 import { quadRemeshGeometry } from './remesh/quadRemesh.js';
@@ -322,6 +323,7 @@ function WorkbenchStudio() {
   const [nodeGraphOpen, setNodeGraphOpen] = useState(false); // Geometry Nodes editor overlay
   const [materialGraphOpen, setMaterialGraphOpen] = useState(false); // Material/shader graph overlay
   const [sequencerOpen, setSequencerOpen] = useState(false); // Sequencer/Timeline track-editor dock
+  const [blueprintOpen, setBlueprintOpen] = useState(false); // Blueprint/visual-scripting graph overlay
   const [brushPaintColor, setBrushPaintColor] = useState('#d08a4a'); // Substance-style texture-paint colour
   const [brushPaintChannel, setBrushPaintChannel] = useState('color'); // PBR channel: color/roughness/metalness/emissive
   const [modStackVersion, setModStackVersion] = useState(0); // forces modifier-stack UI refresh
@@ -461,6 +463,8 @@ function WorkbenchStudio() {
     window.__studioEvalNodeGraph = (graph) => evalNodeGraphToScene(graph);
     // Material/shader graph: evaluate a shading DAG -> PBR material on selected mesh.
     window.__studioApplyMaterialGraph = (graph) => applyMaterialGraph(graph);
+    // Blueprint/visual-scripting: run an exec-flow graph against the scene.
+    window.__studioRunBlueprint = (graph) => runBlueprintInScene(graph);
     // Rigid-body sim: deterministically advance N steps (e2e/Archie, rAF-free) + read state.
     window.__studioPhysicsStep = (steps, dt) => { const n = steps || 1; const h = dt || 0.016; for (let i = 0; i < n; i++) physicsTick(h); return window.__studioPhysicsState(); };
     window.__studioPhysicsState = () => { const scene = window.__archdiscScene; if (!scene) return []; return physicsBodies(scene).map(b => ({ name: b.o.name, pos: [b.o.position.x, b.o.position.y, b.o.position.z], vel: [b.v[0], b.v[1], b.v[2]], radius: b.radius })); };
@@ -482,7 +486,7 @@ function WorkbenchStudio() {
     window.__studioReadTexel = (uv, channel) => { const m = selectedMeshRef.current; if (!m) return null; return readTexel(m, { x: uv[0], y: uv[1] }, channel); };
     window.__studioPolyPaintAt = (pt, color, radius) => { const m = selectedMeshRef.current; if (!m) return null; return paintPolyAt(m, new THREE.Vector3(pt[0], pt[1], pt[2]), color || brushPaintColor, radius || 0.012); };
     window.__studioReadVertexColor = (i) => { const m = selectedMeshRef.current; const col = m && m.geometry && m.geometry.attributes.color; if (!col) return null; return [Math.round(col.getX(i) * 255), Math.round(col.getY(i) * 255), Math.round(col.getZ(i) * 255)]; };
-    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAddNurbsSurface; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; };
+    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAddNurbsSurface; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; };
   });
   // Auto-frame on primitive count change so the camera always shows
   // the current scene without the user having to hit Home.
@@ -623,10 +627,10 @@ function WorkbenchStudio() {
 
   function addPrimitive(kind) {
     const scene = window.__archdiscScene;
-    if (!scene) return;
+    if (!scene) return null;
 
     const geometry = buildPrimitiveGeometry(kind);
-    if (!geometry) return;
+    if (!geometry) return null;
 
     const material = new THREE.MeshStandardMaterial({
       color: 0x6e7681,
@@ -656,6 +660,7 @@ function WorkbenchStudio() {
     primitiveStackRef.current.push(mesh);
     setPrimitiveCount(c => c + 1);
     recomputeMeshStats(scene);
+    return mesh;
   }
 
   // ── Geometry Node Graph (Houdini SOP / Blender Geometry Nodes) ──
@@ -710,6 +715,18 @@ function WorkbenchStudio() {
       message: `material -> ${spec.hasMap ? spec.mapPattern + ' map, ' : ''}rough ${spec.roughness.toFixed(2)} metal ${spec.metalness.toFixed(2)}`,
       ...spec, target: target.name,
     };
+  }
+
+  // ── Blueprint / visual scripting (Unreal Blueprint / Unity Visual Scripting):
+  //    run an exec-flow graph against the live scene (spawn/move/rotate/scale/
+  //    setColor), threaded with a spawn callback into the real primitive API. ──
+  function runBlueprintInScene(graph) {
+    const scene = window.__archdiscScene;
+    if (!scene) return { error: 'no scene' };
+    const ctx = { spawn: (kind) => addPrimitive(kind), log: [] };
+    const r = runBlueprint(graph || { nodes: [], edges: [] }, ctx);
+    if (r.error) return r;
+    return { message: `ran ${r.ran} nodes: ${r.log.join(' -> ')}`, ...r };
   }
 
   // ── Non-destructive modifier STACK (3ds Max / Maya / Blender) ──
@@ -8751,6 +8768,9 @@ function WorkbenchStudio() {
                     <button type="button" className={'ribbon-tool' + (materialGraphOpen ? ' active' : '')} data-studio-ribbon-action="material-editor" onClick={() => setMaterialGraphOpen(v => !v)} title="Material / Shader Node Graph — Substance Designer / Unreal Material Editor / Unity Shader Graph / Blender shader nodes (procedural textures -> PBR channels)">
                       <span className="ribbon-tool-icon">◈</span><span className="ribbon-tool-label">Material Graph</span>
                     </button>
+                    <button type="button" className={'ribbon-tool' + (blueprintOpen ? ' active' : '')} data-studio-ribbon-action="blueprint-editor" onClick={() => setBlueprintOpen(v => !v)} title="Blueprint / Visual Scripting — Unreal Blueprint / Unity Visual Scripting (exec-flow graph: Event -> Spawn/Move/Rotate/Scale/SetColor acting on the live scene)">
+                      <span className="ribbon-tool-icon">⧉</span><span className="ribbon-tool-label">Blueprint</span>
+                    </button>
                     <button type="button" className="ribbon-tool" data-studio-ribbon-action="dynamesh" onClick={() => dynaMeshSelected(26)} disabled={!selectedKind} title="ZBrush DynaMesh — uniform-topology voxel reskin of the selected mesh">
                       <span className="ribbon-tool-icon">⬢</span><span className="ribbon-tool-label">DynaMesh</span>
                     </button>
@@ -12745,6 +12765,17 @@ function WorkbenchStudio() {
         seedGraph={materialSeed}
         mirrorKey="__studioMaterialGraphState"
         kind="material"
+      />
+      <NodeGraphEditor
+        open={blueprintOpen}
+        onClose={() => setBlueprintOpen(false)}
+        onEvaluate={runBlueprintInScene}
+        nodeTypes={BLUEPRINT_NODE_TYPES}
+        title="Blueprint"
+        subtitle="Unreal Blueprint / Unity Visual Scripting (exec-flow)"
+        seedGraph={blueprintSeed}
+        mirrorKey="__studioBlueprintGraphState"
+        kind="blueprint"
       />
       <StudioSequencer
         open={sequencerOpen}

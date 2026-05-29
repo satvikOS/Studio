@@ -34,7 +34,7 @@ tooltips, mirror the tool's algorithm + UX, and update this table.
 
 | Capability | Status | Notes / next |
 |------------|--------|--------------|
-| Procedural node graph (geometry nodes / SOP DAG) | DONE | real geometry node graph (nodegraph/): DAG eval engine + visual editor (draggable nodes, SVG wires, click-to-connect, params, Evaluate->Scene). Nodes: primitive/transform/subdivide/bevel/displace/array/merge/output (slice 152). Material/shader graph now reuses this framework (slice 165, generalized to a node-type registry); Blueprint graph next |
+| Procedural node graph (geometry nodes / SOP DAG) | DONE | real geometry node graph (nodegraph/): DAG eval engine + visual editor (draggable nodes, SVG wires, click-to-connect, params, Evaluate->Scene). Nodes: primitive/transform/subdivide/bevel/displace/array/merge/output (slice 152). Material/shader graph (slice 165) + Blueprint exec-flow graph (slice 168) both reuse this framework, generalized to a node-type registry |
 | VEX-like expressions | ABSENT | — |
 | Scatter / distribute points | PARTIAL | `geometryNodesDistributePoints` + foliage instancing |
 | Cell fracture / explode | DONE | `MOD_explode` cell fracture |

@@ -101,10 +101,14 @@ This map catalogs every Studio feature with its game-engine counterpart.
 - Sequencer / Timeline track editor (Unreal Sequencer / Unity Timeline) — DONE
   (slice 167). Native monotone Sequencer dock: frame ruler, scrubber/playhead,
   transport, per-object keyframe tracks; interpolates position/rotation/scale.
+- Blueprint visual scripting graph (Unreal Blueprint / Unity Visual Scripting) —
+  DONE (slice 168). EXECUTION-flow graph on the shared node-graph engine: Event
+  BeginPlay fires and control follows the exec wire through Spawn / Move /
+  Rotate / Scale / Set Color nodes acting on the live scene (object data pins
+  thread the spawned mesh). "Blueprint" ribbon toggle + `__studioRunBlueprint`.
 
 ## Pending engine features (queued)
 
-- Blueprint visual scripting graph (Unreal Blueprint / Unity Visual Scripting)
 - AnimBP state machine (Unreal Animation Blueprint / Unity Animator state machine)
 - Niagara emitter graph (separate from Studio's particle presets)
 - Datasmith-class asset import (FBX, USD, Datasmith)
