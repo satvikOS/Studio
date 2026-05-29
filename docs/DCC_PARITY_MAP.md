@@ -27,7 +27,7 @@ tooltips, mirror the tool's algorithm + UX, and update this table.
 | DynaMesh (uniform reskin) | DONE | `dynaMeshGeometry` — voxelise (ray-crossing point-in-mesh) -> watertight cuberille -> weld -> Laplacian smooth; uniform-topology reskin (slice 155) |
 | ZRemesher (quad retopology) | ABSENT | no retopology |
 | Polypaint (vertex paint by brush) | DONE | `paintPolyAt` — real per-vertex colour brush with radial falloff; `polypaint` brush mode + colour picker (slice 161) |
-| Stamp / stencil / alpha brushes | ABSENT | — |
+| Stamp / stencil / alpha brushes | DONE | `stamp` brush mode — procedural alpha (concentric rings) drives a patterned relief, not a uniform dome (slice 163). Custom alpha-image stencils are the next extension |
 | Subtools / subtool hierarchy | ABSENT | flat primitive stack |
 
 ## Houdini (procedural)

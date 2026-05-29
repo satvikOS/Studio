@@ -7615,6 +7615,12 @@ function WorkbenchStudio() {
         } else if (mode === 'grab') {
           const w = k * falloff * 1.5;
           pos.setXYZ(i, px + an.x * w, py + an.y * w, pz + an.z * w);
+        } else if (mode === 'stamp') {
+          // ZBrush alpha stamp — a procedural alpha (concentric rings) drives
+          // the relief, so the imprint is a PATTERN, not a uniform dome.
+          const ring = 0.5 + 0.5 * Math.cos(tn * Math.PI * 4);
+          const w = k * falloff * ring * 1.5;
+          pos.setXYZ(i, px + nx * w, py + ny * w, pz + nz * w);
         } else {
           const w = k * falloff;
           pos.setXYZ(i, px + nx * w, py + ny * w, pz + nz * w);
@@ -8829,7 +8835,7 @@ function WorkbenchStudio() {
                     {[
                       ['draw', 'Draw', '✎'], ['inflate', 'Inflate', '◌'], ['crease', 'Crease', '▲'],
                       ['pinch', 'Pinch', '◇'], ['flatten', 'Flatten', '▬'], ['grab', 'Grab', '↕'],
-                      ['smooth', 'Smooth', '◐'], ['mask', 'Mask', '⬚'], ['polypaint', 'Polypaint', '◉'],
+                      ['smooth', 'Smooth', '◐'], ['stamp', 'Stamp', '❉'], ['mask', 'Mask', '⬚'], ['polypaint', 'Polypaint', '◉'],
                     ].map(([m, label, icon]) => (
                       <button
                         key={m}
