@@ -22,6 +22,7 @@ import { MATERIAL_NODE_TYPES, evalMaterialGraph, materialSeed } from './nodegrap
 import StudioSequencer from './anim/StudioSequencer.jsx';
 import { ANIM_STATES, createAnimBP, animBPSetState, animBPStep } from './anim/animBP.js';
 import { BLUEPRINT_NODE_TYPES, runBlueprint, blueprintSeed } from './blueprint/blueprintNodes.js';
+import { NIAGARA_NODE_TYPES, niagaraSeed, evalNiagaraGraph, simulateEmitter } from './vfx/niagaraNodes.js';
 import { buildNurbsSurfaceGeometry } from './nurbs/nurbsSurface.js';
 import { buildSweptGeometry } from './surf/sweepLoft.js';
 import { bakeAmbientOcclusion } from './bake/ambientOcclusion.js';
@@ -327,6 +328,7 @@ function WorkbenchStudio() {
   const [materialGraphOpen, setMaterialGraphOpen] = useState(false); // Material/shader graph overlay
   const [sequencerOpen, setSequencerOpen] = useState(false); // Sequencer/Timeline track-editor dock
   const [blueprintOpen, setBlueprintOpen] = useState(false); // Blueprint/visual-scripting graph overlay
+  const [niagaraOpen, setNiagaraOpen] = useState(false); // Niagara particle emitter graph overlay
   const [animBPState, setAnimBPState] = useState('idle'); // Animation state machine current state
   const [animBPPlaying, setAnimBPPlaying] = useState(false);
   const animBPRef = useRef(null); // { machine, base:{x,y,z,ry}, meshUuid }
@@ -472,6 +474,9 @@ function WorkbenchStudio() {
     window.__studioApplyMaterialGraph = (graph) => applyMaterialGraph(graph);
     // Blueprint/visual-scripting: run an exec-flow graph against the scene.
     window.__studioRunBlueprint = (graph) => runBlueprintInScene(graph);
+    // Niagara particle emitter graph: evaluate to a sim'd Points burst + step it.
+    window.__studioEvalNiagara = (graph) => evalNiagaraToScene(graph);
+    window.__studioNiagaraStep = (dt) => niagaraStep(dt);
     // Rigid-body sim: deterministically advance N steps (e2e/Archie, rAF-free) + read state.
     window.__studioPhysicsStep = (steps, dt) => { const n = steps || 1; const h = dt || 0.016; for (let i = 0; i < n; i++) physicsTick(h); return window.__studioPhysicsState(); };
     window.__studioPhysicsState = () => { const scene = window.__archdiscScene; if (!scene) return []; return physicsBodies(scene).map(b => ({ name: b.o.name, pos: [b.o.position.x, b.o.position.y, b.o.position.z], vel: [b.v[0], b.v[1], b.v[2]], radius: b.radius })); };
@@ -500,7 +505,7 @@ function WorkbenchStudio() {
     window.__studioReadNormalTexel = (uv) => { const m = selectedMeshRef.current; const nc = m && m.userData && m.userData._normalCanvas; if (!nc) return null; const d = nc.getContext('2d').getImageData(Math.floor(uv[0] * 512), Math.floor((1 - uv[1]) * 512), 1, 1).data; return [d[0], d[1], d[2]]; };
     window.__studioPolyPaintAt = (pt, color, radius) => { const m = selectedMeshRef.current; if (!m) return null; return paintPolyAt(m, new THREE.Vector3(pt[0], pt[1], pt[2]), color || brushPaintColor, radius || 0.012); };
     window.__studioReadVertexColor = (i) => { const m = selectedMeshRef.current; const col = m && m.geometry && m.geometry.attributes.color; if (!col) return null; return [Math.round(col.getX(i) * 255), Math.round(col.getY(i) * 255), Math.round(col.getZ(i) * 255)]; };
-    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAnimBPSet; delete window.__studioAnimBPStep; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; };
+    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioEvalNiagara; delete window.__studioNiagaraStep; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAnimBPSet; delete window.__studioAnimBPStep; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; };
   });
   // Auto-frame on primitive count change so the camera always shows
   // the current scene without the user having to hit Home.
@@ -741,6 +746,47 @@ function WorkbenchStudio() {
     const r = runBlueprint(graph || { nodes: [], edges: [] }, ctx);
     if (r.error) return r;
     return { message: `ran ${r.ran} nodes: ${r.log.join(' -> ')}`, ...r };
+  }
+
+  // ── Niagara particle emitter graph (Unreal Niagara / Unity VFX Graph):
+  //    evaluate the module graph into an emitter spec, then drop a simulated
+  //    THREE.Points burst into the scene; niagaraStep advances the sim. ──
+  function evalNiagaraToScene(graph) {
+    const scene = window.__archdiscScene;
+    if (!scene) return { error: 'no scene' };
+    const { spec, error } = evalNiagaraGraph(graph || { nodes: [], edges: [] });
+    if (error) return { error };
+    const t0 = 0.001;
+    const { positions, colors, count } = simulateEmitter(spec, t0);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    const mat = new THREE.PointsMaterial({ size: spec.size, vertexColors: true, sizeAttenuation: true, transparent: true, depthWrite: false });
+    const pts = new THREE.Points(geo, mat);
+    pts.userData.archdiscStudioPrimitive = true;
+    pts.userData.archdiscStudioPrimitiveKind = 'niagara';
+    pts.userData.archdiscNiagara = { spec, simT: t0 };
+    pts.name = `studio-primitive-niagara-${primitiveCount}`;
+    scene.add(pts);
+    primitiveStackRef.current.push(pts);
+    setPrimitiveCount(c => c + 1);
+    recomputeMeshStats(scene);
+    return { count, lifetime: spec.lifetime };
+  }
+  function niagaraStep(dt) {
+    const scene = window.__archdiscScene; if (!scene) return null;
+    let pts = null;
+    scene.traverse((o) => { if (o.userData && o.userData.archdiscStudioPrimitiveKind === 'niagara') pts = o; });
+    if (!pts) return { error: 'no niagara system — evaluate the graph first' };
+    const nd = pts.userData.archdiscNiagara;
+    nd.simT = (nd.simT || 0) + (dt || 1 / 60);
+    const { positions, colors } = simulateEmitter(nd.spec, nd.simT);
+    pts.geometry.attributes.position.array.set(positions); pts.geometry.attributes.position.needsUpdate = true;
+    pts.geometry.attributes.color.array.set(colors); pts.geometry.attributes.color.needsUpdate = true;
+    pts.geometry.computeBoundingBox();
+    const bb = pts.geometry.boundingBox;
+    let meanY = 0; const n = nd.spec.count; for (let i = 0; i < n; i++) meanY += positions[i * 3 + 1]; meanY /= n;
+    return { t: nd.simT, count: n, meanY, spanY: bb.max.y - bb.min.y, spanX: bb.max.x - bb.min.x };
   }
 
   // ── Non-destructive modifier STACK (3ds Max / Maya / Blender) ──
@@ -8884,6 +8930,9 @@ function WorkbenchStudio() {
                     <button type="button" className={'ribbon-tool' + (blueprintOpen ? ' active' : '')} data-studio-ribbon-action="blueprint-editor" onClick={() => setBlueprintOpen(v => !v)} title="Blueprint / Visual Scripting — Unreal Blueprint / Unity Visual Scripting (exec-flow graph: Event -> Spawn/Move/Rotate/Scale/SetColor acting on the live scene)">
                       <span className="ribbon-tool-icon">⧉</span><span className="ribbon-tool-label">Blueprint</span>
                     </button>
+                    <button type="button" className={'ribbon-tool' + (niagaraOpen ? ' active' : '')} data-studio-ribbon-action="niagara-editor" onClick={() => setNiagaraOpen(v => !v)} title="Niagara / VFX Graph — Unreal Niagara / Unity VFX Graph (module graph: Spawn/Velocity/Force/Color-over-Life -> Emitter, simulated particle burst)">
+                      <span className="ribbon-tool-icon">✸</span><span className="ribbon-tool-label">Niagara FX</span>
+                    </button>
                     <button type="button" className="ribbon-tool" data-studio-ribbon-action="dynamesh" onClick={() => dynaMeshSelected(26)} disabled={!selectedKind} title="ZBrush DynaMesh — uniform-topology voxel reskin of the selected mesh">
                       <span className="ribbon-tool-icon">⬢</span><span className="ribbon-tool-label">DynaMesh</span>
                     </button>
@@ -12908,6 +12957,17 @@ function WorkbenchStudio() {
         seedGraph={blueprintSeed}
         mirrorKey="__studioBlueprintGraphState"
         kind="blueprint"
+      />
+      <NodeGraphEditor
+        open={niagaraOpen}
+        onClose={() => setNiagaraOpen(false)}
+        onEvaluate={evalNiagaraToScene}
+        nodeTypes={NIAGARA_NODE_TYPES}
+        title="Niagara FX"
+        subtitle="Unreal Niagara / Unity VFX Graph (particle emitter)"
+        seedGraph={niagaraSeed}
+        mirrorKey="__studioNiagaraGraphState"
+        kind="niagara"
       />
       <StudioSequencer
         open={sequencerOpen}

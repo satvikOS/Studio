@@ -112,11 +112,14 @@ This map catalogs every Studio feature with its game-engine counterpart.
   ribbon state buttons + Play, `__studioAnimBPSet`/`__studioAnimBPStep`.
 - Lightmass / Progressive Lightmapper AO — DONE (slice 171, see DCC map "Map
   baking"): real hemisphere ray-traced ambient-occlusion bake into vertex colours.
+- Niagara / VFX Graph emitter — DONE (slice 173). Module graph (Spawn / Initial
+  Velocity / Force / Colour-over-Life -> Emitter Output) on the shared node-graph
+  engine, simulated as a deterministic THREE.Points burst (pos = o + v*age +
+  0.5*F*age^2); "Niagara FX" ribbon toggle + `__studioEvalNiagara`/`__studioNiagaraStep`.
 
 ## Pending engine features (queued)
 
-- Niagara emitter graph (separate from Studio's particle presets)
-- Datasmith-class asset import (FBX, USD, Datasmith)
+- Datasmith-class asset import (FBX, USD, Datasmith) — FBX/USD/glTF/OBJ already import
 - World Partition + streaming (Unreal World Partition / Unity Addressables)
 - Wwise / MetaSounds audio integration
 - Behavior Tree + Blackboard (Unreal AI / Unity Behavior Designer)
