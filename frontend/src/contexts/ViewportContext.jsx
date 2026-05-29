@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
 import * as THREE from 'three';
-import { ThreeJSBridge } from '../kernel/index.js';
+// CAD kernel decoupled — ThreeJSBridge was imported but unused (Studio is not
+// CAD-kernel-backed). Dropping it severs ViewportContext from kernel/.
 
 /**
  * Viewport Context - 3D scene + model management
