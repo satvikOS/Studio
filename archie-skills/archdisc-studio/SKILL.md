@@ -164,6 +164,22 @@ pure-data plan) → `Verifier.js` (verdicts) → `SessionMemory.js` (cross-sessi
 `run-ai-prompt` property action runs a plan through the app. Pure-data plans
 honour `params` (translate/rotate/scale) — build via plans, not per-model code.
 
+## Model backend — Archie harnesses the platform's connected models
+Archie is model-agnostic and runs on whatever models are connected to Studio —
+no lock-in, switchable per task:
+- **Cloud (API keys).** BYO-LLM via `PlannerProviders.js` / Studio's AI
+  Settings: Anthropic, OpenAI, Google, and any OpenAI-`compatible` endpoint
+  (plus the bundled presets). The user's API keys are entered in Studio and
+  reused by Archie for planning, verifying, and self-critique.
+- **Local (own hardware).** Self-hosted models run on the user's own machine
+  through the `compatible` provider pointed at a local OpenAI-style endpoint
+  (Ollama / LM Studio / llama.cpp / vLLM, e.g. `http://localhost:11434/v1`) —
+  no cloud key, no data leaving the box. Ideal for non-stop autonomous loops
+  where cloud cost/rate-limits would otherwise bite.
+- Archie may mix tiers (e.g. a strong cloud model to plan, a fast local model
+  for high-volume verify/iterate steps). Select/switch via the AI Settings
+  panel or the plan's provider field; never hard-code a single model.
+
 ## Autonomous build loop (self-directed, self-improving, non-stop)
 1. **Pick a target** (a reference image / a self-chosen subject). Keep it open.
 2. **Plan** the body list (kinds, transforms, colours, ops) — deterministic.
