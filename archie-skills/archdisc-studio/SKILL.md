@@ -1,12 +1,12 @@
 ---
 name: archdisc-studio
-description: "Operate ArchDisc Studio — the Electron 3D-content-creation app — fully autonomously: launch it headed via Playwright, drive every ribbon tool / primitive / property control like a human, build complex models, verify them by reading screenshots, and self-improve. Makes the Hermes agent fully familiar with Studio's complete tool surface and workflows."
+description: "Operate ArchDisc Studio — the Electron 3D-content-creation app — fully autonomously: launch it headed via Playwright, drive every ribbon tool / primitive / property control like a human, build complex models, verify them by reading screenshots, and self-improve. Makes the Archie agent fully familiar with Studio's complete tool surface and workflows."
 version: 1.0.0
 author: ArchDisc
 license: MIT
 platforms: [windows, linux, macos]
 metadata:
-  hermes:
+  archie:
     tags: [3d, studio, electron, playwright, modelling, sculpting, rendering, autonomous]
     related_skills: [autonomous-ai-agents, software-development]
 prerequisites:
@@ -176,8 +176,8 @@ honour `params` (translate/rotate/scale) — build via plans, not per-model code
 6. **Iterate** v(n)→v(n+1): fix v(n)'s named failures BEFORE adding anything.
 7. **Stitch a side-by-side** (reference ∥ render) to PROVE parity, not assert it.
 8. **Save a skill**: when a build works, record the recipe (params + ops) as a
-   reusable Studio sub-skill; improve it on reuse (the Hermes learning loop).
-9. **Schedule / loop**: drive unattended via Hermes cron for non-stop operation.
+   reusable Studio sub-skill; improve it on reuse (the Archie learning loop).
+9. **Schedule / loop**: drive unattended via Archie cron for non-stop operation.
 
 ## Hard quality bars (do not violate)
 - **Faithful 1:1, not primitives-put-together.** Grand interiors must ENCLOSE a
