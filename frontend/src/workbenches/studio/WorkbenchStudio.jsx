@@ -31,6 +31,7 @@ import { buildSweptGeometry } from './surf/sweepLoft.js';
 import { bakeAmbientOcclusion } from './bake/ambientOcclusion.js';
 import { dynaMeshGeometry } from './remesh/dynaMesh.js';
 import { quadRemeshGeometry } from './remesh/quadRemesh.js';
+import { fieldAlignedQuadRemesh, FIELD_SURFACES } from './remesh/fieldAlignedQuad.js';
 import {
   MousePointer2, Move, RotateCw, Maximize2,
   Box, Mountain, PaintBucket, Bone, Play, Sparkles, Camera,
@@ -511,6 +512,7 @@ function WorkbenchStudio() {
     window.__studioModStackGet = () => { const m = selectedMeshRef.current; return (m && m.userData.archdiscStudioModStack) ? JSON.parse(JSON.stringify(m.userData.archdiscStudioModStack.mods)) : []; };
     window.__studioDynaMesh = (res) => dynaMeshSelected(res);
     window.__studioQuadRemesh = (res) => quadRemeshSelected(res);
+    window.__studioFieldQuadRemesh = (opts) => fieldQuadRemeshToScene(opts);
     // Substance-style texture paint on the selected mesh's UV map.
     window.__studioPaintTextureAt = (uv, color, radius, channel) => { const m = selectedMeshRef.current; if (!m) return null; return paintTextureAt(m, { x: uv[0], y: uv[1] }, color || brushPaintColor, radius, channel); };
     window.__studioReadTexel = (uv, channel) => { const m = selectedMeshRef.current; if (!m) return null; return readTexel(m, { x: uv[0], y: uv[1] }, channel); };
@@ -519,7 +521,7 @@ function WorkbenchStudio() {
     window.__studioReadNormalTexel = (uv) => { const m = selectedMeshRef.current; const nc = m && m.userData && m.userData._normalCanvas; if (!nc) return null; const d = nc.getContext('2d').getImageData(Math.floor(uv[0] * 512), Math.floor((1 - uv[1]) * 512), 1, 1).data; return [d[0], d[1], d[2]]; };
     window.__studioPolyPaintAt = (pt, color, radius) => { const m = selectedMeshRef.current; if (!m) return null; return paintPolyAt(m, new THREE.Vector3(pt[0], pt[1], pt[2]), color || brushPaintColor, radius || 0.012); };
     window.__studioReadVertexColor = (i) => { const m = selectedMeshRef.current; const col = m && m.geometry && m.geometry.attributes.color; if (!col) return null; return [Math.round(col.getX(i) * 255), Math.round(col.getY(i) * 255), Math.round(col.getZ(i) * 255)]; };
-    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioEvalNiagara; delete window.__studioNiagaraStep; delete window.__studioBTTick; delete window.__studioStreamAround; delete window.__studioRevealAll; delete window.__studioAddAudioSource; delete window.__studioSetListener; delete window.__studioAudioState; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAnimBPSet; delete window.__studioAnimBPStep; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; };
+    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioEvalNiagara; delete window.__studioNiagaraStep; delete window.__studioBTTick; delete window.__studioStreamAround; delete window.__studioRevealAll; delete window.__studioAddAudioSource; delete window.__studioSetListener; delete window.__studioAudioState; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAnimBPSet; delete window.__studioAnimBPStep; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioFieldQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; };
   });
   // Auto-frame on primitive count change so the camera always shows
   // the current scene without the user having to hit Home.
@@ -930,6 +932,43 @@ function WorkbenchStudio() {
       return { vertices: geo.attributes.position.count, ...geo.userData.archdiscQuadRemesh };
     }
     return { error: 'quad remesh produced no geometry' };
+  }
+
+  // ── Field-aligned quad remesh (ZBrush ZRemesher / Instant Meshes) ──
+  // Curvature cross-field -> RoSy smoothing -> field-following streamline net, on
+  // a parametric surface, dropped in as a primitive with a visible quad wireframe
+  // so the curvature-aligned flow is legible.
+  function fieldQuadRemeshToScene(opts) {
+    const scene = window.__archdiscScene; if (!scene) return { error: 'no scene' };
+    const o = opts || {};
+    const surfName = o.surface || 'diagwave';
+    const S = FIELD_SURFACES[surfName] || FIELD_SURFACES.diagwave;
+    const r = fieldAlignedQuadRemesh(S, o);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(r.positions, 3));
+    geo.setIndex(r.triIndex);
+    geo.computeVertexNormals(); geo.computeBoundingSphere();
+    const material = new THREE.MeshStandardMaterial({ color: 0x8a8f98, metalness: 0.15, roughness: 0.6, side: THREE.DoubleSide });
+    const mesh = new THREE.Mesh(geo, material);
+    mesh.castShadow = true; mesh.receiveShadow = true;
+    mesh.userData.archdiscStudioPrimitive = true;
+    mesh.userData.archdiscStudioPrimitiveKind = 'field-quad';
+    mesh.userData.archdiscQuads = r.quads;
+    mesh.userData.archdiscFieldQuad = { alignment: r.alignment, meanFieldAngle: r.meanFieldAngle, rows: r.rows, cols: r.cols, surface: surfName };
+    mesh.name = `studio-primitive-fieldquad-${primitiveCount}`;
+    // quad-edge wireframe overlay (shows the field-aligned flow)
+    const segs = []; const pos = r.positions;
+    for (const q of r.quads) { const e = [[q[0], q[1]], [q[1], q[2]], [q[2], q[3]], [q[3], q[0]]]; for (const [x, y] of e) segs.push(pos[x * 3], pos[x * 3 + 1], pos[x * 3 + 2], pos[y * 3], pos[y * 3 + 1], pos[y * 3 + 2]); }
+    const wgeo = new THREE.BufferGeometry(); wgeo.setAttribute('position', new THREE.Float32BufferAttribute(segs, 3));
+    const wire = new THREE.LineSegments(wgeo, new THREE.LineBasicMaterial({ color: 0x161616 }));
+    wire.userData.archdiscQuadWire = true; mesh.add(wire);
+    const cols = 4, i = primitiveCount;
+    mesh.position.set((i % cols - (cols - 1) / 2) * PRIMITIVE_SIZE * 1.9, 0, Math.floor(i / cols) * PRIMITIVE_SIZE * 1.9);
+    scene.add(mesh);
+    primitiveStackRef.current.push(mesh);
+    setPrimitiveCount(c => c + 1);
+    recomputeMeshStats(scene);
+    return { vertices: r.positions.length / 3, quadCount: r.quadCount, ...mesh.userData.archdiscFieldQuad };
   }
 
   // ── NURBS surface (Maya / Rhino / Plasticity) ──
@@ -9010,8 +9049,11 @@ function WorkbenchStudio() {
                     <button type="button" className="ribbon-tool" data-studio-ribbon-action="dynamesh" onClick={() => dynaMeshSelected(26)} disabled={!selectedKind} title="ZBrush DynaMesh — uniform-topology voxel reskin of the selected mesh">
                       <span className="ribbon-tool-icon">⬢</span><span className="ribbon-tool-label">DynaMesh</span>
                     </button>
-                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="quad-remesh" onClick={() => quadRemeshSelected(22)} disabled={!selectedKind} title="Quad Remesh — uniform quad-dominant retopology (real 4-sided quad faces; field-aligned ZRemesher is a further extension)">
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="quad-remesh" onClick={() => quadRemeshSelected(22)} disabled={!selectedKind} title="Quad Remesh — uniform quad-dominant retopology (real 4-sided quad faces)">
                       <span className="ribbon-tool-icon">▦</span><span className="ribbon-tool-label">Quad Remesh</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="field-quad-remesh" onClick={() => fieldQuadRemeshToScene({ surface: 'diagwave' })} title="ZRemesher / Instant Meshes — field-aligned quad retopology: principal-curvature cross-field -> RoSy smoothing -> streamline quad net (edges flow with curvature). Parametric surface.">
+                      <span className="ribbon-tool-icon">◫</span><span className="ribbon-tool-label">ZRemesh</span>
                     </button>
                   </div>
                   <div className="ribbon-group-label">Engine · Advanced</div>
