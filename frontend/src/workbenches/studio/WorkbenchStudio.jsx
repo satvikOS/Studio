@@ -316,6 +316,7 @@ function WorkbenchStudio() {
   const [brushMode, setBrushMode]         = useState('push');
   const [nodeGraphOpen, setNodeGraphOpen] = useState(false); // Geometry Nodes editor overlay
   const [brushPaintColor, setBrushPaintColor] = useState('#d08a4a'); // Substance-style texture-paint colour
+  const [brushPaintChannel, setBrushPaintChannel] = useState('color'); // PBR channel: color/roughness/metalness/emissive
   const [modStackVersion, setModStackVersion] = useState(0); // forces modifier-stack UI refresh
   const [brushRadius, setBrushRadius]     = useState(0.012);
   const [brushFalloffStrength, setBrushFalloffStrength] = useState(0.4);
@@ -459,8 +460,8 @@ function WorkbenchStudio() {
     window.__studioModStackGet = () => { const m = selectedMeshRef.current; return (m && m.userData.archdiscStudioModStack) ? JSON.parse(JSON.stringify(m.userData.archdiscStudioModStack.mods)) : []; };
     window.__studioDynaMesh = (res) => dynaMeshSelected(res);
     // Substance-style texture paint on the selected mesh's UV map.
-    window.__studioPaintTextureAt = (uv, color, radius) => { const m = selectedMeshRef.current; if (!m) return null; return paintTextureAt(m, { x: uv[0], y: uv[1] }, color || brushPaintColor, radius); };
-    window.__studioReadTexel = (uv) => { const m = selectedMeshRef.current; if (!m) return null; return readTexel(m, { x: uv[0], y: uv[1] }); };
+    window.__studioPaintTextureAt = (uv, color, radius, channel) => { const m = selectedMeshRef.current; if (!m) return null; return paintTextureAt(m, { x: uv[0], y: uv[1] }, color || brushPaintColor, radius, channel); };
+    window.__studioReadTexel = (uv, channel) => { const m = selectedMeshRef.current; if (!m) return null; return readTexel(m, { x: uv[0], y: uv[1] }, channel); };
     return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioAddNurbsSurface; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; };
   });
   // Auto-frame on primitive count change so the camera always shows
@@ -1232,7 +1233,7 @@ function WorkbenchStudio() {
           // Mask brush paints the protect-mask; texpaint paints into the UV
           // texture (Substance/Blender texture paint); else deform (sculpt).
           if (brush.mode === 'mask') paintMaskAt(hit.object, hit.point, brush.radius, 1);
-          else if (brush.mode === 'texpaint') { if (hit.uv) paintTextureAt(hit.object, hit.uv, brush.paintColor); }
+          else if (brush.mode === 'texpaint') { if (hit.uv) paintTextureAt(hit.object, hit.uv, brush.paintColor, undefined, brush.paintChannel); }
           else paintBrushAt(hit.object, hit.point, brush);
           return;
         }
@@ -4563,47 +4564,71 @@ function WorkbenchStudio() {
   // Each painted mesh gets a CanvasTexture as its material.map; brush dabs are
   // composited at the hit's UV. Was a counter-only stub before.
   const TEX_SIZE = 512;
-  function ensureTextureCanvas(mesh, base) {
+  // Full PBR channel set (Substance Painter). Each channel is its own painted
+  // CanvasTexture wired to the matching MeshStandardMaterial map. roughness /
+  // metalness are linear greyscale; the material scalar is set to 1 so the map
+  // fully drives it. base = the channel's neutral fill.
+  const TEX_CHANNELS = {
+    color:     { map: 'map',          base: '#9098a3', srgb: true },
+    roughness: { map: 'roughnessMap', base: '#b0b0b0', srgb: false },
+    metalness: { map: 'metalnessMap', base: '#000000', srgb: false },
+    emissive:  { map: 'emissiveMap',  base: '#000000', srgb: true },
+  };
+  function ensureChannelCanvas(mesh, channel) {
     if (!mesh || !mesh.geometry || !mesh.geometry.attributes || !mesh.geometry.attributes.uv) return null; // needs UVs
-    if (!mesh.userData._texCtx) {
+    const ch = channel || 'color';
+    const spec = TEX_CHANNELS[ch]; if (!spec) return null;
+    mesh.userData._texCh = mesh.userData._texCh || {};
+    if (!mesh.userData._texCh[ch]) {
       const c = document.createElement('canvas'); c.width = TEX_SIZE; c.height = TEX_SIZE;
       const ctx = c.getContext('2d');
-      ctx.fillStyle = base || '#9098a3'; ctx.fillRect(0, 0, TEX_SIZE, TEX_SIZE);
-      const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
-      mesh.userData._texCanvas = c; mesh.userData._texCtx = ctx; mesh.userData._tex = tex;
-      if (mesh.material) { mesh.material.map = tex; if (mesh.material.color) mesh.material.color.set('#ffffff'); mesh.material.needsUpdate = true; }
+      ctx.fillStyle = spec.base; ctx.fillRect(0, 0, TEX_SIZE, TEX_SIZE);
+      const tex = new THREE.CanvasTexture(c); if (spec.srgb) tex.colorSpace = THREE.SRGBColorSpace;
+      mesh.userData._texCh[ch] = { c, ctx, tex };
+      if (mesh.material) {
+        mesh.material[spec.map] = tex;
+        if (ch === 'color' && mesh.material.color) mesh.material.color.set('#ffffff');
+        if (ch === 'roughness') mesh.material.roughness = 1;
+        if (ch === 'metalness') mesh.material.metalness = 1;
+        if (ch === 'emissive') { if (mesh.material.emissive) mesh.material.emissive.set('#ffffff'); mesh.material.emissiveIntensity = 1; }
+        mesh.material.needsUpdate = true;
+      }
+      // legacy single-channel aliases (color) kept for older callers
+      if (ch === 'color') { mesh.userData._texCanvas = c; mesh.userData._texCtx = ctx; mesh.userData._tex = tex; }
       mesh.userData.archdiscStudioTexturePainted = mesh.userData.archdiscStudioTexturePainted || 0;
     }
-    return mesh.userData;
+    return mesh.userData._texCh[ch];
   }
-  function paintTextureAt(mesh, uv, color, radiusPx) {
-    const td = ensureTextureCanvas(mesh);
-    if (!td) return null;
-    const ctx = td._texCtx;
+  // back-compat: color-channel canvas
+  function ensureTextureCanvas(mesh) { ensureChannelCanvas(mesh, 'color'); return mesh && mesh.userData; }
+  function paintTextureAt(mesh, uv, color, radiusPx, channel) {
+    const ch = ensureChannelCanvas(mesh, channel || 'color');
+    if (!ch) return null;
+    const ctx = ch.ctx;
     const x = uv.x * TEX_SIZE, y = (1 - uv.y) * TEX_SIZE; // flip V to image space
     const r = radiusPx || 40;
-    const col = new THREE.Color(color || brushPaintColor);
+    const col = new THREE.Color(color != null ? color : brushPaintColor);
     const rgb = `${Math.round(col.r * 255)},${Math.round(col.g * 255)},${Math.round(col.b * 255)}`;
     const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
     grad.addColorStop(0, `rgba(${rgb},0.95)`); grad.addColorStop(1, `rgba(${rgb},0)`);
     ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
-    td._tex.needsUpdate = true;
+    ch.tex.needsUpdate = true;
     mesh.userData.archdiscStudioTexturePainted = (mesh.userData.archdiscStudioTexturePainted || 0) + 1;
-    return { painted: true };
+    return { painted: true, channel: channel || 'color' };
   }
-  function readTexel(mesh, uv) {
-    const td = mesh && mesh.userData && mesh.userData._texCtx ? mesh.userData : null;
-    if (!td) return null;
-    const d = td._texCtx.getImageData(Math.floor(uv.x * TEX_SIZE), Math.floor((1 - uv.y) * TEX_SIZE), 1, 1).data;
+  function readTexel(mesh, uv, channel) {
+    const slot = mesh && mesh.userData && mesh.userData._texCh && mesh.userData._texCh[channel || 'color'];
+    if (!slot) return null;
+    const d = slot.ctx.getImageData(Math.floor(uv.x * TEX_SIZE), Math.floor((1 - uv.y) * TEX_SIZE), 1, 1).data;
     return [d[0], d[1], d[2]];
   }
-  // Arm the texture-paint brush (drag on the mesh to paint into its UV texture).
+  // Arm the texture-paint brush (drag on the mesh to paint the active channel).
   function texturePaintCommit() {
     const mesh = selectedMeshRef.current;
-    if (mesh) ensureTextureCanvas(mesh);
+    if (mesh) ensureChannelCanvas(mesh, brushPaintChannel);
     setBrushMode('texpaint');
     setBrushActive(true);
-    return { mode: 'texpaint' };
+    return { mode: 'texpaint', channel: brushPaintChannel };
   }
   // ── ZBrush sculpt MASK (sculpt_paint/sculpt_mask.cc) ──
   // A real per-vertex protect-mask (0 = sculptable, 1 = protected). The brush
@@ -7593,8 +7618,9 @@ function WorkbenchStudio() {
       strength:  brushFalloffStrength,
       symmetryX: brushSymmetryX,
       paintColor: brushPaintColor,
+      paintChannel: brushPaintChannel,
     };
-  }, [brushActive, brushMode, brushRadius, brushFalloffStrength, brushSymmetryX, brushPaintColor]);
+  }, [brushActive, brushMode, brushRadius, brushFalloffStrength, brushSymmetryX, brushPaintColor, brushPaintChannel]);
 
   /*
    * Display modes — toggle wireframe, bounding-box overlay, and
@@ -8844,9 +8870,18 @@ function WorkbenchStudio() {
                     <button type="button" className={'ribbon-tool' + (brushMode === 'texpaint' && brushActive ? ' active' : '')} data-studio-ribbon-action="tex-paint-commit" onClick={texturePaintCommit} disabled={!selectedKind} title="Substance Painter / Blender paint_image.cc — paint colour into the mesh's UV texture (drag on the mesh)">
                       <span className="ribbon-tool-icon">●</span><span className="ribbon-tool-label">Tex Paint</span>
                     </button>
-                    <label style={{ alignSelf: 'center', display: 'flex', alignItems: 'center', gap: 4, fontSize: '11px', opacity: 0.75, padding: '0 6px' }} title="Texture-paint colour">
+                    <label style={{ alignSelf: 'center', display: 'flex', alignItems: 'center', gap: 4, fontSize: '11px', opacity: 0.75, padding: '0 6px' }} title="Texture-paint colour / value (greyscale drives roughness + metalness)">
                       <span>Color</span>
                       <input type="color" value={brushPaintColor} data-studio-texpaint-color onChange={(e) => setBrushPaintColor(e.target.value)} style={{ width: 28, height: 18, background: '#0c0c0c', border: '1px solid #2a2a2a', borderRadius: 2, padding: 0 }} />
+                    </label>
+                    <label style={{ alignSelf: 'center', display: 'flex', alignItems: 'center', gap: 4, fontSize: '11px', opacity: 0.75, padding: '0 6px' }} title="Substance PBR channel to paint into">
+                      <span>Chan</span>
+                      <select value={brushPaintChannel} data-studio-texpaint-channel onChange={(e) => setBrushPaintChannel(e.target.value)} style={{ background: '#0c0c0c', color: '#dcdcdc', border: '1px solid #2a2a2a', borderRadius: 2, fontSize: 11 }}>
+                        <option value="color">Base Color</option>
+                        <option value="roughness">Roughness</option>
+                        <option value="metalness">Metalness</option>
+                        <option value="emissive">Emissive</option>
+                      </select>
                     </label>
                   </div>
                   <div className="ribbon-group-label">UV</div>
