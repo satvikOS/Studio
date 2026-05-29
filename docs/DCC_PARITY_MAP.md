@@ -78,7 +78,7 @@ tooltips, mirror the tool's algorithm + UX, and update this table.
 
 | Capability | Status | Notes / next |
 |------------|--------|--------------|
-| NURBS curves / surfaces | PARTIAL | NURBS surface shipped (slice 153, shared with Maya); NURBS curves + trimmed B-rep pending |
+| NURBS curves / surfaces | PARTIAL | NURBS surface shipped (slice 153, shared with Maya); TRIMMED surfaces shipped (slice 178, `surf/trimmedSurface.js` — a parametric patch trimmed by uv loops/holes = a trimmed B-rep FACE; "Trim Surf" ribbon + `__studioTrimmedSurface`). NURBS curves + solid sewn trimmed-B-rep booleans still need a B-rep kernel (OCCT, removed by de-CAD); mesh CSG booleans already cover solid combination |
 | SubD | PARTIAL | loop / Catmull approximations |
 | Grasshopper (visual node graph) | PARTIAL | the geometry node-graph editor (slice 152) is the Grasshopper-style DAG; needs Rhino-specific NURBS nodes |
 
