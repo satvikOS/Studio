@@ -56,7 +56,7 @@ tooltips, mirror the tool's algorithm + UX, and update this table.
 | Capability | Status | Notes / next |
 |------------|--------|--------------|
 | Modifier stack (non-destructive, reorderable) | DONE | real live stack re-evaluated from a clean base every edit (reuses the node engine); add/remove/reorder/toggle; removing a mid-stack modifier truly reverts it (slice 154) |
-| Spline → Loft / sweep along path | ABSENT | Bezier/NURBS-path curves exist; no loft/sweep |
+| Spline → Loft / sweep along path | DONE | Loft/Sweep (slice 170, 3ds Max Loft / Rhino Sweep1) — sweeps an arbitrary polygonal profile (square/L/star/n-gon) along a path curve (helix/arc/S-curve/closed ring) via Frenet frames into a swept surface; "Loft/Sweep" primitive + `__studioSweepLoft`. (Path drives a built-in curve set; sweep along a user-drawn curve is the next step.) |
 | Parametric primitives (re-editable) | PARTIAL | primitives added, not re-editable parametrically |
 
 ## Cinema 4D

@@ -22,6 +22,7 @@ import { MATERIAL_NODE_TYPES, evalMaterialGraph, materialSeed } from './nodegrap
 import StudioSequencer from './anim/StudioSequencer.jsx';
 import { BLUEPRINT_NODE_TYPES, runBlueprint, blueprintSeed } from './blueprint/blueprintNodes.js';
 import { buildNurbsSurfaceGeometry } from './nurbs/nurbsSurface.js';
+import { buildSweptGeometry } from './surf/sweepLoft.js';
 import { dynaMeshGeometry } from './remesh/dynaMesh.js';
 import { quadRemeshGeometry } from './remesh/quadRemesh.js';
 import {
@@ -474,6 +475,7 @@ function WorkbenchStudio() {
     window.__studioInsertKeyframeAt = (f) => insertKeyframe(f);
     window.__studioGetKeyframes = () => keyframes.map((k) => ({ ...k }));
     window.__studioAddNurbsSurface = (opts) => addNurbsSurface(opts);
+    window.__studioSweepLoft = (opts) => sweepLoft(opts);
     // Non-destructive modifier stack (operates on the selected mesh).
     window.__studioModStackAdd = (type, params) => modStackAdd(type, params);
     window.__studioModStackRemove = (i) => modStackRemove(i);
@@ -488,7 +490,7 @@ function WorkbenchStudio() {
     window.__studioReadNormalTexel = (uv) => { const m = selectedMeshRef.current; const nc = m && m.userData && m.userData._normalCanvas; if (!nc) return null; const d = nc.getContext('2d').getImageData(Math.floor(uv[0] * 512), Math.floor((1 - uv[1]) * 512), 1, 1).data; return [d[0], d[1], d[2]]; };
     window.__studioPolyPaintAt = (pt, color, radius) => { const m = selectedMeshRef.current; if (!m) return null; return paintPolyAt(m, new THREE.Vector3(pt[0], pt[1], pt[2]), color || brushPaintColor, radius || 0.012); };
     window.__studioReadVertexColor = (i) => { const m = selectedMeshRef.current; const col = m && m.geometry && m.geometry.attributes.color; if (!col) return null; return [Math.round(col.getX(i) * 255), Math.round(col.getY(i) * 255), Math.round(col.getZ(i) * 255)]; };
-    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAddNurbsSurface; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; };
+    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; };
   });
   // Auto-frame on primitive count change so the camera always shows
   // the current scene without the user having to hit Home.
@@ -811,6 +813,29 @@ function WorkbenchStudio() {
     setPrimitiveCount(c => c + 1);
     recomputeMeshStats(scene);
     return { vertices: geometry.attributes.position.count, nurbs: geometry.userData.archdiscNurbs };
+  }
+
+  // ── Loft / Sweep (3ds Max Loft / Rhino Sweep1) — sweep a profile along a
+  //    path curve into a swept surface, dropped in as a Studio primitive. ──
+  function sweepLoft(opts) {
+    const scene = window.__archdiscScene;
+    if (!scene) return { error: 'no scene' };
+    const geometry = buildSweptGeometry(opts || {});
+    if (!geometry) return { error: 'sweep produced no geometry' };
+    const material = new THREE.MeshStandardMaterial({ color: 0x8a8f98, metalness: 0.2, roughness: 0.5, side: THREE.DoubleSide });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.castShadow = true; mesh.receiveShadow = true;
+    mesh.userData.archdiscStudioPrimitive = true;
+    mesh.userData.archdiscStudioPrimitiveKind = 'sweep-loft';
+    mesh.userData.archdiscSweep = geometry.userData.archdiscSweep;
+    mesh.name = `studio-primitive-sweep-${primitiveCount}`;
+    const cols = 4, i = primitiveCount;
+    mesh.position.set((i % cols - (cols - 1) / 2) * PRIMITIVE_SIZE * 1.9, 0, Math.floor(i / cols) * PRIMITIVE_SIZE * 1.9);
+    scene.add(mesh);
+    primitiveStackRef.current.push(mesh);
+    setPrimitiveCount(c => c + 1);
+    recomputeMeshStats(scene);
+    return { vertices: geometry.attributes.position.count, ...geometry.userData.archdiscSweep };
   }
 
   // ── Reference image planes — Blender "Background Images" (editors/
@@ -8204,6 +8229,10 @@ function WorkbenchStudio() {
                     <button type="button" className="ribbon-tool" data-studio-primitive="nurbs-surface" onClick={() => addNurbsSurface({})} title="Maya / Rhino / Plasticity — add a rational degree-3 NURBS surface">
                       <span className="ribbon-tool-icon">+</span>
                       <span className="ribbon-tool-label">NURBS Surf</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-primitive="sweep-loft" onClick={() => sweepLoft({ profile: 'square', path: 'helix', profileSize: 0.05, turns: 3, height: 0.8, radius: 0.3 })} title="3ds Max Loft / Rhino Sweep1 — sweep a profile (square/L/star/circle) along a path curve (helix/arc/S-curve/ring)">
+                      <span className="ribbon-tool-icon">≀</span>
+                      <span className="ribbon-tool-label">Loft/Sweep</span>
                     </button>
                   </div>
                   <div className="ribbon-group-label">Primitives</div>
