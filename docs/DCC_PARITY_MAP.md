@@ -34,7 +34,7 @@ tooltips, mirror the tool's algorithm + UX, and update this table.
 
 | Capability | Status | Notes / next |
 |------------|--------|--------------|
-| Procedural node graph (geometry nodes / SOP DAG) | ABSENT | "Geometry Nodes" group = one-shot buttons; **need a real node-graph editor** (highest-impact gap) |
+| Procedural node graph (geometry nodes / SOP DAG) | DONE | real geometry node graph (nodegraph/): DAG eval engine + visual editor (draggable nodes, SVG wires, click-to-connect, params, Evaluate->Scene). Nodes: primitive/transform/subdivide/bevel/displace/array/merge/output (slice 152). Material/shader + Blueprint graphs reuse this framework next |
 | VEX-like expressions | ABSENT | — |
 | Scatter / distribute points | PARTIAL | `geometryNodesDistributePoints` + foliage instancing |
 | Cell fracture / explode | DONE | `MOD_explode` cell fracture |
@@ -78,7 +78,7 @@ tooltips, mirror the tool's algorithm + UX, and update this table.
 |------------|--------|--------------|
 | NURBS curves / surfaces | ABSENT in Studio | same as Maya — `kernel/` NURBS not wired |
 | SubD | PARTIAL | loop / Catmull approximations |
-| Grasshopper (visual node graph) | ABSENT | needs the node-graph editor |
+| Grasshopper (visual node graph) | PARTIAL | the geometry node-graph editor (slice 152) is the Grasshopper-style DAG; needs Rhino-specific NURBS nodes |
 
 ## SketchUp
 
