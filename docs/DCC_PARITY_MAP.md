@@ -26,7 +26,7 @@ tooltips, mirror the tool's algorithm + UX, and update this table.
 | Sculpt layers (multi-res levels) | STUB | `sculptLayer` inflate+counter — need a layer stack |
 | DynaMesh (uniform reskin) | DONE | `dynaMeshGeometry` — voxelise (ray-crossing point-in-mesh) -> watertight cuberille -> weld -> Laplacian smooth; uniform-topology reskin (slice 155) |
 | ZRemesher (quad retopology) | ABSENT | no retopology |
-| Polypaint (vertex paint by brush) | PARTIAL | `vertexPaintGradient` bakes a fixed gradient; need brush paint |
+| Polypaint (vertex paint by brush) | DONE | `paintPolyAt` — real per-vertex colour brush with radial falloff; `polypaint` brush mode + colour picker (slice 161) |
 | Stamp / stencil / alpha brushes | ABSENT | — |
 | Subtools / subtool hierarchy | ABSENT | flat primitive stack |
 

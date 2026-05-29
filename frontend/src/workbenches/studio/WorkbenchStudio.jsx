@@ -462,7 +462,9 @@ function WorkbenchStudio() {
     // Substance-style texture paint on the selected mesh's UV map.
     window.__studioPaintTextureAt = (uv, color, radius, channel) => { const m = selectedMeshRef.current; if (!m) return null; return paintTextureAt(m, { x: uv[0], y: uv[1] }, color || brushPaintColor, radius, channel); };
     window.__studioReadTexel = (uv, channel) => { const m = selectedMeshRef.current; if (!m) return null; return readTexel(m, { x: uv[0], y: uv[1] }, channel); };
-    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioAddNurbsSurface; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; };
+    window.__studioPolyPaintAt = (pt, color, radius) => { const m = selectedMeshRef.current; if (!m) return null; return paintPolyAt(m, new THREE.Vector3(pt[0], pt[1], pt[2]), color || brushPaintColor, radius || 0.012); };
+    window.__studioReadVertexColor = (i) => { const m = selectedMeshRef.current; const col = m && m.geometry && m.geometry.attributes.color; if (!col) return null; return [Math.round(col.getX(i) * 255), Math.round(col.getY(i) * 255), Math.round(col.getZ(i) * 255)]; };
+    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioAddNurbsSurface; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; };
   });
   // Auto-frame on primitive count change so the camera always shows
   // the current scene without the user having to hit Home.
@@ -1234,6 +1236,7 @@ function WorkbenchStudio() {
           // texture (Substance/Blender texture paint); else deform (sculpt).
           if (brush.mode === 'mask') paintMaskAt(hit.object, hit.point, brush.radius, 1);
           else if (brush.mode === 'texpaint') { if (hit.uv) paintTextureAt(hit.object, hit.uv, brush.paintColor, undefined, brush.paintChannel); }
+          else if (brush.mode === 'polypaint') paintPolyAt(hit.object, hit.point, brush.paintColor, brush.radius);
           else paintBrushAt(hit.object, hit.point, brush);
           return;
         }
@@ -4635,6 +4638,35 @@ function WorkbenchStudio() {
   // (paintBrushAt) restores masked vertices after every stroke, so masked areas
   // hold their shape. Masked verts are shaded darker via vertex colours, the
   // ZBrush convention.
+  // ── ZBrush POLYPAINT — paint vertex colours with the brush ──
+  function ensureVertexColors(mesh) {
+    const geo = mesh && mesh.geometry; if (!geo || !geo.attributes.position) return null;
+    const n = geo.attributes.position.count;
+    let col = geo.attributes.color;
+    if (!col || col.count !== n) { col = new THREE.BufferAttribute(new Float32Array(n * 3).fill(1), 3); geo.setAttribute('color', col); }
+    if (mesh.material) { mesh.material.vertexColors = true; if (mesh.material.color) mesh.material.color.set('#ffffff'); mesh.material.needsUpdate = true; }
+    return col;
+  }
+  function paintPolyAt(mesh, hitPoint, color, radius) {
+    if (!mesh || !mesh.geometry) return null;
+    const col = ensureVertexColors(mesh); if (!col) return null;
+    const pos = mesh.geometry.attributes.position;
+    const lh = mesh.worldToLocal(hitPoint.clone());
+    const c = new THREE.Color(color != null ? color : brushPaintColor);
+    const r2 = radius * radius;
+    for (let i = 0; i < pos.count; i++) {
+      const dx = pos.getX(i) - lh.x, dy = pos.getY(i) - lh.y, dz = pos.getZ(i) - lh.z;
+      const d2 = dx * dx + dy * dy + dz * dz;
+      if (d2 > r2) continue;
+      const t = Math.sqrt(d2) / radius;
+      const f = (1 - t * t) * (1 - t * t) * 0.9;
+      col.setXYZ(i, col.getX(i) * (1 - f) + c.r * f, col.getY(i) * (1 - f) + c.g * f, col.getZ(i) * (1 - f) + c.b * f);
+    }
+    col.needsUpdate = true;
+    mesh.userData.archdiscStudioPolyPainted = (mesh.userData.archdiscStudioPolyPainted || 0) + 1;
+    return { painted: true };
+  }
+
   function ensureMaskBuffer(mesh) {
     if (!mesh || !mesh.geometry || !mesh.geometry.attributes.position) return null;
     const n = mesh.geometry.attributes.position.count;
@@ -8780,7 +8812,7 @@ function WorkbenchStudio() {
                     {[
                       ['draw', 'Draw', '✎'], ['inflate', 'Inflate', '◌'], ['crease', 'Crease', '▲'],
                       ['pinch', 'Pinch', '◇'], ['flatten', 'Flatten', '▬'], ['grab', 'Grab', '↕'],
-                      ['smooth', 'Smooth', '◐'], ['mask', 'Mask', '⬚'],
+                      ['smooth', 'Smooth', '◐'], ['mask', 'Mask', '⬚'], ['polypaint', 'Polypaint', '◉'],
                     ].map(([m, label, icon]) => (
                       <button
                         key={m}
