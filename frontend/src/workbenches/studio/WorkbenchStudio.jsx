@@ -20,6 +20,7 @@ import { evaluateGraph, evalModifierStack, NODE_TYPES } from './nodegraph/nodeGr
 import NodeGraphEditor from './nodegraph/NodeGraphEditor.jsx';
 import { buildNurbsSurfaceGeometry } from './nurbs/nurbsSurface.js';
 import { dynaMeshGeometry } from './remesh/dynaMesh.js';
+import { quadRemeshGeometry } from './remesh/quadRemesh.js';
 import {
   MousePointer2, Move, RotateCw, Maximize2,
   Box, Mountain, PaintBucket, Bone, Play, Sparkles, Camera,
@@ -461,12 +462,13 @@ function WorkbenchStudio() {
     window.__studioModStackReorder = (i, dir) => modStackReorder(i, dir);
     window.__studioModStackGet = () => { const m = selectedMeshRef.current; return (m && m.userData.archdiscStudioModStack) ? JSON.parse(JSON.stringify(m.userData.archdiscStudioModStack.mods)) : []; };
     window.__studioDynaMesh = (res) => dynaMeshSelected(res);
+    window.__studioQuadRemesh = (res) => quadRemeshSelected(res);
     // Substance-style texture paint on the selected mesh's UV map.
     window.__studioPaintTextureAt = (uv, color, radius, channel) => { const m = selectedMeshRef.current; if (!m) return null; return paintTextureAt(m, { x: uv[0], y: uv[1] }, color || brushPaintColor, radius, channel); };
     window.__studioReadTexel = (uv, channel) => { const m = selectedMeshRef.current; if (!m) return null; return readTexel(m, { x: uv[0], y: uv[1] }, channel); };
     window.__studioPolyPaintAt = (pt, color, radius) => { const m = selectedMeshRef.current; if (!m) return null; return paintPolyAt(m, new THREE.Vector3(pt[0], pt[1], pt[2]), color || brushPaintColor, radius || 0.012); };
     window.__studioReadVertexColor = (i) => { const m = selectedMeshRef.current; const col = m && m.geometry && m.geometry.attributes.color; if (!col) return null; return [Math.round(col.getX(i) * 255), Math.round(col.getY(i) * 255), Math.round(col.getZ(i) * 255)]; };
-    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioAddNurbsSurface; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; };
+    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioAddNurbsSurface; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; };
   });
   // Auto-frame on primitive count change so the camera always shows
   // the current scene without the user having to hit Home.
@@ -708,6 +710,22 @@ function WorkbenchStudio() {
       return { vertices: geo.attributes.position.count, ...geo.userData.archdiscDynaMesh };
     }
     return { error: 'dynamesh produced no geometry' };
+  }
+
+  // ── Quad Remesh (uniform quad-dominant retopology) ──
+  function quadRemeshSelected(res) {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    const geo = quadRemeshGeometry(mesh.geometry, { resolution: res || 22 });
+    if (geo && geo.attributes.position && geo.attributes.position.count > 0) {
+      if (mesh.geometry) mesh.geometry.dispose();
+      mesh.geometry = geo;
+      mesh.userData.archdiscStudioQuadRemesh = geo.userData.archdiscQuadRemesh;
+      mesh.userData.archdiscQuads = geo.userData.archdiscQuads;
+      recomputeMeshStats(window.__archdiscScene);
+      return { vertices: geo.attributes.position.count, ...geo.userData.archdiscQuadRemesh };
+    }
+    return { error: 'quad remesh produced no geometry' };
   }
 
   // ── NURBS surface (Maya / Rhino / Plasticity) ──
@@ -8624,6 +8642,9 @@ function WorkbenchStudio() {
                     </button>
                     <button type="button" className="ribbon-tool" data-studio-ribbon-action="dynamesh" onClick={() => dynaMeshSelected(26)} disabled={!selectedKind} title="ZBrush DynaMesh — uniform-topology voxel reskin of the selected mesh">
                       <span className="ribbon-tool-icon">⬢</span><span className="ribbon-tool-label">DynaMesh</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="quad-remesh" onClick={() => quadRemeshSelected(22)} disabled={!selectedKind} title="Quad Remesh — uniform quad-dominant retopology (real 4-sided quad faces; field-aligned ZRemesher is a further extension)">
+                      <span className="ribbon-tool-icon">▦</span><span className="ribbon-tool-label">Quad Remesh</span>
                     </button>
                   </div>
                   <div className="ribbon-group-label">Engine · Advanced</div>

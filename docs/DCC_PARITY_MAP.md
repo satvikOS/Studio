@@ -25,7 +25,7 @@ tooltips, mirror the tool's algorithm + UX, and update this table.
 | Masking (mask buffer) | DONE | real per-vertex protect-mask: `paintMaskAt` + `mask` brush mode; the brush restores masked verts post-stroke; masked areas shade darker; Clear/Invert (slice 151) |
 | Sculpt layers (multi-res levels) | STUB | `sculptLayer` inflate+counter — need a layer stack |
 | DynaMesh (uniform reskin) | DONE | `dynaMeshGeometry` — voxelise (ray-crossing point-in-mesh) -> watertight cuberille -> weld -> Laplacian smooth; uniform-topology reskin (slice 155) |
-| ZRemesher (quad retopology) | ABSENT | no retopology |
+| ZRemesher (quad retopology) | PARTIAL | UNIFORM quad remesh shipped — `quadRemeshGeometry` voxelises -> genuine 4-sided quad faces -> weld -> smooth (slice 164). Field-aligned / curvature-adaptive quad FLOW (true ZRemesher) is the remaining deep extension |
 | Polypaint (vertex paint by brush) | DONE | `paintPolyAt` — real per-vertex colour brush with radial falloff; `polypaint` brush mode + colour picker (slice 161) |
 | Stamp / stencil / alpha brushes | DONE | `stamp` brush mode — procedural alpha (concentric rings) drives a patterned relief, not a uniform dome (slice 163). Custom alpha-image stencils are the next extension |
 | Subtools / subtool hierarchy | ABSENT | flat primitive stack |
