@@ -49,6 +49,7 @@ tooltips, mirror the tool's algorithm + UX, and update this table.
 | Deformer stack / node editor | DONE | non-destructive modifier stack (slice 154) + the geometry node editor (slice 152) |
 | MASH / instancing | PARTIAL | Array modifier + foliage instancing |
 | Rigging (joints / IK / constraints / skinning) | PARTIAL | armature + IK + constraints shipped (see GAME_ENGINE map) |
+| Timeline / Sequencer (keyframe track editor) | DONE | native monotone Sequencer dock (slice 167, Unreal Sequencer / Unity Timeline / Blender Dope Sheet) — frame ruler, draggable playhead/scrubber, transport, one track per animated object with keyframe diamonds; wired to the keyframe engine which now interpolates position + rotation + SCALE with linear/bezier/constant easing. Replaces the inherited blue display-only TimelineEditor |
 
 ## 3ds Max
 

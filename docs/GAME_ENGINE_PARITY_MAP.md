@@ -98,13 +98,15 @@ This map catalogs every Studio feature with its game-engine counterpart.
   resolution + positional correction (bodies stack/settle without
   interpenetration), mass-by-volume, ground + contact friction. Drives the
   VFX/Sim "Drop" tool; `__studioPhysicsStep`/`__studioPhysicsState`.
+- Sequencer / Timeline track editor (Unreal Sequencer / Unity Timeline) — DONE
+  (slice 167). Native monotone Sequencer dock: frame ruler, scrubber/playhead,
+  transport, per-object keyframe tracks; interpolates position/rotation/scale.
 
 ## Pending engine features (queued)
 
 - Blueprint visual scripting graph (Unreal Blueprint / Unity Visual Scripting)
 - AnimBP state machine (Unreal Animation Blueprint / Unity Animator state machine)
 - Niagara emitter graph (separate from Studio's particle presets)
-- Sequencer / Timeline track editor (Unreal Sequencer / Unity Timeline)
 - Datasmith-class asset import (FBX, USD, Datasmith)
 - Lightmass baking (Unreal Lightmass / Unity Progressive Lightmapper)
 - World Partition + streaming (Unreal World Partition / Unity Addressables)

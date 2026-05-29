@@ -19,6 +19,7 @@ import { gridSignature, compareSignatures } from '../../ai/ArchiePerception.js';
 import { evaluateGraph, evalModifierStack, NODE_TYPES } from './nodegraph/nodeGraphEval.js';
 import NodeGraphEditor from './nodegraph/NodeGraphEditor.jsx';
 import { MATERIAL_NODE_TYPES, evalMaterialGraph, materialSeed } from './nodegraph/materialNodes.js';
+import StudioSequencer from './anim/StudioSequencer.jsx';
 import { buildNurbsSurfaceGeometry } from './nurbs/nurbsSurface.js';
 import { dynaMeshGeometry } from './remesh/dynaMesh.js';
 import { quadRemeshGeometry } from './remesh/quadRemesh.js';
@@ -320,6 +321,7 @@ function WorkbenchStudio() {
   const [brushMode, setBrushMode]         = useState('push');
   const [nodeGraphOpen, setNodeGraphOpen] = useState(false); // Geometry Nodes editor overlay
   const [materialGraphOpen, setMaterialGraphOpen] = useState(false); // Material/shader graph overlay
+  const [sequencerOpen, setSequencerOpen] = useState(false); // Sequencer/Timeline track-editor dock
   const [brushPaintColor, setBrushPaintColor] = useState('#d08a4a'); // Substance-style texture-paint colour
   const [brushPaintChannel, setBrushPaintChannel] = useState('color'); // PBR channel: color/roughness/metalness/emissive
   const [modStackVersion, setModStackVersion] = useState(0); // forces modifier-stack UI refresh
@@ -463,6 +465,10 @@ function WorkbenchStudio() {
     window.__studioPhysicsStep = (steps, dt) => { const n = steps || 1; const h = dt || 0.016; for (let i = 0; i < n; i++) physicsTick(h); return window.__studioPhysicsState(); };
     window.__studioPhysicsState = () => { const scene = window.__archdiscScene; if (!scene) return []; return physicsBodies(scene).map(b => ({ name: b.o.name, pos: [b.o.position.x, b.o.position.y, b.o.position.z], vel: [b.v[0], b.v[1], b.v[2]], radius: b.radius })); };
     window.__studioResetPhysics = () => resetPhysics();
+    // Sequencer / timeline: scrub the frame, insert a key at an explicit frame, read keys.
+    window.__studioSetFrame = (f) => { setCurrentFrame(Math.max(0, Math.round(f))); return Math.round(f); };
+    window.__studioInsertKeyframeAt = (f) => insertKeyframe(f);
+    window.__studioGetKeyframes = () => keyframes.map((k) => ({ ...k }));
     window.__studioAddNurbsSurface = (opts) => addNurbsSurface(opts);
     // Non-destructive modifier stack (operates on the selected mesh).
     window.__studioModStackAdd = (type, params) => modStackAdd(type, params);
@@ -476,7 +482,7 @@ function WorkbenchStudio() {
     window.__studioReadTexel = (uv, channel) => { const m = selectedMeshRef.current; if (!m) return null; return readTexel(m, { x: uv[0], y: uv[1] }, channel); };
     window.__studioPolyPaintAt = (pt, color, radius) => { const m = selectedMeshRef.current; if (!m) return null; return paintPolyAt(m, new THREE.Vector3(pt[0], pt[1], pt[2]), color || brushPaintColor, radius || 0.012); };
     window.__studioReadVertexColor = (i) => { const m = selectedMeshRef.current; const col = m && m.geometry && m.geometry.attributes.color; if (!col) return null; return [Math.round(col.getX(i) * 255), Math.round(col.getY(i) * 255), Math.round(col.getZ(i) * 255)]; };
-    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioAddNurbsSurface; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; };
+    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAddNurbsSurface; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; };
   });
   // Auto-frame on primitive count change so the camera always shows
   // the current scene without the user having to hit Home.
@@ -3653,14 +3659,15 @@ function WorkbenchStudio() {
    * pose before inserting the next keyframe — without the timeline
    * snapping the mesh back to the last keyframed pose.
    */
-  function insertKeyframe() {
+  function insertKeyframe(frameArg) {
     const mesh = selectedMeshRef.current;
     if (!mesh) return null;
     const k = {
       meshUuid: mesh.uuid,
-      frame: Math.round(currentFrame),
+      frame: Math.round(frameArg != null ? frameArg : currentFrame),
       px: mesh.position.x, py: mesh.position.y, pz: mesh.position.z,
       rx: mesh.rotation.x, ry: mesh.rotation.y, rz: mesh.rotation.z,
+      sx: mesh.scale.x, sy: mesh.scale.y, sz: mesh.scale.z,
     };
     setKeyframes(kfs => {
       // Replace any existing KF at the same (mesh, frame).
@@ -3713,6 +3720,10 @@ function WorkbenchStudio() {
         before.ry * (1 - t) + after.ry * t,
         before.rz * (1 - t) + after.rz * t,
       );
+      // Scale (older keys may predate scale capture — default to 1).
+      const bsx = before.sx ?? 1, bsy = before.sy ?? 1, bsz = before.sz ?? 1;
+      const asx = after.sx ?? 1, asy = after.sy ?? 1, asz = after.sz ?? 1;
+      mesh.scale.set(bsx * (1 - t) + asx * t, bsy * (1 - t) + asy * t, bsz * (1 - t) + asz * t);
     });
   }
   useEffect(() => {
@@ -9140,6 +9151,10 @@ function WorkbenchStudio() {
                       <span className="ribbon-tool-icon">▶</span>
                       <span className="ribbon-tool-label">{isAnimating ? 'Stop' : 'Animate'}</span>
                     </button>
+                    <button type="button" className={'ribbon-tool' + (sequencerOpen ? ' active' : '')} data-studio-ribbon-action="sequencer" onClick={() => setSequencerOpen(v => !v)} title="Sequencer / Timeline track editor — Unreal Sequencer / Unity Timeline / Blender Dope Sheet (keyframe tracks, scrub, play; interpolates position/rotation/scale)">
+                      <span className="ribbon-tool-icon">⊟</span>
+                      <span className="ribbon-tool-label">Sequencer</span>
+                    </button>
                   </div>
                   <div className="ribbon-group-label">Playback</div>
                 </div>
@@ -12730,6 +12745,26 @@ function WorkbenchStudio() {
         seedGraph={materialSeed}
         mirrorKey="__studioMaterialGraphState"
         kind="material"
+      />
+      <StudioSequencer
+        open={sequencerOpen}
+        onClose={() => setSequencerOpen(false)}
+        frames={240}
+        currentFrame={currentFrame}
+        onScrub={(f) => setCurrentFrame(f)}
+        playing={isPlayingTimeline}
+        onPlayPause={() => setIsPlayingTimeline(v => !v)}
+        onSetKey={() => insertKeyframe()}
+        onClear={clearKeyframes}
+        tracks={(() => {
+          const scene = window.__archdiscScene;
+          const byMesh = new Map();
+          for (const k of keyframes) { if (!byMesh.has(k.meshUuid)) byMesh.set(k.meshUuid, []); byMesh.get(k.meshUuid).push(k.frame); }
+          return [...byMesh.entries()].map(([uuid, fr]) => {
+            const m = scene && scene.getObjectByProperty('uuid', uuid);
+            return { uuid, name: (m && m.name) || uuid.slice(0, 8), frames: fr.sort((a, b) => a - b) };
+          });
+        })()}
       />
     </>
   );
