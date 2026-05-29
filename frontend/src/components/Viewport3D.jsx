@@ -4,10 +4,33 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls';
 import { Move, RotateCcw, Maximize, MousePointer, Box, Hexagon, Eye, Grid3x3, Layers } from 'lucide-react';
 import { useViewport } from '../contexts/ViewportContext';
-import { ThreeJSBridge, PixelManager, InteractiveSketch, SketchTools, Vec3, ExtrudeFeature, BVH } from '../kernel/index.js';
-import { getFeatureTree, registerSelectedEdgesProvider } from '../workbenches/mechanical-cad/ToolExecutionEngine.js';
-import { getBodyRegistry } from '../foundation/BodyRegistry.js';
 import { matchesBodyKindFilter } from './SwUxOverlays.jsx';
+
+// ── CAD kernel DECOUPLED ──────────────────────────────────────────────────
+// Studio's viewport is pure three.js. It no longer imports the inherited CAD
+// kernel / ToolExecutionEngine / BodyRegistry — those drove sketch, extrude,
+// the B-rep feature tree, and face/edge picking, none of which Studio uses
+// (Studio models via its own ribbon ops + primitive selection). They are
+// replaced by inert, null-safe local stubs so those code paths stay harmless
+// while the viewport pulls in ZERO CAD code (and drops the OCCT WASM weight).
+class PixelManager { register() {} }
+class InteractiveSketch {
+  constructor() { this.active = false; this.entities = []; this.activeTool = 0; this.planeNormal = null; this._penPressure = 0; }
+  onMouseMove() {} onClick() {} getStatus() { return ''; } getProfile() { return []; }
+  activate() {} setTool() {} deactivate() {} onEscape() {} cleanupWithFoundation() {}
+}
+const SketchTools = { NONE: 0, LINE: 1, CIRCLE: 2, RECTANGLE: 3, ARC: 4, DIMENSION: 5 };
+class Vec3 { constructor(x = 0, y = 0, z = 0) { this.x = x; this.y = y; this.z = z; } }
+function ExtrudeFeature() {}
+const BVH = { build: (items) => ({ raycast: () => items }) }; // no accel; checks all
+const ThreeJSBridge = {
+  clearHighlight() {}, hideVertices() {}, showVertices() {}, highlightFace() {},
+  pickFace() { return null; }, solidToGroup() { return null; },
+};
+function getFeatureTree() { return { addExtrude: () => ({ solid: null }) }; }
+function registerSelectedEdgesProvider() {}
+function getBodyRegistry() { return { select() {} }; }
+// ──────────────────────────────────────────────────────────────────────────
 
 // Singletons
 const _pixelManager = new PixelManager();
