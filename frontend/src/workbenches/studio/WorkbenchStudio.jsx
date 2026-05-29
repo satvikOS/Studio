@@ -484,9 +484,11 @@ function WorkbenchStudio() {
     // Substance-style texture paint on the selected mesh's UV map.
     window.__studioPaintTextureAt = (uv, color, radius, channel) => { const m = selectedMeshRef.current; if (!m) return null; return paintTextureAt(m, { x: uv[0], y: uv[1] }, color || brushPaintColor, radius, channel); };
     window.__studioReadTexel = (uv, channel) => { const m = selectedMeshRef.current; if (!m) return null; return readTexel(m, { x: uv[0], y: uv[1] }, channel); };
+    window.__studioBakeNormalFromHeight = (strength) => { const m = selectedMeshRef.current; if (!m) return null; return bakeNormalFromHeight(m, strength); };
+    window.__studioReadNormalTexel = (uv) => { const m = selectedMeshRef.current; const nc = m && m.userData && m.userData._normalCanvas; if (!nc) return null; const d = nc.getContext('2d').getImageData(Math.floor(uv[0] * 512), Math.floor((1 - uv[1]) * 512), 1, 1).data; return [d[0], d[1], d[2]]; };
     window.__studioPolyPaintAt = (pt, color, radius) => { const m = selectedMeshRef.current; if (!m) return null; return paintPolyAt(m, new THREE.Vector3(pt[0], pt[1], pt[2]), color || brushPaintColor, radius || 0.012); };
     window.__studioReadVertexColor = (i) => { const m = selectedMeshRef.current; const col = m && m.geometry && m.geometry.attributes.color; if (!col) return null; return [Math.round(col.getX(i) * 255), Math.round(col.getY(i) * 255), Math.round(col.getZ(i) * 255)]; };
-    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAddNurbsSurface; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; };
+    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAddNurbsSurface; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; };
   });
   // Auto-frame on primitive count change so the camera always shows
   // the current scene without the user having to hit Home.
@@ -4670,6 +4672,9 @@ function WorkbenchStudio() {
     roughness: { map: 'roughnessMap', base: '#b0b0b0', srgb: false },
     metalness: { map: 'metalnessMap', base: '#000000', srgb: false },
     emissive:  { map: 'emissiveMap',  base: '#000000', srgb: true },
+    // Height relief -> bumpMap (mid-grey = neutral). Painting brighter/darker
+    // raises/lowers the surface; a Sobel bake derives a tangent-space normalMap.
+    height:    { map: 'bumpMap',      base: '#808080', srgb: false },
   };
   function ensureChannelCanvas(mesh, channel) {
     if (!mesh || !mesh.geometry || !mesh.geometry.attributes || !mesh.geometry.attributes.uv) return null; // needs UVs
@@ -4688,6 +4693,7 @@ function WorkbenchStudio() {
         if (ch === 'roughness') mesh.material.roughness = 1;
         if (ch === 'metalness') mesh.material.metalness = 1;
         if (ch === 'emissive') { if (mesh.material.emissive) mesh.material.emissive.set('#ffffff'); mesh.material.emissiveIntensity = 1; }
+        if (ch === 'height') mesh.material.bumpScale = 0.05;
         mesh.material.needsUpdate = true;
       }
       // legacy single-channel aliases (color) kept for older callers
@@ -4718,6 +4724,42 @@ function WorkbenchStudio() {
     if (!slot) return null;
     const d = slot.ctx.getImageData(Math.floor(uv.x * TEX_SIZE), Math.floor((1 - uv.y) * TEX_SIZE), 1, 1).data;
     return [d[0], d[1], d[2]];
+  }
+  // Substance "Height -> Normal" — derive a tangent-space normalMap from the
+  // painted height (bump) channel via a Sobel gradient, and wire it as the
+  // material.normalMap. Flat areas read ~(128,128,255); slopes tilt R/G.
+  function bakeNormalFromHeight(mesh, strength) {
+    const slot = mesh && mesh.userData && mesh.userData._texCh && mesh.userData._texCh.height;
+    if (!slot) return { error: 'no height channel painted' };
+    const N = TEX_SIZE;
+    const src = slot.ctx.getImageData(0, 0, N, N).data;
+    const H = (x, y) => src[((Math.max(0, Math.min(N - 1, y)) * N) + Math.max(0, Math.min(N - 1, x))) * 4] / 255;
+    const s = strength || 6;
+    let nc = mesh.userData._normalCanvas;
+    if (!nc) { nc = document.createElement('canvas'); nc.width = N; nc.height = N; mesh.userData._normalCanvas = nc; }
+    const nctx = nc.getContext('2d');
+    const out = nctx.createImageData(N, N);
+    for (let y = 0; y < N; y++) {
+      for (let x = 0; x < N; x++) {
+        // Sobel gradient of the height field.
+        const dx = (H(x + 1, y - 1) + 2 * H(x + 1, y) + H(x + 1, y + 1)) - (H(x - 1, y - 1) + 2 * H(x - 1, y) + H(x - 1, y + 1));
+        const dy = (H(x - 1, y + 1) + 2 * H(x, y + 1) + H(x + 1, y + 1)) - (H(x - 1, y - 1) + 2 * H(x, y - 1) + H(x + 1, y - 1));
+        let nx = -dx * s, ny = -dy * s, nz = 1;
+        const inv = 1 / Math.sqrt(nx * nx + ny * ny + nz * nz);
+        nx *= inv; ny *= inv; nz *= inv;
+        const o = (y * N + x) * 4;
+        out.data[o] = Math.round((nx * 0.5 + 0.5) * 255);
+        out.data[o + 1] = Math.round((ny * 0.5 + 0.5) * 255);
+        out.data[o + 2] = Math.round((nz * 0.5 + 0.5) * 255);
+        out.data[o + 3] = 255;
+      }
+    }
+    nctx.putImageData(out, 0, 0);
+    let ntex = mesh.userData._normalTex;
+    if (!ntex) { ntex = new THREE.CanvasTexture(nc); mesh.userData._normalTex = ntex; }
+    ntex.needsUpdate = true;
+    if (mesh.material) { mesh.material.normalMap = ntex; mesh.material.needsUpdate = true; }
+    return { baked: true };
   }
   // Arm the texture-paint brush (drag on the mesh to paint the active channel).
   function texturePaintCommit() {
@@ -9088,8 +9130,12 @@ function WorkbenchStudio() {
                         <option value="roughness">Roughness</option>
                         <option value="metalness">Metalness</option>
                         <option value="emissive">Emissive</option>
+                        <option value="height">Height (bump)</option>
                       </select>
                     </label>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="bake-normal" onClick={() => bakeNormalFromHeight(selectedMeshRef.current)} disabled={!selectedKind} title="Substance 'Height -> Normal' — Sobel-bake a tangent-space normalMap from the painted Height channel">
+                      <span className="ribbon-tool-icon">◳</span><span className="ribbon-tool-label">Bake Normal</span>
+                    </button>
                   </div>
                   <div className="ribbon-group-label">UV</div>
                 </div>
