@@ -109,17 +109,53 @@ export function critique(plan, verifyResult) {
   return parts ? score / parts : (verifyResult.bodies > 0 ? 1 : 0);
 }
 
-// Self-improvement within a goal: nudge the plan after a weak build (e.g. the
-// last body failed to register — re-emit it). Conservative, deterministic.
-export function refinePlan(plan, verifyResult) {
+// Self-improvement within a goal, deterministic (no randomness). Two modes:
+//   - structure incomplete (fewer bodies than expected): re-emit the last body
+//     slightly nudged — covers a dropped placement.
+//   - structure complete but the render does not yet match the reference:
+//     PERCEPTION-GUIDED search. Sweep the plan's declared per-body `variants`
+//     (each a partial override: {scale?, color?, emissive?, pos?}) so the loop
+//     searches for the build that LOOKS like the reference; the loop keeps the
+//     best-scoring variant. This is what turns the perception score from a
+//     pass/fail gate into a signal Archie actively optimises against — it
+//     iterates toward visual parity. (Vary STRUCTURE, e.g. scale, for a strong
+//     signal: the NCC term is brightness-normalised, so colour-only tweaks
+//     barely move the score.)
+// ctx = { visual, structural, visualParity } from the current iteration.
+export function refinePlan(plan, verifyResult, ctx = {}) {
   const next = JSON.parse(JSON.stringify(plan));
   const exp = next.expect || {};
-  if (typeof exp.bodies === 'number' && (verifyResult.bodies || 0) < exp.bodies && next.bodies && next.bodies.length) {
-    // duplicate the final body slightly nudged — covers a dropped placement
+  const structureIncomplete = typeof exp.bodies === 'number' && (verifyResult.bodies || 0) < exp.bodies;
+
+  if (structureIncomplete && next.bodies && next.bodies.length) {
     const last = JSON.parse(JSON.stringify(next.bodies[next.bodies.length - 1]));
     if (last.pos) last.pos = [last.pos[0], (last.pos[1] || 0) + 0.001, last.pos[2]];
     next.bodies.push(last);
     next._refined = (next._refined || 0) + 1;
+    return next;
+  }
+
+  const tweakables = (next.bodies || [])
+    .map((b, i) => ({ b, i }))
+    .filter(({ b }) => Array.isArray(b.variants) && b.variants.length > 1);
+  const belowVisual = typeof ctx.visual === 'number' && ctx.visual < (ctx.visualParity != null ? ctx.visualParity : 1);
+  if (tweakables.length && belowVisual) {
+    // Advance to the next variant and mixed-radix-decode it across the
+    // tweakable bodies' option counts — a complete deterministic sweep of the
+    // declared appearance space; apply each chosen variant's overrides.
+    let variant = (next._variant || 0) + 1;
+    next._variant = variant;
+    for (const { b } of tweakables) {
+      const n = b.variants.length;
+      const choice = b.variants[variant % n];
+      variant = Math.floor(variant / n);
+      if (choice) {
+        if (choice.scale) b.scale = choice.scale;
+        if (choice.color) b.color = choice.color;
+        if (choice.emissive != null) b.emissive = choice.emissive;
+        if (choice.pos) b.pos = choice.pos;
+      }
+    }
   }
   return next;
 }
@@ -146,10 +182,12 @@ export async function runArchieLoop(opts = {}) {
     visualWeight = 0.6,
     // When a goal carries a reference, parity also requires the render to be
     // at least this visually similar. The NCC+colour comparator tops out near
-    // ~0.86 on a perfect (anti-aliased) rebuild and sits ~0.33 on a different
-    // scene, so 0.72 cleanly separates "this is the reference" from "this is
-    // something else". Structure must be complete AND visual >= visualParity.
-    visualParity = 0.72,
+    // ~0.88 on a perfect (anti-aliased) match and sits ~0.33 on a different
+    // scene. Set high (0.82) so parity means a GENUINE visual match, not merely
+    // "closer than something else" — this keeps Archie searching NON-STOP to
+    // the best/last variant instead of settling on a so-so one. Structure must
+    // be complete AND visual >= visualParity.
+    visualParity = 0.82,
     plan: llmPlanner = null,
     curriculum = DEFAULT_CURRICULUM,
     skillStore = new ArchieSkillStore(),
@@ -211,7 +249,9 @@ export async function runArchieLoop(opts = {}) {
       const structOK = structural >= parityScore;
       const visualOK = (typeof visual !== 'number') ? true : visual >= visualParity;
       if (structOK && visualOK) { reachedParity = true; break; }
-      plan = refinePlan(plan, v); // self-improve within the goal, then retry
+      // self-improve within the goal (perception-guided when a reference is
+      // set), then retry — the loop keeps the best-scoring variant in `best`.
+      plan = refinePlan(plan, v, { visual, structural, visualParity });
     }
 
     const verdict = skillStore.save(goal, best.plan, Math.max(0, best.score));
