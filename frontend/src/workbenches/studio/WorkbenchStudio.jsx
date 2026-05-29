@@ -6,6 +6,8 @@ import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js';
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
+import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
+import { USDZLoader } from 'three/examples/jsm/loaders/USDZLoader.js';
 import { VertexNormalsHelper } from 'three/examples/jsm/helpers/VertexNormalsHelper.js';
 import { SUZANNE_POSITIONS, SUZANNE_INDICES } from './SuzanneGeometry.js';
 import { TEAPOT_POSITIONS, TEAPOT_INDICES } from './TeapotGeometry.js';
@@ -4183,6 +4185,15 @@ function WorkbenchStudio() {
           else resolve({ added: 0, error: 'unsupported glTF data' });
         });
       }
+      if (fmt === 'fbx') { // Autodesk FBX (Maya/Max/Unreal/Unity interop)
+        const buf = (data instanceof ArrayBuffer || typeof data === 'string') ? data : null;
+        if (!buf) return { added: 0, error: 'fbx needs ArrayBuffer or ASCII text' };
+        return { added: registerImportedMeshes(new FBXLoader().parse(buf, ''), 'fbx') };
+      }
+      if (fmt === 'usdz' || fmt === 'usd') { // Pixar USD / USDZ (Apple, Omniverse)
+        if (!(data instanceof ArrayBuffer)) return { added: 0, error: 'usdz needs ArrayBuffer' };
+        return { added: registerImportedMeshes(new USDZLoader().parse(data), 'usdz') };
+      }
       return { added: 0, error: `unsupported format: ${fmt}` };
     } catch (e) {
       return { added: 0, error: String(e && e.message || e) };
@@ -4194,7 +4205,7 @@ function WorkbenchStudio() {
     const fmt = String(format || '').toLowerCase();
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = fmt === 'obj' ? '.obj' : '.gltf,.glb';
+    input.accept = fmt === 'obj' ? '.obj' : fmt === 'fbx' ? '.fbx' : (fmt === 'usdz' || fmt === 'usd') ? '.usdz,.usd' : '.gltf,.glb';
     input.onchange = () => {
       const file = input.files && input.files[0];
       if (!file) return;
@@ -8577,6 +8588,12 @@ function WorkbenchStudio() {
                     </button>
                     <button type="button" className="ribbon-tool" data-studio-ribbon-action="import-obj" onClick={() => importAsset('obj')} title="Import OBJ — universal DCC interop (real OBJLoader)">
                       <span className="ribbon-tool-icon">⤓</span><span className="ribbon-tool-label">Import OBJ</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="import-fbx" onClick={() => importAsset('fbx')} title="Import FBX — Maya / 3ds Max / Unreal / Unity interop (real FBXLoader)">
+                      <span className="ribbon-tool-icon">⤓</span><span className="ribbon-tool-label">Import FBX</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="import-usd" onClick={() => importAsset('usdz')} title="Import USD/USDZ — Pixar USD / Apple / Omniverse interop (real USDZLoader)">
+                      <span className="ribbon-tool-icon">⤓</span><span className="ribbon-tool-label">Import USD</span>
                     </button>
                     <button type="button" className="ribbon-tool" data-studio-ribbon-action="lightmass" onClick={() => lightmassBake(0.7)} disabled={!selectedKind} title="Unreal Lightmass / Unity Progressive Lightmapper — bake lighting to vertex colors">
                       <span className="ribbon-tool-icon">☀</span><span className="ribbon-tool-label">Lightmass</span>

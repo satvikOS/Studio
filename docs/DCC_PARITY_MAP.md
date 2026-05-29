@@ -93,7 +93,7 @@ tooltips, mirror the tool's algorithm + UX, and update this table.
 |------------|--------|--------------|
 | glTF / OBJ import | DONE | real GLTFLoader / OBJLoader (slice 145) |
 | glTF export | DONE | GLTFExporter |
-| FBX / USD import | ABSENT | — |
+| FBX / USD import | DONE | Autodesk FBX (three FBXLoader) + Pixar USD/USDZ (three USDZLoader) wired into the import pipeline + ribbon buttons (slice 162); real battle-tested loaders |
 
 ## Caveat
 
