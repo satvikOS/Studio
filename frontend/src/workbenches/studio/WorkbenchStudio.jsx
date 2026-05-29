@@ -23,6 +23,7 @@ import StudioSequencer from './anim/StudioSequencer.jsx';
 import { ANIM_STATES, createAnimBP, animBPSetState, animBPStep } from './anim/animBP.js';
 import { BLUEPRINT_NODE_TYPES, runBlueprint, blueprintSeed } from './blueprint/blueprintNodes.js';
 import { NIAGARA_NODE_TYPES, niagaraSeed, evalNiagaraGraph, simulateEmitter } from './vfx/niagaraNodes.js';
+import { BT_NODE_TYPES, behaviorTreeSeed, tickBehaviorTree } from './ai/behaviorTreeNodes.js';
 import { buildNurbsSurfaceGeometry } from './nurbs/nurbsSurface.js';
 import { buildSweptGeometry } from './surf/sweepLoft.js';
 import { bakeAmbientOcclusion } from './bake/ambientOcclusion.js';
@@ -329,6 +330,7 @@ function WorkbenchStudio() {
   const [sequencerOpen, setSequencerOpen] = useState(false); // Sequencer/Timeline track-editor dock
   const [blueprintOpen, setBlueprintOpen] = useState(false); // Blueprint/visual-scripting graph overlay
   const [niagaraOpen, setNiagaraOpen] = useState(false); // Niagara particle emitter graph overlay
+  const [behaviorTreeOpen, setBehaviorTreeOpen] = useState(false); // Behavior tree (AI) graph overlay
   const [animBPState, setAnimBPState] = useState('idle'); // Animation state machine current state
   const [animBPPlaying, setAnimBPPlaying] = useState(false);
   const animBPRef = useRef(null); // { machine, base:{x,y,z,ry}, meshUuid }
@@ -477,6 +479,8 @@ function WorkbenchStudio() {
     // Niagara particle emitter graph: evaluate to a sim'd Points burst + step it.
     window.__studioEvalNiagara = (graph) => evalNiagaraToScene(graph);
     window.__studioNiagaraStep = (dt) => niagaraStep(dt);
+    // Behaviour tree: tick the AI tree N times (drives the selected agent).
+    window.__studioBTTick = (steps) => btTick(steps);
     // Rigid-body sim: deterministically advance N steps (e2e/Archie, rAF-free) + read state.
     window.__studioPhysicsStep = (steps, dt) => { const n = steps || 1; const h = dt || 0.016; for (let i = 0; i < n; i++) physicsTick(h); return window.__studioPhysicsState(); };
     window.__studioPhysicsState = () => { const scene = window.__archdiscScene; if (!scene) return []; return physicsBodies(scene).map(b => ({ name: b.o.name, pos: [b.o.position.x, b.o.position.y, b.o.position.z], vel: [b.v[0], b.v[1], b.v[2]], radius: b.radius })); };
@@ -505,7 +509,7 @@ function WorkbenchStudio() {
     window.__studioReadNormalTexel = (uv) => { const m = selectedMeshRef.current; const nc = m && m.userData && m.userData._normalCanvas; if (!nc) return null; const d = nc.getContext('2d').getImageData(Math.floor(uv[0] * 512), Math.floor((1 - uv[1]) * 512), 1, 1).data; return [d[0], d[1], d[2]]; };
     window.__studioPolyPaintAt = (pt, color, radius) => { const m = selectedMeshRef.current; if (!m) return null; return paintPolyAt(m, new THREE.Vector3(pt[0], pt[1], pt[2]), color || brushPaintColor, radius || 0.012); };
     window.__studioReadVertexColor = (i) => { const m = selectedMeshRef.current; const col = m && m.geometry && m.geometry.attributes.color; if (!col) return null; return [Math.round(col.getX(i) * 255), Math.round(col.getY(i) * 255), Math.round(col.getZ(i) * 255)]; };
-    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioEvalNiagara; delete window.__studioNiagaraStep; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAnimBPSet; delete window.__studioAnimBPStep; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; };
+    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioEvalNiagara; delete window.__studioNiagaraStep; delete window.__studioBTTick; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAnimBPSet; delete window.__studioAnimBPStep; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; };
   });
   // Auto-frame on primitive count change so the camera always shows
   // the current scene without the user having to hit Home.
@@ -772,6 +776,22 @@ function WorkbenchStudio() {
     setPrimitiveCount(c => c + 1);
     recomputeMeshStats(scene);
     return { count, lifetime: spec.lifetime };
+  }
+  // ── Behaviour Tree (Unreal Behavior Tree / Unity Behavior Designer): tick an
+  //    AI tree that drives the selected mesh (agent) toward a blackboard target. ──
+  function btTickOnce(graph) {
+    const agent = selectedMeshRef.current;
+    if (!agent) return { error: 'no agent — select a mesh first' };
+    const ctx = { agent, target: [0.5, 0, 0], threshold: 0.05, step: 0.06, log: [] };
+    const r = tickBehaviorTree(graph || { nodes: [], edges: [] }, ctx);
+    if (r.error) return r;
+    const d = Math.hypot(0.5 - agent.position.x, agent.position.y, agent.position.z);
+    return { status: r.status, log: r.log, agentX: agent.position.x, dist: d, color: agent.material && agent.material.color ? agent.material.color.getHexString() : null };
+  }
+  function btTick(steps) {
+    const g = window.__studioBTGraphState; let r = null;
+    for (let i = 0; i < (steps || 1); i++) r = btTickOnce(g);
+    return r;
   }
   function niagaraStep(dt) {
     const scene = window.__archdiscScene; if (!scene) return null;
@@ -8933,6 +8953,9 @@ function WorkbenchStudio() {
                     <button type="button" className={'ribbon-tool' + (niagaraOpen ? ' active' : '')} data-studio-ribbon-action="niagara-editor" onClick={() => setNiagaraOpen(v => !v)} title="Niagara / VFX Graph — Unreal Niagara / Unity VFX Graph (module graph: Spawn/Velocity/Force/Color-over-Life -> Emitter, simulated particle burst)">
                       <span className="ribbon-tool-icon">✸</span><span className="ribbon-tool-label">Niagara FX</span>
                     </button>
+                    <button type="button" className={'ribbon-tool' + (behaviorTreeOpen ? ' active' : '')} data-studio-ribbon-action="behaviortree-editor" onClick={() => setBehaviorTreeOpen(v => !v)} title="Behaviour Tree — Unreal Behavior Tree + Blackboard / Unity Behavior Designer (Root -> Selector/Sequence -> Condition/Action; ticks drive the selected agent)">
+                      <span className="ribbon-tool-icon">⌥</span><span className="ribbon-tool-label">Behavior Tree</span>
+                    </button>
                     <button type="button" className="ribbon-tool" data-studio-ribbon-action="dynamesh" onClick={() => dynaMeshSelected(26)} disabled={!selectedKind} title="ZBrush DynaMesh — uniform-topology voxel reskin of the selected mesh">
                       <span className="ribbon-tool-icon">⬢</span><span className="ribbon-tool-label">DynaMesh</span>
                     </button>
@@ -12968,6 +12991,17 @@ function WorkbenchStudio() {
         seedGraph={niagaraSeed}
         mirrorKey="__studioNiagaraGraphState"
         kind="niagara"
+      />
+      <NodeGraphEditor
+        open={behaviorTreeOpen}
+        onClose={() => setBehaviorTreeOpen(false)}
+        onEvaluate={btTickOnce}
+        nodeTypes={BT_NODE_TYPES}
+        title="Behavior Tree"
+        subtitle="Unreal Behavior Tree / Unity Behavior Designer (tick to drive the agent)"
+        seedGraph={behaviorTreeSeed}
+        mirrorKey="__studioBTGraphState"
+        kind="behaviortree"
       />
       <StudioSequencer
         open={sequencerOpen}

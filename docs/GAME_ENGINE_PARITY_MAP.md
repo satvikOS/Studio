@@ -116,6 +116,11 @@ This map catalogs every Studio feature with its game-engine counterpart.
   Velocity / Force / Colour-over-Life -> Emitter Output) on the shared node-graph
   engine, simulated as a deterministic THREE.Points burst (pos = o + v*age +
   0.5*F*age^2); "Niagara FX" ribbon toggle + `__studioEvalNiagara`/`__studioNiagaraStep`.
+- Behaviour Tree + Blackboard (Unreal Behavior Tree / Unity Behavior Designer) —
+  DONE (slice 174). Tickable AI tree on the shared node-graph engine (Root ->
+  Selector/Sequence -> Condition/Action, children ordered left-to-right); the seed
+  tree drives the selected agent toward a blackboard target then signals arrival;
+  "Behavior Tree" ribbon toggle + `__studioBTTick`.
 
 ## Pending engine features (queued)
 
