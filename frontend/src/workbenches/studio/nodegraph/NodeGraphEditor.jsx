@@ -32,24 +32,32 @@ function seed() {
 
 const portY = (node, ports, idx) => node.y + HEAD_H + 8 + idx * PORT_DY + 5;
 
-export default function NodeGraphEditor({ open, onClose, onEvaluate }) {
-  const [{ nodes, edges }, setGraph] = useState(seed);
+export default function NodeGraphEditor({
+  open, onClose, onEvaluate,
+  nodeTypes = NODE_TYPES,
+  title = 'Geometry Nodes',
+  subtitle = 'Houdini SOP / Blender Geometry Nodes / Grasshopper',
+  seedGraph,
+  mirrorKey = '__studioNodeGraphState',
+  kind = 'geometry',
+}) {
+  const [{ nodes, edges }, setGraph] = useState(() => (seedGraph ? seedGraph() : seed()));
   const [pendingFrom, setPendingFrom] = useState(null); // { node, port }
   const [status, setStatus] = useState('');
   const dragRef = useRef(null);
 
   // Mirror the live graph for e2e + Archie introspection / programmatic eval.
   useEffect(() => {
-    window.__studioNodeGraphState = { nodes, edges };
-    return () => { try { delete window.__studioNodeGraphState; } catch (_) { /* */ } };
-  }, [nodes, edges]);
+    window[mirrorKey] = { nodes, edges };
+    return () => { try { delete window[mirrorKey]; } catch (_) { /* */ } };
+  }, [nodes, edges, mirrorKey]);
 
   const addNode = useCallback((type) => {
-    const t = NODE_TYPES[type];
+    const t = nodeTypes[type];
     const params = {};
     (t.params || []).forEach((p) => { params[p.key] = p.default; });
     setGraph((g) => ({ ...g, nodes: [...g.nodes, { id: newId(type), type, x: 60 + (g.nodes.length % 5) * 40, y: 280 + (g.nodes.length % 4) * 30, params }] }));
-  }, []);
+  }, [nodeTypes]);
 
   const removeNode = useCallback((id) => {
     setGraph((g) => ({ nodes: g.nodes.filter((n) => n.id !== id), edges: g.edges.filter((e) => e.from.node !== id && e.to.node !== id) }));
@@ -89,6 +97,7 @@ export default function NodeGraphEditor({ open, onClose, onEvaluate }) {
   const evaluate = () => {
     const r = onEvaluate ? onEvaluate({ nodes, edges }) : null;
     if (r && r.error) setStatus(`error: ${r.error}`);
+    else if (r && r.message) setStatus(r.message);
     else if (r) setStatus(`evaluated -> ${r.vertices} verts to scene`);
   };
 
@@ -98,7 +107,7 @@ export default function NodeGraphEditor({ open, onClose, onEvaluate }) {
   const wirePath = (e) => {
     const fn = nodeById(e.from.node), tn = nodeById(e.to.node);
     if (!fn || !tn) return null;
-    const ft = NODE_TYPES[fn.type], tt = NODE_TYPES[tn.type];
+    const ft = nodeTypes[fn.type], tt = nodeTypes[tn.type];
     const fIdx = (ft.outputs || []).indexOf(e.from.port);
     const tIdx = (tt.inputs || []).indexOf(e.to.port);
     const x1 = fn.x + NODE_W, y1 = portY(fn, ft.outputs, fIdx < 0 ? 0 : fIdx);
@@ -108,10 +117,10 @@ export default function NodeGraphEditor({ open, onClose, onEvaluate }) {
   };
 
   return (
-    <div data-studio-nodegraph="editor" style={{ position: 'absolute', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.92)', color: '#dcdcdc', fontSize: 12, display: 'flex', flexDirection: 'column' }}>
+    <div data-studio-nodegraph={kind} style={{ position: 'absolute', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.92)', color: '#dcdcdc', fontSize: 12, display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: '#0c0c0c', borderBottom: '1px solid #222' }}>
-        <strong style={{ letterSpacing: 0.5 }}>Geometry Nodes</strong>
-        <span style={{ opacity: 0.5 }}>Houdini SOP / Blender Geometry Nodes / Grasshopper</span>
+        <strong style={{ letterSpacing: 0.5 }}>{title}</strong>
+        <span style={{ opacity: 0.5 }}>{subtitle}</span>
         <div style={{ flex: 1 }} />
         <button data-studio-nodegraph-action="evaluate" onClick={evaluate} style={btn(true)}>Evaluate → Scene</button>
         <button data-studio-nodegraph-action="clear" onClick={() => setGraph({ nodes: [], edges: [] })} style={btn()}>Clear</button>
@@ -120,8 +129,8 @@ export default function NodeGraphEditor({ open, onClose, onEvaluate }) {
       {/* palette */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: '5px 10px', background: '#0a0a0a', borderBottom: '1px solid #1c1c1c' }}>
         <span style={{ opacity: 0.5, alignSelf: 'center' }}>Add:</span>
-        {Object.keys(NODE_TYPES).map((t) => (
-          <button key={t} data-studio-nodegraph-add={t} onClick={() => addNode(t)} style={btn()}>{NODE_TYPES[t].label}</button>
+        {Object.keys(nodeTypes).map((t) => (
+          <button key={t} data-studio-nodegraph-add={t} onClick={() => addNode(t)} style={btn()}>{nodeTypes[t].label}</button>
         ))}
         <div style={{ flex: 1 }} />
         <span style={{ opacity: 0.55, alignSelf: 'center' }} data-studio-nodegraph-status>{status}</span>
@@ -132,7 +141,8 @@ export default function NodeGraphEditor({ open, onClose, onEvaluate }) {
           {edges.map((e, i) => { const d = wirePath(e); return d ? <path key={i} d={d} fill="none" stroke="#6a6a6a" strokeWidth="1.6" /> : null; })}
         </svg>
         {nodes.map((node) => {
-          const t = NODE_TYPES[node.type];
+          const t = nodeTypes[node.type];
+          if (!t) return null;
           return (
             <div key={node.id} data-studio-nodegraph-node={node.type} style={{ position: 'absolute', left: node.x, top: node.y, width: NODE_W, background: '#161616', border: '1px solid #2a2a2a', borderRadius: 4 }}>
               <div onPointerDown={(e) => onHeadDown(node, e)} style={{ height: HEAD_H, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 6px', background: '#1f1f1f', borderBottom: '1px solid #2a2a2a', cursor: 'move', borderRadius: '4px 4px 0 0' }}>
@@ -153,7 +163,9 @@ export default function NodeGraphEditor({ open, onClose, onEvaluate }) {
                     <span style={{ opacity: 0.55, width: 56, fontSize: 11 }}>{pr.key}</span>
                     {pr.type === 'enum'
                       ? <select data-studio-nodegraph-param={`${node.id}:${pr.key}`} value={node.params[pr.key]} onChange={(e) => setParam(node.id, pr.key, e.target.value)} style={inp}>{pr.options.map((o) => <option key={o} value={o}>{o}</option>)}</select>
-                      : <input data-studio-nodegraph-param={`${node.id}:${pr.key}`} type="number" step="0.1" value={node.params[pr.key]} onChange={(e) => setParam(node.id, pr.key, parseFloat(e.target.value))} style={inp} />}
+                      : pr.type === 'color'
+                        ? <input data-studio-nodegraph-param={`${node.id}:${pr.key}`} type="color" value={node.params[pr.key]} onChange={(e) => setParam(node.id, pr.key, e.target.value)} style={{ ...inp, width: 64, height: 18, padding: 0 }} />
+                        : <input data-studio-nodegraph-param={`${node.id}:${pr.key}`} type="number" step="0.1" value={node.params[pr.key]} onChange={(e) => setParam(node.id, pr.key, parseFloat(e.target.value))} style={inp} />}
                   </div>
                 ))}
                 {/* output ports */}

@@ -219,7 +219,10 @@ export function evalModifierStack(baseSpec, mods) {
 }
 
 // Topologically evaluate the graph; returns { geometry, perNode, order, error }.
-export function evaluateGraph(graph) {
+// `types` selects the node registry (geometry NODE_TYPES by default; pass a
+// material/shader registry to evaluate a shading graph). The result field is
+// named `geometry` for back-compat but holds whatever the output node emits.
+export function evaluateGraph(graph, types = NODE_TYPES) {
   const nodes = new Map((graph.nodes || []).map((n) => [n.id, n]));
   const edges = graph.edges || [];
   // adjacency: for each node, incoming edges (port <- fromNode.out)
@@ -246,7 +249,7 @@ export function evaluateGraph(graph) {
   const perNode = {};
   for (const id of order) {
     const node = nodes.get(id);
-    const type = NODE_TYPES[node.type];
+    const type = types[node.type];
     if (!type) { perNode[id] = null; continue; }
     const inp = {};
     for (const e of incoming.get(id)) { const src = perNode[e.from.node]; if (src) inp[e.to.port] = src; }

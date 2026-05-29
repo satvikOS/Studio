@@ -34,7 +34,7 @@ tooltips, mirror the tool's algorithm + UX, and update this table.
 
 | Capability | Status | Notes / next |
 |------------|--------|--------------|
-| Procedural node graph (geometry nodes / SOP DAG) | DONE | real geometry node graph (nodegraph/): DAG eval engine + visual editor (draggable nodes, SVG wires, click-to-connect, params, Evaluate->Scene). Nodes: primitive/transform/subdivide/bevel/displace/array/merge/output (slice 152). Material/shader + Blueprint graphs reuse this framework next |
+| Procedural node graph (geometry nodes / SOP DAG) | DONE | real geometry node graph (nodegraph/): DAG eval engine + visual editor (draggable nodes, SVG wires, click-to-connect, params, Evaluate->Scene). Nodes: primitive/transform/subdivide/bevel/displace/array/merge/output (slice 152). Material/shader graph now reuses this framework (slice 165, generalized to a node-type registry); Blueprint graph next |
 | VEX-like expressions | ABSENT | — |
 | Scatter / distribute points | PARTIAL | `geometryNodesDistributePoints` + foliage instancing |
 | Cell fracture / explode | DONE | `MOD_explode` cell fracture |
@@ -68,7 +68,7 @@ tooltips, mirror the tool's algorithm + UX, and update this table.
 
 | Capability | Status | Notes / next |
 |------------|--------|--------------|
-| Procedural material graph | PARTIAL | `applyShaderTexture` draws real procedural canvases (Voronoi/Wave/Brick/Magic/Noise) but bakes to a flat image — no node graph, no PBR channel set |
+| Procedural material graph | DONE | node-based MATERIAL/SHADER graph (slice 165) — reuses the geometry DAG engine retargeted to PBR: Texture (deterministic Voronoi/noise/checker/wave/gradient -> CanvasTexture) / Color / Scalar / Color Mix nodes feed a Material Output node that assembles a MeshStandardMaterial (colour / roughness / metalness / emissive / map channels), applied to the selected mesh. Visual editor + `__studioApplyMaterialGraph` hook. (Substance Designer / Unreal Material Editor / Unity Shader Graph.) |
 | PBR texture painting on UVs | DONE | full PBR channel set — paint into colour / roughness / metalness / emissive, each its own CanvasTexture wired to the matching MeshStandardMaterial map; channel selector + colour picker + `texpaint` brush mode (slices 156, 160). (Normal/height map is the remaining extension.) |
 | Map baking (AO/normal/position) | PARTIAL | `bakeOp` bakes to vertex colors (not texture maps) |
 

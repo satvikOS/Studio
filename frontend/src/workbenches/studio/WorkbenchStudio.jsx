@@ -18,6 +18,7 @@ import { runArchieLoop, ArchieSkillStore, DEFAULT_CURRICULUM } from '../../ai/Ar
 import { gridSignature, compareSignatures } from '../../ai/ArchiePerception.js';
 import { evaluateGraph, evalModifierStack, NODE_TYPES } from './nodegraph/nodeGraphEval.js';
 import NodeGraphEditor from './nodegraph/NodeGraphEditor.jsx';
+import { MATERIAL_NODE_TYPES, evalMaterialGraph, materialSeed } from './nodegraph/materialNodes.js';
 import { buildNurbsSurfaceGeometry } from './nurbs/nurbsSurface.js';
 import { dynaMeshGeometry } from './remesh/dynaMesh.js';
 import { quadRemeshGeometry } from './remesh/quadRemesh.js';
@@ -318,6 +319,7 @@ function WorkbenchStudio() {
   const [brushActive, setBrushActive]     = useState(false);
   const [brushMode, setBrushMode]         = useState('push');
   const [nodeGraphOpen, setNodeGraphOpen] = useState(false); // Geometry Nodes editor overlay
+  const [materialGraphOpen, setMaterialGraphOpen] = useState(false); // Material/shader graph overlay
   const [brushPaintColor, setBrushPaintColor] = useState('#d08a4a'); // Substance-style texture-paint colour
   const [brushPaintChannel, setBrushPaintChannel] = useState('color'); // PBR channel: color/roughness/metalness/emissive
   const [modStackVersion, setModStackVersion] = useState(0); // forces modifier-stack UI refresh
@@ -455,6 +457,8 @@ function WorkbenchStudio() {
     window.__studioBrushStrokeAt = (pt, brush) => { const m = selectedMeshRef.current; if (!m) return null; paintBrushAt(m, new THREE.Vector3(pt[0], pt[1], pt[2]), brush || { mode: 'inflate', radius: 0.06, strength: 0.5 }); return true; };
     // Geometry node graph: evaluate a {nodes,edges} graph -> scene primitive.
     window.__studioEvalNodeGraph = (graph) => evalNodeGraphToScene(graph);
+    // Material/shader graph: evaluate a shading DAG -> PBR material on selected mesh.
+    window.__studioApplyMaterialGraph = (graph) => applyMaterialGraph(graph);
     window.__studioAddNurbsSurface = (opts) => addNurbsSurface(opts);
     // Non-destructive modifier stack (operates on the selected mesh).
     window.__studioModStackAdd = (type, params) => modStackAdd(type, params);
@@ -468,7 +472,7 @@ function WorkbenchStudio() {
     window.__studioReadTexel = (uv, channel) => { const m = selectedMeshRef.current; if (!m) return null; return readTexel(m, { x: uv[0], y: uv[1] }, channel); };
     window.__studioPolyPaintAt = (pt, color, radius) => { const m = selectedMeshRef.current; if (!m) return null; return paintPolyAt(m, new THREE.Vector3(pt[0], pt[1], pt[2]), color || brushPaintColor, radius || 0.012); };
     window.__studioReadVertexColor = (i) => { const m = selectedMeshRef.current; const col = m && m.geometry && m.geometry.attributes.color; if (!col) return null; return [Math.round(col.getX(i) * 255), Math.round(col.getY(i) * 255), Math.round(col.getZ(i) * 255)]; };
-    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioAddNurbsSurface; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; };
+    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioAddNurbsSurface; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; };
   });
   // Auto-frame on primitive count change so the camera always shows
   // the current scene without the user having to hit Home.
@@ -667,6 +671,35 @@ function WorkbenchStudio() {
     setPrimitiveCount(c => c + 1);
     recomputeMeshStats(scene);
     return { vertices: geometry.attributes.position.count, nodes: (graph.nodes || []).length };
+  }
+
+  // ── Material / shader node graph (Substance Designer / Unreal Material /
+  //    Unity Shader Graph) — evaluate a shading DAG into a PBR material and
+  //    apply it to the selected mesh (or the most recent primitive). ──
+  function applyMaterialGraph(graph) {
+    const scene = window.__archdiscScene;
+    if (!scene) return { error: 'no scene' };
+    const target = selectedMeshRef.current
+      || primitiveStackRef.current[primitiveStackRef.current.length - 1];
+    if (!target || !target.isMesh) return { error: 'no target mesh — add/select a primitive first' };
+    const { spec, mapTexture, error } = evalMaterialGraph(graph || { nodes: [], edges: [] });
+    if (error) return { error };
+    const mat = new THREE.MeshStandardMaterial({
+      color: new THREE.Color(spec.colorHex),
+      roughness: spec.roughness,
+      metalness: spec.metalness,
+      emissive: new THREE.Color(spec.emissiveHex),
+    });
+    if (mapTexture) { mat.map = mapTexture; mat.map.needsUpdate = true; }
+    if (target.material && target.material.dispose) target.material.dispose();
+    target.material = mat;
+    mat.needsUpdate = true;
+    target.userData.archdiscStudioMaterialGraph = (graph.nodes || []).map((n) => n.type);
+    target.userData.archdiscStudioMaterialSpec = spec;
+    return {
+      message: `material -> ${spec.hasMap ? spec.mapPattern + ' map, ' : ''}rough ${spec.roughness.toFixed(2)} metal ${spec.metalness.toFixed(2)}`,
+      ...spec, target: target.name,
+    };
   }
 
   // ── Non-destructive modifier STACK (3ds Max / Maya / Blender) ──
@@ -8637,8 +8670,11 @@ function WorkbenchStudio() {
                     <button type="button" className="ribbon-tool" data-studio-ribbon-action="mograph-cloner" onClick={() => mographCloner({ countX: 8, countZ: 8, falloff: 'radial' })} disabled={!selectedKind} title="Cinema 4D MoGraph — Cloner + Plain Effector (radial falloff drives clone scale/rise/twist)">
                       <span className="ribbon-tool-icon">▦</span><span className="ribbon-tool-label">MoGraph</span>
                     </button>
-                    <button type="button" className={'ribbon-tool' + (nodeGraphOpen ? ' active' : '')} data-studio-ribbon-action="node-editor" onClick={() => setNodeGraphOpen(v => !v)} title="Geometry Node Graph — Houdini SOP / Blender Geometry Nodes / Grasshopper / Substance / Unreal-Unity material+blueprint graph foundation">
+                    <button type="button" className={'ribbon-tool' + (nodeGraphOpen ? ' active' : '')} data-studio-ribbon-action="node-editor" onClick={() => setNodeGraphOpen(v => !v)} title="Geometry Node Graph — Houdini SOP / Blender Geometry Nodes / Grasshopper">
                       <span className="ribbon-tool-icon">⬡</span><span className="ribbon-tool-label">Node Editor</span>
+                    </button>
+                    <button type="button" className={'ribbon-tool' + (materialGraphOpen ? ' active' : '')} data-studio-ribbon-action="material-editor" onClick={() => setMaterialGraphOpen(v => !v)} title="Material / Shader Node Graph — Substance Designer / Unreal Material Editor / Unity Shader Graph / Blender shader nodes (procedural textures -> PBR channels)">
+                      <span className="ribbon-tool-icon">◈</span><span className="ribbon-tool-label">Material Graph</span>
                     </button>
                     <button type="button" className="ribbon-tool" data-studio-ribbon-action="dynamesh" onClick={() => dynaMeshSelected(26)} disabled={!selectedKind} title="ZBrush DynaMesh — uniform-topology voxel reskin of the selected mesh">
                       <span className="ribbon-tool-icon">⬢</span><span className="ribbon-tool-label">DynaMesh</span>
@@ -12620,6 +12656,17 @@ function WorkbenchStudio() {
 
       {/* Geometry Node Graph editor — full overlay over the viewport. */}
       <NodeGraphEditor open={nodeGraphOpen} onClose={() => setNodeGraphOpen(false)} onEvaluate={evalNodeGraphToScene} />
+      <NodeGraphEditor
+        open={materialGraphOpen}
+        onClose={() => setMaterialGraphOpen(false)}
+        onEvaluate={applyMaterialGraph}
+        nodeTypes={MATERIAL_NODE_TYPES}
+        title="Material Graph"
+        subtitle="Substance Designer / Unreal Material Editor / Unity Shader Graph"
+        seedGraph={materialSeed}
+        mirrorKey="__studioMaterialGraphState"
+        kind="material"
+      />
     </>
   );
 }

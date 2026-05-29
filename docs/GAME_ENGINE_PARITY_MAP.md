@@ -87,9 +87,15 @@ This map catalogs every Studio feature with its game-engine counterpart.
 | Bounding Box          | StaticMesh bounds              | Mesh.bounds                |
 | Transform Geometry    | Matrix transform               | Transform component        |
 
+## Shipped engine graph features
+
+- Material visual graph editor (Unreal Material Editor / Unity Shader Graph /
+  Substance Designer) — DONE (slice 165). Node-based PBR material assembly
+  (Texture/Color/Scalar/Color Mix -> Material Output channels) on the shared
+  node-graph engine; "Material Graph" ribbon toggle + `__studioApplyMaterialGraph`.
+
 ## Pending engine features (queued)
 
-- Material visual graph editor (Unreal Material Editor / Unity Shader Graph)
 - Blueprint visual scripting graph (Unreal Blueprint / Unity Visual Scripting)
 - AnimBP state machine (Unreal Animation Blueprint / Unity Animator state machine)
 - Niagara emitter graph (separate from Studio's particle presets)
