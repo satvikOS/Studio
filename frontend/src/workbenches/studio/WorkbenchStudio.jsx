@@ -24,6 +24,7 @@ import { ANIM_STATES, createAnimBP, animBPSetState, animBPStep } from './anim/an
 import { BLUEPRINT_NODE_TYPES, runBlueprint, blueprintSeed } from './blueprint/blueprintNodes.js';
 import { NIAGARA_NODE_TYPES, niagaraSeed, evalNiagaraGraph, simulateEmitter } from './vfx/niagaraNodes.js';
 import { BT_NODE_TYPES, behaviorTreeSeed, tickBehaviorTree } from './ai/behaviorTreeNodes.js';
+import { streamAround as wpStreamAround, revealAll as wpRevealAll } from './world/worldPartition.js';
 import { buildNurbsSurfaceGeometry } from './nurbs/nurbsSurface.js';
 import { buildSweptGeometry } from './surf/sweepLoft.js';
 import { bakeAmbientOcclusion } from './bake/ambientOcclusion.js';
@@ -331,6 +332,7 @@ function WorkbenchStudio() {
   const [blueprintOpen, setBlueprintOpen] = useState(false); // Blueprint/visual-scripting graph overlay
   const [niagaraOpen, setNiagaraOpen] = useState(false); // Niagara particle emitter graph overlay
   const [behaviorTreeOpen, setBehaviorTreeOpen] = useState(false); // Behavior tree (AI) graph overlay
+  const [worldPartitionOn, setWorldPartitionOn] = useState(false); // World-partition streaming active
   const [animBPState, setAnimBPState] = useState('idle'); // Animation state machine current state
   const [animBPPlaying, setAnimBPPlaying] = useState(false);
   const animBPRef = useRef(null); // { machine, base:{x,y,z,ry}, meshUuid }
@@ -481,6 +483,9 @@ function WorkbenchStudio() {
     window.__studioNiagaraStep = (dt) => niagaraStep(dt);
     // Behaviour tree: tick the AI tree N times (drives the selected agent).
     window.__studioBTTick = (steps) => btTick(steps);
+    // World partition: stream cells around an origin / reveal all.
+    window.__studioStreamAround = (origin, cellSize, radiusCells) => streamWorldPartition(origin, { cellSize, radiusCells });
+    window.__studioRevealAll = () => revealAllPrimitives();
     // Rigid-body sim: deterministically advance N steps (e2e/Archie, rAF-free) + read state.
     window.__studioPhysicsStep = (steps, dt) => { const n = steps || 1; const h = dt || 0.016; for (let i = 0; i < n; i++) physicsTick(h); return window.__studioPhysicsState(); };
     window.__studioPhysicsState = () => { const scene = window.__archdiscScene; if (!scene) return []; return physicsBodies(scene).map(b => ({ name: b.o.name, pos: [b.o.position.x, b.o.position.y, b.o.position.z], vel: [b.v[0], b.v[1], b.v[2]], radius: b.radius })); };
@@ -509,7 +514,7 @@ function WorkbenchStudio() {
     window.__studioReadNormalTexel = (uv) => { const m = selectedMeshRef.current; const nc = m && m.userData && m.userData._normalCanvas; if (!nc) return null; const d = nc.getContext('2d').getImageData(Math.floor(uv[0] * 512), Math.floor((1 - uv[1]) * 512), 1, 1).data; return [d[0], d[1], d[2]]; };
     window.__studioPolyPaintAt = (pt, color, radius) => { const m = selectedMeshRef.current; if (!m) return null; return paintPolyAt(m, new THREE.Vector3(pt[0], pt[1], pt[2]), color || brushPaintColor, radius || 0.012); };
     window.__studioReadVertexColor = (i) => { const m = selectedMeshRef.current; const col = m && m.geometry && m.geometry.attributes.color; if (!col) return null; return [Math.round(col.getX(i) * 255), Math.round(col.getY(i) * 255), Math.round(col.getZ(i) * 255)]; };
-    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioEvalNiagara; delete window.__studioNiagaraStep; delete window.__studioBTTick; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAnimBPSet; delete window.__studioAnimBPStep; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; };
+    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioEvalNiagara; delete window.__studioNiagaraStep; delete window.__studioBTTick; delete window.__studioStreamAround; delete window.__studioRevealAll; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAnimBPSet; delete window.__studioAnimBPStep; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; };
   });
   // Auto-frame on primitive count change so the camera always shows
   // the current scene without the user having to hit Home.
@@ -792,6 +797,40 @@ function WorkbenchStudio() {
     const g = window.__studioBTGraphState; let r = null;
     for (let i = 0; i < (steps || 1); i++) r = btTickOnce(g);
     return r;
+  }
+
+  // ── World Partition / streaming (Unreal World Partition / Unity Addressables):
+  //    bucket primitives into a spatial grid and stream cells in/out by distance
+  //    from an origin (the camera). ──
+  function gatherStreamables() {
+    const scene = window.__archdiscScene; const a = [];
+    scene && scene.traverse((o) => { if (o.userData && o.userData.archdiscStudioPrimitive) a.push(o); });
+    return a;
+  }
+  function streamWorldPartition(origin, opts) {
+    const scene = window.__archdiscScene; if (!scene) return { error: 'no scene' };
+    const r = wpStreamAround(gatherStreamables(), { ...(opts || {}), origin: origin || [0, 0, 0] });
+    recomputeMeshStats(scene);
+    return r;
+  }
+  function revealAllPrimitives() {
+    const r = wpRevealAll(gatherStreamables());
+    recomputeMeshStats(window.__archdiscScene);
+    return r;
+  }
+  function toggleWorldPartition() {
+    setWorldPartitionOn((on) => {
+      const next = !on;
+      if (next) {
+        const vp = window.__archdiscViewport;
+        const tgt = vp && (vp.orbitControls || vp.controls) && (vp.orbitControls || vp.controls).target;
+        const origin = tgt ? [tgt.x, tgt.y, tgt.z] : [0, 0, 0];
+        streamWorldPartition(origin, { cellSize: 0.4, radiusCells: 2 });
+      } else {
+        revealAllPrimitives();
+      }
+      return next;
+    });
   }
   function niagaraStep(dt) {
     const scene = window.__archdiscScene; if (!scene) return null;
@@ -8955,6 +8994,9 @@ function WorkbenchStudio() {
                     </button>
                     <button type="button" className={'ribbon-tool' + (behaviorTreeOpen ? ' active' : '')} data-studio-ribbon-action="behaviortree-editor" onClick={() => setBehaviorTreeOpen(v => !v)} title="Behaviour Tree — Unreal Behavior Tree + Blackboard / Unity Behavior Designer (Root -> Selector/Sequence -> Condition/Action; ticks drive the selected agent)">
                       <span className="ribbon-tool-icon">⌥</span><span className="ribbon-tool-label">Behavior Tree</span>
+                    </button>
+                    <button type="button" className={'ribbon-tool' + (worldPartitionOn ? ' active' : '')} data-studio-ribbon-action="world-partition" onClick={toggleWorldPartition} title="World Partition / streaming — Unreal World Partition / Unity Addressables (stream scene cells in/out by distance from the camera; toggle off to reveal all)">
+                      <span className="ribbon-tool-icon">▣</span><span className="ribbon-tool-label">{worldPartitionOn ? 'Reveal All' : 'World Part'}</span>
                     </button>
                     <button type="button" className="ribbon-tool" data-studio-ribbon-action="dynamesh" onClick={() => dynaMeshSelected(26)} disabled={!selectedKind} title="ZBrush DynaMesh — uniform-topology voxel reskin of the selected mesh">
                       <span className="ribbon-tool-icon">⬢</span><span className="ribbon-tool-label">DynaMesh</span>

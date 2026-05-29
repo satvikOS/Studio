@@ -122,10 +122,15 @@ This map catalogs every Studio feature with its game-engine counterpart.
   tree drives the selected agent toward a blackboard target then signals arrival;
   "Behavior Tree" ribbon toggle + `__studioBTTick`.
 
+- World Partition + streaming (Unreal World Partition / Unity Addressables) —
+  DONE (slice 175). world/worldPartition.js buckets primitives into a uniform
+  spatial grid and streams cells in/out by Chebyshev cell distance from an origin
+  (the camera target); "World Part" ribbon toggle + `__studioStreamAround` /
+  `__studioRevealAll`. Moving the origin swaps the resident set.
+
 ## Pending engine features (queued)
 
 - Datasmith-class asset import (FBX, USD, Datasmith) — FBX/USD/glTF/OBJ already import
-- World Partition + streaming (Unreal World Partition / Unity Addressables)
 - Wwise / MetaSounds audio integration
 - Behavior Tree + Blackboard (Unreal AI / Unity Behavior Designer)
 - AR Foundation parity (Unity AR Foundation)
