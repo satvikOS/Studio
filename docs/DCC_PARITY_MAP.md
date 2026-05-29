@@ -45,7 +45,7 @@ tooltips, mirror the tool's algorithm + UX, and update this table.
 | Capability | Status | Notes / next |
 |------------|--------|--------------|
 | NURBS surfaces/curves | PARTIAL | rational degree-3 tensor-product NURBS SURFACE shipped — ribbon primitive + node-graph node (three Cox-de Boor, slice 153). NURBS curves + exact trimmed B-rep (OCCT booleans) still a separate effort |
-| Deformer stack / node editor | ABSENT | modifiers are destructive one-shots |
+| Deformer stack / node editor | DONE | non-destructive modifier stack (slice 154) + the geometry node editor (slice 152) |
 | MASH / instancing | PARTIAL | Array modifier + foliage instancing |
 | Rigging (joints / IK / constraints / skinning) | PARTIAL | armature + IK + constraints shipped (see GAME_ENGINE map) |
 
@@ -53,7 +53,7 @@ tooltips, mirror the tool's algorithm + UX, and update this table.
 
 | Capability | Status | Notes / next |
 |------------|--------|--------------|
-| Modifier stack (non-destructive, reorderable) | PARTIAL/STUB | move-up/down + apply exist but don't manage a real live stack |
+| Modifier stack (non-destructive, reorderable) | DONE | real live stack re-evaluated from a clean base every edit (reuses the node engine); add/remove/reorder/toggle; removing a mid-stack modifier truly reverts it (slice 154) |
 | Spline → Loft / sweep along path | ABSENT | Bezier/NURBS-path curves exist; no loft/sweep |
 | Parametric primitives (re-editable) | PARTIAL | primitives added, not re-editable parametrically |
 

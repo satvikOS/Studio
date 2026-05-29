@@ -14,7 +14,7 @@ import { getManifold } from '../../foundation/manifoldKernel.js';
 import { geometryToManifold, manifoldToGeometry } from '../../foundation/ManifoldThreeBridge.js';
 import { runArchieLoop, ArchieSkillStore, DEFAULT_CURRICULUM } from '../../ai/ArchieLoop.js';
 import { gridSignature, compareSignatures } from '../../ai/ArchiePerception.js';
-import { evaluateGraph, NODE_TYPES } from './nodegraph/nodeGraphEval.js';
+import { evaluateGraph, evalModifierStack, NODE_TYPES } from './nodegraph/nodeGraphEval.js';
 import NodeGraphEditor from './nodegraph/NodeGraphEditor.jsx';
 import { buildNurbsSurfaceGeometry } from './nurbs/nurbsSurface.js';
 import {
@@ -314,6 +314,7 @@ function WorkbenchStudio() {
   const [brushActive, setBrushActive]     = useState(false);
   const [brushMode, setBrushMode]         = useState('push');
   const [nodeGraphOpen, setNodeGraphOpen] = useState(false); // Geometry Nodes editor overlay
+  const [modStackVersion, setModStackVersion] = useState(0); // forces modifier-stack UI refresh
   const [brushRadius, setBrushRadius]     = useState(0.012);
   const [brushFalloffStrength, setBrushFalloffStrength] = useState(0.4);
   const [brushSymmetryX, setBrushSymmetryX] = useState(false);
@@ -449,7 +450,12 @@ function WorkbenchStudio() {
     // Geometry node graph: evaluate a {nodes,edges} graph -> scene primitive.
     window.__studioEvalNodeGraph = (graph) => evalNodeGraphToScene(graph);
     window.__studioAddNurbsSurface = (opts) => addNurbsSurface(opts);
-    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioAddNurbsSurface; };
+    // Non-destructive modifier stack (operates on the selected mesh).
+    window.__studioModStackAdd = (type, params) => modStackAdd(type, params);
+    window.__studioModStackRemove = (i) => modStackRemove(i);
+    window.__studioModStackReorder = (i, dir) => modStackReorder(i, dir);
+    window.__studioModStackGet = () => { const m = selectedMeshRef.current; return (m && m.userData.archdiscStudioModStack) ? JSON.parse(JSON.stringify(m.userData.archdiscStudioModStack.mods)) : []; };
+    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioAddNurbsSurface; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; };
   });
   // Auto-frame on primitive count change so the camera always shows
   // the current scene without the user having to hit Home.
@@ -649,6 +655,34 @@ function WorkbenchStudio() {
     recomputeMeshStats(scene);
     return { vertices: geometry.attributes.position.count, nodes: (graph.nodes || []).length };
   }
+
+  // ── Non-destructive modifier STACK (3ds Max / Maya / Blender) ──
+  // A live stack of modifiers re-evaluated from a clean base primitive every
+  // edit (reuses the node-graph engine). Removing/reordering a mid-stack
+  // modifier genuinely reverts it — the defining non-destructive property.
+  const MODSTACK_BASE_KINDS = ['cube', 'sphere', 'cylinder', 'cone', 'torus', 'icosahedron'];
+  function ensureModStack(mesh) {
+    if (!mesh.userData.archdiscStudioModStack) {
+      const k = mesh.userData.archdiscStudioPrimitiveKind || 'cube';
+      mesh.userData.archdiscStudioModStack = { base: { type: 'primitive', params: { kind: MODSTACK_BASE_KINDS.includes(k) ? k : 'cube', size: 1 } }, mods: [] };
+    }
+    return mesh.userData.archdiscStudioModStack;
+  }
+  function reevalModStack(mesh) {
+    const st = mesh.userData.archdiscStudioModStack; if (!st) return;
+    const { geometry } = evalModifierStack(st.base, st.mods);
+    if (geometry && geometry.attributes && geometry.attributes.position) {
+      if (mesh.geometry) mesh.geometry.dispose();
+      mesh.geometry = geometry;
+      recomputeMeshStats(window.__archdiscScene);
+    }
+  }
+  function modStackAdd(type, params) { const m = selectedMeshRef.current; if (!m) return null; const st = ensureModStack(m); st.mods.push({ type, params: params || {}, enabled: true }); reevalModStack(m); setModStackVersion(v => v + 1); return st.mods.length; }
+  function modStackRemove(i) { const m = selectedMeshRef.current; if (!m || !m.userData.archdiscStudioModStack) return; m.userData.archdiscStudioModStack.mods.splice(i, 1); reevalModStack(m); setModStackVersion(v => v + 1); }
+  function modStackReorder(i, dir) { const m = selectedMeshRef.current; if (!m || !m.userData.archdiscStudioModStack) return; const mods = m.userData.archdiscStudioModStack.mods; const j = i + dir; if (j < 0 || j >= mods.length) return; [mods[i], mods[j]] = [mods[j], mods[i]]; reevalModStack(m); setModStackVersion(v => v + 1); }
+  function modStackToggle(i) { const m = selectedMeshRef.current; if (!m || !m.userData.archdiscStudioModStack) return; const mod = m.userData.archdiscStudioModStack.mods[i]; if (mod) { mod.enabled = mod.enabled === false; reevalModStack(m); setModStackVersion(v => v + 1); } }
+  function modStackPopLast() { const m = selectedMeshRef.current; if (!m || !m.userData.archdiscStudioModStack) return; m.userData.archdiscStudioModStack.mods.pop(); reevalModStack(m); setModStackVersion(v => v + 1); }
+  const selectedModStack = () => { const m = selectedMeshRef.current; return (m && m.userData.archdiscStudioModStack) ? m.userData.archdiscStudioModStack.mods : []; };
 
   // ── NURBS surface (Maya / Rhino / Plasticity) ──
   // A real rational degree-3 tensor-product NURBS surface, tessellated and
@@ -8446,6 +8480,26 @@ function WorkbenchStudio() {
                     </button>
                   </div>
                   <div className="ribbon-group-label">Engine · Advanced</div>
+                </div>
+
+                <div className="ribbon-group">
+                  <div className="ribbon-group-tools" data-modstack-version={modStackVersion}>
+                    {[['subdivide', 'Subdiv'], ['bevel', 'Bevel'], ['displace', 'Displace'], ['array', 'Array']].map(([t, l]) => (
+                      <button key={t} type="button" className="ribbon-tool" data-studio-ribbon-action={`modstack-add-${t}`} onClick={() => modStackAdd(t, {})} disabled={!selectedKind} title={`3ds Max / Maya / Blender — push ${l} onto the selected mesh's NON-DESTRUCTIVE modifier stack`}>
+                        <span className="ribbon-tool-icon">+</span><span className="ribbon-tool-label">{l}</span>
+                      </button>
+                    ))}
+                    <span data-studio-modstack-count style={{ alignSelf: 'center', fontSize: '11px', opacity: 0.6, padding: '0 6px' }}>{selectedModStack().length} mod{selectedModStack().length === 1 ? '' : 's'}</span>
+                    {selectedModStack().map((mod, i) => (
+                      <span key={i} data-studio-modstack-item={mod.type} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: '10px', background: '#161616', border: '1px solid #2a2a2a', borderRadius: 3, padding: '1px 4px', marginRight: 2, alignSelf: 'center' }}>
+                        <span style={{ opacity: mod.enabled === false ? 0.4 : 0.85 }}>{mod.type}</span>
+                        <button type="button" onClick={() => modStackReorder(i, -1)} title="move up" style={{ background: 'none', border: 'none', color: '#bbb', cursor: 'pointer', padding: '0 1px' }}>↑</button>
+                        <button type="button" onClick={() => modStackReorder(i, 1)} title="move down" style={{ background: 'none', border: 'none', color: '#bbb', cursor: 'pointer', padding: '0 1px' }}>↓</button>
+                        <button type="button" onClick={() => modStackRemove(i)} title="remove" style={{ background: 'none', border: 'none', color: '#bbb', cursor: 'pointer', padding: '0 1px' }}>×</button>
+                      </span>
+                    ))}
+                  </div>
+                  <div className="ribbon-group-label">Modifier Stack · Max/Maya</div>
                 </div>
 
                 <div className="ribbon-group">

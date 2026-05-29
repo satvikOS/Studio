@@ -199,6 +199,25 @@ export const NODE_TYPES = {
   },
 };
 
+// A non-destructive modifier STACK (3ds Max / Maya / Blender) is just a linear
+// node graph: base -> mod1 -> mod2 -> ... -> output. Re-evaluated from the base
+// on every edit, so removing/reordering a mid-stack modifier truly reverts it.
+export function evalModifierStack(baseSpec, mods) {
+  const nodes = [{ id: 'base', type: (baseSpec && baseSpec.type) || 'primitive', params: (baseSpec && baseSpec.params) || {} }];
+  const edges = [];
+  let prev = 'base';
+  (mods || []).forEach((m, i) => {
+    if (m.enabled === false) return;
+    const id = `m${i}`;
+    nodes.push({ id, type: m.type, params: m.params || {} });
+    edges.push({ from: { node: prev, port: 'geometry' }, to: { node: id, port: 'geometry' } });
+    prev = id;
+  });
+  nodes.push({ id: 'out', type: 'output', params: {} });
+  edges.push({ from: { node: prev, port: 'geometry' }, to: { node: 'out', port: 'geometry' } });
+  return evaluateGraph({ nodes, edges });
+}
+
 // Topologically evaluate the graph; returns { geometry, perNode, order, error }.
 export function evaluateGraph(graph) {
   const nodes = new Map((graph.nodes || []).map((n) => [n.id, n]));
