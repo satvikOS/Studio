@@ -437,7 +437,12 @@ function WorkbenchStudio() {
     window.__studioImportAsset = (format, data) => importAssetFromData(format, data);
     window.__studioExportGltfString = () => exportGltfString();
     window.__studioAddRefPlane = (axis, imageUrl, opts) => addReferenceImagePlane(axis, imageUrl, opts);
-    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; };
+    // ZBrush mask + a programmatic brush stroke (for Archie + e2e). pt = world [x,y,z].
+    window.__studioPaintMaskAt = (pt, radius, value) => { const m = selectedMeshRef.current; if (!m) return null; return paintMaskAt(m, new THREE.Vector3(pt[0], pt[1], pt[2]), radius, value == null ? 1 : value); };
+    window.__studioClearMask = () => clearMaskOn(selectedMeshRef.current);
+    window.__studioInvertMask = () => invertMaskOn(selectedMeshRef.current);
+    window.__studioBrushStrokeAt = (pt, brush) => { const m = selectedMeshRef.current; if (!m) return null; paintBrushAt(m, new THREE.Vector3(pt[0], pt[1], pt[2]), brush || { mode: 'inflate', radius: 0.06, strength: 0.5 }); return true; };
+    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; };
   });
   // Auto-frame on primitive count change so the camera always shows
   // the current scene without the user having to hit Home.
@@ -1114,7 +1119,9 @@ function WorkbenchStudio() {
         const brush = brushStateRef.current;
         if (brush.active && hits.length > 0) {
           const hit = hits[0];
-          paintBrushAt(hit.object, hit.point, brush);
+          // Mask brush paints the protect-mask instead of deforming (ZBrush).
+          if (brush.mode === 'mask') paintMaskAt(hit.object, hit.point, brush.radius, 1);
+          else paintBrushAt(hit.object, hit.point, brush);
           return;
         }
         if (hits.length > 0) {
@@ -4447,13 +4454,59 @@ function WorkbenchStudio() {
     mesh.userData.archdiscStudioTexturePaintCommit = (mesh.userData.archdiscStudioTexturePaintCommit || 0) + 1;
     return null;
   }
-  // sculpt_paint/sculpt_brush_types.cc — Mask brush (paint sculpt mask).
+  // ── ZBrush sculpt MASK (sculpt_paint/sculpt_mask.cc) ──
+  // A real per-vertex protect-mask (0 = sculptable, 1 = protected). The brush
+  // (paintBrushAt) restores masked vertices after every stroke, so masked areas
+  // hold their shape. Masked verts are shaded darker via vertex colours, the
+  // ZBrush convention.
+  function ensureMaskBuffer(mesh) {
+    if (!mesh || !mesh.geometry || !mesh.geometry.attributes.position) return null;
+    const n = mesh.geometry.attributes.position.count;
+    if (!mesh.userData.archdiscStudioMask || mesh.userData.archdiscStudioMask.length !== n) {
+      mesh.userData.archdiscStudioMask = new Float32Array(n);
+    }
+    return mesh.userData.archdiscStudioMask;
+  }
+  function updateMaskViz(mesh) {
+    const mask = mesh && mesh.userData && mesh.userData.archdiscStudioMask;
+    if (!mask || !mesh.geometry) return;
+    const geo = mesh.geometry; const n = geo.attributes.position.count;
+    let col = geo.attributes.color;
+    if (!col || col.count !== n) { col = new THREE.BufferAttribute(new Float32Array(n * 3), 3); geo.setAttribute('color', col); }
+    for (let i = 0; i < n; i++) { const v = 1 - 0.72 * Math.min(1, Math.max(0, mask[i])); col.setXYZ(i, v, v, v); }
+    col.needsUpdate = true;
+    if (mesh.material) { mesh.material.vertexColors = true; mesh.material.needsUpdate = true; }
+  }
+  function paintMaskAt(mesh, hitPoint, radius, value = 1) {
+    if (!mesh || !mesh.geometry) return null;
+    const mask = ensureMaskBuffer(mesh);
+    const pos = mesh.geometry.attributes.position;
+    const lh = mesh.worldToLocal(hitPoint.clone());
+    const r2 = radius * radius;
+    for (let i = 0; i < pos.count; i++) {
+      const dx = pos.getX(i) - lh.x, dy = pos.getY(i) - lh.y, dz = pos.getZ(i) - lh.z;
+      const d2 = dx * dx + dy * dy + dz * dz;
+      if (d2 > r2) continue;
+      const t = Math.sqrt(d2) / radius;
+      const f = (1 - t * t) * (1 - t * t);
+      mask[i] = Math.min(1, Math.max(0, mask[i] + value * f));
+    }
+    updateMaskViz(mesh);
+    mesh.userData.archdiscStudioBrushMask = (mesh.userData.archdiscStudioBrushMask || 0) + 1;
+    return { masked: true };
+  }
+  function clearMaskOn(mesh) { const m = mesh && mesh.userData && mesh.userData.archdiscStudioMask; if (m) m.fill(0); if (mesh) updateMaskViz(mesh); }
+  function invertMaskOn(mesh) { const m = mesh && mesh.userData && mesh.userData.archdiscStudioMask; if (m) { for (let i = 0; i < m.length; i++) m[i] = 1 - m[i]; updateMaskViz(mesh); } }
+  // Ribbon entry: arm the Mask brush (drag on the mesh to paint protect-mask).
   function sculptMaskBrush() {
     const mesh = selectedMeshRef.current;
-    if (!mesh) return null;
-    mesh.userData.archdiscStudioBrushMask = (mesh.userData.archdiscStudioBrushMask || 0) + 1;
-    return null;
+    if (mesh) ensureMaskBuffer(mesh);
+    setBrushMode('mask');
+    setBrushActive(true);
+    return { mode: 'mask' };
   }
+  function clearSelectedMask() { clearMaskOn(selectedMeshRef.current); }
+  function invertSelectedMask() { invertMaskOn(selectedMeshRef.current); }
   /* ─── Ultra-realistic sculpting: deterministic fractal-noise terrain ───
    *
    * Real weathering / erosion / clay micro-relief needs multi-octave value
@@ -7350,9 +7403,26 @@ function WorkbenchStudio() {
       }
     };
 
+    // ZBrush masking — snapshot positions so masked vertices can be restored
+    // after the stroke (mask 1 = fully protected, 0 = fully sculptable). Done
+    // post-stroke so it is mode-agnostic across every brush above.
+    const mask = (mesh.userData && mesh.userData.archdiscStudioMask && mesh.userData.archdiscStudioMask.length === pos.count) ? mesh.userData.archdiscStudioMask : null;
+    let orig = null;
+    if (mask) {
+      orig = new Float32Array(pos.count * 3);
+      for (let i = 0; i < pos.count; i++) { orig[i * 3] = pos.getX(i); orig[i * 3 + 1] = pos.getY(i); orig[i * 3 + 2] = pos.getZ(i); }
+    }
+
     applyStroke(localHit);
     if (brush.symmetryX) {
       applyStroke(new THREE.Vector3(-localHit.x, localHit.y, localHit.z));
+    }
+
+    if (mask && orig) {
+      for (let i = 0; i < pos.count; i++) {
+        const m = Math.min(1, Math.max(0, mask[i]));
+        if (m > 0) pos.setXYZ(i, pos.getX(i) * (1 - m) + orig[i * 3] * m, pos.getY(i) * (1 - m) + orig[i * 3 + 1] * m, pos.getZ(i) * (1 - m) + orig[i * 3 + 2] * m);
+      }
     }
 
     pos.needsUpdate = true;
@@ -8502,7 +8572,7 @@ function WorkbenchStudio() {
                     {[
                       ['draw', 'Draw', '✎'], ['inflate', 'Inflate', '◌'], ['crease', 'Crease', '▲'],
                       ['pinch', 'Pinch', '◇'], ['flatten', 'Flatten', '▬'], ['grab', 'Grab', '↕'],
-                      ['smooth', 'Smooth', '◐'],
+                      ['smooth', 'Smooth', '◐'], ['mask', 'Mask', '⬚'],
                     ].map(([m, label, icon]) => (
                       <button
                         key={m}
@@ -8520,6 +8590,12 @@ function WorkbenchStudio() {
                     <button type="button" className={'ribbon-tool' + (brushSymmetryX ? ' active' : '')} data-studio-ribbon-action="brush-symmetry-x" data-studio-brush-symmetry={brushSymmetryX ? '1' : '0'} onClick={() => setBrushSymmetryX(v => !v)} title="Blender sculpt symmetry — mirror every stroke across local X (bilateral / facial symmetry)">
                       <span className="ribbon-tool-icon">◫</span>
                       <span className="ribbon-tool-label">{brushSymmetryX ? 'Sym X ON' : 'Sym X'}</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="mask-clear" onClick={clearSelectedMask} disabled={!selectedKind} title="ZBrush — clear the sculpt mask on the selected mesh">
+                      <span className="ribbon-tool-icon">▢</span><span className="ribbon-tool-label">Clear Mask</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="mask-invert" onClick={invertSelectedMask} disabled={!selectedKind} title="ZBrush — invert the sculpt mask (Ctrl+I)">
+                      <span className="ribbon-tool-icon">◰</span><span className="ribbon-tool-label">Invert Mask</span>
                     </button>
                   </div>
                   <div className="ribbon-group-label">Sculpt Brush · Blender</div>

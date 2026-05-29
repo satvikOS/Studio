@@ -22,7 +22,7 @@ tooltips, mirror the tool's algorithm + UX, and update this table.
 |------------|--------|--------------|
 | Localized brush sculpt (draw/inflate/crease/pinch/flatten/grab/smooth) | PARTIAL | `paintBrushAt` localized brush + X-symmetry shipped; verify per-mode |
 | Erosion / weathering / degradation | DONE | `sculptErode` / `sculptWeather` (deterministic fBm) |
-| Masking (mask buffer) | STUB | `sculptMaskBrush` counter-only — need a real per-vertex mask buffer |
+| Masking (mask buffer) | DONE | real per-vertex protect-mask: `paintMaskAt` + `mask` brush mode; the brush restores masked verts post-stroke; masked areas shade darker; Clear/Invert (slice 151) |
 | Sculpt layers (multi-res levels) | STUB | `sculptLayer` inflate+counter — need a layer stack |
 | DynaMesh (uniform reskin) | ABSENT | only coarse voxel `remeshModifier` |
 | ZRemesher (quad retopology) | ABSENT | no retopology |
