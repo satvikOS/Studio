@@ -61,7 +61,7 @@ tooltips, mirror the tool's algorithm + UX, and update this table.
 
 | Capability | Status | Notes / next |
 |------------|--------|--------------|
-| MoGraph cloner + effectors | ABSENT | Array only; need falloff-driven effectors |
+| MoGraph cloner + effectors | DONE | `mographCloner` — grid clones (one InstancedMesh) + radial/linear falloff effector driving scale/rise/twist (slice 149) |
 | Deformers (bend/twist/taper/…) | DONE | Simple Deform family (Blender ports) |
 
 ## Substance (Painter / Designer)

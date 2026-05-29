@@ -3221,6 +3221,59 @@ function WorkbenchStudio() {
   }
 
   /*
+   * Cinema 4D MoGraph — Cloner + Effector. Clones the selected object into a
+   * grid (one InstancedMesh = one draw call) and drives each clone's transform
+   * by a FALLOFF field (the C4D "Plain effector" pattern): radial falloff is 1
+   * at the grid centre -> 0 at the edges, modulating scale + a Y "rise" + a
+   * twist, so the grid forms the signature MoGraph bump. Fully deterministic
+   * (index/falloff-driven — no Math.random), per Studio's no-randomness rule.
+   */
+  function mographCloner(opts = {}) {
+    const source = selectedMeshRef.current;
+    const scene = window.__archdiscScene;
+    if (!source || !source.geometry || !scene) return null;
+    const countX = Math.max(2, Math.min(24, Math.floor(opts.countX || 8)));
+    const countZ = Math.max(2, Math.min(24, Math.floor(opts.countZ || 8)));
+    const falloff = opts.falloff || 'radial';
+    const N = countX * countZ;
+    const step = PRIMITIVE_SIZE * (opts.spacing || 2.0);
+    const instanced = new THREE.InstancedMesh(source.geometry, source.material, N);
+    const dummy = new THREE.Object3D();
+    const cx = (countX - 1) / 2, cz = (countZ - 1) / 2;
+    const maxR = Math.hypot(cx, cz) || 1;
+    let k = 0;
+    for (let ix = 0; ix < countX; ix++) {
+      for (let iz = 0; iz < countZ; iz++) {
+        const gx = ix - cx, gz = iz - cz;
+        const f = falloff === 'linear'
+          ? ix / (countX - 1 || 1)
+          : 1 - Math.min(1, Math.hypot(gx, gz) / maxR); // radial: centre=1, edge=0
+        const s = 0.35 + 0.95 * f;        // effector: centre clones larger
+        const rise = step * 2.4 * f;      // effector: centre clones rise
+        dummy.position.set(gx * step, rise, gz * step);
+        dummy.scale.set(s, s, s);
+        dummy.rotation.set(0, f * Math.PI * 0.6, 0); // effector: twist by falloff
+        dummy.updateMatrix();
+        instanced.setMatrixAt(k++, dummy.matrix);
+      }
+    }
+    instanced.instanceMatrix.needsUpdate = true;
+    instanced.castShadow = true; instanced.receiveShadow = true;
+    instanced.userData.archdiscStudioPrimitive = true;
+    instanced.userData.archdiscStudioPrimitiveKind = 'mograph-cloner';
+    instanced.userData.archdiscStudioInstanceCount = N;
+    instanced.userData.archdiscStudioMographFalloff = falloff;
+    instanced.name = `studio-primitive-mograph-${N}-${primitiveCount}`;
+    const cols = 4, i = primitiveCount;
+    instanced.position.set((i % cols - (cols - 1) / 2) * PRIMITIVE_SIZE * 1.9, 0, Math.floor(i / cols) * PRIMITIVE_SIZE * 1.9);
+    scene.add(instanced);
+    primitiveStackRef.current.push(instanced);
+    setPrimitiveCount(c => c + 1);
+    recomputeMeshStats(scene);
+    return { clones: N, falloff };
+  }
+
+  /*
    * Procedural Tree — recursive L-system-ish generator. Each level
    * spawns `branches` child branches at a tilt + spread, lengths
    * shrink by a fixed ratio, radius narrows. Leaf spheres land at
@@ -8255,6 +8308,9 @@ function WorkbenchStudio() {
                     </button>
                     <button type="button" className="ribbon-tool" data-studio-ribbon-action="niagara-burst" onClick={() => niagaraBurst(400)} title="Unreal Niagara burst / Unity ParticleSystem.Emit">
                       <span className="ribbon-tool-icon">✦</span><span className="ribbon-tool-label">Niagara</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="mograph-cloner" onClick={() => mographCloner({ countX: 8, countZ: 8, falloff: 'radial' })} disabled={!selectedKind} title="Cinema 4D MoGraph — Cloner + Plain Effector (radial falloff drives clone scale/rise/twist)">
+                      <span className="ribbon-tool-icon">▦</span><span className="ribbon-tool-label">MoGraph</span>
                     </button>
                   </div>
                   <div className="ribbon-group-label">Engine · Advanced</div>
