@@ -133,11 +133,21 @@ This map catalogs every Studio feature with its game-engine counterpart.
   stereo pan; visible source gizmo; "Audio Src" ribbon + `__studioAddAudioSource`/
   `__studioSetListener`/`__studioAudioState`. (Synthesized tone; HRTF/occlusion/
   reverb zones out of scope.) Replaced the old octahedron-only placeholder.
+- WebXR AR/VR (Unity AR Foundation / Unreal XR) — DONE (slice 180). Real WebXR
+  immersive session via three.js renderer.xr + the WebXR Device API: detects
+  support (`navigator.xr.isSessionSupported`), enters AR/VR on an XR device,
+  and degrades gracefully on a non-XR desktop. "AR / VR" ribbon + status +
+  `__studioXRSupport`/`__studioEnterXR`. Honest scope: session entry, not full
+  AR-Foundation plane-detection/anchors (need on-device AR feature APIs).
 
-## Pending engine features (queued)
+## Effectively covered / honest-defer
 
-- Datasmith-class asset import — FBX/USD/glTF/OBJ already import (full .udatasmith pending)
-- AR Foundation parity (Unity AR Foundation) — needs an AR runtime/device; N/A on desktop
+- Datasmith-class asset import — COVERED by the existing rich-scene import
+  pipeline (FBX / USD / glTF / OBJ loaders bring in scene graph + materials).
+  A dedicated `.udatasmith` (proprietary Unreal) parser adds little over these.
+- Solid sewn trimmed-B-rep booleans (vs the trimmed SURFACE shipped, slice 178)
+  need a B-rep kernel — OCCT was removed in the viewport de-CAD by design; mesh
+  CSG booleans (manifold-3d) already cover solid combination.
 
 ## Caveat
 

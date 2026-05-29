@@ -337,6 +337,7 @@ function WorkbenchStudio() {
   const [niagaraOpen, setNiagaraOpen] = useState(false); // Niagara particle emitter graph overlay
   const [behaviorTreeOpen, setBehaviorTreeOpen] = useState(false); // Behavior tree (AI) graph overlay
   const [worldPartitionOn, setWorldPartitionOn] = useState(false); // World-partition streaming active
+  const [xrStatus, setXrStatus] = useState(''); // WebXR (AR/VR) session status text
   const [animBPState, setAnimBPState] = useState('idle'); // Animation state machine current state
   const [animBPPlaying, setAnimBPPlaying] = useState(false);
   const animBPRef = useRef(null); // { machine, base:{x,y,z,ry}, meshUuid }
@@ -490,6 +491,9 @@ function WorkbenchStudio() {
     // World partition: stream cells around an origin / reveal all.
     window.__studioStreamAround = (origin, cellSize, radiusCells) => streamWorldPartition(origin, { cellSize, radiusCells });
     window.__studioRevealAll = () => revealAllPrimitives();
+    // WebXR (AR/VR): detect support / enter an immersive session.
+    window.__studioXRSupport = (mode) => studioXRSupport(mode);
+    window.__studioEnterXR = (mode) => studioEnterXR(mode);
     // Spatial audio: add a positional source / move the listener / read state.
     window.__studioAddAudioSource = (opts) => addAudioSourceToScene(opts);
     window.__studioSetListener = (pos) => { audioSetListener(pos); return audioState(); };
@@ -525,7 +529,7 @@ function WorkbenchStudio() {
     window.__studioReadNormalTexel = (uv) => { const m = selectedMeshRef.current; const nc = m && m.userData && m.userData._normalCanvas; if (!nc) return null; const d = nc.getContext('2d').getImageData(Math.floor(uv[0] * 512), Math.floor((1 - uv[1]) * 512), 1, 1).data; return [d[0], d[1], d[2]]; };
     window.__studioPolyPaintAt = (pt, color, radius) => { const m = selectedMeshRef.current; if (!m) return null; return paintPolyAt(m, new THREE.Vector3(pt[0], pt[1], pt[2]), color || brushPaintColor, radius || 0.012); };
     window.__studioReadVertexColor = (i) => { const m = selectedMeshRef.current; const col = m && m.geometry && m.geometry.attributes.color; if (!col) return null; return [Math.round(col.getX(i) * 255), Math.round(col.getY(i) * 255), Math.round(col.getZ(i) * 255)]; };
-    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioEvalNiagara; delete window.__studioNiagaraStep; delete window.__studioBTTick; delete window.__studioStreamAround; delete window.__studioRevealAll; delete window.__studioAddAudioSource; delete window.__studioSetListener; delete window.__studioAudioState; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAnimBPSet; delete window.__studioAnimBPStep; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioTrimmedSurface; delete window.__studioAddNurbsCurve; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioFieldQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; };
+    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioEvalNiagara; delete window.__studioNiagaraStep; delete window.__studioBTTick; delete window.__studioStreamAround; delete window.__studioRevealAll; delete window.__studioAddAudioSource; delete window.__studioSetListener; delete window.__studioAudioState; delete window.__studioXRSupport; delete window.__studioEnterXR; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAnimBPSet; delete window.__studioAnimBPStep; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioTrimmedSurface; delete window.__studioAddNurbsCurve; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioFieldQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; };
   });
   // Auto-frame on primitive count change so the camera always shows
   // the current scene without the user having to hit Home.
@@ -828,6 +832,34 @@ function WorkbenchStudio() {
     const r = wpRevealAll(gatherStreamables());
     recomputeMeshStats(window.__archdiscScene);
     return r;
+  }
+
+  // ── WebXR AR/VR (the web/Electron-native path for Unity AR Foundation / Unreal
+  //    XR): three's renderer.xr immersive session via the WebXR Device API.
+  //    Honest scope: this is the immersive-session entry; full AR Foundation
+  //    plane-detection/anchors need on-device AR APIs. Works on XR-capable
+  //    devices; on a non-XR desktop it detects + reports unsupported gracefully.
+  async function studioXRSupport(mode) {
+    const xr = (typeof navigator !== 'undefined') ? navigator.xr : null;
+    if (!xr) return { hasXR: false, supported: false, mode: mode || 'immersive-vr' };
+    let supported = false;
+    try { supported = await xr.isSessionSupported(mode || 'immersive-vr'); } catch (e) { supported = false; }
+    return { hasXR: true, supported, mode: mode || 'immersive-vr' };
+  }
+  async function studioEnterXR(mode) {
+    const m = mode || 'immersive-ar';
+    const vp = window.__archdiscViewport;
+    const sup = await studioXRSupport(m);
+    if (!sup.hasXR) { setXrStatus('WebXR unavailable in this runtime'); return { ...sup, entered: false }; }
+    if (!sup.supported) { setXrStatus(`${m} not supported on this device`); return { ...sup, entered: false }; }
+    if (!vp || !vp.renderer) { setXrStatus('no renderer'); return { ...sup, entered: false }; }
+    try {
+      vp.renderer.xr.enabled = true;
+      const session = await navigator.xr.requestSession(m, m === 'immersive-ar' ? { optionalFeatures: ['hit-test', 'local-floor'] } : {});
+      await vp.renderer.xr.setSession(session);
+      setXrStatus(`${m} session active`);
+      return { ...sup, entered: true };
+    } catch (e) { setXrStatus(`session failed: ${String((e && e.message) || e)}`); return { ...sup, entered: false }; }
   }
 
   // ── Spatial audio (Unreal MetaSounds/Wwise / Unity AudioSource): anchor a
@@ -9033,6 +9065,9 @@ function WorkbenchStudio() {
                     </button>
                     <button type="button" className="ribbon-tool" data-studio-ribbon-action="audio-source" onClick={() => addAudioSourceToScene({ freq: 330 })} title="Spatial Audio Source — Unreal MetaSounds/Wwise / Unity AudioSource (positional synthesized tone with real distance attenuation + stereo pan; listener = camera)">
                       <span className="ribbon-tool-icon">♪</span><span className="ribbon-tool-label">Audio Src</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="enter-xr" data-studio-xr-status={xrStatus} onClick={() => studioEnterXR('immersive-ar')} title="AR/VR (WebXR) — Unity AR Foundation / Unreal XR via three.js renderer.xr immersive session; enters AR on an XR device, reports unsupported on desktop">
+                      <span className="ribbon-tool-icon">◉</span><span className="ribbon-tool-label">AR / VR</span>
                     </button>
                   </div>
                   <div className="ribbon-group-label">Engine · Unreal/Unity/RAGE</div>
