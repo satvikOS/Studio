@@ -10,6 +10,7 @@ import { TEAPOT_POSITIONS, TEAPOT_INDICES } from './TeapotGeometry.js';
 import { COLOR_CUBE_POSITIONS, COLOR_CUBE_INDICES } from './ColorCubeGeometry.js';
 import { getManifold } from '../../foundation/manifoldKernel.js';
 import { geometryToManifold, manifoldToGeometry } from '../../foundation/ManifoldThreeBridge.js';
+import { runArchieLoop, ArchieSkillStore, DEFAULT_CURRICULUM } from '../../ai/ArchieLoop.js';
 import {
   MousePointer2, Move, RotateCw, Maximize2,
   Box, Mountain, PaintBucket, Bone, Play, Sparkles, Camera,
@@ -7244,6 +7245,57 @@ function WorkbenchStudio() {
   // Keep the latest deleteSelectedMesh available to setup-scoped listeners.
   const deleteSelectedMeshRef = useRef(deleteSelectedMesh);
   useEffect(() => { deleteSelectedMeshRef.current = deleteSelectedMesh; });
+
+  // ─── Archie — the autonomous loop, wired onto the AI scaffold ───────
+  // An in-app executor (builds a data-driven plan via the real build fns)
+  // + verifier (reads the scene back) handed to runArchieLoop, exposed as
+  // window.__archieRun. Archie plans -> builds -> reads -> self-critiques ->
+  // iterates NON-STOP until 1:1-or-better parity, then banks a skill. The
+  // same engine drives the app and the e2e ("tests are done using Archie").
+  const archieSkillStoreRef = useRef(new ArchieSkillStore());
+  useEffect(() => {
+    const OP = {
+      'sculpt-erode': () => sculptErode(0.6),
+      'sculpt-weather': () => sculptWeather(0.42),
+      'sculpt-clay': () => sculptClay(0.5),
+      'sculpt-scrape': () => sculptScrape(0.4),
+      'subdivide-selected': () => subdivideSelected(),
+    };
+    const buildBody = (b) => {
+      addPrimitive(b.kind);
+      const stack = primitiveStackRef.current;
+      const mesh = stack[stack.length - 1];
+      if (!mesh) return;
+      if (b.pos) mesh.position.set(b.pos[0] || 0, b.pos[1] || 0, b.pos[2] || 0);
+      if (b.scale) mesh.scale.set(b.scale[0] || 1, b.scale[1] || 1, b.scale[2] || 1);
+      if (b.rot) mesh.rotation.set(b.rot[0] || 0, b.rot[1] || 0, b.rot[2] || 0);
+      if (b.color && mesh.material && mesh.material.color) mesh.material.color.set(b.color);
+      if (b.emissive && mesh.material) {
+        mesh.material.emissive = (mesh.material.color || new THREE.Color('#ffffff')).clone();
+        mesh.material.emissiveIntensity = b.emissive;
+      }
+      if (mesh.material) mesh.material.needsUpdate = true;
+      if (mesh.geometry) mesh.geometry.computeBoundingSphere();
+      if (Array.isArray(b.ops) && b.ops.length) {
+        if (window.__studioSelectMesh) window.__studioSelectMesh(mesh);
+        for (const op of b.ops) { const fn = OP[op]; if (fn) { try { fn(); } catch (_) { /* op best-effort */ } } }
+      }
+    };
+    const execute = async (plan) => {
+      clearScene();
+      for (const b of (plan && plan.bodies) || []) buildBody(b);
+      if (window.__studioFrameAll) window.__studioFrameAll();
+      return { built: ((plan && plan.bodies) || []).length };
+    };
+    const verify = async () => {
+      const scene = window.__archdiscScene; const kinds = new Set(); let bodies = 0;
+      if (scene) scene.traverse((o) => { if (o.userData && o.userData.archdiscStudioPrimitive) { bodies++; kinds.add(String(o.userData.archdiscStudioPrimitiveKind || '').replace('-array', '')); } });
+      return { bodies, kinds: [...kinds] };
+    };
+    window.__archieRun = (opts = {}) => runArchieLoop({ execute, verify, skillStore: archieSkillStoreRef.current, ...opts });
+    window.__archieEngine = { runArchieLoop, ArchieSkillStore, DEFAULT_CURRICULUM, skillStore: archieSkillStoreRef.current };
+    return () => { try { delete window.__archieRun; delete window.__archieEngine; } catch (_) { /* cleanup best-effort */ } };
+  }, []);
 
   return (
     <>

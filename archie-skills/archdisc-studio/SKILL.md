@@ -181,6 +181,15 @@ no lock-in, switchable per task:
   panel or the plan's provider field; never hard-code a single model.
 
 ## Autonomous build loop (self-directed, self-improving, non-stop)
+Wired in `frontend/src/ai/ArchieLoop.js` and exposed in-app as
+`window.__archieRun(opts)` (executor + verifier supplied by Studio). Archie's
+mandate: **work NON-STOP until 1:1-or-better parity** for each goal (it refines
+and rebuilds until the critique hits `parityScore`, bounded only by a safety
+cap and a stop signal), then banks a skill in `ArchieSkillStore` and moves on;
+with `selfDirect` it refills its own goal queue. The same engine drives the app
+AND the tests — an e2e just calls `window.__archieRun(...)` and asserts Archie
+reached parity (see `e2e/studio-archie-autonomous-loop-electron.spec.js`).
+Steps:
 1. **Pick a target** (a reference image / a self-chosen subject). Keep it open.
 2. **Plan** the body list (kinds, transforms, colours, ops) — deterministic.
 3. **Build** via the race-safe placement + ribbon ops; arrays/scatter for bulk.
