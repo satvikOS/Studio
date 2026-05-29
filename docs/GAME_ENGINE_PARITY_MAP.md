@@ -127,13 +127,17 @@ This map catalogs every Studio feature with its game-engine counterpart.
   spatial grid and streams cells in/out by Chebyshev cell distance from an origin
   (the camera target); "World Part" ribbon toggle + `__studioStreamAround` /
   `__studioRevealAll`. Moving the origin swaps the resident set.
+- Wwise / MetaSounds / Unity AudioSource spatial audio — DONE (slice 176).
+  audio/spatialAudio.js: real Web Audio graph (Oscillator -> Gain -> StereoPanner)
+  per source; the listener (camera) drives inverse-rolloff distance attenuation +
+  stereo pan; visible source gizmo; "Audio Src" ribbon + `__studioAddAudioSource`/
+  `__studioSetListener`/`__studioAudioState`. (Synthesized tone; HRTF/occlusion/
+  reverb zones out of scope.) Replaced the old octahedron-only placeholder.
 
 ## Pending engine features (queued)
 
-- Datasmith-class asset import (FBX, USD, Datasmith) — FBX/USD/glTF/OBJ already import
-- Wwise / MetaSounds audio integration
-- Behavior Tree + Blackboard (Unreal AI / Unity Behavior Designer)
-- AR Foundation parity (Unity AR Foundation)
+- Datasmith-class asset import — FBX/USD/glTF/OBJ already import (full .udatasmith pending)
+- AR Foundation parity (Unity AR Foundation) — needs an AR runtime/device; N/A on desktop
 
 ## Caveat
 

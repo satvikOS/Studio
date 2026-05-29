@@ -25,6 +25,7 @@ import { BLUEPRINT_NODE_TYPES, runBlueprint, blueprintSeed } from './blueprint/b
 import { NIAGARA_NODE_TYPES, niagaraSeed, evalNiagaraGraph, simulateEmitter } from './vfx/niagaraNodes.js';
 import { BT_NODE_TYPES, behaviorTreeSeed, tickBehaviorTree } from './ai/behaviorTreeNodes.js';
 import { streamAround as wpStreamAround, revealAll as wpRevealAll } from './world/worldPartition.js';
+import { addSource as audioAddSource, setListener as audioSetListener, audioState, sourceCount as audioSourceCount } from './audio/spatialAudio.js';
 import { buildNurbsSurfaceGeometry } from './nurbs/nurbsSurface.js';
 import { buildSweptGeometry } from './surf/sweepLoft.js';
 import { bakeAmbientOcclusion } from './bake/ambientOcclusion.js';
@@ -486,6 +487,10 @@ function WorkbenchStudio() {
     // World partition: stream cells around an origin / reveal all.
     window.__studioStreamAround = (origin, cellSize, radiusCells) => streamWorldPartition(origin, { cellSize, radiusCells });
     window.__studioRevealAll = () => revealAllPrimitives();
+    // Spatial audio: add a positional source / move the listener / read state.
+    window.__studioAddAudioSource = (opts) => addAudioSourceToScene(opts);
+    window.__studioSetListener = (pos) => { audioSetListener(pos); return audioState(); };
+    window.__studioAudioState = () => audioState();
     // Rigid-body sim: deterministically advance N steps (e2e/Archie, rAF-free) + read state.
     window.__studioPhysicsStep = (steps, dt) => { const n = steps || 1; const h = dt || 0.016; for (let i = 0; i < n; i++) physicsTick(h); return window.__studioPhysicsState(); };
     window.__studioPhysicsState = () => { const scene = window.__archdiscScene; if (!scene) return []; return physicsBodies(scene).map(b => ({ name: b.o.name, pos: [b.o.position.x, b.o.position.y, b.o.position.z], vel: [b.v[0], b.v[1], b.v[2]], radius: b.radius })); };
@@ -514,7 +519,7 @@ function WorkbenchStudio() {
     window.__studioReadNormalTexel = (uv) => { const m = selectedMeshRef.current; const nc = m && m.userData && m.userData._normalCanvas; if (!nc) return null; const d = nc.getContext('2d').getImageData(Math.floor(uv[0] * 512), Math.floor((1 - uv[1]) * 512), 1, 1).data; return [d[0], d[1], d[2]]; };
     window.__studioPolyPaintAt = (pt, color, radius) => { const m = selectedMeshRef.current; if (!m) return null; return paintPolyAt(m, new THREE.Vector3(pt[0], pt[1], pt[2]), color || brushPaintColor, radius || 0.012); };
     window.__studioReadVertexColor = (i) => { const m = selectedMeshRef.current; const col = m && m.geometry && m.geometry.attributes.color; if (!col) return null; return [Math.round(col.getX(i) * 255), Math.round(col.getY(i) * 255), Math.round(col.getZ(i) * 255)]; };
-    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioEvalNiagara; delete window.__studioNiagaraStep; delete window.__studioBTTick; delete window.__studioStreamAround; delete window.__studioRevealAll; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAnimBPSet; delete window.__studioAnimBPStep; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; };
+    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioEvalNiagara; delete window.__studioNiagaraStep; delete window.__studioBTTick; delete window.__studioStreamAround; delete window.__studioRevealAll; delete window.__studioAddAudioSource; delete window.__studioSetListener; delete window.__studioAudioState; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAnimBPSet; delete window.__studioAnimBPStep; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; };
   });
   // Auto-frame on primitive count change so the camera always shows
   // the current scene without the user having to hit Home.
@@ -817,6 +822,26 @@ function WorkbenchStudio() {
     const r = wpRevealAll(gatherStreamables());
     recomputeMeshStats(window.__archdiscScene);
     return r;
+  }
+
+  // ── Spatial audio (Unreal MetaSounds/Wwise / Unity AudioSource): anchor a
+  //    synthesized positional tone at a point + a visible gizmo; the listener
+  //    (camera target) drives distance attenuation + stereo pan. ──
+  function addAudioSourceToScene(opts) {
+    const scene = window.__archdiscScene; if (!scene) return { error: 'no scene' };
+    const o = opts || {};
+    const sel = selectedMeshRef.current;
+    const pos = o.position || (sel ? [sel.position.x, sel.position.y, sel.position.z] : [0, 0, 0]);
+    audioAddSource({ ...o, position: pos });
+    const giz = new THREE.Mesh(new THREE.IcosahedronGeometry(0.03, 0), new THREE.MeshBasicMaterial({ color: 0xbcbcbc, wireframe: true }));
+    giz.position.set(pos[0], pos[1], pos[2]);
+    giz.userData.archdiscAudioGizmo = true;
+    giz.name = `studio-audio-source-${audioSourceCount()}`;
+    scene.add(giz);
+    const vp = window.__archdiscViewport; const ctrl = vp && (vp.orbitControls || vp.controls); const t = ctrl && ctrl.target;
+    audioSetListener(t ? [t.x, t.y, t.z] : [0, 0, 0]);
+    recomputeMeshStats(scene);
+    return { count: audioSourceCount(), state: audioState() };
   }
   function toggleWorldPartition() {
     setWorldPartitionOn((on) => {
@@ -4755,22 +4780,6 @@ function WorkbenchStudio() {
   }
 
   // Unreal AudioComponent / Unity AudioSource — placeholder emitter.
-  function addAudioSource(x, y, z) {
-    const scene = window.__archdiscScene;
-    if (!scene) return null;
-    // Visual: small octahedron at the audio source location.
-    const geom = new THREE.OctahedronGeometry(0.005, 0);
-    const mat = new THREE.MeshStandardMaterial({ color: 0xa0a0a0, emissive: 0x404040 });
-    const audio = new THREE.Mesh(geom, mat);
-    audio.position.set(x, y, z);
-    audio.userData.archdiscStudioPrimitive = true;
-    audio.userData.archdiscStudioPrimitiveKind = 'audio-source';
-    scene.add(audio);
-    primitiveStackRef.current.push(audio);
-    setPrimitiveCount(primitiveStackRef.current.length);
-    recomputeMeshStats(scene);
-    return { position: [x, y, z] };
-  }
 
   /*
    * BATCH 13: UV + paint + decimate variants + sculpt brush extras.
@@ -8929,8 +8938,8 @@ function WorkbenchStudio() {
                     <button type="button" className="ribbon-tool" data-studio-ribbon-action="trigger-volume" onClick={() => addTriggerVolume(0, 0.04, 0.04)} title="Unreal TriggerVolume / Unity Collider.isTrigger">
                       <span className="ribbon-tool-icon">▢</span><span className="ribbon-tool-label">Trigger</span>
                     </button>
-                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="audio-source" onClick={() => addAudioSource(0, 0.05, 0)} title="Unreal AudioComponent / Unity AudioSource">
-                      <span className="ribbon-tool-icon">♪</span><span className="ribbon-tool-label">Audio</span>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="audio-source" onClick={() => addAudioSourceToScene({ freq: 330 })} title="Spatial Audio Source — Unreal MetaSounds/Wwise / Unity AudioSource (positional synthesized tone with real distance attenuation + stereo pan; listener = camera)">
+                      <span className="ribbon-tool-icon">♪</span><span className="ribbon-tool-label">Audio Src</span>
                     </button>
                   </div>
                   <div className="ribbon-group-label">Engine · Unreal/Unity/RAGE</div>
