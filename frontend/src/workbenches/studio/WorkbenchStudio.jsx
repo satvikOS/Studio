@@ -11310,6 +11310,27 @@ function WorkbenchStudio() {
             <div style={{ padding: '8px 10px', overflowY: 'auto', flex: 1 }}>
               {nPanelTab === 'Item' && (
                 <div data-studio-npanel-content="Item">
+                  {/* Slice 231: opacity slider on the selected mesh
+                      material. Sets material.opacity + transparent. */}
+                  {selectedKind && (
+                    <div data-studio-npanel-section="opacity" style={{ marginBottom: '10px' }}>
+                      <div style={{ opacity: 0.6, marginBottom: '3px', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Opacity</div>
+                      <input
+                        type="range" min="0" max="1" step="0.05" defaultValue="1"
+                        data-studio-npanel-opacity
+                        onInput={(e) => {
+                          const v = parseFloat(e.target.value);
+                          const m = selectedMeshRef.current;
+                          if (!m || !m.material) return;
+                          m.material.opacity = v;
+                          m.material.transparent = v < 1.0;
+                          m.material.needsUpdate = true;
+                          window.__studioMeshOpacity = v;
+                        }}
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+                  )}
                   <div style={{ opacity: 0.6, marginBottom: '6px', textTransform: 'uppercase', fontSize: '10px', letterSpacing: '0.05em' }}>Selected</div>
                   {selectedKind ? (
                     <>
