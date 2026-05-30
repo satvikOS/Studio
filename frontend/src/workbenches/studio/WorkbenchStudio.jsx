@@ -11829,6 +11829,23 @@ function WorkbenchStudio() {
                     <span style={{ opacity: 0.6 }}>Faces:</span>{' '}
                     <span data-studio-npanel-faces>{faceCount.toLocaleString()}</span>
                   </div>
+                  {/* Slice 265: scene-wide bounding box (all primitives). */}
+                  <div style={{ marginBottom: '8px' }}>
+                    <span style={{ opacity: 0.6 }}>Scene bbox:</span>{' '}
+                    <span data-studio-npanel-scene-bbox style={{ fontFamily: 'monospace', fontSize: '10px' }}>{(() => {
+                      void primitiveCount; void lightCount; void outlinerTick; void currentFrame;
+                      const scene = window.__archdiscScene; if (!scene) return '–';
+                      const box = new THREE.Box3();
+                      scene.traverse((o) => {
+                        if (o.userData && o.userData.archdiscStudioPrimitive && o.geometry) {
+                          box.expandByObject(o);
+                        }
+                      });
+                      if (box.isEmpty()) return '–';
+                      const sz = box.getSize(new THREE.Vector3());
+                      return `${sz.x.toFixed(2)} × ${sz.y.toFixed(2)} × ${sz.z.toFixed(2)}`;
+                    })()}</span>
+                  </div>
                   {/* Slice 253 + 263: scene-wide triangle tally. Slice 263
                       adds a budget warning — turns amber over 250k tris,
                       red over 1M. */}
