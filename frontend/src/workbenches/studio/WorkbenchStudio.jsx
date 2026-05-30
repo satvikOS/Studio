@@ -12033,22 +12033,33 @@ function WorkbenchStudio() {
                       style={{ background: '#2a2a3a', color: '#bdbdbd', border: '1px solid #3a3a4a', borderRadius: '3px', padding: '3px 8px', fontSize: '10px', cursor: 'pointer', fontFamily: 'inherit' }}
                     >Turntable</button>
                   </div>
-                  {/* Slice 261: run an Archie autonomous build via one
-                      click. Picks the first curriculum goal so the user
-                      sees the autonomous loop produce a real scene
-                      without typing a prompt. */}
-                  <div style={{ marginBottom: '8px' }}>
+                  {/* Slice 261 + 270: curriculum dropdown + run button.
+                      Lists every DEFAULT_CURRICULUM goal so the user
+                      can pick which scene Archie builds. */}
+                  <div style={{ marginBottom: '8px', display: 'flex', gap: '6px' }}>
+                    <select
+                      data-studio-npanel-archie-goal
+                      style={{ flex: 1, background: '#1f1f1f', color: '#dfdfdf', border: '1px solid #353535', borderRadius: '3px', padding: '2px 6px', fontSize: '10px' }}
+                    >
+                      {(window.__archieEngine && window.__archieEngine.DEFAULT_CURRICULUM
+                        ? window.__archieEngine.DEFAULT_CURRICULUM.map((g) => g.goal)
+                        : ['stone cairn']
+                      ).map((g) => (
+                        <option key={g} value={g}>{g}</option>
+                      ))}
+                    </select>
                     <button
                       type="button"
                       data-studio-npanel-run-archie
                       onClick={() => {
                         if (window.__archieRun && window.__archieEngine) {
-                          const goal = window.__archieEngine.DEFAULT_CURRICULUM[0].goal;
+                          const sel = document.querySelector('[data-studio-npanel-archie-goal]');
+                          const goal = (sel && sel.value) || window.__archieEngine.DEFAULT_CURRICULUM[0].goal;
                           window.__archieRun({ goals: [goal], maxGoals: 1 });
                         }
                       }}
                       style={{ background: '#22323a', color: '#9ed7ff', border: '1px solid #2f4c5a', borderRadius: '3px', padding: '3px 8px', fontSize: '10px', cursor: 'pointer', fontFamily: 'inherit' }}
-                    >Run Archie demo</button>
+                    >Run</button>
                   </div>
                   {/* Slice 259: clear all Studio lights button. */}
                   <div style={{ marginBottom: '8px' }}>
