@@ -11222,9 +11222,21 @@ function WorkbenchStudio() {
                     <span style={{ opacity: 0.6 }}>Vertices:</span>{' '}
                     <span data-studio-npanel-verts>{vertexCount.toLocaleString()}</span>
                   </div>
-                  <div>
+                  <div style={{ marginBottom: '8px' }}>
                     <span style={{ opacity: 0.6 }}>Faces:</span>{' '}
                     <span data-studio-npanel-faces>{faceCount.toLocaleString()}</span>
+                  </div>
+                  {/* Slice 216: Timeline stats — current frame +
+                      keyframe count so the animation state is always
+                      visible without opening the Sequencer dock. */}
+                  <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px solid #1d1d1d', opacity: 0.6, marginBottom: '6px', textTransform: 'uppercase', fontSize: '10px', letterSpacing: '0.05em' }}>Timeline</div>
+                  <div style={{ marginBottom: '8px' }}>
+                    <span style={{ opacity: 0.6 }}>Frame:</span>{' '}
+                    <span data-studio-npanel-frame>{currentFrame}</span>
+                  </div>
+                  <div>
+                    <span style={{ opacity: 0.6 }}>Keyframes:</span>{' '}
+                    <span data-studio-npanel-keyframes>{(keyframes || []).length}</span>
                   </div>
                 </div>
               )}
