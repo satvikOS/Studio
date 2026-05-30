@@ -2203,7 +2203,7 @@ function WorkbenchStudio() {
       // numpad (slice 193). Block other modifier combos so browser
       // shortcuts (Cmd+R, Ctrl+S, etc.) still work.
       const isAllowedModCombo = (
-        (e.ctrlKey && /^[a13750cvzmj]$/i.test(e.key)) ||
+        (e.ctrlKey && (/^[a13750cvzmj]$/i.test(e.key) || e.key === '.')) ||
         (e.altKey && /^[ahgrs]$/i.test(e.key)) ||
         (e.shiftKey && /^[dcszgh]$/i.test(e.key))
       );
@@ -2281,6 +2281,18 @@ function WorkbenchStudio() {
           }
         }
         if (mesh) writeTransform(mesh);
+      }
+      else if (e.key === '.' && e.ctrlKey) {
+        // Slice 218: Ctrl+. toggles the gizmo's transform space
+        // between world ("global") and local. TransformControls
+        // exposes setSpace + space getter; we flip + persist on
+        // window so the UI / e2e can read back.
+        const giz = window.__studioGizmo;
+        if (giz && typeof giz.setSpace === 'function') {
+          const next = (giz.space === 'world') ? 'local' : 'world';
+          giz.setSpace(next);
+          window.__studioGizmoSpace = next;
+        }
       }
       else if (e.key === '.') {
         // Slice 205: cycle pivot point mode (Blender's `.` key opens a
