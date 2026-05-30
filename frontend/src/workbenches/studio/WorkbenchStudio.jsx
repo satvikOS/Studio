@@ -921,6 +921,8 @@ function WorkbenchStudio() {
     // Skip while loadSceneJSON is replaying so undo/redo internal
     // addPrimitive calls don't pollute the history stacks.
     if (window.__studioPushUndo && !window.__studioReplayingScene) window.__studioPushUndo();
+    // Slice 220: record the last primitive-spawn so Shift+R can repeat.
+    if (!window.__studioReplayingScene) window.__studioLastOp = { kind: 'primitive', id: kind };
 
     const geometry = buildPrimitiveGeometry(kind);
     if (!geometry) return null;
@@ -2205,7 +2207,7 @@ function WorkbenchStudio() {
       const isAllowedModCombo = (
         (e.ctrlKey && (/^[a13750cvzmj]$/i.test(e.key) || e.key === '.')) ||
         (e.altKey && /^[ahgrs]$/i.test(e.key)) ||
-        (e.shiftKey && /^[dcszgh]$/i.test(e.key))
+        (e.shiftKey && /^[dcszghr]$/i.test(e.key))
       );
       if ((e.metaKey || e.ctrlKey || e.altKey) && !isAllowedModCombo) return;
       const k = (e.key || '').toLowerCase();
@@ -2328,6 +2330,19 @@ function WorkbenchStudio() {
           selectedMeshesRef.current = matches.slice();
           window.__studioSelectMesh(matches[matches.length - 1]);
           selectedMeshesRef.current = matches.slice();
+        }
+      } else if (k === 'r' && e.shiftKey) {
+        // Slice 220: Shift+R repeats the last fired ribbon action or
+        // a recorded "last op" stash. Studio records the most recent
+        // primitive spawn / ribbon action on window.__studioLastOp;
+        // Shift+R replays it.
+        const last = window.__studioLastOp;
+        if (last && last.kind === 'primitive') {
+          const btn = document.querySelector(`[data-studio-primitive="${last.id}"]`);
+          if (btn) btn.click();
+        } else if (last && last.kind === 'ribbon') {
+          const btn = document.querySelector(`[data-studio-ribbon-action="${last.id}"]`);
+          if (btn) btn.click();
         }
       } else if (e.key === 'F12') {
         // Slice 219: F12 captures a render frame (Blender F12 idiom).
