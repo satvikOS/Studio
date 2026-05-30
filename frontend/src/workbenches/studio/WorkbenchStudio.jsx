@@ -11870,6 +11870,23 @@ function WorkbenchStudio() {
                       <option value="15">15</option>
                     </select>
                   </div>
+                  {/* Slice 259: clear all Studio lights button. */}
+                  <div style={{ marginBottom: '8px' }}>
+                    <button
+                      type="button"
+                      data-studio-npanel-clear-lights
+                      onClick={() => {
+                        const scene = window.__archdiscScene; if (!scene) return;
+                        const toRemove = [];
+                        scene.traverse((o) => {
+                          if (o.userData && (o.userData.archdiscStudioLight || o.userData.archdiscStudioLightHelper)) toRemove.push(o);
+                        });
+                        for (const o of toRemove) scene.remove(o);
+                        setLightCount(0);
+                      }}
+                      style={{ background: '#3a2222', color: '#ffd9a0', border: '1px solid #5a3030', borderRadius: '3px', padding: '3px 8px', fontSize: '10px', cursor: 'pointer', fontFamily: 'inherit' }}
+                    >Clear lights</button>
+                  </div>
                   {/* Slice 249: global lights intensity multiplier —
                       scales every Studio light's intensity at once. */}
                   <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
