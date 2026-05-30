@@ -317,6 +317,16 @@ function WorkbenchStudio() {
   const [outlinerFilter, setOutlinerFilter] = useState('');
   const [outlinerCollections, setOutlinerCollections] = useState({ Primitives: true, Lights: true });
   const toggleCollection = (name) => setOutlinerCollections((s) => ({ ...s, [name]: !s[name] }));
+  // Slice 205: Blender pivot point modes. Median (default — pivot is
+  // the centroid of the selection set), Individual (each mesh rotates /
+  // scales around its own origin), Cursor (pivot is the 3D Cursor from
+  // slice 197). Period key (.) cycles through them. R/S in the keymap
+  // respect the active pivot. Ref mirrors the state so the persistent
+  // document keymap closure reads the live value.
+  const [pivotMode, setPivotMode] = useState('median');
+  const pivotModeRef = useRef('median');
+  const PIVOT_MODES = ['median', 'individual', 'cursor'];
+  useEffect(() => { pivotModeRef.current = pivotMode; }, [pivotMode]);
   // Slice 187: Blender N-panel — the viewport's right-edge sidebar with
   // Item / Tool / View tabs. Open by default (Blender ships it visible)
   // and toggleable via the floating "N" button at the viewport's right
@@ -648,6 +658,8 @@ function WorkbenchStudio() {
       if (!m) return null;
       return setCursorAt([m.position.x, m.position.y, m.position.z]);
     };
+    window.__studioSetPivotMode = (mode) => setPivotMode(mode);
+    window.__studioGetPivotMode = () => pivotModeRef.current;
     window.__studioAddRefPlane = (axis, imageUrl, opts) => addReferenceImagePlane(axis, imageUrl, opts);
     // ZBrush mask + a programmatic brush stroke (for Archie + e2e). pt = world [x,y,z].
     window.__studioPaintMaskAt = (pt, radius, value) => { const m = selectedMeshRef.current; if (!m) return null; return paintMaskAt(m, new THREE.Vector3(pt[0], pt[1], pt[2]), radius, value == null ? 1 : value); };
@@ -2143,8 +2155,61 @@ function WorkbenchStudio() {
       const set = (selectedMeshesRef.current && selectedMeshesRef.current.length)
         ? selectedMeshesRef.current : (mesh ? [mesh] : []);
       if (k === 'g' && set.length) { for (const m of set) m.position.x += 0.05; if (mesh) writeTransform(mesh); }
-      else if (k === 'r' && set.length) { for (const m of set) m.rotation.y += 0.1; if (mesh) writeTransform(mesh); }
-      else if (k === 's' && !e.shiftKey && !e.ctrlKey && !e.altKey && set.length) { for (const m of set) m.scale.multiplyScalar(1.1); if (mesh) writeTransform(mesh); }
+      else if (k === 'r' && set.length) {
+        // Slice 205: rotation around the active pivot point.
+        const mode = pivotModeRef.current || 'median';
+        let pivot = null;
+        if (mode === 'cursor' && cursorRef.current) {
+          pivot = cursorRef.current.position.clone();
+        } else if (mode === 'median' && set.length > 1) {
+          pivot = new THREE.Vector3();
+          for (const m of set) pivot.add(m.position);
+          pivot.multiplyScalar(1 / set.length);
+        }
+        // 'individual' (or single-selection) falls through to rotate-in-place.
+        const dy = 0.1;
+        for (const m of set) {
+          m.rotation.y += dy;
+          if (pivot) {
+            const dx = m.position.x - pivot.x;
+            const dz = m.position.z - pivot.z;
+            const c = Math.cos(dy), s = Math.sin(dy);
+            m.position.x = pivot.x + (dx * c - dz * s);
+            m.position.z = pivot.z + (dx * s + dz * c);
+          }
+        }
+        if (mesh) writeTransform(mesh);
+      }
+      else if (k === 's' && !e.shiftKey && !e.ctrlKey && !e.altKey && set.length) {
+        // Slice 205: scale around the active pivot point.
+        const mode = pivotModeRef.current || 'median';
+        let pivot = null;
+        if (mode === 'cursor' && cursorRef.current) {
+          pivot = cursorRef.current.position.clone();
+        } else if (mode === 'median' && set.length > 1) {
+          pivot = new THREE.Vector3();
+          for (const m of set) pivot.add(m.position);
+          pivot.multiplyScalar(1 / set.length);
+        }
+        const factor = 1.1;
+        for (const m of set) {
+          m.scale.multiplyScalar(factor);
+          if (pivot) {
+            const dx = m.position.x - pivot.x;
+            const dy = m.position.y - pivot.y;
+            const dz = m.position.z - pivot.z;
+            m.position.set(pivot.x + dx * factor, pivot.y + dy * factor, pivot.z + dz * factor);
+          }
+        }
+        if (mesh) writeTransform(mesh);
+      }
+      else if (e.key === '.') {
+        // Slice 205: cycle pivot point mode (Blender's `.` key opens a
+        // pie menu; Studio cycles through median / individual / cursor).
+        const cur = pivotModeRef.current || 'median';
+        const next = PIVOT_MODES[(PIVOT_MODES.indexOf(cur) + 1) % PIVOT_MODES.length];
+        if (window.__studioSetPivotMode) window.__studioSetPivotMode(next);
+      }
       else if (k === 'a' && !e.ctrlKey && !e.altKey && !e.shiftKey) {
         const stack = primitiveStackRef.current || [];
         if (!stack.length) return;
