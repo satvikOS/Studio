@@ -751,6 +751,35 @@ function WorkbenchStudio() {
       return true;
     };
     window.__studioUndoStackLen = () => undoStackRef.current.length;
+    // Slice 260: instanced-mesh stress spawn. Adds N InstancedMesh
+    // copies of the active mesh's geometry+material in a grid. Real
+    // GPU instancing = 1 draw call regardless of N. Useful perf
+    // benchmark + comparable to Maya's MASH / Blender's Geometry-Nodes
+    // instancing at scale.
+    window.__studioInstancedStress = (n) => {
+      const scene = window.__archdiscScene; const src = selectedMeshRef.current;
+      if (!scene || !src || !src.geometry || !src.material) return null;
+      const inst = new THREE.InstancedMesh(src.geometry.clone(), src.material.clone(), n);
+      const dummy = new THREE.Object3D();
+      const cols = Math.ceil(Math.sqrt(n));
+      const step = 0.04;
+      const base = -(cols - 1) * step * 0.5;
+      for (let i = 0; i < n; i++) {
+        const col = i % cols, row = Math.floor(i / cols);
+        dummy.position.set(base + col * step, 0, base + row * step);
+        dummy.updateMatrix();
+        inst.setMatrixAt(i, dummy.matrix);
+      }
+      inst.instanceMatrix.needsUpdate = true;
+      inst.userData.archdiscStudioPrimitive = true;
+      inst.userData.archdiscStudioPrimitiveKind = 'instanced-stress';
+      inst.name = `studio-primitive-instanced-${n}`;
+      scene.add(inst);
+      if (primitiveStackRef.current) primitiveStackRef.current.push(inst);
+      setPrimitiveCount((c) => c + 1);
+      window.__studioLastInstancedCount = n;
+      return n;
+    };
     // Slice 246: camera bookmarks. Saves the current camera position +
     // orbit target as a named record; restoreBookmark plays it back.
     // Persisted on window so they survive between scene rebuilds in
