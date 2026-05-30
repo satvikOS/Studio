@@ -2205,7 +2205,7 @@ function WorkbenchStudio() {
       // numpad (slice 193). Block other modifier combos so browser
       // shortcuts (Cmd+R, Ctrl+S, etc.) still work.
       const isAllowedModCombo = (
-        (e.ctrlKey && (/^[a13750cvzmji]$/i.test(e.key) || e.key === '.')) ||
+        (e.ctrlKey && (/^[a13750cvzmji]$/i.test(e.key) || e.key === '.' || e.key === 'PageUp' || e.key === 'PageDown')) ||
         (e.altKey && /^[ahgrsc]$/i.test(e.key)) ||
         (e.shiftKey && /^[dcszghrl]$/i.test(e.key)) ||
         (e.ctrlKey && e.shiftKey && /^[l]$/i.test(e.key))
@@ -2378,6 +2378,19 @@ function WorkbenchStudio() {
           const btn = document.querySelector(`[data-studio-ribbon-action="${last.id}"]`);
           if (btn) btn.click();
         }
+      } else if ((e.key === 'PageUp' || e.key === 'PageDown') && e.ctrlKey) {
+        // Slice 226: Ctrl+PageUp / Ctrl+PageDown cycle the active
+        // Blender workspace (slice 185). Blender uses the same chord.
+        const tabs = document.querySelectorAll('[data-blender-workspace]');
+        if (!tabs.length) return;
+        let curIdx = 0;
+        for (let i = 0; i < tabs.length; i++) {
+          if (tabs[i].getAttribute('data-blender-workspace-active') === '1') { curIdx = i; break; }
+        }
+        const dir = e.key === 'PageDown' ? 1 : -1;
+        const nextIdx = (curIdx + dir + tabs.length) % tabs.length;
+        e.preventDefault();
+        tabs[nextIdx].click();
       } else if (k === 'l' && e.shiftKey && e.ctrlKey) {
         // Slice 225: Ctrl+Shift+L spawns a cinematic point light at
         // the 3D Cursor (or origin if cursor never moved). Reuses the
