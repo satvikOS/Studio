@@ -2203,7 +2203,7 @@ function WorkbenchStudio() {
       // numpad (slice 193). Block other modifier combos so browser
       // shortcuts (Cmd+R, Ctrl+S, etc.) still work.
       const isAllowedModCombo = (
-        (e.ctrlKey && /^[a13750cvzm]$/i.test(e.key)) ||
+        (e.ctrlKey && /^[a13750cvzmj]$/i.test(e.key)) ||
         (e.altKey && /^[ahgrs]$/i.test(e.key)) ||
         (e.shiftKey && /^[dcsz]$/i.test(e.key))
       );
@@ -2417,6 +2417,48 @@ function WorkbenchStudio() {
           }
         });
         window.__studioWireframeOn = any;
+      } else if (k === 'j' && e.ctrlKey && set.length >= 2) {
+        // Slice 214: Ctrl+J joins the multi-select set into one mesh
+        // (Blender's Object > Join). Bakes each source's world
+        // transform into its geometry, merges via mergeGeometries,
+        // wraps in a fresh Mesh tagged as a primitive so the rest of
+        // Studio's selection / outliner / save-load picks it up.
+        e.preventDefault();
+        if (window.__studioPushUndo) window.__studioPushUndo();
+        const scene = window.__archdiscScene;
+        const geos = [];
+        for (const m of set) {
+          if (!m.geometry) continue;
+          const g = m.geometry.clone();
+          g.applyMatrix4(m.matrixWorld);
+          // mergeGeometries needs uniform attribute sets; strip non-position
+          // attributes if they vary.
+          geos.push(g);
+        }
+        try {
+          const merged = mergeGeometries(geos, false);
+          if (merged) {
+            const baseMat = set[0].material && set[0].material.clone ? set[0].material.clone() : null;
+            const joined = new THREE.Mesh(merged, baseMat || new THREE.MeshStandardMaterial({ color: 0x9ab }));
+            joined.userData.archdiscStudioPrimitive = true;
+            joined.userData.archdiscStudioPrimitiveKind = 'joined';
+            joined.name = 'studio-primitive-joined-' + Date.now();
+            for (const m of set) {
+              const idx = primitiveStackRef.current.indexOf(m);
+              if (idx >= 0) primitiveStackRef.current.splice(idx, 1);
+              scene.remove(m);
+              if (m.geometry && m.geometry.dispose) m.geometry.dispose();
+            }
+            scene.add(joined);
+            primitiveStackRef.current.push(joined);
+            setPrimitiveCount(primitiveStackRef.current.length);
+            selectedMeshesRef.current = [joined];
+            if (window.__studioSelectMesh) window.__studioSelectMesh(joined);
+          }
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.warn('[studio] Ctrl+J join failed', err);
+        }
       } else if (k === 'm' && e.ctrlKey) {
         // Slice 210: Ctrl+M mirrors the multi-select set across the
         // world X axis (Blender's Ctrl+M opens a mirror prompt; Studio
