@@ -11199,6 +11199,19 @@ function WorkbenchStudio() {
             >{m}</button>
           ))}
           <span style={{ flex: 1 }} />
+          {/* Slice 230: viewport-header screenshot button. Click runs
+              the same capture pipeline as F12 (slice 219). */}
+          <button
+            type="button"
+            data-studio-viewport-screenshot
+            onClick={() => { if (window.__archieCaptureRender) window.__archieCaptureRender(); }}
+            title="Capture render (F12)"
+            style={{
+              background: '#3a3a3a', color: '#bdbdbd', border: '1px solid #1d1d1d',
+              cursor: 'pointer', fontFamily: 'inherit', fontSize: '11px',
+              padding: '2px 8px', marginRight: '8px',
+            }}
+          >📷</button>
           {['wireframe', 'solid', 'material', 'rendered'].map((mode) => (
             <button
               key={mode}
