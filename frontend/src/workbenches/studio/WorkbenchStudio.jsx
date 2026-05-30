@@ -1871,7 +1871,15 @@ function WorkbenchStudio() {
       const tag = (e.target && e.target.tagName) || '';
       window.__bgTag = tag;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      // Allow Ctrl+A / Alt+A / Alt+H / Shift+D for slice 194 + Ctrl+
+      // numpad (slice 193). Block other modifier combos so browser
+      // shortcuts (Cmd+R, Ctrl+S, etc.) still work.
+      const isAllowedModCombo = (
+        (e.ctrlKey && /^[a13750]$/i.test(e.key)) ||
+        (e.altKey && /^[ah]$/i.test(e.key)) ||
+        (e.shiftKey && /^[d]$/i.test(e.key))
+      );
+      if ((e.metaKey || e.ctrlKey || e.altKey) && !isAllowedModCombo) return;
       const k = (e.key || '').toLowerCase();
       const mesh = selectedMeshRef.current;
       window.__bgMesh = mesh ? mesh.uuid : 'null';
@@ -1882,7 +1890,7 @@ function WorkbenchStudio() {
       if (k === 'g' && set.length) { for (const m of set) m.position.x += 0.05; if (mesh) writeTransform(mesh); }
       else if (k === 'r' && set.length) { for (const m of set) m.rotation.y += 0.1; if (mesh) writeTransform(mesh); }
       else if (k === 's' && set.length) { for (const m of set) m.scale.multiplyScalar(1.1); if (mesh) writeTransform(mesh); }
-      else if (k === 'a') {
+      else if (k === 'a' && !e.ctrlKey && !e.altKey && !e.shiftKey) {
         const stack = primitiveStackRef.current || [];
         if (!stack.length) return;
         const cur = selectedMeshRef.current;
@@ -1894,6 +1902,76 @@ function WorkbenchStudio() {
       } else if (e.key === 'Tab') {
         e.preventDefault();
         setViewportMode((cur) => cur === 'Object Mode' ? 'Edit Mode' : 'Object Mode');
+      } else if (k === 'f' && mesh) {
+        // Slice 194: F frames the camera on the active selection.
+        // Computes bounding sphere of selected set, orbits camera so
+        // it neatly contains the selection (Blender Numpad-. + F key).
+        const targets = (selectedMeshesRef.current && selectedMeshesRef.current.length)
+          ? selectedMeshesRef.current : [mesh];
+        const box = new THREE.Box3();
+        for (const m of targets) { box.expandByObject(m); }
+        const center = box.getCenter(new THREE.Vector3());
+        const size = box.getSize(new THREE.Vector3()).length();
+        if (typeof window.__archdiscFrameBox === 'function') {
+          window.__archdiscFrameBox(center, size);
+        } else if (typeof window.__studioFrameAll === 'function') {
+          window.__studioFrameAll();
+        }
+      } else if (e.key === 'Home') {
+        if (typeof window.__studioFrameAll === 'function') window.__studioFrameAll();
+      } else if (k === 'h' && !e.altKey && set.length) {
+        // Slice 194: H hides the selected meshes; Alt+H reveals all.
+        for (const m of set) m.visible = false;
+      } else if (k === 'h' && e.altKey) {
+        const scene = window.__archdiscScene; if (scene) {
+          scene.traverse((o) => { if (o.userData && o.userData.archdiscStudioPrimitive) o.visible = true; });
+        }
+      } else if (k === 'd' && e.shiftKey && set.length) {
+        // Slice 194: Shift+D duplicates each selected mesh just like
+        // Blender: clone geometry + material, offset slightly so the
+        // duplicates don't z-fight the originals, add to scene + stack.
+        const scene = window.__archdiscScene; if (!scene) return;
+        const dupes = [];
+        for (const m of set) {
+          const c = m.clone();
+          c.geometry = m.geometry.clone();
+          c.material = m.material && m.material.clone ? m.material.clone() : m.material;
+          c.position.x += 0.05;
+          c.userData = { ...m.userData };
+          c.name = (m.name || 'studio-primitive') + '-dup';
+          scene.add(c);
+          if (primitiveStackRef.current) primitiveStackRef.current.push(c);
+          dupes.push(c);
+        }
+        setPrimitiveCount((cur) => cur + dupes.length);
+        if (dupes.length && window.__studioSelectMesh) window.__studioSelectMesh(dupes[dupes.length - 1]);
+      } else if (k === 'a' && e.ctrlKey) {
+        // Slice 194: Ctrl+A selects every primitive (Blender Ctrl+A
+        // selects all; plain A cycles which slice 190 wired).
+        const stack = primitiveStackRef.current || [];
+        if (stack.length && window.__studioSelectMesh) {
+          selectedMeshesRef.current = stack.slice();
+          window.__studioSelectMesh(stack[stack.length - 1]);
+          // __studioSelectMesh collapses set; re-establish the full set.
+          selectedMeshesRef.current = stack.slice();
+        }
+      } else if (k === 'a' && e.altKey) {
+        // Slice 194: Alt+A deselects all (Blender Alt+A).
+        selectedMeshesRef.current = [];
+        if (window.__studioDeselect) window.__studioDeselect();
+      } else if (k === 'z') {
+        // Slice 194: Z toggles wireframe shading on every primitive
+        // (Blender Z toggles between shading modes; Studio toggles
+        // wireframe overlay as the simplest equivalent).
+        const scene = window.__archdiscScene; if (!scene) return;
+        let any = false;
+        scene.traverse((o) => {
+          if (o.userData && o.userData.archdiscStudioPrimitive && o.material) {
+            o.material.wireframe = !o.material.wireframe;
+            any = any || o.material.wireframe;
+          }
+        });
+        window.__studioWireframeOn = any;
       } else if (['1','3','7','5'].includes(e.key)) {
         // Slice 193: Blender numpad view shortcuts. Numpad-1 front,
         // Numpad-3 right side, Numpad-7 top, Numpad-5 ortho/persp
@@ -10904,9 +10982,20 @@ function WorkbenchStudio() {
              mirroring Blender's canonical workspaces. Sits ABOVE the
              discipline ribbon, scrolls horizontally if it overflows so the
              full 11 workspaces fit any viewport. */
+          /* The Blender workspaces strip is absolutely positioned at the
+             very top of the workbench stage (above the ribbon-placeholder).
+             It's NOT a grid child of .workbench-stage because the stage's
+             template-areas only declare ribbon-row + main-row, and an
+             unassigned child auto-places at the BOTTOM. Using absolute
+             positioning keeps the strip out of the grid layout entirely. */
+          .workbench-stage { padding-top: 30px; box-sizing: border-box; }
           .blender-workspaces-strip {
-            position: relative;
-            z-index: 50;
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 30px;
+            z-index: 40;
             display: flex;
             align-items: center;
             gap: 2px;
@@ -10918,15 +11007,7 @@ function WorkbenchStudio() {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             font-size: 11px;
             scrollbar-width: thin;
-          }
-          /* The left toolbar (.workbench-tools) is absolutely positioned
-             with top: var(--ribbon-height). The new strip pushes the
-             ribbon row taller so the toolbar's top sits OVER the ribbon
-             area, intercepting clicks on the strip's tabs. Bump the
-             toolbar's top by the strip height so the strip stays
-             clickable end-to-end. */
-          body:has(.blender-workspaces-strip) .workbench-tools {
-            top: calc(var(--ribbon-height) + 30px);
+            box-sizing: border-box;
           }
           .blender-workspaces-strip::-webkit-scrollbar { height: 4px; }
           .blender-workspaces-strip::-webkit-scrollbar-thumb { background: #555; border-radius: 2px; }
