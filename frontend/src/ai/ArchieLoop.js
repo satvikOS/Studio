@@ -207,11 +207,40 @@ export async function runArchieLoop(opts = {}) {
     throw new Error('runArchieLoop requires execute() and verify() callbacks');
   }
 
+  // Steering: the caller (and via window hooks, the user) can inject new
+  // goals mid-flight, pause the loop, or cancel it. We attach helpers to
+  // `signal` so the same shared object is the control surface.
+  if (!Array.isArray(signal.injectQueue)) signal.injectQueue = [];
+  if (typeof signal.inject !== 'function') {
+    signal.inject = (g) => {
+      if (typeof g === 'string' && g.trim()) signal.injectQueue.push(g.trim());
+    };
+  }
+  if (typeof signal.pause !== 'function') signal.pause = () => { signal.paused = true; };
+  if (typeof signal.resume !== 'function') signal.resume = () => { signal.paused = false; };
+  if (typeof signal.cancel !== 'function') signal.cancel = () => { signal.stopped = true; };
+
+  async function awaitNotPaused() {
+    while (signal.paused && !signal.stopped) {
+      await new Promise((r) => setTimeout(r, 200));
+    }
+  }
+  function drainInjects() {
+    if (!signal.injectQueue.length) return 0;
+    const drained = signal.injectQueue.splice(0, signal.injectQueue.length);
+    queue.unshift(...drained);
+    onEvent({ type: 'injected', goals: drained });
+    return drained.length;
+  }
+
   const queue = [...goals];
   const log = [];
   let completed = 0, improvements = 0, reuses = 0;
 
   while (queue.length && completed < maxGoals && !signal.stopped) {
+    drainInjects();
+    await awaitNotPaused();
+    if (signal.stopped) break;
     const goal = queue.shift();
     onEvent({ type: 'goal-start', goal });
 
@@ -227,6 +256,15 @@ export async function runArchieLoop(opts = {}) {
     let best = { score: -1, plan };
     let reachedParity = false;
     for (let it = 0; it <= maxIterations && !signal.stopped; it++) {
+      await awaitNotPaused();
+      if (signal.stopped) break;
+      // Mid-iteration inject: if the user typed a steering prompt, drop
+      // out of this goal's refine loop and let the outer loop pick it up.
+      if (signal.injectQueue.length) {
+        onEvent({ type: 'inject-interrupt', goal, iteration: it,
+                  pendingInjects: signal.injectQueue.length });
+        break;
+      }
       let result;
       try { result = await execute(plan); }
       catch (err) { onEvent({ type: 'execute-error', goal, iteration: it, error: String(err) }); break; }

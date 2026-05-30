@@ -9698,10 +9698,45 @@ function WorkbenchStudio() {
       if (window.__archdiscOrbitView) window.__archdiscOrbitView(v[0], v[1], v[2]);
       return perceiveAgainst(plan.reference);
     };
-    window.__archieRun = (opts = {}) => runArchieLoop({ execute, verify, perceive, skillStore: archieSkillStoreRef.current, ...opts });
+    // Shared signal object lets the user steer a RUNNING loop via
+    // window.__archieInject / __archiePause / __archieResume / __archieCancel.
+    // The loop reads signal.injectQueue at every goal boundary AND between
+    // iterations, so a typed-in mid-flight prompt is folded into the next
+    // refine pass without restarting the run.
+    const archieSignal = { stopped: false, paused: false, injectQueue: [] };
+    window.__archieRun = (opts = {}) => {
+      // Reset for each new run (stopped flag in particular).
+      archieSignal.stopped = false;
+      archieSignal.paused = false;
+      archieSignal.injectQueue = [];
+      return runArchieLoop({
+        execute, verify, perceive,
+        skillStore: archieSkillStoreRef.current,
+        signal: archieSignal,
+        ...opts,
+      });
+    };
+    window.__archieInject = (prompt) => {
+      if (typeof prompt !== 'string' || !prompt.trim()) return false;
+      archieSignal.injectQueue.push(prompt.trim());
+      return true;
+    };
+    window.__archiePause   = () => { archieSignal.paused = true; };
+    window.__archieResume  = () => { archieSignal.paused = false; };
+    window.__archieCancel  = () => { archieSignal.stopped = true; };
+    window.__archieStatus  = () => ({
+      paused: !!archieSignal.paused,
+      stopped: !!archieSignal.stopped,
+      pendingInjects: archieSignal.injectQueue.length,
+    });
     window.__archieEngine = { runArchieLoop, ArchieSkillStore, DEFAULT_CURRICULUM, skillStore: archieSkillStoreRef.current,
-      TOOL_REGISTRY, findTool, dispatchOp, setKnob, applySceneSetup };
-    return () => { try { delete window.__archieRun; delete window.__archieEngine; delete window.__archieCaptureRender; delete window.__archiePerceive; } catch (_) { /* cleanup best-effort */ } };
+      TOOL_REGISTRY, findTool, dispatchOp, setKnob, applySceneSetup, signal: archieSignal };
+    return () => { try {
+      delete window.__archieRun; delete window.__archieEngine;
+      delete window.__archieCaptureRender; delete window.__archiePerceive;
+      delete window.__archieInject; delete window.__archiePause;
+      delete window.__archieResume; delete window.__archieCancel; delete window.__archieStatus;
+    } catch (_) { /* cleanup best-effort */ } };
   }, []);
 
   return (
@@ -11749,6 +11784,21 @@ function WorkbenchStudio() {
                       void primitiveCount; void lightCount; void outlinerTick; void currentFrame;
                       return (vp.renderer.info.render.triangles || 0).toLocaleString();
                     })()}</span>
+                  </div>
+                  {/* Slice 254: shadow quality dropdown. */}
+                  <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <label style={{ opacity: 0.6 }}>Shadows:</label>
+                    <select
+                      data-studio-npanel-shadow-quality
+                      defaultValue="medium"
+                      onChange={(e) => { if (window.__studioSetShadowQuality) window.__studioSetShadowQuality(e.target.value); }}
+                      style={{ background: '#1f1f1f', color: '#dfdfdf', border: '1px solid #353535', borderRadius: '3px', padding: '2px 6px' }}
+                    >
+                      <option value="off">off</option>
+                      <option value="low">low (512)</option>
+                      <option value="medium">med (1024)</option>
+                      <option value="high">high (2048)</option>
+                    </select>
                   </div>
                   {/* Slice 252: FPS cap dropdown for battery / thermal
                       headroom. Writes window.__studioFpsCap that the
