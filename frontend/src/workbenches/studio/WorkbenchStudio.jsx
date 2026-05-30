@@ -1894,6 +1894,34 @@ function WorkbenchStudio() {
       } else if (e.key === 'Tab') {
         e.preventDefault();
         setViewportMode((cur) => cur === 'Object Mode' ? 'Edit Mode' : 'Object Mode');
+      } else if (['1','3','7','5'].includes(e.key)) {
+        // Slice 193: Blender numpad view shortcuts. Numpad-1 front,
+        // Numpad-3 right side, Numpad-7 top, Numpad-5 ortho/persp
+        // toggle. Ctrl+ inverts (back/left/bottom). Maps to the
+        // existing __archdiscOrbitView so the camera flies to the
+        // canonical view immediately. (Studio's perspective toggle is
+        // a planned follow-up; Numpad-5 is logged as the intent.)
+        const ctrl = e.ctrlKey;
+        const VIEWS = {
+          '1': [   0,  0, 1 ], // front
+          '3': [  90,  0, 1 ], // right
+          '7': [   0, 89, 1 ], // top
+        };
+        const CTRL_VIEWS = {
+          '1': [ 180,  0, 1 ], // back
+          '3': [ -90,  0, 1 ], // left
+          '7': [   0,-89, 1 ], // bottom
+        };
+        if (e.key === '5') {
+          // Toggle ortho/persp marker on a window slot (real ortho cam
+          // toggle lands when the renderer plumbs both projections).
+          window.__studioViewProjection = window.__studioViewProjection === 'ortho' ? 'persp' : 'ortho';
+          return;
+        }
+        const v = (ctrl ? CTRL_VIEWS : VIEWS)[e.key];
+        if (v && typeof window.__archdiscOrbitView === 'function') {
+          window.__archdiscOrbitView(v[0], v[1], v[2]);
+        }
       }
     });
   }
