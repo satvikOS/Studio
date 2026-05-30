@@ -211,7 +211,16 @@ export async function planFor({
   try {
     const system = `${SYSTEM_PROMPT}\n${registryContextBlock()}`;
     const userMessage = buildUserMessage(userPrompt, clarifications);
-    const args = { apiKey: cfg?.apiKey, model: cfg?.model, baseUrl: cfg?.baseUrl, system, userMessage };
+    // `discipline` is the field the `archie` provider reads to pick
+    // adapters/archie/studio/{discipline} per-request. It's harmless for
+    // other providers (anthropic/openai/etc. just ignore unknown args).
+    // We default to `domain` so a caller that only sets domain still
+    // gets the right discipline LoRA selected.
+    const discipline = cfg?.discipline ?? domain;
+    const args = {
+      apiKey: cfg?.apiKey, model: cfg?.model, baseUrl: cfg?.baseUrl,
+      system, userMessage, discipline,
+    };
     const streamed = !!onToken && typeof provider.generateStream === 'function';
     const text = streamed
       ? await provider.generateStream({ ...args, onToken })
