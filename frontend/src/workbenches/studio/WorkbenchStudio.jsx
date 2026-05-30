@@ -2205,7 +2205,7 @@ function WorkbenchStudio() {
       // numpad (slice 193). Block other modifier combos so browser
       // shortcuts (Cmd+R, Ctrl+S, etc.) still work.
       const isAllowedModCombo = (
-        (e.ctrlKey && (/^[a13750cvzmj]$/i.test(e.key) || e.key === '.')) ||
+        (e.ctrlKey && (/^[a13750cvzmji]$/i.test(e.key) || e.key === '.')) ||
         (e.altKey && /^[ahgrs]$/i.test(e.key)) ||
         (e.shiftKey && /^[dcszghr]$/i.test(e.key))
       );
@@ -2330,6 +2330,22 @@ function WorkbenchStudio() {
           selectedMeshesRef.current = matches.slice();
           window.__studioSelectMesh(matches[matches.length - 1]);
           selectedMeshesRef.current = matches.slice();
+        }
+      } else if (k === 'i' && e.ctrlKey) {
+        // Slice 221: Ctrl+I inverts the selection — every primitive
+        // not currently in the multi-select set becomes selected;
+        // current selection drops out (Blender Ctrl+I).
+        const stack = primitiveStackRef.current || [];
+        const cur = new Set(selectedMeshesRef.current || []);
+        const inverted = stack.filter((m) => !cur.has(m));
+        if (inverted.length && window.__studioSelectMesh) {
+          selectedMeshesRef.current = inverted.slice();
+          window.__studioSelectMesh(inverted[inverted.length - 1]);
+          selectedMeshesRef.current = inverted.slice();
+        } else {
+          // Nothing left to select; just clear.
+          selectedMeshesRef.current = [];
+          if (window.__studioDeselect) window.__studioDeselect();
         }
       } else if (k === 'r' && e.shiftKey) {
         // Slice 220: Shift+R repeats the last fired ribbon action or
