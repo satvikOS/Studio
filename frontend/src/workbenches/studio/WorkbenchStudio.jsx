@@ -327,6 +327,32 @@ function WorkbenchStudio() {
   // buttons (Wireframe / Solid / Material / Rendered) on the right.
   // Mirrors Blender's per-editor header. Active shading drives the
   // existing shade-* ribbon actions so a single source of truth.
+  // Slice 189: Blender Mode dropdown — the "Object Mode" slot in the
+  // viewport header becomes a real dropdown matching Blender's mode
+  // selector (Object / Edit / Sculpt / Vertex Paint / Weight Paint /
+  // Texture Paint / Pose). Each mode flips the matching Studio
+  // discipline and, where Blender wires a one-shot action (pose-mode,
+  // vertex-paint, weight-paint), dispatches it through the registry.
+  const [viewportMode, setViewportMode] = useState('Object Mode');
+  const [modeDropdownOpen, setModeDropdownOpen] = useState(false);
+  const BLENDER_MODES = [
+    { id: 'Object Mode',   discipline: 'modeling',   action: null },
+    { id: 'Edit Mode',     discipline: 'modeling',   action: null },
+    { id: 'Sculpt Mode',   discipline: 'sculpting',  action: 'brush-toggle' },
+    { id: 'Vertex Paint',  discipline: 'uv-texture', action: 'vertex-paint' },
+    { id: 'Weight Paint',  discipline: 'uv-texture', action: 'weight-paint' },
+    { id: 'Texture Paint', discipline: 'uv-texture', action: null },
+    { id: 'Pose Mode',     discipline: 'rigging',    action: 'pose-mode' },
+  ];
+  const applyMode = (mode) => {
+    setViewportMode(mode.id);
+    setModeDropdownOpen(false);
+    if (mode.discipline) setActiveTab(mode.discipline);
+    if (mode.action) {
+      const meta = findTool(mode.action);
+      if (meta) { try { dispatchInApp(meta, {}); } catch (_) { /* mode action best-effort */ } }
+    }
+  };
   const [viewportShading, setViewportShading] = useState('solid');
   const shadingAction = { wireframe: null, solid: 'shade-solid', material: 'shade-material', rendered: 'shade-rendered' };
   const applyShading = (mode) => {
@@ -10129,7 +10155,49 @@ function WorkbenchStudio() {
         >
           <span data-studio-viewport-header-label style={{ opacity: 0.7 }}>3D Viewport</span>
           <span style={{ opacity: 0.4 }}>·</span>
-          <span data-studio-viewport-mode style={{ color: '#bdbdbd' }}>Object Mode</span>
+          <div style={{ position: 'relative' }}>
+            <button
+              type="button"
+              data-studio-viewport-mode={viewportMode}
+              data-studio-viewport-mode-open={modeDropdownOpen ? '1' : '0'}
+              onClick={() => setModeDropdownOpen((v) => !v)}
+              style={{
+                background: '#353535', color: '#fff',
+                border: '1px solid #1d1d1d', borderRadius: '3px',
+                padding: '2px 8px', cursor: 'pointer',
+                fontSize: '11px', fontFamily: 'inherit',
+              }}
+            >{viewportMode} ▾</button>
+            {modeDropdownOpen && (
+              <div
+                data-studio-viewport-mode-dropdown
+                style={{
+                  position: 'absolute', top: '24px', left: 0, minWidth: '160px',
+                  background: '#1f1f1f', border: '1px solid #353535',
+                  borderRadius: '3px', padding: '4px 0', zIndex: 30,
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+                }}
+              >
+                {BLENDER_MODES.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    data-studio-viewport-mode-option={m.id}
+                    data-studio-viewport-mode-option-active={m.id === viewportMode ? '1' : '0'}
+                    onClick={() => applyMode(m)}
+                    style={{
+                      display: 'block', width: '100%', textAlign: 'left',
+                      background: m.id === viewportMode ? '#353535' : 'transparent',
+                      color: m.id === viewportMode ? '#fff' : '#bdbdbd',
+                      border: 'none', padding: '5px 12px',
+                      cursor: 'pointer', fontSize: '11px',
+                      fontFamily: 'inherit',
+                    }}
+                  >{m.id}</button>
+                ))}
+              </div>
+            )}
+          </div>
           <span style={{ opacity: 0.4, marginLeft: '12px' }}>|</span>
           {['View', 'Add', 'Object'].map((m) => (
             <button
