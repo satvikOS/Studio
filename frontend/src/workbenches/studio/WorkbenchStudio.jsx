@@ -417,6 +417,14 @@ function WorkbenchStudio() {
   // is a {kind, pos, scale, rot, color} record sufficient to recreate
   // the primitive on paste.
   const studioClipboardRef = useRef([]);
+  // Slice 208: scene-snapshot undo / redo history. pushUndo serialises
+  // the current scene via saveSceneJSON before each significant edit
+  // (addPrimitive / deleteSelectedMesh / Shift+D / Ctrl+V). Ctrl+Z
+  // reverts to the most recent snapshot; Ctrl+Shift+Z restores from
+  // the redo stack. Capped at 50 entries each so memory stays bounded.
+  const undoStackRef = useRef([]);
+  const redoStackRef = useRef([]);
+  const UNDO_LIMIT = 50;
   // Active transform mode mirrors activeTool for move/rotate/scale.
   // Drag-to-transform isn't wired yet (separate slice); for now the mode
   // is reflected in the Selection panel so the user can see what tool is
@@ -664,6 +672,34 @@ function WorkbenchStudio() {
     };
     window.__studioSetPivotMode = (mode) => setPivotMode(mode);
     window.__studioGetPivotMode = () => pivotModeRef.current;
+    // Slice 208: undo / redo entry points the keymap calls. pushUndo
+    // is also wired from addPrimitive + deleteSelectedMesh.
+    window.__studioPushUndo = () => {
+      try {
+        const snap = saveSceneJSON();
+        undoStackRef.current.push(snap);
+        if (undoStackRef.current.length > UNDO_LIMIT) undoStackRef.current.shift();
+        // A new edit invalidates the redo stack (linear history).
+        redoStackRef.current = [];
+      } catch (_) { /* snapshot best-effort */ }
+    };
+    window.__studioUndo = () => {
+      const stack = undoStackRef.current;
+      if (!stack.length) return false;
+      const snap = stack.pop();
+      try { redoStackRef.current.push(saveSceneJSON()); } catch (_) { /* */ }
+      loadSceneJSON(snap);
+      return true;
+    };
+    window.__studioRedo = () => {
+      const stack = redoStackRef.current;
+      if (!stack.length) return false;
+      const snap = stack.pop();
+      try { undoStackRef.current.push(saveSceneJSON()); } catch (_) { /* */ }
+      loadSceneJSON(snap);
+      return true;
+    };
+    window.__studioUndoStackLen = () => undoStackRef.current.length;
     window.__studioAddRefPlane = (axis, imageUrl, opts) => addReferenceImagePlane(axis, imageUrl, opts);
     // ZBrush mask + a programmatic brush stroke (for Archie + e2e). pt = world [x,y,z].
     window.__studioPaintMaskAt = (pt, radius, value) => { const m = selectedMeshRef.current; if (!m) return null; return paintMaskAt(m, new THREE.Vector3(pt[0], pt[1], pt[2]), radius, value == null ? 1 : value); };
@@ -869,6 +905,10 @@ function WorkbenchStudio() {
   function addPrimitive(kind) {
     const scene = window.__archdiscScene;
     if (!scene) return null;
+    // Slice 208: snapshot the pre-add scene so Ctrl+Z reverts to it.
+    // Skip while loadSceneJSON is replaying so undo/redo internal
+    // addPrimitive calls don't pollute the history stacks.
+    if (window.__studioPushUndo && !window.__studioReplayingScene) window.__studioPushUndo();
 
     const geometry = buildPrimitiveGeometry(kind);
     if (!geometry) return null;
@@ -1556,6 +1596,10 @@ function WorkbenchStudio() {
   function loadSceneJSON(jsonOrObj) {
     const payload = (typeof jsonOrObj === 'string') ? JSON.parse(jsonOrObj) : jsonOrObj;
     if (!payload || !Array.isArray(payload.primitives)) return { ok: false, error: 'invalid payload' };
+    // Slice 208: flag the replay so addPrimitive skips pushUndo —
+    // otherwise loading a snapshot would pollute the history with N
+    // micro-snapshots + clear the redo stack.
+    window.__studioReplayingScene = true;
     clearScene();
     for (const p of payload.primitives) {
       addPrimitive(p.kind);
@@ -1582,6 +1626,7 @@ function WorkbenchStudio() {
     // intensity-state-driven, so faithful restore needs a state-aware
     // pass. Stub written so the format is forward-compatible.
     if (window.__studioFrameAll) window.__studioFrameAll();
+    window.__studioReplayingScene = false;
     return { ok: true, primitives: payload.primitives.length, lights: (payload.lights || []).length };
   }
 
@@ -2306,6 +2351,14 @@ function WorkbenchStudio() {
           }
         });
         window.__studioWireframeOn = any;
+      } else if (k === 'z' && e.ctrlKey && !e.shiftKey) {
+        // Slice 208: Ctrl+Z undo.
+        e.preventDefault();
+        if (window.__studioUndo) window.__studioUndo();
+      } else if (k === 'z' && e.ctrlKey && e.shiftKey) {
+        // Slice 208: Ctrl+Shift+Z redo.
+        e.preventDefault();
+        if (window.__studioRedo) window.__studioRedo();
       } else if (k === 'c' && e.ctrlKey && !e.shiftKey) {
         // Slice 206: Ctrl+C copies the multi-select set into a JS
         // clipboard ref (in-process; no system clipboard). Stores enough
@@ -2405,6 +2458,8 @@ function WorkbenchStudio() {
     const scene = window.__archdiscScene;
     const mesh = selectedMeshRef.current;
     if (!scene || !mesh) return;
+    // Slice 208: snapshot pre-delete so Ctrl+Z restores the mesh.
+    if (window.__studioPushUndo) window.__studioPushUndo();
 
     outlineRef.current = null;
     scene.remove(mesh);
