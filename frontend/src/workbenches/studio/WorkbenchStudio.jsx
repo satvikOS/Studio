@@ -11899,6 +11899,17 @@ function WorkbenchStudio() {
                       <option value="15">15</option>
                     </select>
                   </div>
+                  {/* Slice 262: autosave timestamp readout. */}
+                  <div style={{ marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '10px', opacity: 0.7 }}>
+                    <span>Autosave:</span>
+                    <span data-studio-npanel-autosave-ts>{(() => {
+                      void primitiveCount; void lightCount; void outlinerTick; void currentFrame;
+                      const ts = typeof window !== 'undefined' && window.__studioAutosaveAt ? window.__studioAutosaveAt() : 0;
+                      if (!ts) return 'never';
+                      const d = new Date(ts);
+                      return d.toLocaleTimeString();
+                    })()}</span>
+                  </div>
                   {/* Slice 261: run an Archie autonomous build via one
                       click. Picks the first curriculum goal so the user
                       sees the autonomous loop produce a real scene
