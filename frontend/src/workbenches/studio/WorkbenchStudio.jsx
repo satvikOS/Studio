@@ -11738,6 +11738,13 @@ function WorkbenchStudio() {
                     <span style={{ opacity: 0.6 }}>Frame:</span>{' '}
                     <span data-studio-npanel-frame>{currentFrame}</span>
                   </div>
+                  {/* Slice 247: playhead scrubber — drag to set frame. */}
+                  <input
+                    type="range" min="0" max="120" step="1" value={currentFrame}
+                    data-studio-npanel-frame-scrub
+                    onInput={(e) => { if (window.__studioSetFrame) window.__studioSetFrame(parseInt(e.target.value, 10)); }}
+                    style={{ width: '100%', marginBottom: '6px' }}
+                  />
                   <div>
                     <span style={{ opacity: 0.6 }}>Keyframes:</span>{' '}
                     <span data-studio-npanel-keyframes>{(keyframes || []).length}</span>
