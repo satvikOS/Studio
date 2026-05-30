@@ -2240,7 +2240,7 @@ function WorkbenchStudio() {
       // numpad (slice 193). Block other modifier combos so browser
       // shortcuts (Cmd+R, Ctrl+S, etc.) still work.
       const isAllowedModCombo = (
-        (e.ctrlKey && (/^[a13750cvzmjin]$/i.test(e.key) || e.key === '.' || e.key === 'PageUp' || e.key === 'PageDown')) ||
+        (e.ctrlKey && (/^[a13750cvzmjinos]$/i.test(e.key) || e.key === '.' || e.key === 'PageUp' || e.key === 'PageDown')) ||
         (e.altKey && /^[ahgrscp]$/i.test(e.key)) ||
         (e.shiftKey && /^[dcszghrlp]$/i.test(e.key)) ||
         (e.ctrlKey && e.shiftKey && /^[l]$/i.test(e.key))
@@ -2478,6 +2478,14 @@ function WorkbenchStudio() {
           const next = window.prompt('Rename selected mesh', mesh.name || '');
           if (next != null && next.trim()) { mesh.name = next.trim(); bumpOutliner(); }
         }
+      } else if (k === 'o' && e.ctrlKey) {
+        // Slice 245: Ctrl+O Open File via picker.
+        e.preventDefault();
+        if (window.__studioOpenSceneFile) window.__studioOpenSceneFile();
+      } else if (k === 's' && e.ctrlKey && !e.shiftKey && !e.altKey) {
+        // Slice 245: Ctrl+S Save to .studio.json download.
+        e.preventDefault();
+        if (window.__studioDownloadScene) window.__studioDownloadScene();
       } else if (k === 'n' && e.ctrlKey) {
         // Slice 244: Ctrl+N "New File" — wipe scene + reset cursor +
         // undo stack. Blender / Maya / 3ds Max all bind Ctrl+N here.
