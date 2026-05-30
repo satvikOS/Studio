@@ -751,6 +751,19 @@ function WorkbenchStudio() {
       return true;
     };
     window.__studioUndoStackLen = () => undoStackRef.current.length;
+    // Slice 268: auto-rotate camera turntable. Toggles a flag the
+    // animation loop reads; while on, the camera orbits the scene at
+    // a steady rate. Iconic demo / turntable gesture every DCC ships.
+    window.__studioToggleTurntable = (rate = 0.5) => {
+      const vp = window.__archdiscViewport;
+      if (!vp || !vp.orbitControls) return false;
+      const ctrl = vp.orbitControls;
+      const on = !ctrl.autoRotate;
+      ctrl.autoRotate = on;
+      ctrl.autoRotateSpeed = on ? rate * 2 : 0;
+      window.__studioTurntableOn = on;
+      return on;
+    };
     // Slice 260: instanced-mesh stress spawn. Adds N InstancedMesh
     // copies of the active mesh's geometry+material in a grid. Real
     // GPU instancing = 1 draw call regardless of N. Useful perf
@@ -11968,6 +11981,15 @@ function WorkbenchStudio() {
                       const d = new Date(ts);
                       return d.toLocaleTimeString();
                     })()}</span>
+                  </div>
+                  {/* Slice 268: turntable autorotate. */}
+                  <div style={{ marginBottom: '8px' }}>
+                    <button
+                      type="button"
+                      data-studio-npanel-turntable
+                      onClick={() => { if (window.__studioToggleTurntable) window.__studioToggleTurntable(0.6); }}
+                      style={{ background: '#2a2a3a', color: '#bdbdbd', border: '1px solid #3a3a4a', borderRadius: '3px', padding: '3px 8px', fontSize: '10px', cursor: 'pointer', fontFamily: 'inherit' }}
+                    >Turntable</button>
                   </div>
                   {/* Slice 261: run an Archie autonomous build via one
                       click. Picks the first curriculum goal so the user
