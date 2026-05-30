@@ -1463,13 +1463,11 @@ export function SelectionPriorityBar() {
        *  Sketch / Part tab ribbon entry, or programmatically from the
        *  AI orchestration layer). Full-page modal — see
        *  EquationManager.css for the z-index 50 backdrop. */}
-      <EquationManager />
-      {/* UX Tier 6c — Weldments Cut List modal. Mounted as a sibling of the
-       *  Equation Manager so it rides every workbench. Renders nothing
-       *  until the global `archdisc:open-cut-list` event fires (from the
-       *  Weldments tab ribbon entry or programmatically from the AI
-       *  orchestration layer). Same z-index-50 modal tier as Tier-10. */}
-      <CutListPanel />
+      {/* Slice 196 declutter: EquationManager + CutListPanel were Mech-
+          era modal overlays (sketch-equation editor + weldments cut-list)
+          with no Studio counterpart. Removed from the always-on overlay
+          set so they no longer mount; the underlying components stay in
+          the tree for any future Mech revival. */}
     </>
   );
 }

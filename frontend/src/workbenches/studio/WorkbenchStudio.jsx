@@ -11076,6 +11076,18 @@ function WorkbenchStudio() {
              unassigned child auto-places at the BOTTOM. Using absolute
              positioning keeps the strip out of the grid layout entirely. */
           .workbench-stage { padding-top: 30px; box-sizing: border-box; }
+          /* Slice 196 declutter: hide the redundant discipline-tab strip
+             (the workspaces strip already drives discipline switching),
+             hide the legacy left workbench-tools (Mech-era vertical icon
+             rail) since the viewport header + Mode dropdown + workspaces
+             strip now cover all those entries. The ribbon-content (tool
+             buttons + section labels under each discipline) stays
+             visible — only the chrome above it is suppressed. */
+          body:has([data-studio-properties="studio"]) .ribbon-tabs { display: none !important; }
+          body:has([data-studio-properties="studio"]) .workbench-tools { display: none !important; }
+          /* Also free up the left edge that the toolbar used to reserve so
+             the viewport extends to the window's left edge. */
+          body:has([data-studio-properties="studio"]) .workbench-viewport { left: 0 !important; }
           .blender-workspaces-strip {
             position: absolute;
             top: 0;
