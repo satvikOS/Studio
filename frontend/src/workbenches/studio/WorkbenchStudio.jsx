@@ -11229,6 +11229,20 @@ function WorkbenchStudio() {
             </div>
           </div>
         )}
+        {/* Slice 248: pivot-mode + gizmo-space HUD pinned to the
+            lower-center. Shows which mode rotation / scale will use,
+            and the gizmo's transform space — both live state that
+            otherwise required digging into the cheat sheet. */}
+        <div
+          data-studio-viewport-pivot-hud
+          style={{
+            position: 'absolute', bottom: '8px', left: '50%',
+            transform: 'translateX(-50%)', zIndex: 23,
+            background: 'rgba(0,0,0,0.55)', color: '#bdbdbd',
+            padding: '3px 8px', borderRadius: '3px',
+            fontFamily: 'monospace', fontSize: '11px', pointerEvents: 'none',
+          }}
+        >Pivot: <span data-studio-viewport-pivot-mode>{pivotMode}</span></div>
         {/* Slice 238: live frame overlay (lower-right of viewport).
             Shows current animation frame at all times so users don't
             need to open the Sequencer dock or the N-panel View tab. */}
