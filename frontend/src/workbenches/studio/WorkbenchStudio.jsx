@@ -391,6 +391,11 @@ function WorkbenchStudio() {
   const [selectedKind, setSelectedKind] = useState(null);
   const [selectedTransform, setSelectedTransform] = useState(null);
   const selectedMeshRef = useRef(null);
+  // Slice 192: multi-select set (Shift+click adds/removes). The single
+  // selectedMeshRef stays as the "active" mesh that drives the
+  // properties panel; selectedMeshesRef.current is the full set the
+  // keymap's G/R/S apply to.
+  const selectedMeshesRef = useRef([]);
   // Active transform mode mirrors activeTool for move/rotate/scale.
   // Drag-to-transform isn't wired yet (separate slice); for now the mode
   // is reflected in the Selection panel so the user can see what tool is
@@ -1715,7 +1720,14 @@ function WorkbenchStudio() {
       };
 
       // Expose for the React-side delete + other slices.
-      window.__studioSelectMesh = selectMesh;
+      // Wrap selectMesh so programmatic selection also collapses the
+      // multi-select set to just this mesh (single-select semantics).
+      window.__studioSelectMesh = (mesh) => {
+        selectedMeshesRef.current = mesh ? [mesh] : [];
+        selectMesh(mesh);
+      };
+      // Read-only getter for the multi-select set (e2e + AI).
+      window.__studioSelectedMeshes = () => selectedMeshesRef.current.slice();
       window.__studioDeselect = deselect;
       // Read-only getter for the currently-selected mesh (e2e + AI
       // introspection — lets specs measure geometry before/after an op).
@@ -1752,8 +1764,20 @@ function WorkbenchStudio() {
           return;
         }
         if (hits.length > 0) {
-          selectMesh(hits[0].object);
+          const hit = hits[0].object;
+          if (e.shiftKey) {
+            // Multi-select: toggle hit mesh in/out of the set. The hit
+            // mesh becomes the active mesh either way.
+            const set = selectedMeshesRef.current;
+            const idx = set.indexOf(hit);
+            if (idx >= 0) set.splice(idx, 1); else set.push(hit);
+          } else {
+            // Single-select replaces the set.
+            selectedMeshesRef.current = [hit];
+          }
+          selectMesh(hit);
         } else {
+          selectedMeshesRef.current = [];
           deselect();
         }
       };
@@ -1786,45 +1810,16 @@ function WorkbenchStudio() {
       };
       vp.renderer.domElement.addEventListener('contextmenu', onContextMenu);
 
-      const writeTransform = (mesh) => {
-        setSelectedTransform({
-          position: { x: mesh.position.x, y: mesh.position.y, z: mesh.position.z },
-          rotation: { x: mesh.rotation.x, y: mesh.rotation.y, z: mesh.rotation.z },
-          scale:    { x: mesh.scale.x,    y: mesh.scale.y,    z: mesh.scale.z },
-        });
-      };
+      // Delete/Backspace shortcut (original Studio handler). The full
+      // Blender keymap (G/R/S/A/X/Tab) lives in the persistent
+      // document-level listener below so it survives any re-render
+      // storms — keeping them in separate handlers avoids double-firing.
       const onKeyDown = (e) => {
-        const tag = (e.target && e.target.tagName) || '';
-        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-        if (e.metaKey || e.ctrlKey || e.altKey) return;
-        // Delete / Backspace — the existing Studio shortcut (kept).
         if ((e.key === 'Delete' || e.key === 'Backspace') && selectedMeshRef.current) {
+          const tag = (e.target && e.target.tagName) || '';
+          if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
           e.preventDefault();
           deleteSelectedMeshRef.current && deleteSelectedMeshRef.current();
-          return;
-        }
-        // Blender keymap (slice 190) — G grab / R rotate / S scale /
-        // A cycle-select / X delete / Tab cycle Object<->Edit mode.
-        const k = (e.key || '').toLowerCase();
-        const mesh = selectedMeshRef.current;
-        if (k === 'g' && mesh) {
-          mesh.position.x += 0.05; writeTransform(mesh);
-        } else if (k === 'r' && mesh) {
-          mesh.rotation.y += 0.1; writeTransform(mesh);
-        } else if (k === 's' && mesh) {
-          mesh.scale.multiplyScalar(1.1); writeTransform(mesh);
-        } else if (k === 'a') {
-          const stack = primitiveStackRef.current || [];
-          if (!stack.length) return;
-          const cur = selectedMeshRef.current;
-          const idx = cur ? stack.indexOf(cur) : -1;
-          const next = stack[(idx + 1) % stack.length];
-          if (next && window.__studioSelectMesh) window.__studioSelectMesh(next);
-        } else if (k === 'x' && mesh) {
-          deleteSelectedMeshRef.current && deleteSelectedMeshRef.current();
-        } else if (e.key === 'Tab') {
-          e.preventDefault();
-          setViewportMode((cur) => cur === 'Object Mode' ? 'Edit Mode' : 'Object Mode');
         }
       };
       window.addEventListener('keydown', onKeyDown);
@@ -1880,9 +1875,13 @@ function WorkbenchStudio() {
       const k = (e.key || '').toLowerCase();
       const mesh = selectedMeshRef.current;
       window.__bgMesh = mesh ? mesh.uuid : 'null';
-      if (k === 'g' && mesh) { mesh.position.x += 0.05; writeTransform(mesh); }
-      else if (k === 'r' && mesh) { mesh.rotation.y += 0.1; writeTransform(mesh); }
-      else if (k === 's' && mesh) { mesh.scale.multiplyScalar(1.1); writeTransform(mesh); }
+      // Slice 192: multi-select set drives G/R/S so Shift+click groups
+      // transform together. Falls back to active mesh when set empty.
+      const set = (selectedMeshesRef.current && selectedMeshesRef.current.length)
+        ? selectedMeshesRef.current : (mesh ? [mesh] : []);
+      if (k === 'g' && set.length) { for (const m of set) m.position.x += 0.05; if (mesh) writeTransform(mesh); }
+      else if (k === 'r' && set.length) { for (const m of set) m.rotation.y += 0.1; if (mesh) writeTransform(mesh); }
+      else if (k === 's' && set.length) { for (const m of set) m.scale.multiplyScalar(1.1); if (mesh) writeTransform(mesh); }
       else if (k === 'a') {
         const stack = primitiveStackRef.current || [];
         if (!stack.length) return;
