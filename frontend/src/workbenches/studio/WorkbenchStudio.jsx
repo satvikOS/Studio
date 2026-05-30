@@ -2377,6 +2377,12 @@ function WorkbenchStudio() {
           const btn = document.querySelector(`[data-studio-ribbon-action="${last.id}"]`);
           if (btn) btn.click();
         }
+      } else if (e.key === 'F3') {
+        // Slice 223: F3 opens the command palette (Blender's F3 menu
+        // search — the standard "type any command" search box).
+        e.preventDefault();
+        const btn = document.querySelector('[data-studio-ribbon-action="cmd-palette"]');
+        if (btn) btn.click();
       } else if (e.key === 'F12') {
         // Slice 219: F12 captures a render frame (Blender F12 idiom).
         e.preventDefault();
