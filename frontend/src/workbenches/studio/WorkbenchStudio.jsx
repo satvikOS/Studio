@@ -11670,6 +11670,25 @@ function WorkbenchStudio() {
             <div style={{ padding: '8px 10px', overflowY: 'auto', flex: 1 }}>
               {nPanelTab === 'Item' && (
                 <div data-studio-npanel-content="Item">
+                  {/* Slice 267: flat-shading toggle on the active mesh
+                      material. material.flatShading flips per-vertex
+                      normals OFF — pure faceted look every DCC ships. */}
+                  {selectedKind && (
+                    <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <label style={{ opacity: 0.6, fontSize: '10px' }}>Flat shading:</label>
+                      <input
+                        type="checkbox"
+                        data-studio-npanel-flat-shading
+                        onChange={(e) => {
+                          const m = selectedMeshRef.current;
+                          if (!m || !m.material) return;
+                          m.material.flatShading = e.target.checked;
+                          m.material.needsUpdate = true;
+                          window.__studioMeshFlatShading = e.target.checked;
+                        }}
+                      />
+                    </div>
+                  )}
                   {/* Slice 243: quick colour swatches for the active
                       mesh's material. Click → mesh.material.color.set. */}
                   {selectedKind && (
