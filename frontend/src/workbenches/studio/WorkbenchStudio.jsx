@@ -11737,6 +11737,25 @@ function WorkbenchStudio() {
                     <span style={{ opacity: 0.6 }}>Faces:</span>{' '}
                     <span data-studio-npanel-faces>{faceCount.toLocaleString()}</span>
                   </div>
+                  {/* Slice 252: FPS cap dropdown for battery / thermal
+                      headroom. Writes window.__studioFpsCap that the
+                      animation loop reads to throttle requestAnimation
+                      Frame. */}
+                  <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <label style={{ opacity: 0.6 }}>FPS cap:</label>
+                    <select
+                      data-studio-npanel-fps-cap
+                      defaultValue="0"
+                      onChange={(e) => { window.__studioFpsCap = parseInt(e.target.value, 10); }}
+                      style={{ background: '#1f1f1f', color: '#dfdfdf', border: '1px solid #353535', borderRadius: '3px', padding: '2px 6px' }}
+                    >
+                      <option value="0">unlimited</option>
+                      <option value="120">120</option>
+                      <option value="60">60</option>
+                      <option value="30">30</option>
+                      <option value="15">15</option>
+                    </select>
+                  </div>
                   {/* Slice 249: global lights intensity multiplier —
                       scales every Studio light's intensity at once. */}
                   <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>

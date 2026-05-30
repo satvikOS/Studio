@@ -1173,8 +1173,18 @@ function Viewport3D({ canvasId = 'render-canvas', domain = 'mechanical', onReady
         window.addEventListener('keydown', handleKeyDown);
 
         // --- Render loop ---
-        function animate() {
+        // Slice 252: optional FPS cap via window.__studioFpsCap (0 =
+        // unlimited). Skips frames when called more often than cap
+        // allows, dropping device thermals / battery drain.
+        let lastFrameMs = 0;
+        function animate(now) {
             rafRef.current = requestAnimationFrame(animate);
+            const cap = window.__studioFpsCap || 0;
+            if (cap > 0) {
+              const minInterval = 1000 / cap;
+              if (now - lastFrameMs < minInterval - 0.5) return;
+              lastFrameMs = now;
+            }
             orbitControls.update();
             renderer.render(scene, camera);
         }
