@@ -11199,6 +11199,19 @@ function WorkbenchStudio() {
             >{m}</button>
           ))}
           <span style={{ flex: 1 }} />
+          {/* Slice 232: viewport-header Frame All button. Click fits
+              the camera to the whole scene (Home key + Numpad-Home). */}
+          <button
+            type="button"
+            data-studio-viewport-frame-all
+            onClick={() => { if (window.__studioFrameAll) window.__studioFrameAll(); }}
+            title="Frame All (Home)"
+            style={{
+              background: '#3a3a3a', color: '#bdbdbd', border: '1px solid #1d1d1d',
+              cursor: 'pointer', fontFamily: 'inherit', fontSize: '11px',
+              padding: '2px 8px', marginRight: '4px',
+            }}
+          >⬚</button>
           {/* Slice 230: viewport-header screenshot button. Click runs
               the same capture pipeline as F12 (slice 219). */}
           <button
