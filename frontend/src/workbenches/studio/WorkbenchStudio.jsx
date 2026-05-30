@@ -2241,8 +2241,8 @@ function WorkbenchStudio() {
       // shortcuts (Cmd+R, Ctrl+S, etc.) still work.
       const isAllowedModCombo = (
         (e.ctrlKey && (/^[a13750cvzmji]$/i.test(e.key) || e.key === '.' || e.key === 'PageUp' || e.key === 'PageDown')) ||
-        (e.altKey && /^[ahgrsc]$/i.test(e.key)) ||
-        (e.shiftKey && /^[dcszghrl]$/i.test(e.key)) ||
+        (e.altKey && /^[ahgrscp]$/i.test(e.key)) ||
+        (e.shiftKey && /^[dcszghrlp]$/i.test(e.key)) ||
         (e.ctrlKey && e.shiftKey && /^[l]$/i.test(e.key))
       );
       if ((e.metaKey || e.ctrlKey || e.altKey) && !isAllowedModCombo) return;
@@ -2426,6 +2426,27 @@ function WorkbenchStudio() {
         const nextIdx = (curIdx + dir + tabs.length) % tabs.length;
         e.preventDefault();
         tabs[nextIdx].click();
+      } else if (k === 'p' && e.shiftKey) {
+        // Slice 241: Shift+P parents the rest of the multi-select set
+        // to the active mesh — Blender's Ctrl+P "Set Parent" (Studio
+        // uses Shift+P to avoid Ctrl+P's browser-print clash).
+        const parent = selectedMeshRef.current;
+        const set = (selectedMeshesRef.current || []).filter((m) => m !== parent);
+        if (!parent || !set.length) return;
+        if (window.__studioPushUndo) window.__studioPushUndo();
+        for (const child of set) {
+          parent.attach(child);
+        }
+        bumpOutliner();
+      } else if (k === 'p' && e.altKey) {
+        // Slice 241: Alt+P unparents — re-attach selected meshes back to
+        // the scene root.
+        const scene = window.__archdiscScene; if (!scene) return;
+        const set = (selectedMeshesRef.current && selectedMeshesRef.current.length) ? selectedMeshesRef.current : (mesh ? [mesh] : []);
+        if (!set.length) return;
+        if (window.__studioPushUndo) window.__studioPushUndo();
+        for (const m of set) scene.attach(m);
+        bumpOutliner();
       } else if (k === 'l' && e.shiftKey && e.ctrlKey) {
         // Slice 225: Ctrl+Shift+L spawns a cinematic point light at
         // the 3D Cursor (or origin if cursor never moved). Reuses the
