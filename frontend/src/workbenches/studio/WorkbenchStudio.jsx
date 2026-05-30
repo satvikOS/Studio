@@ -316,6 +316,12 @@ function WorkbenchStudio() {
   const [outlinerFilter, setOutlinerFilter] = useState('');
   const [outlinerCollections, setOutlinerCollections] = useState({ Primitives: true, Lights: true });
   const toggleCollection = (name) => setOutlinerCollections((s) => ({ ...s, [name]: !s[name] }));
+  // Slice 187: Blender N-panel — the viewport's right-edge sidebar with
+  // Item / Tool / View tabs. Open by default (Blender ships it visible)
+  // and toggleable via the floating "N" button at the viewport's right
+  // edge. Mirrors Blender's N-key sidebar.
+  const [nPanelOpen, setNPanelOpen] = useState(true);
+  const [nPanelTab, setNPanelTab] = useState('Item');
   const [activeTool, setActiveTool] = useState('select');
   const [primitiveCount, setPrimitiveCount] = useState(0);
   const [vertexCount, setVertexCount] = useState(0);
@@ -10083,6 +10089,163 @@ function WorkbenchStudio() {
           viewport's own absolute/fixed overlay children. */}
       <main className="workbench-viewport">
         <Viewport3D canvasId="render-canvas-studio" domain="studio" />
+        {/* BLENDER N-PANEL (slice 187) — viewport-overlay sidebar with
+            Item / Tool / View tabs. Sits at the viewport's right edge,
+            below the ribbon, above the status bar. Default open. The
+            floating "N" button (vertical, right edge) toggles it. */}
+        <button
+          type="button"
+          data-studio-npanel-toggle
+          aria-pressed={nPanelOpen ? 'true' : 'false'}
+          onClick={() => setNPanelOpen((v) => !v)}
+          title={(nPanelOpen ? 'Hide' : 'Show') + ' N-panel (Blender N-key sidebar)'}
+          style={{
+            position: 'absolute',
+            top: '8px',
+            right: nPanelOpen ? '252px' : '8px',
+            zIndex: 25,
+            width: '20px',
+            height: '36px',
+            background: '#2b2b2b',
+            color: '#dfdfdf',
+            border: '1px solid #1d1d1d',
+            borderRadius: '3px',
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+            fontSize: '11px',
+            transition: 'right 0.16s ease',
+          }}
+        >N</button>
+        {nPanelOpen && (
+          <aside
+            data-studio-npanel="open"
+            data-studio-npanel-tab={nPanelTab}
+            style={{
+              position: 'absolute',
+              top: '0',
+              right: '0',
+              bottom: '0',
+              width: '240px',
+              background: '#262626',
+              borderLeft: '1px solid #1d1d1d',
+              color: '#dfdfdf',
+              fontSize: '11px',
+              fontFamily: 'inherit',
+              zIndex: 20,
+              display: 'flex',
+              flexDirection: 'column',
+              boxSizing: 'border-box',
+            }}
+          >
+            <div
+              style={{ display: 'flex', borderBottom: '1px solid #1d1d1d', background: '#2b2b2b' }}
+            >
+              {['Item', 'Tool', 'View'].map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  data-studio-npanel-tab-button={tab}
+                  data-studio-npanel-tab-active={tab === nPanelTab ? '1' : '0'}
+                  onClick={() => setNPanelTab(tab)}
+                  style={{
+                    flex: 1,
+                    background: tab === nPanelTab ? '#353535' : 'transparent',
+                    color: tab === nPanelTab ? '#ffffff' : '#bdbdbd',
+                    border: 'none',
+                    borderBottom: tab === nPanelTab ? '2px solid #4a90d9' : '2px solid transparent',
+                    padding: '6px 0',
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                    fontSize: '11px',
+                  }}
+                >{tab}</button>
+              ))}
+            </div>
+            <div style={{ padding: '8px 10px', overflowY: 'auto', flex: 1 }}>
+              {nPanelTab === 'Item' && (
+                <div data-studio-npanel-content="Item">
+                  <div style={{ opacity: 0.6, marginBottom: '6px', textTransform: 'uppercase', fontSize: '10px', letterSpacing: '0.05em' }}>Selected</div>
+                  {selectedKind ? (
+                    <>
+                      <div style={{ marginBottom: '8px' }}>
+                        <span style={{ opacity: 0.6 }}>Name:</span>{' '}
+                        <span data-studio-npanel-selected-kind style={{ color: '#fff' }}>{selectedKind}</span>
+                      </div>
+                      {selectedTransform && (
+                        <>
+                          <div data-studio-npanel-section="transform" style={{ marginBottom: '6px' }}>
+                            <div style={{ opacity: 0.6, marginBottom: '3px' }}>Location</div>
+                            <div style={{ fontFamily: 'monospace', color: '#cfd5dc' }}>
+                              <span data-studio-npanel-loc-x>{selectedTransform.position?.x?.toFixed(3) ?? '0.000'}</span>{' '}
+                              <span data-studio-npanel-loc-y>{selectedTransform.position?.y?.toFixed(3) ?? '0.000'}</span>{' '}
+                              <span data-studio-npanel-loc-z>{selectedTransform.position?.z?.toFixed(3) ?? '0.000'}</span>
+                            </div>
+                          </div>
+                          <div style={{ marginBottom: '6px' }}>
+                            <div style={{ opacity: 0.6, marginBottom: '3px' }}>Rotation (rad)</div>
+                            <div style={{ fontFamily: 'monospace', color: '#cfd5dc' }}>
+                              <span data-studio-npanel-rot-x>{selectedTransform.rotation?.x?.toFixed(3) ?? '0.000'}</span>{' '}
+                              <span data-studio-npanel-rot-y>{selectedTransform.rotation?.y?.toFixed(3) ?? '0.000'}</span>{' '}
+                              <span data-studio-npanel-rot-z>{selectedTransform.rotation?.z?.toFixed(3) ?? '0.000'}</span>
+                            </div>
+                          </div>
+                          <div>
+                            <div style={{ opacity: 0.6, marginBottom: '3px' }}>Scale</div>
+                            <div style={{ fontFamily: 'monospace', color: '#cfd5dc' }}>
+                              <span data-studio-npanel-scale-x>{selectedTransform.scale?.x?.toFixed(3) ?? '1.000'}</span>{' '}
+                              <span data-studio-npanel-scale-y>{selectedTransform.scale?.y?.toFixed(3) ?? '1.000'}</span>{' '}
+                              <span data-studio-npanel-scale-z>{selectedTransform.scale?.z?.toFixed(3) ?? '1.000'}</span>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </>
+                  ) : (
+                    <div data-studio-npanel-empty style={{ opacity: 0.5 }}>(no selection)</div>
+                  )}
+                </div>
+              )}
+              {nPanelTab === 'Tool' && (
+                <div data-studio-npanel-content="Tool">
+                  <div style={{ opacity: 0.6, marginBottom: '6px', textTransform: 'uppercase', fontSize: '10px', letterSpacing: '0.05em' }}>Active Tool</div>
+                  <div style={{ marginBottom: '8px' }}>
+                    <span style={{ opacity: 0.6 }}>Name:</span>{' '}
+                    <span data-studio-npanel-tool style={{ color: '#fff', textTransform: 'capitalize' }}>{activeTool}</span>
+                  </div>
+                  <div style={{ marginBottom: '8px' }}>
+                    <span style={{ opacity: 0.6 }}>Discipline:</span>{' '}
+                    <span data-studio-npanel-discipline style={{ color: '#fff' }}>{activeTab}</span>
+                  </div>
+                  <div style={{ marginBottom: '8px' }}>
+                    <span style={{ opacity: 0.6 }}>Workspace:</span>{' '}
+                    <span data-studio-npanel-workspace style={{ color: '#fff' }}>{activeWorkspace}</span>
+                  </div>
+                </div>
+              )}
+              {nPanelTab === 'View' && (
+                <div data-studio-npanel-content="View">
+                  <div style={{ opacity: 0.6, marginBottom: '6px', textTransform: 'uppercase', fontSize: '10px', letterSpacing: '0.05em' }}>3D Viewport</div>
+                  <div style={{ marginBottom: '8px' }}>
+                    <span style={{ opacity: 0.6 }}>Primitives:</span>{' '}
+                    <span data-studio-npanel-primitives>{primitiveCount}</span>
+                  </div>
+                  <div style={{ marginBottom: '8px' }}>
+                    <span style={{ opacity: 0.6 }}>Lights:</span>{' '}
+                    <span data-studio-npanel-lights>{lightCount}</span>
+                  </div>
+                  <div style={{ marginBottom: '8px' }}>
+                    <span style={{ opacity: 0.6 }}>Vertices:</span>{' '}
+                    <span data-studio-npanel-verts>{vertexCount.toLocaleString()}</span>
+                  </div>
+                  <div>
+                    <span style={{ opacity: 0.6 }}>Faces:</span>{' '}
+                    <span data-studio-npanel-faces>{faceCount.toLocaleString()}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </aside>
+        )}
         {/* Right-click context menu — fires on viewport contextmenu event,
             offers Studio-specific actions on the picked mesh (Duplicate,
             Subdivide, Delete, etc.) or generic actions for empty space. */}
