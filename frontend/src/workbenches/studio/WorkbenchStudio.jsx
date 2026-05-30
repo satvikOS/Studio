@@ -2240,7 +2240,7 @@ function WorkbenchStudio() {
       // numpad (slice 193). Block other modifier combos so browser
       // shortcuts (Cmd+R, Ctrl+S, etc.) still work.
       const isAllowedModCombo = (
-        (e.ctrlKey && (/^[a13750cvzmji]$/i.test(e.key) || e.key === '.' || e.key === 'PageUp' || e.key === 'PageDown')) ||
+        (e.ctrlKey && (/^[a13750cvzmjin]$/i.test(e.key) || e.key === '.' || e.key === 'PageUp' || e.key === 'PageDown')) ||
         (e.altKey && /^[ahgrscp]$/i.test(e.key)) ||
         (e.shiftKey && /^[dcszghrlp]$/i.test(e.key)) ||
         (e.ctrlKey && e.shiftKey && /^[l]$/i.test(e.key))
@@ -2478,6 +2478,22 @@ function WorkbenchStudio() {
           const next = window.prompt('Rename selected mesh', mesh.name || '');
           if (next != null && next.trim()) { mesh.name = next.trim(); bumpOutliner(); }
         }
+      } else if (k === 'n' && e.ctrlKey) {
+        // Slice 244: Ctrl+N "New File" — wipe scene + reset cursor +
+        // undo stack. Blender / Maya / 3ds Max all bind Ctrl+N here.
+        e.preventDefault();
+        if (window.__studioPushUndo) window.__studioPushUndo();
+        const scene = window.__archdiscScene;
+        if (scene) {
+          const toRemove = [];
+          scene.traverse((o) => { if (o.userData && o.userData.archdiscStudioPrimitive) toRemove.push(o); });
+          for (const m of toRemove) { scene.remove(m); if (m.geometry && m.geometry.dispose) m.geometry.dispose(); }
+          primitiveStackRef.current = [];
+          setPrimitiveCount(0);
+        }
+        selectedMeshesRef.current = [];
+        if (window.__studioDeselect) window.__studioDeselect();
+        if (window.__studioSnapCursorOrigin) window.__studioSnapCursorOrigin();
       } else if (k === 'y' && !e.ctrlKey && !e.altKey && !e.shiftKey) {
         // Slice 234: Y toggles the transform gizmo's visibility +
         // enabled state. Quick hide for clean screenshots.
