@@ -11072,6 +11072,41 @@ function WorkbenchStudio() {
           viewport's own absolute/fixed overlay children. */}
       <main className="workbench-viewport">
         <Viewport3D canvasId="render-canvas-studio" domain="studio" />
+        {/* Slice 233: live FPS counter pinned to the viewport's
+            lower-left corner. Reads viewport renderer.info each second
+            and computes frames-per-second + draw-call count. Helpful
+            for performance debugging and parity with Blender / Maya
+            stats overlays. */}
+        <div
+          data-studio-viewport-fps
+          style={{
+            position: 'absolute', bottom: '8px', left: '8px', zIndex: 23,
+            background: 'rgba(0, 0, 0, 0.55)', color: '#bdbdbd',
+            padding: '3px 8px', borderRadius: '3px',
+            fontFamily: 'monospace', fontSize: '11px', pointerEvents: 'none',
+          }}
+          ref={(el) => {
+            if (!el) return;
+            if (el.__studioFpsTick) return;
+            let frames = 0; let last = performance.now();
+            const tick = () => {
+              frames++;
+              const now = performance.now();
+              if (now - last >= 500) {
+                const fps = (frames * 1000 / (now - last)).toFixed(0);
+                const vp = window.__archdiscViewport;
+                const calls = vp && vp.renderer && vp.renderer.info ? vp.renderer.info.render.calls : 0;
+                el.textContent = `${fps} FPS · ${calls} calls`;
+                window.__studioFps = Number(fps);
+                window.__studioDrawCalls = calls;
+                frames = 0; last = now;
+              }
+              requestAnimationFrame(tick);
+            };
+            el.__studioFpsTick = true;
+            requestAnimationFrame(tick);
+          }}
+        >— FPS</div>
         {/* VIEW CUBE corner widget (slice 207) — 3x2 grid of buttons at
             the top-right (just below the viewport header), each clicks
             to orbit the camera to a canonical view. Mirrors 3ds Max's
