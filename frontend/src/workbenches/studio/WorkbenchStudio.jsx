@@ -11086,6 +11086,18 @@ function WorkbenchStudio() {
           viewport's own absolute/fixed overlay children. */}
       <main className="workbench-viewport">
         <Viewport3D canvasId="render-canvas-studio" domain="studio" />
+        {/* Slice 238: live frame overlay (lower-right of viewport).
+            Shows current animation frame at all times so users don't
+            need to open the Sequencer dock or the N-panel View tab. */}
+        <div
+          data-studio-viewport-frame-overlay
+          style={{
+            position: 'absolute', bottom: '8px', right: '8px', zIndex: 23,
+            background: 'rgba(0, 0, 0, 0.55)', color: '#bdbdbd',
+            padding: '3px 8px', borderRadius: '3px',
+            fontFamily: 'monospace', fontSize: '11px', pointerEvents: 'none',
+          }}
+        >Frame {currentFrame}</div>
         {/* Slice 233: live FPS counter pinned to the viewport's
             lower-left corner. Reads viewport renderer.info each second
             and computes frames-per-second + draw-call count. Helpful
