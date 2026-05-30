@@ -11374,6 +11374,31 @@ function WorkbenchStudio() {
                     <span style={{ opacity: 0.6 }}>Faces:</span>{' '}
                     <span data-studio-npanel-faces>{faceCount.toLocaleString()}</span>
                   </div>
+                  {/* Slice 229: Viewport background colour. Live colour
+                      input feeds vp.renderer.setClearColor + scene.background
+                      so the user can pick any backdrop on demand. */}
+                  <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px solid #1d1d1d', opacity: 0.6, marginBottom: '6px', textTransform: 'uppercase', fontSize: '10px', letterSpacing: '0.05em' }}>Background</div>
+                  <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <input
+                      type="color"
+                      data-studio-npanel-bg
+                      defaultValue="#000000"
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        const vp = window.__archdiscViewport;
+                        if (!vp) return;
+                        try {
+                          if (vp.renderer && vp.renderer.setClearColor) {
+                            vp.renderer.setClearColor(new THREE.Color(v));
+                          }
+                          if (vp.scene) vp.scene.background = new THREE.Color(v);
+                          window.__studioBgColor = v;
+                        } catch (_) { /* colour update best-effort */ }
+                      }}
+                      style={{ width: '40px', height: '24px', background: '#222', border: '1px solid #353535', borderRadius: '3px', cursor: 'pointer' }}
+                    />
+                    <span style={{ opacity: 0.6 }}>Viewport</span>
+                  </div>
                   {/* Slice 216: Timeline stats — current frame +
                       keyframe count so the animation state is always
                       visible without opening the Sequencer dock. */}
