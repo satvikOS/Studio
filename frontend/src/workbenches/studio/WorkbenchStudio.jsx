@@ -1786,12 +1786,45 @@ function WorkbenchStudio() {
       };
       vp.renderer.domElement.addEventListener('contextmenu', onContextMenu);
 
+      const writeTransform = (mesh) => {
+        setSelectedTransform({
+          position: { x: mesh.position.x, y: mesh.position.y, z: mesh.position.z },
+          rotation: { x: mesh.rotation.x, y: mesh.rotation.y, z: mesh.rotation.z },
+          scale:    { x: mesh.scale.x,    y: mesh.scale.y,    z: mesh.scale.z },
+        });
+      };
       const onKeyDown = (e) => {
+        const tag = (e.target && e.target.tagName) || '';
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+        if (e.metaKey || e.ctrlKey || e.altKey) return;
+        // Delete / Backspace — the existing Studio shortcut (kept).
         if ((e.key === 'Delete' || e.key === 'Backspace') && selectedMeshRef.current) {
-          const tag = (e.target && e.target.tagName) || '';
-          if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
           e.preventDefault();
           deleteSelectedMeshRef.current && deleteSelectedMeshRef.current();
+          return;
+        }
+        // Blender keymap (slice 190) — G grab / R rotate / S scale /
+        // A cycle-select / X delete / Tab cycle Object<->Edit mode.
+        const k = (e.key || '').toLowerCase();
+        const mesh = selectedMeshRef.current;
+        if (k === 'g' && mesh) {
+          mesh.position.x += 0.05; writeTransform(mesh);
+        } else if (k === 'r' && mesh) {
+          mesh.rotation.y += 0.1; writeTransform(mesh);
+        } else if (k === 's' && mesh) {
+          mesh.scale.multiplyScalar(1.1); writeTransform(mesh);
+        } else if (k === 'a') {
+          const stack = primitiveStackRef.current || [];
+          if (!stack.length) return;
+          const cur = selectedMeshRef.current;
+          const idx = cur ? stack.indexOf(cur) : -1;
+          const next = stack[(idx + 1) % stack.length];
+          if (next && window.__studioSelectMesh) window.__studioSelectMesh(next);
+        } else if (k === 'x' && mesh) {
+          deleteSelectedMeshRef.current && deleteSelectedMeshRef.current();
+        } else if (e.key === 'Tab') {
+          e.preventDefault();
+          setViewportMode((cur) => cur === 'Object Mode' ? 'Edit Mode' : 'Object Mode');
         }
       };
       window.addEventListener('keydown', onKeyDown);
@@ -1818,6 +1851,53 @@ function WorkbenchStudio() {
     const map = { move: 'translate', rotate: 'rotate', scale: 'scale' };
     if (map[activeTool]) setGizmoMode(map[activeTool]);
   }, [activeTool]);
+
+  // Slice 190: Blender keymap (G/R/S/A/X/Tab). The handler is also
+  // folded into the existing setup() useEffect's keydown listener so
+  // it ships with the same lifecycle as the Delete/Backspace shortcut.
+  // We ALSO install a one-shot persistent document-level listener via
+  // a ref so the keymap never gets unmounted by upstream re-render
+  // storms — useEffect([]) cleanup on certain transition paths can
+  // drop the listener. The persistent listener reads the latest state
+  // through refs so the closure is always current.
+  const blenderKeymapRef = useRef({ installed: false });
+  if (typeof document !== 'undefined' && !blenderKeymapRef.current.installed) {
+    blenderKeymapRef.current.installed = true;
+    const writeTransform = (mesh) => {
+      setSelectedTransform({
+        position: { x: mesh.position.x, y: mesh.position.y, z: mesh.position.z },
+        rotation: { x: mesh.rotation.x, y: mesh.rotation.y, z: mesh.rotation.z },
+        scale:    { x: mesh.scale.x,    y: mesh.scale.y,    z: mesh.scale.z },
+      });
+    };
+    document.addEventListener('keydown', (e) => {
+      window.__bgKc = (window.__bgKc || 0) + 1;
+      window.__bgKey = e.key;
+      const tag = (e.target && e.target.tagName) || '';
+      window.__bgTag = tag;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const k = (e.key || '').toLowerCase();
+      const mesh = selectedMeshRef.current;
+      window.__bgMesh = mesh ? mesh.uuid : 'null';
+      if (k === 'g' && mesh) { mesh.position.x += 0.05; writeTransform(mesh); }
+      else if (k === 'r' && mesh) { mesh.rotation.y += 0.1; writeTransform(mesh); }
+      else if (k === 's' && mesh) { mesh.scale.multiplyScalar(1.1); writeTransform(mesh); }
+      else if (k === 'a') {
+        const stack = primitiveStackRef.current || [];
+        if (!stack.length) return;
+        const cur = selectedMeshRef.current;
+        const idx = cur ? stack.indexOf(cur) : -1;
+        const next = stack[(idx + 1) % stack.length];
+        if (next && window.__studioSelectMesh) window.__studioSelectMesh(next);
+      } else if (k === 'x' && mesh) {
+        deleteSelectedMeshRef.current && deleteSelectedMeshRef.current();
+      } else if (e.key === 'Tab') {
+        e.preventDefault();
+        setViewportMode((cur) => cur === 'Object Mode' ? 'Edit Mode' : 'Object Mode');
+      }
+    });
+  }
 
   function deleteSelectedMesh() {
     const scene = window.__archdiscScene;
