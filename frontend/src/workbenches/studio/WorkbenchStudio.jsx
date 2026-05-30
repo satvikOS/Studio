@@ -413,6 +413,10 @@ function WorkbenchStudio() {
   // properties panel; selectedMeshesRef.current is the full set the
   // keymap's G/R/S apply to.
   const selectedMeshesRef = useRef([]);
+  // Slice 206: in-process clipboard for Ctrl+C / Ctrl+V. Each entry
+  // is a {kind, pos, scale, rot, color} record sufficient to recreate
+  // the primitive on paste.
+  const studioClipboardRef = useRef([]);
   // Active transform mode mirrors activeTool for move/rotate/scale.
   // Drag-to-transform isn't wired yet (separate slice); for now the mode
   // is reflected in the Selection panel so the user can see what tool is
@@ -2142,9 +2146,9 @@ function WorkbenchStudio() {
       // numpad (slice 193). Block other modifier combos so browser
       // shortcuts (Cmd+R, Ctrl+S, etc.) still work.
       const isAllowedModCombo = (
-        (e.ctrlKey && /^[a13750]$/i.test(e.key)) ||
+        (e.ctrlKey && /^[a13750cvz]$/i.test(e.key)) ||
         (e.altKey && /^[ah]$/i.test(e.key)) ||
-        (e.shiftKey && /^[dcs]$/i.test(e.key))
+        (e.shiftKey && /^[dcsz]$/i.test(e.key))
       );
       if ((e.metaKey || e.ctrlKey || e.altKey) && !isAllowedModCombo) return;
       const k = (e.key || '').toLowerCase();
@@ -2302,7 +2306,48 @@ function WorkbenchStudio() {
           }
         });
         window.__studioWireframeOn = any;
-      } else if (['1','3','7','5'].includes(e.key)) {
+      } else if (k === 'c' && e.ctrlKey && !e.shiftKey) {
+        // Slice 206: Ctrl+C copies the multi-select set into a JS
+        // clipboard ref (in-process; no system clipboard). Stores enough
+        // to reconstruct geometry + material on paste.
+        const _src = (selectedMeshesRef.current && selectedMeshesRef.current.length) ? selectedMeshesRef.current : (mesh ? [mesh] : []);
+        if (_src.length) {
+          studioClipboardRef.current = _src.map((m) => ({
+            kind: m.userData && m.userData.archdiscStudioPrimitiveKind,
+            pos:   [m.position.x, m.position.y, m.position.z],
+            scale: [m.scale.x,    m.scale.y,    m.scale.z],
+            rot:   [m.rotation.x, m.rotation.y, m.rotation.z],
+            color: (m.material && m.material.color && '#' + m.material.color.getHexString()) || null,
+          }));
+        }
+      } else if (k === 'v' && e.ctrlKey) {
+        // Slice 206: Ctrl+V pastes the clipboard. Each entry spawns a
+        // fresh primitive at its saved position + an offset so the dupe
+        // is visible next to the source. The new meshes form the new
+        // selection set so a subsequent Ctrl+V chains.
+        const clip = studioClipboardRef.current || [];
+        if (!clip.length) return;
+        const fresh = [];
+        for (const c of clip) {
+          if (!c.kind) continue;
+          addPrimitive(c.kind);
+          const stack = primitiveStackRef.current;
+          const nm = stack[stack.length - 1];
+          if (!nm) continue;
+          nm.position.set((c.pos[0] || 0) + 0.04, c.pos[1] || 0, c.pos[2] || 0);
+          nm.scale.set(c.scale[0] || 1, c.scale[1] || 1, c.scale[2] || 1);
+          nm.rotation.set(c.rot[0] || 0, c.rot[1] || 0, c.rot[2] || 0);
+          if (c.color && nm.material && nm.material.color) {
+            nm.material.color.set(c.color);
+            nm.material.needsUpdate = true;
+          }
+          fresh.push(nm);
+        }
+        if (fresh.length && window.__studioSelectMesh) {
+          window.__studioSelectMesh(fresh[fresh.length - 1]);
+          selectedMeshesRef.current = fresh.slice();
+        }
+      } else if (['1','3','7','5','2','4','6','8','9'].includes(e.key)) {
         // Slice 193: Blender numpad view shortcuts. Numpad-1 front,
         // Numpad-3 right side, Numpad-7 top, Numpad-5 ortho/persp
         // toggle. Ctrl+ inverts (back/left/bottom). Maps to the
@@ -2326,9 +2371,31 @@ function WorkbenchStudio() {
           window.__studioViewProjection = window.__studioViewProjection === 'ortho' ? 'persp' : 'ortho';
           return;
         }
+        // Slice 206: Numpad-2/4/6/8 orbit the camera 15 degrees in
+        // cardinal directions (Blender's view-orbit shortcuts). 9
+        // inverts the current view by 180 degrees of azimuth.
         const v = (ctrl ? CTRL_VIEWS : VIEWS)[e.key];
         if (v && typeof window.__archdiscOrbitView === 'function') {
           window.__archdiscOrbitView(v[0], v[1], v[2]);
+          return;
+        }
+        if (['2','4','6','8','9'].includes(e.key)) {
+          const vp = window.__archdiscViewport;
+          if (!vp) return;
+          const p = vp.camera.position;
+          const r = Math.hypot(p.x, p.y, p.z);
+          let az = Math.atan2(p.x, p.z) * 180 / Math.PI;
+          let el = Math.asin(p.y / r) * 180 / Math.PI;
+          const D = 15;
+          if (e.key === '2') el -= D;
+          else if (e.key === '8') el += D;
+          else if (e.key === '4') az -= D;
+          else if (e.key === '6') az += D;
+          else if (e.key === '9') az += 180;
+          el = Math.max(-89, Math.min(89, el));
+          if (typeof window.__archdiscOrbitView === 'function') {
+            window.__archdiscOrbitView(az, el, 1);
+          }
         }
       }
     });
