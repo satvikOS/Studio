@@ -11676,6 +11676,28 @@ function WorkbenchStudio() {
                     <span style={{ opacity: 0.6 }}>Faces:</span>{' '}
                     <span data-studio-npanel-faces>{faceCount.toLocaleString()}</span>
                   </div>
+                  {/* Slice 249: global lights intensity multiplier —
+                      scales every Studio light's intensity at once. */}
+                  <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <label style={{ opacity: 0.6 }}>Lights ×:</label>
+                    <input
+                      type="range" min="0" max="3" step="0.1" defaultValue="1"
+                      data-studio-npanel-lights-mul
+                      onInput={(e) => {
+                        const mul = parseFloat(e.target.value);
+                        const scene = window.__archdiscScene; if (!scene) return;
+                        scene.traverse((o) => {
+                          if (o.userData && o.userData.archdiscStudioLight && o.isLight) {
+                            const base = o.userData.archdiscStudioBaseIntensity ?? o.intensity;
+                            o.userData.archdiscStudioBaseIntensity = base;
+                            o.intensity = base * mul;
+                          }
+                        });
+                        window.__studioLightsMul = mul;
+                      }}
+                      style={{ flex: 1 }}
+                    />
+                  </div>
                   {/* Slice 235: Grid visibility toggle. */}
                   <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <label style={{ opacity: 0.6 }}>Grid:</label>
