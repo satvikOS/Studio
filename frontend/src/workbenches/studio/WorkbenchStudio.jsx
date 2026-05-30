@@ -2329,6 +2329,10 @@ function WorkbenchStudio() {
           window.__studioSelectMesh(matches[matches.length - 1]);
           selectedMeshesRef.current = matches.slice();
         }
+      } else if (e.key === 'F12') {
+        // Slice 219: F12 captures a render frame (Blender F12 idiom).
+        e.preventDefault();
+        if (window.__archieCaptureRender) window.__archieCaptureRender();
       } else if (k === 'k' && !e.ctrlKey && !e.altKey && !e.shiftKey && mesh) {
         // Slice 213: K inserts a keyframe at the current frame for the
         // active mesh (Blender's K, Maya's S key). Drives Studio's
