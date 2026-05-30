@@ -2447,6 +2447,20 @@ function WorkbenchStudio() {
           const next = window.prompt('Rename selected mesh', mesh.name || '');
           if (next != null && next.trim()) { mesh.name = next.trim(); bumpOutliner(); }
         }
+      } else if (k === 'y' && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+        // Slice 234: Y toggles the transform gizmo's visibility +
+        // enabled state. Quick hide for clean screenshots.
+        const giz = window.__studioGizmo;
+        if (!giz) return;
+        const next = !(giz.enabled === false);
+        giz.enabled = !next;
+        if (giz.visible !== undefined) giz.visible = !next;
+        // Also flip the helper Object3D (the one in the scene).
+        if (typeof giz.getHelper === 'function') {
+          const helper = giz.getHelper();
+          if (helper) helper.visible = !next;
+        }
+        window.__studioGizmoVisible = !next;
       } else if (e.key === 'F3') {
         // Slice 223: F3 opens the command palette (Blender's F3 menu
         // search — the standard "type any command" search box).
