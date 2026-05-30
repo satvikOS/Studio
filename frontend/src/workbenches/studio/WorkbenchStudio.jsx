@@ -4,6 +4,7 @@ import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferG
 import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js';
 import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js';
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
+import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
@@ -1852,9 +1853,42 @@ function WorkbenchStudio() {
         return;
       }
 
+      // Slice 201: Three.js TransformControls — the move/rotate/scale
+      // gizmo every DCC tool shows around the selected mesh. In r0.181
+      // TransformControls extends `Controls` (not Object3D), so the
+      // helper Object3D returned by getHelper() is what goes into the
+      // scene. Wrapped defensively so a setup failure doesn't break
+      // the rest of the viewport bootstrap.
+      let gizmo = null;
+      try {
+        gizmo = new TransformControls(vp.camera, vp.renderer.domElement);
+        gizmo.userData = gizmo.userData || {};
+        gizmo.userData.archdiscStudioGizmo = true;
+        const gizmoHelper = (typeof gizmo.getHelper === 'function') ? gizmo.getHelper() : gizmo;
+        if (gizmoHelper && gizmoHelper.isObject3D) vp.scene.add(gizmoHelper);
+        gizmo.addEventListener('dragging-changed', (ev) => {
+          const ctrl = vp.orbitControls || vp.controls;
+          if (ctrl) ctrl.enabled = !ev.value;
+        });
+        gizmo.addEventListener('objectChange', () => {
+          const m = selectedMeshRef.current;
+          if (!m) return;
+          setSelectedTransform({
+            position: [m.position.x, m.position.y, m.position.z],
+            rotation: [m.rotation.x, m.rotation.y, m.rotation.z],
+            scale:    [m.scale.x,    m.scale.y,    m.scale.z],
+          });
+        });
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn('[studio] TransformControls init failed', err);
+        gizmo = null;
+      }
+
       const selectMesh = (mesh) => {
         selectedMeshRef.current = mesh;
         attachOutline(mesh);
+        if (gizmo && mesh) gizmo.attach(mesh);
 
         setSelectedKind(mesh.userData?.archdiscStudioPrimitiveKind || 'unknown');
         setSelectedTransform({
@@ -1876,10 +1910,15 @@ function WorkbenchStudio() {
 
       const deselect = () => {
         clearOutline();
+        if (gizmo) gizmo.detach();
         selectedMeshRef.current = null;
         setSelectedKind(null);
         setSelectedTransform(null);
       };
+
+      // Expose the gizmo so other slices (gizmoMode mirror, viewport
+      // header toggle, automation specs) can drive its mode.
+      window.__studioGizmo = gizmo;
 
       // Expose for the React-side delete + other slices.
       // Wrap selectMesh so programmatic selection also collapses the
@@ -2003,11 +2042,17 @@ function WorkbenchStudio() {
     };
   }, []);
 
-  // Mirror activeTool → transform mode label (gizmo arrives in a later slice).
+  // Mirror activeTool → transform mode label + drive the gizmo's mode
+  // so the visible move/rotate/scale handles match the active tool.
   useEffect(() => {
     const map = { move: 'translate', rotate: 'rotate', scale: 'scale' };
     if (map[activeTool]) setGizmoMode(map[activeTool]);
   }, [activeTool]);
+  useEffect(() => {
+    if (window.__studioGizmo && typeof window.__studioGizmo.setMode === 'function') {
+      try { window.__studioGizmo.setMode(gizmoMode); } catch (_) { /* mode update best-effort */ }
+    }
+  }, [gizmoMode]);
 
   // Slice 190: Blender keymap (G/R/S/A/X/Tab). The handler is also
   // folded into the existing setup() useEffect's keydown listener so
