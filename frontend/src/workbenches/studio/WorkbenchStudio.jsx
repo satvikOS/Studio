@@ -670,6 +670,22 @@ function WorkbenchStudio() {
       setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 0);
       return a.download;
     };
+    // Slice 258: GLTF download — wraps __studioExportGltfString and
+    // pipes its JSON through a blob/anchor for an OS-level save dialog.
+    window.__studioDownloadGLTF = async (name) => {
+      const txt = await (window.__studioExportGltfString ? window.__studioExportGltfString() : Promise.resolve(null));
+      if (!txt) return null;
+      const blob = new Blob([txt], { type: 'model/gltf+json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      a.download = `${name || 'studio-scene'}-${ts}.gltf`;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 0);
+      return a.download;
+    };
     window.__studioOpenSceneFile = () => new Promise((resolve) => {
       const input = document.createElement('input');
       input.type = 'file';
@@ -2269,7 +2285,7 @@ function WorkbenchStudio() {
       // numpad (slice 193). Block other modifier combos so browser
       // shortcuts (Cmd+R, Ctrl+S, etc.) still work.
       const isAllowedModCombo = (
-        (e.ctrlKey && (/^[a13750cvzmjinos]$/i.test(e.key) || e.key === '.' || e.key === 'PageUp' || e.key === 'PageDown')) ||
+        (e.ctrlKey && (/^[a13750cvzmjinose]$/i.test(e.key) || e.key === '.' || e.key === 'PageUp' || e.key === 'PageDown')) ||
         (e.altKey && /^[ahgrscp]$/i.test(e.key)) ||
         (e.shiftKey && /^[dcszghrlp]$/i.test(e.key)) ||
         (e.ctrlKey && e.shiftKey && /^[l]$/i.test(e.key))
@@ -2507,6 +2523,10 @@ function WorkbenchStudio() {
           const next = window.prompt('Rename selected mesh', mesh.name || '');
           if (next != null && next.trim()) { mesh.name = next.trim(); bumpOutliner(); }
         }
+      } else if (k === 'e' && e.ctrlKey) {
+        // Slice 258: Ctrl+E export scene as GLTF.
+        e.preventDefault();
+        if (window.__studioDownloadGLTF) window.__studioDownloadGLTF();
       } else if (k === 'o' && e.ctrlKey) {
         // Slice 245: Ctrl+O Open File via picker.
         e.preventDefault();
