@@ -11505,6 +11505,29 @@ function WorkbenchStudio() {
                     />
                     <span style={{ opacity: 0.6 }}>Viewport</span>
                   </div>
+                  {/* Slice 236: BG colour quick presets. */}
+                  <div style={{ marginBottom: '8px', display: 'flex', gap: '4px' }}>
+                    {['#000000', '#1c1c1e', '#3a3a3c', '#bdbdbd', '#ffffff'].map((hex) => (
+                      <button
+                        key={hex}
+                        type="button"
+                        data-studio-npanel-bg-preset={hex}
+                        onClick={() => {
+                          const vp = window.__archdiscViewport;
+                          if (!vp) return;
+                          try {
+                            vp.renderer.setClearColor(new THREE.Color(hex));
+                            vp.scene.background = new THREE.Color(hex);
+                            window.__studioBgColor = hex;
+                            const inp = document.querySelector('[data-studio-npanel-bg]');
+                            if (inp) inp.value = hex;
+                          } catch (_) { /* preset best-effort */ }
+                        }}
+                        title={hex}
+                        style={{ width: '18px', height: '18px', background: hex, border: '1px solid #555', borderRadius: '2px', padding: 0, cursor: 'pointer' }}
+                      />
+                    ))}
+                  </div>
                   {/* Slice 216: Timeline stats — current frame +
                       keyframe count so the animation state is always
                       visible without opening the Sequencer dock. */}
