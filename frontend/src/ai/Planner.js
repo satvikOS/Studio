@@ -15,6 +15,7 @@
 
 import { TOOL_REGISTRY, ALL_TOOL_IDS, findTool } from './ToolRegistry.js';
 import { PROVIDERS } from './PlannerProviders.js';
+import { extractArchieResponse } from './ArchieExtractor.js';
 
 // ─── STUDIO FALLBACK RECIPES (offline-safe) ──────────────────────────
 // Same data-driven shape Archie's loop already accepts. Reusable as
@@ -216,19 +217,38 @@ export async function planFor({
       ? await provider.generateStream({ ...args, onToken })
       : await provider.generate(args);
     const obj = parseLLMJson(text);
-    if (!obj) {
-      return { source: 'fallback-error', recipe: deepClone(fallback),
-        errors: ['could not parse JSON from LLM output'] };
-    }
-    if (obj.recipe) {
+    // Wrapped {recipe: ...} from cloud providers.
+    if (obj && obj.recipe) {
       const { ok, errors, warnings, normalized } = validateAndNormalizeRecipe(obj.recipe);
       if (!ok) return { source: 'fallback-error', recipe: deepClone(fallback), errors };
       return { source: streamed ? 'llm-streamed' : 'llm', recipe: normalized, warnings };
     }
-    if (Array.isArray(obj.plan)) {
+    // Wrapped {plan: [...]} from cloud providers.
+    if (obj && Array.isArray(obj.plan)) {
       const { ok, errors, warnings, normalized } = validateAndNormalizePlan(obj.plan);
       if (!ok) return { source: 'fallback-error', recipe: deepClone(fallback), errors };
       return { source: streamed ? 'llm-streamed' : 'llm', plan: normalized, warnings };
+    }
+    // Archie schema: the LoRA emits <think> + <plan>{...}</plan> + maybe
+    // <tool_call> blocks. Run the salvage extractor to pull a recipe out
+    // even if the model left the plan inside <think> or omitted tool_calls.
+    const arch = extractArchieResponse(text, { discipline: cfg?.discipline ?? domain });
+    if (arch.clarify) {
+      return { source: 'archie-clarify', clarify: arch.clarify };
+    }
+    if (arch.recipe) {
+      const { ok, errors, warnings, normalized } = validateAndNormalizeRecipe(arch.recipe);
+      if (!ok) return { source: 'fallback-error', recipe: deepClone(fallback), errors };
+      return { source: arch.source, recipe: normalized, warnings };
+    }
+    if (Array.isArray(arch.plan) && arch.plan.length > 0) {
+      const { ok, errors, warnings, normalized } = validateAndNormalizePlan(arch.plan);
+      if (!ok) return { source: 'fallback-error', recipe: deepClone(fallback), errors };
+      return { source: arch.source, plan: normalized, warnings };
+    }
+    if (!obj) {
+      return { source: 'fallback-error', recipe: deepClone(fallback),
+        errors: ['could not parse JSON from LLM output'] };
     }
     return { source: 'fallback-error', recipe: deepClone(fallback),
       errors: ['LLM JSON had neither "recipe" nor "plan"'] };
