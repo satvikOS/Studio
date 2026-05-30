@@ -2205,7 +2205,7 @@ function WorkbenchStudio() {
       const isAllowedModCombo = (
         (e.ctrlKey && /^[a13750cvzmj]$/i.test(e.key)) ||
         (e.altKey && /^[ahgrs]$/i.test(e.key)) ||
-        (e.shiftKey && /^[dcszg]$/i.test(e.key))
+        (e.shiftKey && /^[dcszgh]$/i.test(e.key))
       );
       if ((e.metaKey || e.ctrlKey || e.altKey) && !isAllowedModCombo) return;
       const k = (e.key || '').toLowerCase();
@@ -2370,6 +2370,14 @@ function WorkbenchStudio() {
         }
       } else if (e.key === 'Home') {
         if (typeof window.__studioFrameAll === 'function') window.__studioFrameAll();
+      } else if (k === 'h' && e.shiftKey) {
+        // Slice 217: Shift+H hides everything EXCEPT the multi-select
+        // set (Blender's "Hide Unselected"). Inverse of plain H.
+        const selSet = new Set((selectedMeshesRef.current || []).concat(mesh ? [mesh] : []));
+        const scene = window.__archdiscScene; if (!scene) return;
+        scene.traverse((o) => {
+          if (o.userData && o.userData.archdiscStudioPrimitive) o.visible = selSet.has(o);
+        });
       } else if (k === 'h' && !e.altKey && set.length) {
         // Slice 194: H hides the selected meshes; Alt+H reveals all.
         for (const m of set) m.visible = false;
