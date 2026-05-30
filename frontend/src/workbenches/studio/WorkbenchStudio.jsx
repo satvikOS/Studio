@@ -367,6 +367,12 @@ function WorkbenchStudio() {
   // styled in styles/workbench.css to translate the aside off-screen
   // (only the toggle stays clickable on the right margin).
   const [propertiesCollapsed, setPropertiesCollapsed] = useState(false);
+  // Slice 239: F1 keymap cheat-sheet overlay state.
+  const [cheatSheetOpen, setCheatSheetOpen] = useState(false);
+  useEffect(() => {
+    window.__studioToggleCheatSheet = () => setCheatSheetOpen((v) => !v);
+    return () => { try { delete window.__studioToggleCheatSheet; } catch (_) { /* */ } };
+  }, []);
   const [nPanelTab, setNPanelTab] = useState('Item');
   // Slice 188: Blender 3D-viewport header strip — top-of-viewport menus
   // (View / Add / Object) on the left and the 4 shading-mode round
@@ -2436,6 +2442,10 @@ function WorkbenchStudio() {
           });
           if (last) last.position.copy(cur.position);
         }
+      } else if (e.key === 'F1') {
+        // Slice 239: F1 toggles the keymap cheat-sheet overlay.
+        e.preventDefault();
+        if (window.__studioToggleCheatSheet) window.__studioToggleCheatSheet();
       } else if (e.key === 'F2' && mesh) {
         // Slice 224: F2 renames the active mesh inline. Reuses the
         // Outliner's contenteditable rename flow from slice 200 by
@@ -11086,6 +11096,65 @@ function WorkbenchStudio() {
           viewport's own absolute/fixed overlay children. */}
       <main className="workbench-viewport">
         <Viewport3D canvasId="render-canvas-studio" domain="studio" />
+        {/* Slice 239: keymap cheat-sheet overlay (F1). */}
+        {cheatSheetOpen && (
+          <div
+            data-studio-cheat-sheet="open"
+            onClick={() => setCheatSheetOpen(false)}
+            style={{
+              position: 'absolute', inset: 0, zIndex: 100,
+              background: 'rgba(0,0,0,0.78)', color: '#dfdfdf',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontFamily: 'inherit', fontSize: '11px', cursor: 'pointer',
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{ background: '#1f1f1f', border: '1px solid #353535',
+                       borderRadius: '6px', padding: '14px 18px',
+                       maxWidth: '560px', cursor: 'default' }}
+            >
+              <div style={{ fontSize: '14px', marginBottom: '10px', borderBottom: '1px solid #353535', paddingBottom: '6px' }}>Studio Keymap (F1 to close)</div>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <tbody>
+                  {[
+                    ['G / R / S',         'nudge move / rotate / scale (multi-select aware, pivot-mode aware)'],
+                    ['Alt+G/R/S',         'clear position / rotation / scale'],
+                    ['Shift+D / Ctrl+V',  'duplicate / paste from clipboard'],
+                    ['Ctrl+C / Ctrl+J',   'copy / join selected'],
+                    ['Ctrl+A / Alt+A',    'select all / deselect all'],
+                    ['Ctrl+I',            'invert selection'],
+                    ['Shift+G',           'select similar (same kind)'],
+                    ['A',                 'cycle selection to next primitive'],
+                    ['X / Del',           'delete selected'],
+                    ['H / Shift+H / Alt+H', 'hide / hide unselected / reveal all'],
+                    ['Z / Y',             'wireframe toggle / gizmo toggle'],
+                    ['F / Home / Numpad-/', 'frame selected / frame all / local view'],
+                    ['Numpad 1/3/7/5',    'front / right / top / ortho toggle (Ctrl inverts)'],
+                    ['Numpad 2/4/6/8/9',  'orbit nudge (15°) / invert view'],
+                    ['Tab',               'cycle Object / Edit mode'],
+                    ['. / Ctrl+.',        'cycle pivot mode / toggle gizmo space'],
+                    ['Ctrl+M',            'mirror across world X'],
+                    ['Alt+C',             'randomize per-mesh colors'],
+                    ['K / ←/→',           'insert keyframe / step frame'],
+                    ['Space',             'play / pause animation'],
+                    ['Ctrl+Z / Ctrl+Shift+Z', 'undo / redo'],
+                    ['Ctrl+S* / Ctrl+L*', 'snap cursor origin / add light at cursor (use Shift)'],
+                    ['Shift+C / Shift+S', '3D cursor: to origin / to selection'],
+                    ['Shift+R',           'repeat last operation'],
+                    ['Ctrl+PageUp/Down',  'cycle Blender workspaces'],
+                    ['F2 / F3 / F12',     'rename / palette / capture render'],
+                  ].map(([k, v]) => (
+                    <tr key={k}>
+                      <td style={{ padding: '2px 8px', color: '#ffd9a0', fontFamily: 'monospace', whiteSpace: 'nowrap', verticalAlign: 'top' }}>{k}</td>
+                      <td style={{ padding: '2px 4px', opacity: 0.85 }}>{v}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
         {/* Slice 238: live frame overlay (lower-right of viewport).
             Shows current animation frame at all times so users don't
             need to open the Sequencer dock or the N-panel View tab. */}
