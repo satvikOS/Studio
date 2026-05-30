@@ -2207,7 +2207,8 @@ function WorkbenchStudio() {
       const isAllowedModCombo = (
         (e.ctrlKey && (/^[a13750cvzmji]$/i.test(e.key) || e.key === '.')) ||
         (e.altKey && /^[ahgrsc]$/i.test(e.key)) ||
-        (e.shiftKey && /^[dcszghr]$/i.test(e.key))
+        (e.shiftKey && /^[dcszghrl]$/i.test(e.key)) ||
+        (e.ctrlKey && e.shiftKey && /^[l]$/i.test(e.key))
       );
       if ((e.metaKey || e.ctrlKey || e.altKey) && !isAllowedModCombo) return;
       const k = (e.key || '').toLowerCase();
@@ -2376,6 +2377,22 @@ function WorkbenchStudio() {
         } else if (last && last.kind === 'ribbon') {
           const btn = document.querySelector(`[data-studio-ribbon-action="${last.id}"]`);
           if (btn) btn.click();
+        }
+      } else if (k === 'l' && e.shiftKey && e.ctrlKey) {
+        // Slice 225: Ctrl+Shift+L spawns a cinematic point light at
+        // the 3D Cursor (or origin if cursor never moved). Reuses the
+        // existing addCinematicLight pipeline + repositions the new
+        // light to the cursor.
+        if (window.__studioPushUndo) window.__studioPushUndo();
+        const cur = cursorRef.current;
+        addCinematicLight();
+        const scene = window.__archdiscScene;
+        if (scene && cur) {
+          let last = null;
+          scene.traverse((o) => {
+            if (o.userData && o.userData.archdiscStudioLight && o.isLight) last = o;
+          });
+          if (last) last.position.copy(cur.position);
         }
       } else if (e.key === 'F2' && mesh) {
         // Slice 224: F2 renames the active mesh inline. Reuses the
