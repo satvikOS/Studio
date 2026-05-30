@@ -11899,6 +11899,23 @@ function WorkbenchStudio() {
                       <option value="15">15</option>
                     </select>
                   </div>
+                  {/* Slice 261: run an Archie autonomous build via one
+                      click. Picks the first curriculum goal so the user
+                      sees the autonomous loop produce a real scene
+                      without typing a prompt. */}
+                  <div style={{ marginBottom: '8px' }}>
+                    <button
+                      type="button"
+                      data-studio-npanel-run-archie
+                      onClick={() => {
+                        if (window.__archieRun && window.__archieEngine) {
+                          const goal = window.__archieEngine.DEFAULT_CURRICULUM[0].goal;
+                          window.__archieRun({ goals: [goal], maxGoals: 1 });
+                        }
+                      }}
+                      style={{ background: '#22323a', color: '#9ed7ff', border: '1px solid #2f4c5a', borderRadius: '3px', padding: '3px 8px', fontSize: '10px', cursor: 'pointer', fontFamily: 'inherit' }}
+                    >Run Archie demo</button>
+                  </div>
                   {/* Slice 259: clear all Studio lights button. */}
                   <div style={{ marginBottom: '8px' }}>
                     <button
