@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js';
@@ -306,6 +306,16 @@ function WorkbenchStudio() {
     setActiveWorkspace(ws.id);
     if (ws.discipline) setActiveTab(ws.discipline);
   };
+  // Slice 186 Outliner: tick bumps re-derive the scene tree without
+  // requiring a primitive add (e.g. visibility toggle). filter is the
+  // search-box query; collections holds the expanded/collapsed state
+  // of each named collection ("Primitives" / "Lights"), defaulting to
+  // expanded on first mount (mirrors Blender on a fresh scene).
+  const [outlinerTick, setOutlinerTick] = useState(0);
+  const bumpOutliner = () => setOutlinerTick((v) => v + 1);
+  const [outlinerFilter, setOutlinerFilter] = useState('');
+  const [outlinerCollections, setOutlinerCollections] = useState({ Primitives: true, Lights: true });
+  const toggleCollection = (name) => setOutlinerCollections((s) => ({ ...s, [name]: !s[name] }));
   const [activeTool, setActiveTool] = useState('select');
   const [primitiveCount, setPrimitiveCount] = useState(0);
   const [vertexCount, setVertexCount] = useState(0);
@@ -11096,7 +11106,14 @@ function WorkbenchStudio() {
 
         {/* Outliner — scene tree at the top of the right rail. Lists every
             Studio primitive + light by kind, lets the user click an entry
-            to select that object. Real DCC outliner pattern. */}
+            to select that object. Real DCC outliner pattern.
+            Slice 186: upgraded to a Blender-style Outliner with collection
+            grouping (Primitives / Lights) — each collection collapsible
+            with a folder-disclosure arrow — and a top-of-panel search
+            filter that narrows by case-insensitive substring of the
+            object name OR kind. Mirrors Blender's Outliner editor where
+            scene objects sit under named collections with a search box
+            in the header. */}
         {(() => {
           const sceneEntries = [];
           if (typeof window !== 'undefined' && window.__archdiscScene) {
@@ -11105,12 +11122,14 @@ function WorkbenchStudio() {
                 sceneEntries.push({
                   uuid: o.uuid,
                   kind: o.userData.archdiscStudioPrimitiveKind || 'mesh',
+                  name: o.name || o.userData.archdiscStudioPrimitiveKind || 'primitive',
                   isPrimitive: true,
                 });
               } else if (o.userData && o.userData.archdiscStudioLight && o.isLight) {
                 sceneEntries.push({
                   uuid: o.uuid,
                   kind: o.type || 'light',
+                  name: o.name || 'studio-light',
                   isPrimitive: false,
                 });
               }
@@ -11119,7 +11138,11 @@ function WorkbenchStudio() {
           // Touch primitiveCount + selectedKind + lightCount + currentFrame
           // so React re-evaluates the IIFE whenever the scene state changes
           // (eslint-disable-next-line no-unused-expressions).
-          void primitiveCount; void selectedKind; void lightCount; void currentFrame;
+          void primitiveCount; void selectedKind; void lightCount; void currentFrame; void outlinerTick;
+          const q = (outlinerFilter || '').trim().toLowerCase();
+          const matches = (e) => !q || e.kind.toLowerCase().includes(q) || (e.name || '').toLowerCase().includes(q);
+          const primitives = sceneEntries.filter((e) => e.isPrimitive && matches(e));
+          const lights     = sceneEntries.filter((e) => !e.isPrimitive && matches(e));
           return (
             <div className="property-section" data-studio-section="outliner">
               <h3 className="property-header">
@@ -11131,6 +11154,19 @@ function WorkbenchStudio() {
                   {sceneEntries.length} item{sceneEntries.length === 1 ? '' : 's'}
                 </span>
               </h3>
+              <input
+                type="search"
+                value={outlinerFilter}
+                onChange={(e) => setOutlinerFilter(e.target.value)}
+                placeholder="Filter…"
+                data-studio-outliner-filter
+                style={{
+                  display: 'block', width: '100%', boxSizing: 'border-box',
+                  background: '#1f1f1f', color: '#dfdfdf',
+                  border: '1px solid #353535', borderRadius: '3px',
+                  padding: '3px 6px', marginBottom: '6px', fontSize: '11px',
+                }}
+              />
               {sceneEntries.length === 0 ? (
                 <p
                   data-studio-outliner-empty
@@ -11147,11 +11183,39 @@ function WorkbenchStudio() {
                     display: 'flex',
                     flexDirection: 'column',
                     gap: '2px',
-                    maxHeight: '180px',
+                    maxHeight: '220px',
                     overflowY: 'auto',
                   }}
                 >
-                  {sceneEntries.map((entry, i) => (
+                  {/* Render two Blender-style collections (Primitives and
+                      Lights) with disclosure arrows; each collection's
+                      entries hide when its arrow is collapsed. Empty
+                      collections are skipped so the panel doesn't show
+                      noise. */}
+                  {[
+                    { name: 'Primitives', entries: primitives },
+                    { name: 'Lights',     entries: lights },
+                  ].filter((c) => c.entries.length > 0).map((coll) => (
+                    <React.Fragment key={coll.name}>
+                      <div
+                        data-studio-outliner-collection={coll.name}
+                        data-studio-outliner-collection-expanded={outlinerCollections[coll.name] ? '1' : '0'}
+                        onClick={() => toggleCollection(coll.name)}
+                        style={{
+                          cursor: 'pointer', padding: '2px 4px',
+                          fontSize: '10.5px', textTransform: 'uppercase',
+                          letterSpacing: '0.05em', color: '#9aa',
+                          display: 'flex', alignItems: 'center', gap: '4px',
+                          userSelect: 'none',
+                        }}
+                      >
+                        <span style={{ width: '10px', display: 'inline-block' }}>
+                          {outlinerCollections[coll.name] ? '▾' : '▸'}
+                        </span>
+                        {coll.name}
+                        <span style={{ marginLeft: 'auto', opacity: 0.5 }}>{coll.entries.length}</span>
+                      </div>
+                      {outlinerCollections[coll.name] && coll.entries.map((entry, i) => (
                     <div
                       key={entry.uuid}
                       data-studio-outliner-entry={i}
@@ -11197,8 +11261,9 @@ function WorkbenchStudio() {
                           textOverflow: 'ellipsis',
                           whiteSpace: 'nowrap',
                         }}
+                        title={entry.name}
                       >
-                        {entry.kind}
+                        {entry.name}
                       </span>
                       {/* Visibility toggle */}
                       <span
@@ -11269,6 +11334,15 @@ function WorkbenchStudio() {
                       )}
                     </div>
                   ))}
+                    </React.Fragment>
+                  ))}
+                  {/* Filter narrowed everything out — show a tiny note */}
+                  {q && primitives.length === 0 && lights.length === 0 && (
+                    <div
+                      data-studio-outliner-filter-empty
+                      style={{ padding: '6px 8px', opacity: 0.5, fontSize: '11px' }}
+                    >No items match "{outlinerFilter}"</div>
+                  )}
                 </div>
               )}
             </div>
