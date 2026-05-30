@@ -735,6 +735,35 @@ function WorkbenchStudio() {
       return true;
     };
     window.__studioUndoStackLen = () => undoStackRef.current.length;
+    // Slice 246: camera bookmarks. Saves the current camera position +
+    // orbit target as a named record; restoreBookmark plays it back.
+    // Persisted on window so they survive between scene rebuilds in
+    // the same session.
+    window.__studioCameraBookmarks = window.__studioCameraBookmarks || {};
+    window.__studioBookmarkCamera = (name) => {
+      const vp = window.__archdiscViewport; if (!vp || !vp.camera) return null;
+      const ctrl = vp.orbitControls || vp.controls;
+      const rec = {
+        position: [vp.camera.position.x, vp.camera.position.y, vp.camera.position.z],
+        target: ctrl && ctrl.target ? [ctrl.target.x, ctrl.target.y, ctrl.target.z] : [0, 0, 0],
+        ts: Date.now(),
+      };
+      window.__studioCameraBookmarks[name] = rec;
+      return rec;
+    };
+    window.__studioRestoreCameraBookmark = (name) => {
+      const rec = window.__studioCameraBookmarks[name];
+      const vp = window.__archdiscViewport;
+      if (!rec || !vp || !vp.camera) return false;
+      vp.camera.position.set(rec.position[0], rec.position[1], rec.position[2]);
+      const ctrl = vp.orbitControls || vp.controls;
+      if (ctrl && ctrl.target) {
+        ctrl.target.set(rec.target[0], rec.target[1], rec.target[2]);
+        if (typeof ctrl.update === 'function') ctrl.update();
+      }
+      return true;
+    };
+    window.__studioListCameraBookmarks = () => Object.keys(window.__studioCameraBookmarks).slice();
     // Slice 211: Space toggles play/pause on the existing animation
     // loop. Exposed so the keymap (and any UI button) can call it.
     window.__studioToggleAnimating = () => setIsAnimating((v) => {
