@@ -700,6 +700,12 @@ function WorkbenchStudio() {
       return true;
     };
     window.__studioUndoStackLen = () => undoStackRef.current.length;
+    // Slice 211: Space toggles play/pause on the existing animation
+    // loop. Exposed so the keymap (and any UI button) can call it.
+    window.__studioToggleAnimating = () => setIsAnimating((v) => {
+      window.__studioAnimatingFlag = !v;
+      return !v;
+    });
     window.__studioAddRefPlane = (axis, imageUrl, opts) => addReferenceImagePlane(axis, imageUrl, opts);
     // ZBrush mask + a programmatic brush stroke (for Archie + e2e). pt = world [x,y,z].
     window.__studioPaintMaskAt = (pt, radius, value) => { const m = selectedMeshRef.current; if (!m) return null; return paintMaskAt(m, new THREE.Vector3(pt[0], pt[1], pt[2]), radius, value == null ? 1 : value); };
@@ -2271,6 +2277,11 @@ function WorkbenchStudio() {
       } else if (e.key === 'Tab') {
         e.preventDefault();
         setViewportMode((cur) => cur === 'Object Mode' ? 'Edit Mode' : 'Object Mode');
+      } else if (e.key === ' ') {
+        // Slice 211: Space toggles animation playback (Blender / Maya /
+        // C4D / Houdini all use Spacebar for play/pause).
+        e.preventDefault();
+        if (window.__studioToggleAnimating) window.__studioToggleAnimating();
       } else if (e.key === '/') {
         // Slice 209: Numpad / toggles Local View — temporarily hides
         // every non-selected mesh so the user can focus on the active
