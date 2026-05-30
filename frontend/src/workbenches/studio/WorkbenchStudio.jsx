@@ -2271,6 +2271,21 @@ function WorkbenchStudio() {
       } else if (e.key === 'Tab') {
         e.preventDefault();
         setViewportMode((cur) => cur === 'Object Mode' ? 'Edit Mode' : 'Object Mode');
+      } else if (e.key === '/') {
+        // Slice 209: Numpad / toggles Local View — temporarily hides
+        // every non-selected mesh so the user can focus on the active
+        // selection. Press again to reveal all.
+        const scene = window.__archdiscScene; if (!scene) return;
+        const selSet = new Set((selectedMeshesRef.current || []).concat(mesh ? [mesh] : []));
+        if (window.__studioLocalView) {
+          scene.traverse((o) => { if (o.userData && o.userData.archdiscStudioPrimitive) o.visible = true; });
+          window.__studioLocalView = false;
+        } else if (selSet.size) {
+          scene.traverse((o) => {
+            if (o.userData && o.userData.archdiscStudioPrimitive) o.visible = selSet.has(o);
+          });
+          window.__studioLocalView = true;
+        }
       } else if (k === 'f' && mesh) {
         // Slice 194: F frames the camera on the active selection.
         // Computes bounding sphere of selected set, orbits camera so
