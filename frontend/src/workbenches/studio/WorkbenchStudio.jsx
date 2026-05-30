@@ -587,6 +587,18 @@ function WorkbenchStudio() {
     // any future session (parity with File > Save / Open in every DCC).
     window.__studioSaveScene = () => saveSceneJSON();
     window.__studioLoadScene = (jsonOrObj) => loadSceneJSON(jsonOrObj);
+    // Slice 197: Blender 3D Cursor — positional anchor with a visible
+    // crosshair in the scene. Settable via __studioSetCursor([x,y,z]),
+    // readable via __studioGetCursor, snaps to origin via Shift+C, snaps
+    // to active selection via Shift+S (handled in the document keymap).
+    window.__studioSetCursor = (pos) => setCursorAt(pos);
+    window.__studioGetCursor = () => getCursorPos();
+    window.__studioSnapCursorOrigin = () => setCursorAt([0, 0, 0]);
+    window.__studioSnapCursorSelection = () => {
+      const m = selectedMeshRef.current;
+      if (!m) return null;
+      return setCursorAt([m.position.x, m.position.y, m.position.z]);
+    };
     window.__studioAddRefPlane = (axis, imageUrl, opts) => addReferenceImagePlane(axis, imageUrl, opts);
     // ZBrush mask + a programmatic brush stroke (for Archie + e2e). pt = world [x,y,z].
     window.__studioPaintMaskAt = (pt, radius, value) => { const m = selectedMeshRef.current; if (!m) return null; return paintMaskAt(m, new THREE.Vector3(pt[0], pt[1], pt[2]), radius, value == null ? 1 : value); };
@@ -1365,6 +1377,55 @@ function WorkbenchStudio() {
   }
 
   /*
+   * Slice 197 — Blender 3D Cursor.
+   *
+   * Renders a small 3-axis crosshair in the scene at a programmable
+   * world position. Mirrors Blender's iconic 3D Cursor: a positional
+   * anchor used as a transform pivot and a spawn point for new
+   * primitives. Three small line segments along X / Y / Z so the
+   * cursor is visible from any angle. Tag userData.archdisc3DCursor
+   * for picking it out of traversals.
+   */
+  const cursorRef = useRef(null);
+  function ensureCursor() {
+    const scene = window.__archdiscScene;
+    if (!scene) return null;
+    if (cursorRef.current && scene.children.includes(cursorRef.current)) return cursorRef.current;
+    const group = new THREE.Group();
+    group.userData.archdisc3DCursor = true;
+    group.name = 'studio-3d-cursor';
+    const size = 0.012;
+    const make = (axis, color) => {
+      const g = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(axis === 'x' ? -size : 0, axis === 'y' ? -size : 0, axis === 'z' ? -size : 0),
+        new THREE.Vector3(axis === 'x' ?  size : 0, axis === 'y' ?  size : 0, axis === 'z' ?  size : 0),
+      ]);
+      const m = new THREE.LineBasicMaterial({ color });
+      return new THREE.Line(g, m);
+    };
+    group.add(make('x', 0xff5555));
+    group.add(make('y', 0x55ff55));
+    group.add(make('z', 0x5555ff));
+    scene.add(group);
+    cursorRef.current = group;
+    return group;
+  }
+  function setCursorAt(pos) {
+    const c = ensureCursor();
+    if (!c) return null;
+    const x = (Array.isArray(pos) ? pos[0] : pos.x) || 0;
+    const y = (Array.isArray(pos) ? pos[1] : pos.y) || 0;
+    const z = (Array.isArray(pos) ? pos[2] : pos.z) || 0;
+    c.position.set(x, y, z);
+    return [x, y, z];
+  }
+  function getCursorPos() {
+    const c = cursorRef.current;
+    if (!c) return [0, 0, 0];
+    return [c.position.x, c.position.y, c.position.z];
+  }
+
+  /*
    * Slice 195 — Save / Load scene as JSON.
    *
    * saveSceneJSON walks the live scene and snapshots every primitive +
@@ -1964,7 +2025,7 @@ function WorkbenchStudio() {
       const isAllowedModCombo = (
         (e.ctrlKey && /^[a13750]$/i.test(e.key)) ||
         (e.altKey && /^[ah]$/i.test(e.key)) ||
-        (e.shiftKey && /^[d]$/i.test(e.key))
+        (e.shiftKey && /^[dcs]$/i.test(e.key))
       );
       if ((e.metaKey || e.ctrlKey || e.altKey) && !isAllowedModCombo) return;
       const k = (e.key || '').toLowerCase();
@@ -1976,7 +2037,7 @@ function WorkbenchStudio() {
         ? selectedMeshesRef.current : (mesh ? [mesh] : []);
       if (k === 'g' && set.length) { for (const m of set) m.position.x += 0.05; if (mesh) writeTransform(mesh); }
       else if (k === 'r' && set.length) { for (const m of set) m.rotation.y += 0.1; if (mesh) writeTransform(mesh); }
-      else if (k === 's' && set.length) { for (const m of set) m.scale.multiplyScalar(1.1); if (mesh) writeTransform(mesh); }
+      else if (k === 's' && !e.shiftKey && !e.ctrlKey && !e.altKey && set.length) { for (const m of set) m.scale.multiplyScalar(1.1); if (mesh) writeTransform(mesh); }
       else if (k === 'a' && !e.ctrlKey && !e.altKey && !e.shiftKey) {
         const stack = primitiveStackRef.current || [];
         if (!stack.length) return;
@@ -2046,6 +2107,16 @@ function WorkbenchStudio() {
         // Slice 194: Alt+A deselects all (Blender Alt+A).
         selectedMeshesRef.current = [];
         if (window.__studioDeselect) window.__studioDeselect();
+      } else if (k === 'c' && e.shiftKey) {
+        // Slice 197: Shift+C snaps the 3D Cursor back to world origin
+        // (Blender Shift+C also frames all + recenters cursor; Studio
+        // splits these — Shift+C does the cursor reset, Home does the
+        // frame-all from slice 194).
+        if (window.__studioSnapCursorOrigin) window.__studioSnapCursorOrigin();
+      } else if (k === 's' && e.shiftKey) {
+        // Slice 197: Shift+S snaps the 3D Cursor to the active mesh's
+        // origin (Blender Shift+S "Cursor to Selected" menu pick).
+        if (window.__studioSnapCursorSelection) window.__studioSnapCursorSelection();
       } else if (k === 'z') {
         // Slice 194: Z toggles wireframe shading on every primitive
         // (Blender Z toggles between shading modes; Studio toggles
