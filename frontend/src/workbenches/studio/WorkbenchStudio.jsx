@@ -2377,6 +2377,17 @@ function WorkbenchStudio() {
           const btn = document.querySelector(`[data-studio-ribbon-action="${last.id}"]`);
           if (btn) btn.click();
         }
+      } else if (e.key === 'F2' && mesh) {
+        // Slice 224: F2 renames the active mesh inline. Reuses the
+        // Outliner's contenteditable rename flow from slice 200 by
+        // triggering dblclick on the matching label.
+        const label = document.querySelector(`[data-studio-outliner-label-uuid="${mesh.uuid}"]`);
+        if (label) {
+          label.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+        } else if (typeof window.prompt === 'function') {
+          const next = window.prompt('Rename selected mesh', mesh.name || '');
+          if (next != null && next.trim()) { mesh.name = next.trim(); bumpOutliner(); }
+        }
       } else if (e.key === 'F3') {
         // Slice 223: F3 opens the command palette (Blender's F3 menu
         // search — the standard "type any command" search box).
