@@ -11229,6 +11229,24 @@ function WorkbenchStudio() {
             </div>
           </div>
         )}
+        {/* Slice 250: world-axes orientation HUD (top-left of the
+            viewport, below the workspaces strip). Static text +X +Y +Z
+            in red / green / blue so users always know world orientation.
+            Will become a live mini-axes-cube in a follow-up slice. */}
+        <div
+          data-studio-viewport-axes-hud
+          style={{
+            position: 'absolute', top: '40px', left: '8px', zIndex: 23,
+            background: 'rgba(0,0,0,0.55)', color: '#bdbdbd',
+            padding: '3px 8px', borderRadius: '3px',
+            fontFamily: 'monospace', fontSize: '11px', pointerEvents: 'none',
+            display: 'flex', gap: '8px',
+          }}
+        >
+          <span data-studio-viewport-axis="x" style={{ color: '#ff8b8b' }}>+X</span>
+          <span data-studio-viewport-axis="y" style={{ color: '#9eff9e' }}>+Y</span>
+          <span data-studio-viewport-axis="z" style={{ color: '#8bb6ff' }}>+Z</span>
+        </div>
         {/* Slice 248: pivot-mode + gizmo-space HUD pinned to the
             lower-center. Shows which mode rotation / scale will use,
             and the gizmo's transform space — both live state that
