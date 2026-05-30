@@ -11486,6 +11486,31 @@ function WorkbenchStudio() {
             <div style={{ padding: '8px 10px', overflowY: 'auto', flex: 1 }}>
               {nPanelTab === 'Item' && (
                 <div data-studio-npanel-content="Item">
+                  {/* Slice 243: quick colour swatches for the active
+                      mesh's material. Click → mesh.material.color.set. */}
+                  {selectedKind && (
+                    <div data-studio-npanel-section="material-presets" style={{ marginBottom: '10px' }}>
+                      <div style={{ opacity: 0.6, marginBottom: '3px', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Material</div>
+                      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                        {['#ff5555', '#ffb24a', '#ffe26b', '#7ed957', '#4aa8ff', '#a86cff', '#ff70b5', '#ffffff', '#888888', '#222222'].map((hex) => (
+                          <button
+                            key={hex}
+                            type="button"
+                            data-studio-npanel-mat-preset={hex}
+                            onClick={() => {
+                              const m = selectedMeshRef.current;
+                              if (!m || !m.material || !m.material.color) return;
+                              m.material.color.set(hex);
+                              m.material.needsUpdate = true;
+                              bumpOutliner();
+                            }}
+                            title={hex}
+                            style={{ width: '18px', height: '18px', background: hex, border: '1px solid #555', borderRadius: '2px', padding: 0, cursor: 'pointer' }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   {/* Slice 231: opacity slider on the selected mesh
                       material. Sets material.opacity + transparent. */}
                   {selectedKind && (
