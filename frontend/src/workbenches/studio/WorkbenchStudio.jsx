@@ -11825,18 +11825,22 @@ function WorkbenchStudio() {
                     <span style={{ opacity: 0.6 }}>Faces:</span>{' '}
                     <span data-studio-npanel-faces>{faceCount.toLocaleString()}</span>
                   </div>
-                  {/* Slice 253: scene-wide triangle tally — sums every
-                      primitive + helper draw call. Updates each render. */}
+                  {/* Slice 253 + 263: scene-wide triangle tally. Slice 263
+                      adds a budget warning — turns amber over 250k tris,
+                      red over 1M. */}
                   <div style={{ marginBottom: '8px' }}>
                     <span style={{ opacity: 0.6 }}>Triangles:</span>{' '}
-                    <span data-studio-npanel-triangles>{(() => {
+                    {(() => {
                       const vp = window.__archdiscViewport;
-                      if (!vp || !vp.renderer || !vp.renderer.info) return '0';
-                      // Touch primitiveCount + lightCount + outlinerTick + currentFrame
-                      // so the read flows whenever the scene changes.
                       void primitiveCount; void lightCount; void outlinerTick; void currentFrame;
-                      return (vp.renderer.info.render.triangles || 0).toLocaleString();
-                    })()}</span>
+                      const tris = (vp && vp.renderer && vp.renderer.info) ? (vp.renderer.info.render.triangles || 0) : 0;
+                      const col = tris > 1_000_000 ? '#ff6b6b' : (tris > 250_000 ? '#ffd066' : '#cfd5dc');
+                      return (
+                        <span data-studio-npanel-triangles data-studio-npanel-triangles-band={tris > 1_000_000 ? 'red' : (tris > 250_000 ? 'amber' : 'green')} style={{ color: col }}>
+                          {tris.toLocaleString()}
+                        </span>
+                      );
+                    })()}
                   </div>
                   {/* Slice 256: tone mapping dropdown. */}
                   <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
