@@ -104,6 +104,21 @@ function Viewport3D({ canvasId = 'render-canvas', domain = 'mechanical', onReady
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        // Slice 254: shadow-quality control. setQuality('off' / 'low' /
+        // 'medium' / 'high') toggles shadowMap.enabled + resizes any
+        // existing shadow.mapSize. Lets the user trade quality for FPS.
+        window.__studioSetShadowQuality = (q) => {
+          const map = { off: 0, low: 512, medium: 1024, high: 2048 };
+          const sz = (q in map) ? map[q] : 1024;
+          renderer.shadowMap.enabled = sz > 0;
+          window.__studioShadowQuality = q;
+          scene.traverse((o) => {
+            if (o.isLight && o.shadow && o.shadow.mapSize) {
+              o.shadow.mapSize.set(sz || 512, sz || 512);
+              if (o.shadow.map) { o.shadow.map.dispose(); o.shadow.map = null; }
+            }
+          });
+        };
         renderer.toneMapping = THREE.ACESFilmicToneMapping;
         renderer.toneMappingExposure = 1.2;
         container.appendChild(renderer.domElement);
