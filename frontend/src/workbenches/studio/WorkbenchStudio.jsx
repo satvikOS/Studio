@@ -11341,6 +11341,48 @@ function WorkbenchStudio() {
             </div>
           </div>
         )}
+        {/* Slice 269: mouse-position-in-world HUD pinned to the top-
+            center of the viewport. Updates as the cursor moves over the
+            canvas — raycasts to the Y=0 ground plane. Pointer events
+            off so it never blocks clicks. */}
+        <div
+          data-studio-viewport-cursor-hud
+          ref={(el) => {
+            if (!el || el.__studioWired) return;
+            el.__studioWired = true;
+            const tryWire = (attemptsLeft) => {
+              const vp = window.__archdiscViewport;
+              if (!vp || !vp.renderer || !vp.camera) {
+                if (attemptsLeft > 0) setTimeout(() => tryWire(attemptsLeft - 1), 100);
+                return;
+              }
+              const cv = vp.renderer.domElement;
+              cv.addEventListener('pointermove', (ev) => {
+                const rect = cv.getBoundingClientRect();
+                const ndc = new THREE.Vector2(
+                  ((ev.clientX - rect.left) / rect.width) * 2 - 1,
+                  -((ev.clientY - rect.top) / rect.height) * 2 + 1,
+                );
+                const ray = new THREE.Raycaster();
+                ray.setFromCamera(ndc, vp.camera);
+                const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+                const hit = new THREE.Vector3();
+                if (ray.ray.intersectPlane(plane, hit)) {
+                  el.textContent = `${hit.x.toFixed(3)} ${hit.y.toFixed(3)} ${hit.z.toFixed(3)}`;
+                  window.__studioCursorWorld = [hit.x, hit.y, hit.z];
+                }
+              });
+            };
+            tryWire(50);
+          }}
+          style={{
+            position: 'absolute', top: '40px', left: '50%',
+            transform: 'translateX(-50%)', zIndex: 23,
+            background: 'rgba(0,0,0,0.55)', color: '#bdbdbd',
+            padding: '3px 8px', borderRadius: '3px',
+            fontFamily: 'monospace', fontSize: '11px', pointerEvents: 'none',
+          }}
+        >cursor: –</div>
         {/* Slice 250: world-axes orientation HUD (top-left of the
             viewport, below the workspaces strip). Static text +X +Y +Z
             in red / green / blue so users always know world orientation.
