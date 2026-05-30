@@ -11348,6 +11348,23 @@ function WorkbenchStudio() {
             </div>
           </div>
         )}
+        {/* Slice 272: scene title HUD (top-center, ABOVE the cursor
+            HUD). Shows "Untitled · N bodies · dirty" indicator. */}
+        <div
+          data-studio-viewport-title-hud
+          style={{
+            position: 'absolute', top: '8px', left: '50%',
+            transform: 'translateX(-50%)', zIndex: 24,
+            background: 'rgba(0,0,0,0.55)', color: '#dfdfdf',
+            padding: '3px 10px', borderRadius: '3px',
+            fontFamily: 'inherit', fontSize: '11px', pointerEvents: 'none',
+            display: 'flex', gap: '8px', alignItems: 'center',
+          }}
+        >
+          <span data-studio-viewport-title>Untitled scene</span>
+          <span style={{ opacity: 0.4 }}>·</span>
+          <span data-studio-viewport-title-count>{primitiveCount} bodies</span>
+        </div>
         {/* Slice 269: mouse-position-in-world HUD pinned to the top-
             center of the viewport. Updates as the cursor moves over the
             canvas — raycasts to the Y=0 ground plane. Pointer events
@@ -11383,7 +11400,7 @@ function WorkbenchStudio() {
             tryWire(50);
           }}
           style={{
-            position: 'absolute', top: '40px', left: '50%',
+            position: 'absolute', top: '64px', left: '50%',
             transform: 'translateX(-50%)', zIndex: 23,
             background: 'rgba(0,0,0,0.55)', color: '#bdbdbd',
             padding: '3px 8px', borderRadius: '3px',
