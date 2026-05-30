@@ -11737,6 +11737,19 @@ function WorkbenchStudio() {
                     <span style={{ opacity: 0.6 }}>Faces:</span>{' '}
                     <span data-studio-npanel-faces>{faceCount.toLocaleString()}</span>
                   </div>
+                  {/* Slice 253: scene-wide triangle tally — sums every
+                      primitive + helper draw call. Updates each render. */}
+                  <div style={{ marginBottom: '8px' }}>
+                    <span style={{ opacity: 0.6 }}>Triangles:</span>{' '}
+                    <span data-studio-npanel-triangles>{(() => {
+                      const vp = window.__archdiscViewport;
+                      if (!vp || !vp.renderer || !vp.renderer.info) return '0';
+                      // Touch primitiveCount + lightCount + outlinerTick + currentFrame
+                      // so the read flows whenever the scene changes.
+                      void primitiveCount; void lightCount; void outlinerTick; void currentFrame;
+                      return (vp.renderer.info.render.triangles || 0).toLocaleString();
+                    })()}</span>
+                  </div>
                   {/* Slice 252: FPS cap dropdown for battery / thermal
                       headroom. Writes window.__studioFpsCap that the
                       animation loop reads to throttle requestAnimation
