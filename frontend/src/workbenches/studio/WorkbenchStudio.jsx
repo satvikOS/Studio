@@ -2206,7 +2206,7 @@ function WorkbenchStudio() {
       // shortcuts (Cmd+R, Ctrl+S, etc.) still work.
       const isAllowedModCombo = (
         (e.ctrlKey && (/^[a13750cvzmji]$/i.test(e.key) || e.key === '.')) ||
-        (e.altKey && /^[ahgrs]$/i.test(e.key)) ||
+        (e.altKey && /^[ahgrsc]$/i.test(e.key)) ||
         (e.shiftKey && /^[dcszghr]$/i.test(e.key))
       );
       if ((e.metaKey || e.ctrlKey || e.altKey) && !isAllowedModCombo) return;
@@ -2331,6 +2331,23 @@ function WorkbenchStudio() {
           window.__studioSelectMesh(matches[matches.length - 1]);
           selectedMeshesRef.current = matches.slice();
         }
+      } else if (k === 'c' && e.altKey && set.length) {
+        // Slice 222: Alt+C assigns a randomized HSL color to each
+        // selected mesh — useful for distinguishing many primitives
+        // at a glance. Deterministic-per-uuid so the same scene
+        // repeats the same palette.
+        if (window.__studioPushUndo) window.__studioPushUndo();
+        for (const m of set) {
+          if (!m.material || !m.material.color) continue;
+          // Hash the uuid to a stable hue in [0, 1).
+          let h = 0;
+          const u = m.uuid || m.name || '';
+          for (let i = 0; i < u.length; i++) h = (h * 131 + u.charCodeAt(i)) >>> 0;
+          const hue = (h % 360) / 360;
+          m.material.color.setHSL(hue, 0.55, 0.55);
+          m.material.needsUpdate = true;
+        }
+        bumpOutliner();
       } else if (k === 'i' && e.ctrlKey) {
         // Slice 221: Ctrl+I inverts the selection — every primitive
         // not currently in the multi-select set becomes selected;
