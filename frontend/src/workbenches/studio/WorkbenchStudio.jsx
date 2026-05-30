@@ -2847,7 +2847,7 @@ function WorkbenchStudio() {
           window.__studioSelectMesh(fresh[fresh.length - 1]);
           selectedMeshesRef.current = fresh.slice();
         }
-      } else if (['1','3','7','5','2','4','6','8','9'].includes(e.key)) {
+      } else if (['1','3','7','5','2','4','6','8','9','+','=','-'].includes(e.key)) {
         // Slice 193: Blender numpad view shortcuts. Numpad-1 front,
         // Numpad-3 right side, Numpad-7 top, Numpad-5 ortho/persp
         // toggle. Ctrl+ inverts (back/left/bottom). Maps to the
@@ -2877,6 +2877,21 @@ function WorkbenchStudio() {
         const v = (ctrl ? CTRL_VIEWS : VIEWS)[e.key];
         if (v && typeof window.__archdiscOrbitView === 'function') {
           window.__archdiscOrbitView(v[0], v[1], v[2]);
+          return;
+        }
+        if (['+', '=', '-'].includes(e.key)) {
+          // Slice 266: Numpad +/- dolly the camera in / out by 12 %
+          // along its view direction. = is the unshifted + key on a
+          // US layout so it falls through to "dolly in" too.
+          const vp = window.__archdiscViewport; if (!vp || !vp.camera) return;
+          const ctrl = vp.orbitControls || vp.controls;
+          if (!ctrl) return;
+          const target = ctrl.target;
+          const dir = vp.camera.position.clone().sub(target);
+          const k = (e.key === '-') ? 1.12 : 0.89;
+          dir.multiplyScalar(k);
+          vp.camera.position.copy(target).add(dir);
+          if (typeof ctrl.update === 'function') ctrl.update();
           return;
         }
         if (['2','4','6','8','9'].includes(e.key)) {
