@@ -322,6 +322,12 @@ function WorkbenchStudio() {
   // and toggleable via the floating "N" button at the viewport's right
   // edge. Mirrors Blender's N-key sidebar.
   const [nPanelOpen, setNPanelOpen] = useState(true);
+  // Slice 202: collapse the right Properties panel to reclaim viewport
+  // width. Default expanded; user toggles via the chevron button on the
+  // inner edge. The .workbench-properties-collapsed class is already
+  // styled in styles/workbench.css to translate the aside off-screen
+  // (only the toggle stays clickable on the right margin).
+  const [propertiesCollapsed, setPropertiesCollapsed] = useState(false);
   const [nPanelTab, setNPanelTab] = useState('Item');
   // Slice 188: Blender 3D-viewport header strip — top-of-viewport menus
   // (View / Add / Object) on the left and the 4 shading-mode round
@@ -11187,10 +11193,42 @@ function WorkbenchStudio() {
 
       {/* RIGHT PROPERTIES PANEL */}
       <aside
-        className="workbench-properties"
+        className={'workbench-properties' + (propertiesCollapsed ? ' workbench-properties-collapsed' : '')}
         data-studio-properties="studio"
         data-studio-discipline={activeTab}
+        data-studio-properties-collapsed={propertiesCollapsed ? '1' : '0'}
       >
+        {/* Slice 202: collapse / expand chevron at the inner edge of
+            the panel. The existing .workbench-drawer-toggle CSS pins it
+            to left: -9px so the affordance hangs into the viewport's
+            right margin; click to slide the whole aside off-screen and
+            reclaim the viewport width. */}
+        <button
+          type="button"
+          className="workbench-drawer-toggle"
+          data-studio-properties-toggle
+          aria-pressed={propertiesCollapsed ? 'true' : 'false'}
+          title={(propertiesCollapsed ? 'Show' : 'Hide') + ' Properties panel'}
+          onClick={() => setPropertiesCollapsed((v) => !v)}
+          style={{
+            position: 'absolute',
+            left: '-18px',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            width: '18px',
+            height: '60px',
+            background: '#2b2b2b',
+            color: '#dfdfdf',
+            border: '1px solid #1d1d1d',
+            borderRight: 'none',
+            borderRadius: '4px 0 0 4px',
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+            fontSize: '14px',
+            zIndex: 25,
+            padding: 0,
+          }}
+        >{propertiesCollapsed ? '◀' : '▶'}</button>
         {/* Discipline-aware section visibility. AI Prompt, Welcome,
             Selection, Material show on every tab; everything else
             gates on data-studio-discipline matching one of its allow-list. */}
