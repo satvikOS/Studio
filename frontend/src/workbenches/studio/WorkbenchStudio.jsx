@@ -11785,6 +11785,16 @@ function WorkbenchStudio() {
                       return (vp.renderer.info.render.triangles || 0).toLocaleString();
                     })()}</span>
                   </div>
+                  {/* Slice 255: pixel ratio control. */}
+                  <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <label style={{ opacity: 0.6 }}>Pixel ratio:</label>
+                    <input
+                      type="range" min="0.25" max="2" step="0.25" defaultValue="1"
+                      data-studio-npanel-pixel-ratio
+                      onInput={(e) => { if (window.__studioSetPixelRatio) window.__studioSetPixelRatio(parseFloat(e.target.value)); }}
+                      style={{ flex: 1 }}
+                    />
+                  </div>
                   {/* Slice 254: shadow quality dropdown. */}
                   <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <label style={{ opacity: 0.6 }}>Shadows:</label>

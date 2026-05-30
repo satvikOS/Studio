@@ -107,6 +107,13 @@ function Viewport3D({ canvasId = 'render-canvas', domain = 'mechanical', onReady
         // Slice 254: shadow-quality control. setQuality('off' / 'low' /
         // 'medium' / 'high') toggles shadowMap.enabled + resizes any
         // existing shadow.mapSize. Lets the user trade quality for FPS.
+        // Slice 255: pixel ratio control. Lets users render at lower
+        // (or higher) than native DPR to trade fidelity for FPS.
+        window.__studioSetPixelRatio = (r) => {
+          const clamped = Math.max(0.25, Math.min(3, Number(r) || 1));
+          renderer.setPixelRatio(clamped);
+          window.__studioPixelRatio = clamped;
+        };
         window.__studioSetShadowQuality = (q) => {
           const map = { off: 0, low: 512, medium: 1024, high: 2048 };
           const sz = (q in map) ? map[q] : 1024;
