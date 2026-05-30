@@ -11929,12 +11929,51 @@ function WorkbenchStudio() {
                       />
                       <span
                         data-studio-outliner-label
+                        data-studio-outliner-label-uuid={entry.uuid}
                         onClick={() => {
                           if (typeof window === 'undefined' || !window.__archdiscScene) return;
                           const mesh = window.__archdiscScene.getObjectByProperty('uuid', entry.uuid);
                           if (mesh && window.__studioSelectMesh && entry.isPrimitive) {
                             window.__studioSelectMesh(mesh);
                           }
+                        }}
+                        onDoubleClick={(ev) => {
+                          // Slice 200: ZBrush Subtool-style rename. Double-
+                          // click the label → contenteditable; Enter / blur
+                          // commits to mesh.name; Esc cancels.
+                          ev.stopPropagation();
+                          const el = ev.currentTarget;
+                          if (typeof window === 'undefined' || !window.__archdiscScene) return;
+                          const mesh = window.__archdiscScene.getObjectByProperty('uuid', entry.uuid);
+                          if (!mesh) return;
+                          const original = mesh.name || '';
+                          el.contentEditable = 'true';
+                          el.dataset.studioOutlinerLabelEditing = '1';
+                          el.focus();
+                          // Select all text inside the editable span.
+                          const range = document.createRange();
+                          range.selectNodeContents(el);
+                          const sel = window.getSelection();
+                          sel.removeAllRanges(); sel.addRange(range);
+                          const commit = () => {
+                            const next = (el.textContent || '').trim();
+                            if (next) mesh.name = next; else el.textContent = original;
+                            el.contentEditable = 'false';
+                            delete el.dataset.studioOutlinerLabelEditing;
+                            bumpOutliner();
+                          };
+                          const cancel = () => {
+                            el.textContent = original;
+                            el.contentEditable = 'false';
+                            delete el.dataset.studioOutlinerLabelEditing;
+                          };
+                          el.addEventListener('keydown', function onKey(e2) {
+                            if (e2.key === 'Enter') { e2.preventDefault(); el.blur(); }
+                            else if (e2.key === 'Escape') { e2.preventDefault(); cancel(); el.removeEventListener('keydown', onKey); }
+                          });
+                          el.addEventListener('blur', function onBlur() {
+                            commit(); el.removeEventListener('blur', onBlur);
+                          });
                         }}
                         style={{
                           flex: 1,
@@ -11943,7 +11982,7 @@ function WorkbenchStudio() {
                           textOverflow: 'ellipsis',
                           whiteSpace: 'nowrap',
                         }}
-                        title={entry.name}
+                        title={`${entry.name} — double-click to rename`}
                       >
                         {entry.name}
                       </span>
