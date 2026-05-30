@@ -11470,6 +11470,16 @@ function WorkbenchStudio() {
                     <span style={{ opacity: 0.6 }}>Faces:</span>{' '}
                     <span data-studio-npanel-faces>{faceCount.toLocaleString()}</span>
                   </div>
+                  {/* Slice 235: Grid visibility toggle. */}
+                  <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <label style={{ opacity: 0.6 }}>Grid:</label>
+                    <input
+                      type="checkbox"
+                      data-studio-npanel-grid
+                      defaultChecked
+                      onChange={(e) => { if (window.__studioSetGridVisible) window.__studioSetGridVisible(e.target.checked); }}
+                    />
+                  </div>
                   {/* Slice 229: Viewport background colour. Live colour
                       input feeds vp.renderer.setClearColor + scene.background
                       so the user can pick any backdrop on demand. */}
