@@ -2191,7 +2191,7 @@ function WorkbenchStudio() {
       // numpad (slice 193). Block other modifier combos so browser
       // shortcuts (Cmd+R, Ctrl+S, etc.) still work.
       const isAllowedModCombo = (
-        (e.ctrlKey && /^[a13750cvz]$/i.test(e.key)) ||
+        (e.ctrlKey && /^[a13750cvzm]$/i.test(e.key)) ||
         (e.altKey && /^[ah]$/i.test(e.key)) ||
         (e.shiftKey && /^[dcsz]$/i.test(e.key))
       );
@@ -2366,6 +2366,34 @@ function WorkbenchStudio() {
           }
         });
         window.__studioWireframeOn = any;
+      } else if (k === 'm' && e.ctrlKey) {
+        // Slice 210: Ctrl+M mirrors the multi-select set across the
+        // world X axis (Blender's Ctrl+M opens a mirror prompt; Studio
+        // uses world X as the default). Each selected mesh spawns a
+        // duplicate at its mirrored position with scale.x flipped.
+        e.preventDefault();
+        const _src = (selectedMeshesRef.current && selectedMeshesRef.current.length) ? selectedMeshesRef.current : (mesh ? [mesh] : []);
+        if (!_src.length) return;
+        if (window.__studioPushUndo) window.__studioPushUndo();
+        window.__studioReplayingScene = true;
+        const mirrored = [];
+        for (const m of _src) {
+          const kind = m.userData && m.userData.archdiscStudioPrimitiveKind;
+          if (!kind) continue;
+          addPrimitive(kind);
+          const stack = primitiveStackRef.current;
+          const nm = stack[stack.length - 1];
+          if (!nm) continue;
+          nm.position.set(-m.position.x, m.position.y, m.position.z);
+          nm.scale.set(m.scale.x, m.scale.y, m.scale.z); // keep absolute scale
+          nm.rotation.set(m.rotation.x, -m.rotation.y, m.rotation.z);
+          if (m.material && nm.material && m.material.color && nm.material.color) {
+            nm.material.color.copy(m.material.color);
+            nm.material.needsUpdate = true;
+          }
+          mirrored.push(nm);
+        }
+        window.__studioReplayingScene = false;
       } else if (k === 'z' && e.ctrlKey && !e.shiftKey) {
         // Slice 208: Ctrl+Z undo.
         e.preventDefault();
