@@ -327,6 +327,35 @@ function WorkbenchStudio() {
   const pivotModeRef = useRef('median');
   const PIVOT_MODES = ['median', 'individual', 'cursor'];
   useEffect(() => { pivotModeRef.current = pivotMode; }, [pivotMode]);
+  // Slice 227: AUTOSAVE — snapshot the scene to localStorage every
+  // 30 seconds. Mirrors Blender / Maya / 3ds Max auto-recovery. Skips
+  // if the saveSceneJSON entry-point isn't wired yet (early mount)
+  // or if the scene is empty (no point persisting an empty payload).
+  // Restoration is a manual __studioRestoreAutosave call so users
+  // aren't surprised by a stale scene on next launch.
+  useEffect(() => {
+    const tick = () => {
+      try {
+        const save = window.__studioSaveScene;
+        if (typeof save !== 'function') return;
+        const json = save();
+        const parsed = JSON.parse(json);
+        if (!parsed || !parsed.primitives || !parsed.primitives.length) return;
+        window.localStorage.setItem('archdisc.studio.autosave', json);
+        window.localStorage.setItem('archdisc.studio.autosave.ts', String(Date.now()));
+      } catch (_) { /* autosave best-effort */ }
+    };
+    const id = setInterval(tick, 30000);
+    if (typeof window !== 'undefined') {
+      window.__studioRestoreAutosave = () => {
+        const json = window.localStorage.getItem('archdisc.studio.autosave');
+        if (!json || typeof window.__studioLoadScene !== 'function') return { ok: false };
+        return window.__studioLoadScene(json);
+      };
+      window.__studioAutosaveAt = () => Number(window.localStorage.getItem('archdisc.studio.autosave.ts') || 0);
+    }
+    return () => { clearInterval(id); };
+  }, []);
   // Slice 187: Blender N-panel — the viewport's right-edge sidebar with
   // Item / Tool / View tabs. Open by default (Blender ships it visible)
   // and toggleable via the floating "N" button at the viewport's right
