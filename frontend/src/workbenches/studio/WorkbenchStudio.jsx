@@ -41,7 +41,7 @@ import {
   MousePointer2, Move, RotateCw, Maximize2,
   Box, Mountain, PaintBucket, Bone, Play, Sparkles, Camera,
   Palette, Layers, Lightbulb, Image as ImageIcon, Wand2,
-  Brush, Grid3x3, SlidersHorizontal,
+  Brush, Grid3x3, SlidersHorizontal, Code,
 } from 'lucide-react';
 import Viewport3D from '../../components/Viewport3D';
 
@@ -254,6 +254,34 @@ const DISCIPLINE_TABS = [
   { id: 'compositing', label: 'Compositing',  Icon: SlidersHorizontal },
 ];
 
+/*
+ * Blender canonical workspaces — Studio's top-of-window strip mirrors
+ * Blender's "Layout / Modeling / Sculpting / UV Editing / Texture Paint /
+ * Shading / Animation / Rendering / Compositing / Geometry Nodes /
+ * Scripting" tabs. Each workspace maps to one of Studio's existing
+ * disciplines (and, for editor-centric workspaces, to a sidecar editor
+ * the user expects open by default — node editor for Geometry Nodes,
+ * material graph for Shading). Clicking a workspace activates its
+ * mapped discipline so the right ribbon panel surfaces underneath,
+ * matching Blender's "switching workspaces switches the screen layout"
+ * behaviour. The strip is independent of the discipline tabs so users
+ * can stay in (e.g.) the Modeling workspace while sampling Sculpting
+ * tools — exactly how Blender behaves.
+ */
+const BLENDER_WORKSPACES = [
+  { id: 'Layout',          discipline: 'modeling',    Icon: Box },
+  { id: 'Modeling',        discipline: 'modeling',    Icon: Box },
+  { id: 'Sculpting',       discipline: 'sculpting',   Icon: Brush },
+  { id: 'UV Editing',      discipline: 'uv-texture',  Icon: Grid3x3 },
+  { id: 'Texture Paint',   discipline: 'uv-texture',  Icon: PaintBucket },
+  { id: 'Shading',         discipline: 'uv-texture',  Icon: SlidersHorizontal },
+  { id: 'Animation',       discipline: 'animation',   Icon: Play },
+  { id: 'Rendering',       discipline: 'rendering',   Icon: Camera },
+  { id: 'Compositing',     discipline: 'compositing', Icon: SlidersHorizontal },
+  { id: 'Geometry Nodes',  discipline: 'modeling',    Icon: Grid3x3 },
+  { id: 'Scripting',       discipline: 'modeling',    Icon: Code },
+];
+
 const TOOL_BUTTONS = [
   { id: 'select',    title: 'Select',         Icon: MousePointer2 },
   { id: 'move',      title: 'Move',           Icon: Move },
@@ -270,6 +298,14 @@ const TOOL_BUTTONS = [
 
 function WorkbenchStudio() {
   const [activeTab, setActiveTab] = useState('modeling');
+  // Blender workspace strip — see BLENDER_WORKSPACES. Selecting a workspace
+  // activates the discipline its layout is built around (the mapping mirrors
+  // Blender's default screen layouts for each workspace).
+  const [activeWorkspace, setActiveWorkspace] = useState('Layout');
+  const activateWorkspace = (ws) => {
+    setActiveWorkspace(ws.id);
+    if (ws.discipline) setActiveTab(ws.discipline);
+  };
   const [activeTool, setActiveTool] = useState('select');
   const [primitiveCount, setPrimitiveCount] = useState(0);
   const [vertexCount, setVertexCount] = useState(0);
@@ -8573,6 +8609,39 @@ function WorkbenchStudio() {
 
   return (
     <>
+      {/* BLENDER WORKSPACES STRIP — top-of-window tab strip mirroring
+          Blender's canonical workspaces (Layout / Modeling / Sculpting /
+          UV Editing / Texture Paint / Shading / Animation / Rendering /
+          Compositing / Geometry Nodes / Scripting). Selecting a workspace
+          activates the discipline its layout is built around so the right
+          ribbon panel surfaces underneath, matching Blender's "switching
+          workspaces switches the screen layout" behaviour. Independent of
+          the discipline tabs so users can stay in a workspace while
+          sampling tools from other disciplines — exactly how Blender
+          works. */}
+      <div
+        className="blender-workspaces-strip"
+        data-blender-workspaces-strip="studio"
+      >
+        {BLENDER_WORKSPACES.map((ws) => {
+          const WSIcon = ws.Icon;
+          return (
+            <button
+              key={ws.id}
+              type="button"
+              className={'blender-workspace-tab' + (ws.id === activeWorkspace ? ' active' : '')}
+              data-blender-workspace={ws.id}
+              data-blender-workspace-active={ws.id === activeWorkspace ? '1' : '0'}
+              data-blender-workspace-discipline={ws.discipline}
+              onClick={() => activateWorkspace(ws)}
+              title={`${ws.id} workspace (Blender ${ws.id})`}
+            >
+              {WSIcon && <WSIcon size={11} style={{ marginRight: '5px', verticalAlign: '-2px' }} />}
+              {ws.id}
+            </button>
+          );
+        })}
+      </div>
       {/* RIBBON: Studio discipline tabs (placeholder; real ribbons land per discipline) */}
       {/* RIBBON — matches Mech's RibbonToolbar layout: ribbon-tabs strip
           on top, ribbon-content with grouped tool buttons + section
@@ -10404,6 +10473,55 @@ function WorkbenchStudio() {
             Selection, Material show on every tab; everything else
             gates on data-studio-discipline matching one of its allow-list. */}
         <style>{`
+          /* Blender workspaces strip — slice 185: top-of-window tab strip
+             mirroring Blender's canonical workspaces. Sits ABOVE the
+             discipline ribbon, scrolls horizontally if it overflows so the
+             full 11 workspaces fit any viewport. */
+          .blender-workspaces-strip {
+            position: relative;
+            z-index: 50;
+            display: flex;
+            align-items: center;
+            gap: 2px;
+            padding: 4px 8px;
+            background: #2b2b2b;
+            border-bottom: 1px solid #1d1d1d;
+            overflow-x: auto;
+            overflow-y: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            font-size: 11px;
+            scrollbar-width: thin;
+          }
+          /* The left toolbar (.workbench-tools) is absolutely positioned
+             with top: var(--ribbon-height). The new strip pushes the
+             ribbon row taller so the toolbar's top sits OVER the ribbon
+             area, intercepting clicks on the strip's tabs. Bump the
+             toolbar's top by the strip height so the strip stays
+             clickable end-to-end. */
+          body:has(.blender-workspaces-strip) .workbench-tools {
+            top: calc(var(--ribbon-height) + 30px);
+          }
+          .blender-workspaces-strip::-webkit-scrollbar { height: 4px; }
+          .blender-workspaces-strip::-webkit-scrollbar-thumb { background: #555; border-radius: 2px; }
+          .blender-workspace-tab {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 10px;
+            background: transparent;
+            border: none;
+            border-top: 2px solid transparent;
+            color: #bdbdbd;
+            cursor: pointer;
+            white-space: nowrap;
+            user-select: none;
+            transition: background 0.08s ease, color 0.08s ease, border-color 0.08s ease;
+          }
+          .blender-workspace-tab:hover { background: #3a3a3a; color: #f0f0f0; }
+          .blender-workspace-tab.active {
+            background: #353535;
+            color: #ffffff;
+            border-top-color: #4a90d9;
+          }
           [data-studio-properties="studio"] [data-studio-section="mesh"],
           [data-studio-properties="studio"] [data-studio-section="reference"],
           [data-studio-properties="studio"] [data-studio-section="archviz"],
