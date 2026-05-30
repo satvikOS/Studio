@@ -11350,6 +11350,18 @@ function WorkbenchStudio() {
             >{m}</button>
           ))}
           <span style={{ flex: 1 }} />
+          {/* Slice 242: viewport-header gizmo toggle (mirrors Y key). */}
+          <button
+            type="button"
+            data-studio-viewport-gizmo-toggle
+            onClick={() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'y', bubbles: true }))}
+            title="Toggle transform gizmo (Y)"
+            style={{
+              background: '#3a3a3a', color: '#bdbdbd', border: '1px solid #1d1d1d',
+              cursor: 'pointer', fontFamily: 'inherit', fontSize: '11px',
+              padding: '2px 8px', marginRight: '4px',
+            }}
+          >⇲</button>
           {/* Slice 232: viewport-header Frame All button. Click fits
               the camera to the whole scene (Home key + Numpad-Home). */}
           <button
