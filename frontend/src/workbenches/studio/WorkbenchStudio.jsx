@@ -10717,6 +10717,55 @@ function WorkbenchStudio() {
           viewport's own absolute/fixed overlay children. */}
       <main className="workbench-viewport">
         <Viewport3D canvasId="render-canvas-studio" domain="studio" />
+        {/* VIEW CUBE corner widget (slice 207) — 3x2 grid of buttons at
+            the top-right (just below the viewport header), each clicks
+            to orbit the camera to a canonical view. Mirrors 3ds Max's
+            ViewCube + Fusion 360's NavCube — DCC users expect this as
+            a quick navigation affordance. */}
+        <div
+          data-studio-view-cube
+          style={{
+            position: 'absolute',
+            top: '36px',
+            right: nPanelOpen ? '252px' : '12px',
+            zIndex: 23,
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, 30px)',
+            gridTemplateRows: 'repeat(2, 26px)',
+            gap: '2px',
+            padding: '4px',
+            background: 'rgba(40, 40, 40, 0.72)',
+            border: '1px solid #1d1d1d',
+            borderRadius: '4px',
+            transition: 'right 0.16s ease',
+          }}
+        >
+          {[
+            { id: 'top',    label: 'Top',   az:  0, el:  89 },
+            { id: 'front',  label: 'Front', az:  0, el:   0 },
+            { id: 'right',  label: 'Right', az: 90, el:   0 },
+            { id: 'bot',    label: 'Bot',   az:  0, el: -89 },
+            { id: 'back',   label: 'Back',  az:180, el:   0 },
+            { id: 'left',   label: 'Left',  az:-90, el:   0 },
+          ].map((v) => (
+            <button
+              key={v.id}
+              type="button"
+              data-studio-view-cube-face={v.id}
+              onClick={() => {
+                if (typeof window.__archdiscOrbitView === 'function') {
+                  window.__archdiscOrbitView(v.az, v.el, 1);
+                }
+              }}
+              title={`Orbit to ${v.label} view (Blender Numpad equiv)`}
+              style={{
+                background: '#353535', color: '#dfdfdf', border: '1px solid #1d1d1d',
+                cursor: 'pointer', fontSize: '10px', fontFamily: 'inherit',
+                padding: 0,
+              }}
+            >{v.label}</button>
+          ))}
+        </div>
         {/* BLENDER 3D-VIEWPORT HEADER (slice 188) — per-editor header
             strip at the top of the viewport, mirroring Blender's
             "editor header" idiom. Left: editor-type label + Object Mode
