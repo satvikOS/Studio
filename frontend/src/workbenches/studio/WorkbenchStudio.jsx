@@ -11716,6 +11716,9 @@ function WorkbenchStudio() {
                     // Slice 257: bounding sphere — radius + centroid.
                     if (!g.boundingSphere) g.computeBoundingSphere();
                     const bs = g.boundingSphere;
+                    // Slice 264: centroid (mass center — bsphere center
+                    // works as a uniform-density proxy).
+                    const c = bs ? bs.center : null;
                     return (
                       <div data-studio-npanel-section="measure" style={{ marginBottom: '10px', fontFamily: 'monospace', fontSize: '10px', color: '#cfd5dc' }}>
                         <div style={{ opacity: 0.6, marginBottom: '3px', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Measure</div>
@@ -11723,6 +11726,7 @@ function WorkbenchStudio() {
                         <div style={{ marginBottom: '2px' }}>Volume: <span data-studio-npanel-volume>{Math.abs(vol).toExponential(2)}</span></div>
                         <div style={{ marginBottom: '2px' }}>Area: <span data-studio-npanel-area>{area.toExponential(2)}</span></div>
                         <div style={{ marginBottom: '2px' }}>BSphere R: <span data-studio-npanel-bsphere-radius>{bs ? bs.radius.toFixed(3) : '0.000'}</span></div>
+                        <div style={{ marginBottom: '2px' }}>Centroid: <span data-studio-npanel-centroid>{c ? `${c.x.toFixed(3)} ${c.y.toFixed(3)} ${c.z.toFixed(3)}` : '0 0 0'}</span></div>
                         <div>Verts: <span data-studio-npanel-verts-count>{verts}</span></div>
                       </div>
                     );
