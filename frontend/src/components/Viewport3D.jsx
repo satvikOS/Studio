@@ -107,6 +107,20 @@ function Viewport3D({ canvasId = 'render-canvas', domain = 'mechanical', onReady
         // Slice 254: shadow-quality control. setQuality('off' / 'low' /
         // 'medium' / 'high') toggles shadowMap.enabled + resizes any
         // existing shadow.mapSize. Lets the user trade quality for FPS.
+        // Slice 256: tone mapping selector. Real DCC parity — Blender,
+        // Unreal, Maya all ship tone-map presets. Names match the
+        // three.js constants. Maps "ACES" / "Cineon" / "Reinhard" /
+        // "Linear" / "None".
+        window.__studioSetToneMapping = (name) => {
+          const map = {
+            none: THREE.NoToneMapping, linear: THREE.LinearToneMapping,
+            reinhard: THREE.ReinhardToneMapping, cineon: THREE.CineonToneMapping,
+            aces: THREE.ACESFilmicToneMapping, neutral: THREE.NeutralToneMapping || THREE.ACESFilmicToneMapping,
+          };
+          const tone = (name in map) ? map[name] : THREE.ACESFilmicToneMapping;
+          renderer.toneMapping = tone;
+          window.__studioToneMapping = name;
+        };
         // Slice 255: pixel ratio control. Lets users render at lower
         // (or higher) than native DPR to trade fidelity for FPS.
         window.__studioSetPixelRatio = (r) => {

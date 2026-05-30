@@ -11785,6 +11785,23 @@ function WorkbenchStudio() {
                       return (vp.renderer.info.render.triangles || 0).toLocaleString();
                     })()}</span>
                   </div>
+                  {/* Slice 256: tone mapping dropdown. */}
+                  <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <label style={{ opacity: 0.6 }}>Tone map:</label>
+                    <select
+                      data-studio-npanel-tone-mapping
+                      defaultValue="aces"
+                      onChange={(e) => { if (window.__studioSetToneMapping) window.__studioSetToneMapping(e.target.value); }}
+                      style={{ background: '#1f1f1f', color: '#dfdfdf', border: '1px solid #353535', borderRadius: '3px', padding: '2px 6px' }}
+                    >
+                      <option value="none">none</option>
+                      <option value="linear">linear</option>
+                      <option value="reinhard">reinhard</option>
+                      <option value="cineon">cineon</option>
+                      <option value="aces">ACES</option>
+                      <option value="neutral">neutral</option>
+                    </select>
+                  </div>
                   {/* Slice 255: pixel ratio control. */}
                   <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <label style={{ opacity: 0.6 }}>Pixel ratio:</label>
