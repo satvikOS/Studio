@@ -127,6 +127,24 @@ function Viewport3D({ canvasId = 'render-canvas', domain = 'mechanical', onReady
         scene.add(grid);
         window.__studioGrid = grid;
         window.__studioSetGridVisible = (v) => { grid.visible = !!v; };
+        // Slice 240: live grid-size control. Re-build the GridHelper
+        // with the new extent + same 20-division count.
+        window.__studioSetGridSize = (extent, divisions) => {
+          try {
+            const wasVisible = grid.visible;
+            scene.remove(grid);
+            if (grid.geometry && grid.geometry.dispose) grid.geometry.dispose();
+            if (grid.material && grid.material.dispose) grid.material.dispose();
+          } catch (_) { /* dispose best-effort */ }
+          const newGrid = new THREE.GridHelper(extent || 1, divisions || 20, 0x666666, 0x2a2a2a);
+          newGrid.position.y = -0.0005;
+          newGrid.userData.pickable = false;
+          newGrid.userData.isHelper = true;
+          newGrid.userData.archdiscStudioGrid = true;
+          scene.add(newGrid);
+          window.__studioGrid = newGrid;
+          window.__studioGridSize = extent || 1;
+        };
 
         // --- Lighting (studio setup) ---
         const ambient = new THREE.AmbientLight(0xffffff, 0.4);

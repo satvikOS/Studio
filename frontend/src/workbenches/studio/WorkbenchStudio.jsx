@@ -11561,6 +11561,16 @@ function WorkbenchStudio() {
                       onChange={(e) => { if (window.__studioSetGridVisible) window.__studioSetGridVisible(e.target.checked); }}
                     />
                   </div>
+                  {/* Slice 240: Grid size slider. */}
+                  <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <label style={{ opacity: 0.6 }}>Grid size:</label>
+                    <input
+                      type="range" min="0.2" max="5" step="0.2" defaultValue="1"
+                      data-studio-npanel-grid-size
+                      onInput={(e) => { if (window.__studioSetGridSize) window.__studioSetGridSize(parseFloat(e.target.value), 20); }}
+                      style={{ flex: 1 }}
+                    />
+                  </div>
                   {/* Slice 229: Viewport background colour. Live colour
                       input feeds vp.renderer.setClearColor + scene.background
                       so the user can pick any backdrop on demand. */}
