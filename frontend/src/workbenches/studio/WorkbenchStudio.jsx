@@ -820,17 +820,31 @@ function WorkbenchStudio() {
     mesh.userData.archdiscStudioPrimitiveKind = kind;
     mesh.name = `studio-primitive-${kind}-${primitiveCount}`;
 
-    // Grid layout — spread additions so multiple primitives are individually
-    // visible. 4 columns wide; new rows along +Z.
-    const cols = 4;
-    const i = primitiveCount;
-    const col = i % cols;
-    const row = Math.floor(i / cols);
-    mesh.position.set(
-      (col - (cols - 1) / 2) * PRIMITIVE_SIZE * 1.9,
-      0,
-      row * PRIMITIVE_SIZE * 1.9,
-    );
+    // Slice 198: Spawn at 3D Cursor (Blender default). When the user
+    // has placed the 3D Cursor at a non-origin position (slice 197),
+    // new primitives land there instead of falling onto the auto-grid.
+    // The cursor is a Group tagged userData.archdisc3DCursor; if its
+    // position differs from origin, we spawn the new mesh AT the cursor.
+    // Otherwise fall back to the legacy 4-column grid layout so empty-
+    // cursor scenes keep their spread.
+    const cursor = cursorRef.current;
+    const cursorOffOrigin = cursor && (Math.abs(cursor.position.x) > 1e-6
+      || Math.abs(cursor.position.y) > 1e-6 || Math.abs(cursor.position.z) > 1e-6);
+    if (cursorOffOrigin) {
+      mesh.position.copy(cursor.position);
+    } else {
+      // Grid layout — spread additions so multiple primitives are
+      // individually visible. 4 columns wide; new rows along +Z.
+      const cols = 4;
+      const i = primitiveCount;
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      mesh.position.set(
+        (col - (cols - 1) / 2) * PRIMITIVE_SIZE * 1.9,
+        0,
+        row * PRIMITIVE_SIZE * 1.9,
+      );
+    }
 
     scene.add(mesh);
     primitiveStackRef.current.push(mesh);
