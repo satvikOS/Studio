@@ -2198,7 +2198,7 @@ function WorkbenchStudio() {
       // shortcuts (Cmd+R, Ctrl+S, etc.) still work.
       const isAllowedModCombo = (
         (e.ctrlKey && /^[a13750cvzm]$/i.test(e.key)) ||
-        (e.altKey && /^[ah]$/i.test(e.key)) ||
+        (e.altKey && /^[ahgrs]$/i.test(e.key)) ||
         (e.shiftKey && /^[dcsz]$/i.test(e.key))
       );
       if ((e.metaKey || e.ctrlKey || e.altKey) && !isAllowedModCombo) return;
@@ -2209,7 +2209,25 @@ function WorkbenchStudio() {
       // transform together. Falls back to active mesh when set empty.
       const set = (selectedMeshesRef.current && selectedMeshesRef.current.length)
         ? selectedMeshesRef.current : (mesh ? [mesh] : []);
-      if (k === 'g' && set.length) { for (const m of set) m.position.x += 0.05; if (mesh) writeTransform(mesh); }
+      if (k === 'g' && e.altKey && set.length) {
+        // Slice 212: Alt+G clears position on every selected mesh.
+        if (window.__studioPushUndo) window.__studioPushUndo();
+        for (const m of set) m.position.set(0, 0, 0);
+        if (mesh) writeTransform(mesh);
+      }
+      else if (k === 'r' && e.altKey && set.length) {
+        // Slice 212: Alt+R clears rotation.
+        if (window.__studioPushUndo) window.__studioPushUndo();
+        for (const m of set) m.rotation.set(0, 0, 0);
+        if (mesh) writeTransform(mesh);
+      }
+      else if (k === 's' && e.altKey && set.length) {
+        // Slice 212: Alt+S clears scale (back to 1,1,1).
+        if (window.__studioPushUndo) window.__studioPushUndo();
+        for (const m of set) m.scale.set(1, 1, 1);
+        if (mesh) writeTransform(mesh);
+      }
+      else if (k === 'g' && set.length) { for (const m of set) m.position.x += 0.05; if (mesh) writeTransform(mesh); }
       else if (k === 'r' && set.length) {
         // Slice 205: rotation around the active pivot point.
         const mode = pivotModeRef.current || 'median';
