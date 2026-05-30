@@ -11664,12 +11664,16 @@ function WorkbenchStudio() {
                       }
                     }
                     const verts = pos ? pos.count : 0;
+                    // Slice 257: bounding sphere — radius + centroid.
+                    if (!g.boundingSphere) g.computeBoundingSphere();
+                    const bs = g.boundingSphere;
                     return (
                       <div data-studio-npanel-section="measure" style={{ marginBottom: '10px', fontFamily: 'monospace', fontSize: '10px', color: '#cfd5dc' }}>
                         <div style={{ opacity: 0.6, marginBottom: '3px', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Measure</div>
                         <div style={{ marginBottom: '2px' }}>BBox: <span data-studio-npanel-bbox>{sz.map((v) => v.toFixed(3)).join(' × ')}</span></div>
                         <div style={{ marginBottom: '2px' }}>Volume: <span data-studio-npanel-volume>{Math.abs(vol).toExponential(2)}</span></div>
                         <div style={{ marginBottom: '2px' }}>Area: <span data-studio-npanel-area>{area.toExponential(2)}</span></div>
+                        <div style={{ marginBottom: '2px' }}>BSphere R: <span data-studio-npanel-bsphere-radius>{bs ? bs.radius.toFixed(3) : '0.000'}</span></div>
                         <div>Verts: <span data-studio-npanel-verts-count>{verts}</span></div>
                       </div>
                     );
