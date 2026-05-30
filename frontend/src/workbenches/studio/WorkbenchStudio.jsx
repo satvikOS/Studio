@@ -12818,6 +12818,33 @@ function WorkbenchStudio() {
                       >
                         {entry.name}
                       </span>
+                      {/* Slice 237: solo button — isolate this mesh by
+                          hiding all other primitives. Click again to
+                          reveal everything. */}
+                      {entry.isPrimitive && (
+                        <span
+                          data-studio-outliner-solo={entry.uuid}
+                          onClick={(ev) => {
+                            ev.stopPropagation();
+                            const scene = window.__archdiscScene; if (!scene) return;
+                            if (window.__studioLocalView) {
+                              scene.traverse((o) => { if (o.userData && o.userData.archdiscStudioPrimitive) o.visible = true; });
+                              window.__studioLocalView = false;
+                              return;
+                            }
+                            scene.traverse((o) => {
+                              if (o.userData && o.userData.archdiscStudioPrimitive) o.visible = (o.uuid === entry.uuid);
+                            });
+                            window.__studioLocalView = true;
+                            if (window.__studioSelectMesh) {
+                              const target = scene.getObjectByProperty('uuid', entry.uuid);
+                              if (target) window.__studioSelectMesh(target);
+                            }
+                          }}
+                          title="Solo (isolate this mesh)"
+                          style={{ cursor: 'pointer', opacity: 0.55, fontSize: '10px', padding: '0 4px', flexShrink: 0 }}
+                        >S</span>
+                      )}
                       {/* Visibility toggle */}
                       <span
                         data-studio-outliner-visibility={entry.uuid}
