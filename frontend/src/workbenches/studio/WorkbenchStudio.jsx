@@ -594,6 +594,48 @@ function WorkbenchStudio() {
     // any future session (parity with File > Save / Open in every DCC).
     window.__studioSaveScene = () => saveSceneJSON();
     window.__studioLoadScene = (jsonOrObj) => loadSceneJSON(jsonOrObj);
+    // Slice 204: real File > Save / File > Open via the browser's
+    // download anchor + <input type=file>. __studioDownloadScene
+    // triggers a .studio.json download with a timestamped name.
+    // __studioOpenSceneFile opens a file picker, reads the chosen
+    // JSON, and calls loadSceneJSON. Parity with File > Save and
+    // File > Open in every DCC tool.
+    window.__studioDownloadScene = (name) => {
+      const json = saveSceneJSON();
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      a.download = `${name || 'studio-scene'}-${ts}.studio.json`;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 0);
+      return a.download;
+    };
+    window.__studioOpenSceneFile = () => new Promise((resolve) => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.json,application/json';
+      input.style.display = 'none';
+      document.body.appendChild(input);
+      input.addEventListener('change', () => {
+        const f = input.files && input.files[0];
+        if (!f) { document.body.removeChild(input); resolve({ ok: false, error: 'no file' }); return; }
+        const reader = new FileReader();
+        reader.onload = () => {
+          const r = loadSceneJSON(reader.result);
+          document.body.removeChild(input);
+          resolve(r);
+        };
+        reader.onerror = () => {
+          document.body.removeChild(input);
+          resolve({ ok: false, error: 'read error' });
+        };
+        reader.readAsText(f);
+      });
+      input.click();
+    });
     // Slice 197: Blender 3D Cursor — positional anchor with a visible
     // crosshair in the scene. Settable via __studioSetCursor([x,y,z]),
     // readable via __studioGetCursor, snaps to origin via Shift+C, snaps
