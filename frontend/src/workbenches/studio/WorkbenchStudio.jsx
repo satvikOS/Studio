@@ -2205,7 +2205,7 @@ function WorkbenchStudio() {
       const isAllowedModCombo = (
         (e.ctrlKey && /^[a13750cvzmj]$/i.test(e.key)) ||
         (e.altKey && /^[ahgrs]$/i.test(e.key)) ||
-        (e.shiftKey && /^[dcsz]$/i.test(e.key))
+        (e.shiftKey && /^[dcszg]$/i.test(e.key))
       );
       if ((e.metaKey || e.ctrlKey || e.altKey) && !isAllowedModCombo) return;
       const k = (e.key || '').toLowerCase();
@@ -2233,7 +2233,7 @@ function WorkbenchStudio() {
         for (const m of set) m.scale.set(1, 1, 1);
         if (mesh) writeTransform(mesh);
       }
-      else if (k === 'g' && set.length) { for (const m of set) m.position.x += 0.05; if (mesh) writeTransform(mesh); }
+      else if (k === 'g' && !e.shiftKey && !e.ctrlKey && !e.altKey && set.length) { for (const m of set) m.position.x += 0.05; if (mesh) writeTransform(mesh); }
       else if (k === 'r' && set.length) {
         // Slice 205: rotation around the active pivot point.
         const mode = pivotModeRef.current || 'median';
@@ -2301,6 +2301,22 @@ function WorkbenchStudio() {
       } else if (e.key === 'Tab') {
         e.preventDefault();
         setViewportMode((cur) => cur === 'Object Mode' ? 'Edit Mode' : 'Object Mode');
+      } else if (k === 'g' && e.shiftKey && mesh) {
+        // Slice 215: Shift+G "Select Similar" — pick every primitive
+        // sharing the active mesh's kind. Replaces the multi-select
+        // set with the matching cohort.
+        const wantKind = mesh.userData && mesh.userData.archdiscStudioPrimitiveKind;
+        if (!wantKind) return;
+        const matches = [];
+        window.__archdiscScene.traverse((o) => {
+          if (o.userData && o.userData.archdiscStudioPrimitive
+              && o.userData.archdiscStudioPrimitiveKind === wantKind) matches.push(o);
+        });
+        if (matches.length && window.__studioSelectMesh) {
+          selectedMeshesRef.current = matches.slice();
+          window.__studioSelectMesh(matches[matches.length - 1]);
+          selectedMeshesRef.current = matches.slice();
+        }
       } else if (k === 'k' && !e.ctrlKey && !e.altKey && !e.shiftKey && mesh) {
         // Slice 213: K inserts a keyframe at the current frame for the
         // active mesh (Blender's K, Maya's S key). Drives Studio's
