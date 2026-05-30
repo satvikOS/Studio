@@ -108,14 +108,25 @@ function Viewport3D({ canvasId = 'render-canvas', domain = 'mechanical', onReady
         renderer.toneMappingExposure = 1.2;
         container.appendChild(renderer.domElement);
 
-        // --- Axes triad only (no infinite floor grid) ---
-        // Industry CAD apps don't draw a perpetual ground plane —
-        // they use a corner triad and an orientation gizmo. Keeps
-        // the OLED-black backdrop uncluttered.
+        // --- Axes triad + Blender-style ground grid (slice 203) ---
+        // Industry CAD apps used to skip a ground plane, but every DCC
+        // tool (Blender, Maya, 3ds Max, Cinema 4D, Houdini, ZBrush)
+        // ships one because it conveys scale + horizon orientation.
+        // Subtle grey GridHelper at world origin, sized to the same
+        // scale as the axes (1m extent, 20 divisions = 5cm cells).
+        // Toggle with window.__studioGridVisible = false to hide.
         const axes = new THREE.AxesHelper(0.05); // 50mm axes
         axes.userData.pickable = false;
         axes.userData.isHelper = true;
         scene.add(axes);
+        const grid = new THREE.GridHelper(1, 20, 0x666666, 0x2a2a2a);
+        grid.position.y = -0.0005; // sit just below the axes plane so the X/Z axes still read
+        grid.userData.pickable = false;
+        grid.userData.isHelper = true;
+        grid.userData.archdiscStudioGrid = true;
+        scene.add(grid);
+        window.__studioGrid = grid;
+        window.__studioSetGridVisible = (v) => { grid.visible = !!v; };
 
         // --- Lighting (studio setup) ---
         const ambient = new THREE.AmbientLight(0xffffff, 0.4);
