@@ -12479,6 +12479,8 @@ function WorkbenchStudio() {
                   kind: o.userData.archdiscStudioPrimitiveKind || 'mesh',
                   name: o.name || o.userData.archdiscStudioPrimitiveKind || 'primitive',
                   isPrimitive: true,
+                  // Slice 228: per-entry colour swatch.
+                  swatch: (o.material && o.material.color && '#' + o.material.color.getHexString()) || null,
                 });
               } else if (o.userData && o.userData.archdiscStudioLight && o.isLight) {
                 sceneEntries.push({
@@ -12486,6 +12488,7 @@ function WorkbenchStudio() {
                   kind: o.type || 'light',
                   name: o.name || 'studio-light',
                   isPrimitive: false,
+                  swatch: (o.color && '#' + o.color.getHexString()) || '#ffffff',
                 });
               }
             });
@@ -12591,12 +12594,14 @@ function WorkbenchStudio() {
                       }}
                     >
                       <span
+                        data-studio-outliner-swatch={entry.swatch || ''}
                         style={{
                           display: 'inline-block',
-                          width: '6px',
-                          height: '6px',
-                          borderRadius: '50%',
-                          background: entry.isPrimitive ? '#e6e6e6' : '#bfbfbf',
+                          width: '10px',
+                          height: '10px',
+                          borderRadius: '2px',
+                          background: entry.swatch || (entry.isPrimitive ? '#888' : '#bfbfbf'),
+                          border: '1px solid rgba(255,255,255,0.18)',
                           flexShrink: 0,
                         }}
                       />
