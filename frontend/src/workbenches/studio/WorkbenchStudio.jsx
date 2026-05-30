@@ -322,6 +322,26 @@ function WorkbenchStudio() {
   // edge. Mirrors Blender's N-key sidebar.
   const [nPanelOpen, setNPanelOpen] = useState(true);
   const [nPanelTab, setNPanelTab] = useState('Item');
+  // Slice 188: Blender 3D-viewport header strip — top-of-viewport menus
+  // (View / Add / Object) on the left and the 4 shading-mode round
+  // buttons (Wireframe / Solid / Material / Rendered) on the right.
+  // Mirrors Blender's per-editor header. Active shading drives the
+  // existing shade-* ribbon actions so a single source of truth.
+  const [viewportShading, setViewportShading] = useState('solid');
+  const shadingAction = { wireframe: null, solid: 'shade-solid', material: 'shade-material', rendered: 'shade-rendered' };
+  const applyShading = (mode) => {
+    setViewportShading(mode);
+    if (mode === 'wireframe') {
+      setDisplayWireframe(true);
+    } else {
+      setDisplayWireframe(false);
+      const id = shadingAction[mode];
+      if (id) {
+        const meta = findTool(id);
+        if (meta) { try { dispatchInApp(meta, {}); } catch (_) { /* shade dispatch best-effort */ } }
+      }
+    }
+  };
   const [activeTool, setActiveTool] = useState('select');
   const [primitiveCount, setPrimitiveCount] = useState(0);
   const [vertexCount, setVertexCount] = useState(0);
@@ -10089,10 +10109,69 @@ function WorkbenchStudio() {
           viewport's own absolute/fixed overlay children. */}
       <main className="workbench-viewport">
         <Viewport3D canvasId="render-canvas-studio" domain="studio" />
+        {/* BLENDER 3D-VIEWPORT HEADER (slice 188) — per-editor header
+            strip at the top of the viewport, mirroring Blender's
+            "editor header" idiom. Left: editor-type label + Object Mode
+            indicator. Center: View / Add / Object menu buttons. Right:
+            4 round Wireframe / Solid / Material / Rendered shading-mode
+            buttons (Blender's iconic shading toggle, fires the existing
+            shade-* ribbon actions). Active shading is highlighted. */}
+        <div
+          data-studio-viewport-header
+          style={{
+            position: 'absolute', top: 0, left: 0, right: 0, height: '28px',
+            background: '#2b2b2b', borderBottom: '1px solid #1d1d1d',
+            display: 'flex', alignItems: 'center', gap: '4px',
+            padding: '0 8px', fontSize: '11px', color: '#dfdfdf',
+            zIndex: 22,
+            fontFamily: 'inherit',
+          }}
+        >
+          <span data-studio-viewport-header-label style={{ opacity: 0.7 }}>3D Viewport</span>
+          <span style={{ opacity: 0.4 }}>·</span>
+          <span data-studio-viewport-mode style={{ color: '#bdbdbd' }}>Object Mode</span>
+          <span style={{ opacity: 0.4, marginLeft: '12px' }}>|</span>
+          {['View', 'Add', 'Object'].map((m) => (
+            <button
+              key={m}
+              type="button"
+              data-studio-viewport-menu={m}
+              onClick={() => { /* menu stubs land in a later slice */ }}
+              style={{
+                background: 'transparent', color: '#bdbdbd', border: 'none',
+                padding: '2px 8px', cursor: 'pointer', fontSize: '11px',
+                fontFamily: 'inherit',
+              }}
+            >{m}</button>
+          ))}
+          <span style={{ flex: 1 }} />
+          {['wireframe', 'solid', 'material', 'rendered'].map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              data-studio-viewport-shading={mode}
+              data-studio-viewport-shading-active={mode === viewportShading ? '1' : '0'}
+              onClick={() => applyShading(mode)}
+              title={mode.charAt(0).toUpperCase() + mode.slice(1) + ' shading'}
+              style={{
+                width: '20px', height: '20px', borderRadius: '50%',
+                background: mode === viewportShading ? '#4a90d9' : '#3a3a3a',
+                color: mode === viewportShading ? '#ffffff' : '#bdbdbd',
+                border: '1px solid ' + (mode === viewportShading ? '#4a90d9' : '#1d1d1d'),
+                cursor: 'pointer',
+                fontSize: '10px',
+                lineHeight: '18px',
+                padding: 0,
+                marginLeft: '3px',
+                fontFamily: 'inherit',
+              }}
+            >{mode === 'wireframe' ? '⊞' : mode === 'solid' ? '●' : mode === 'material' ? '◐' : '◉'}</button>
+          ))}
+        </div>
         {/* BLENDER N-PANEL (slice 187) — viewport-overlay sidebar with
             Item / Tool / View tabs. Sits at the viewport's right edge,
-            below the ribbon, above the status bar. Default open. The
-            floating "N" button (vertical, right edge) toggles it. */}
+            below the header strip, above the status bar. Default open.
+            The floating "N" button (vertical, right edge) toggles it. */}
         <button
           type="button"
           data-studio-npanel-toggle
@@ -10101,7 +10180,7 @@ function WorkbenchStudio() {
           title={(nPanelOpen ? 'Hide' : 'Show') + ' N-panel (Blender N-key sidebar)'}
           style={{
             position: 'absolute',
-            top: '8px',
+            top: '36px',
             right: nPanelOpen ? '252px' : '8px',
             zIndex: 25,
             width: '20px',
@@ -10122,7 +10201,7 @@ function WorkbenchStudio() {
             data-studio-npanel-tab={nPanelTab}
             style={{
               position: 'absolute',
-              top: '0',
+              top: '28px',
               right: '0',
               bottom: '0',
               width: '240px',
