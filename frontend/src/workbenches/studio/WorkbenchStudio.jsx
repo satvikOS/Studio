@@ -738,7 +738,13 @@ function WorkbenchStudio() {
     window.__studioPhysicsState = () => { const scene = window.__archdiscScene; if (!scene) return []; return physicsBodies(scene).map(b => ({ name: b.o.name, pos: [b.o.position.x, b.o.position.y, b.o.position.z], vel: [b.v[0], b.v[1], b.v[2]], radius: b.radius })); };
     window.__studioResetPhysics = () => resetPhysics();
     // Sequencer / timeline: scrub the frame, insert a key at an explicit frame, read keys.
-    window.__studioSetFrame = (f) => { setCurrentFrame(Math.max(0, Math.round(f))); return Math.round(f); };
+    window.__studioSetFrame = (f) => {
+      const n = Math.max(0, Math.round(f));
+      window.__studioFrameMirror = n;
+      setCurrentFrame(n);
+      return n;
+    };
+    window.__studioGetFrame = () => window.__studioFrameMirror || 0;
     window.__studioInsertKeyframeAt = (f) => insertKeyframe(f);
     window.__studioGetKeyframes = () => keyframes.map((k) => ({ ...k }));
     // Animation state machine (AnimBP): set state + step the locomotion pose.
@@ -2295,6 +2301,22 @@ function WorkbenchStudio() {
       } else if (e.key === 'Tab') {
         e.preventDefault();
         setViewportMode((cur) => cur === 'Object Mode' ? 'Edit Mode' : 'Object Mode');
+      } else if (k === 'k' && !e.ctrlKey && !e.altKey && !e.shiftKey && mesh) {
+        // Slice 213: K inserts a keyframe at the current frame for the
+        // active mesh (Blender's K, Maya's S key). Drives Studio's
+        // existing keyframe system.
+        if (window.__studioInsertKeyframeAt && window.__studioGetFrame) {
+          window.__studioInsertKeyframeAt(window.__studioGetFrame());
+        }
+      } else if (e.key === 'ArrowRight' && !e.ctrlKey && !e.altKey) {
+        // Slice 213: step one frame forward (Maya / Blender Right).
+        if (window.__studioSetFrame && window.__studioGetFrame) {
+          window.__studioSetFrame(window.__studioGetFrame() + 1);
+        }
+      } else if (e.key === 'ArrowLeft' && !e.ctrlKey && !e.altKey) {
+        if (window.__studioSetFrame && window.__studioGetFrame) {
+          window.__studioSetFrame(Math.max(0, window.__studioGetFrame() - 1));
+        }
       } else if (e.key === ' ') {
         // Slice 211: Space toggles animation playback (Blender / Maya /
         // C4D / Houdini all use Spacebar for play/pause).
