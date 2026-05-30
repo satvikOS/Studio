@@ -2436,8 +2436,15 @@ function WorkbenchStudio() {
       } else if (k === 'x' && mesh) {
         deleteSelectedMeshRef.current && deleteSelectedMeshRef.current();
       } else if (e.key === 'Tab') {
+        // Slice 271: Tab cycles through every Blender mode (not just
+        // Object <-> Edit). Mirrors the dropdown order from slice 189.
         e.preventDefault();
-        setViewportMode((cur) => cur === 'Object Mode' ? 'Edit Mode' : 'Object Mode');
+        const cycle = ['Object Mode', 'Edit Mode', 'Sculpt Mode', 'Vertex Paint',
+                       'Weight Paint', 'Texture Paint', 'Pose Mode'];
+        setViewportMode((cur) => {
+          const i = cycle.indexOf(cur);
+          return cycle[(i + 1) % cycle.length];
+        });
       } else if (k === 'g' && e.shiftKey && mesh) {
         // Slice 215: Shift+G "Select Similar" — pick every primitive
         // sharing the active mesh's kind. Replaces the multi-select
