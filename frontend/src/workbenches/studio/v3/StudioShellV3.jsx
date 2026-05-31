@@ -717,11 +717,57 @@ export function StudioShellV3({ mode = 'dark' }) {
     setDockOpen(true);
   };
 
+  // Slice 400 — QAT actions hit V2's real APIs through the headless mount.
+  // Each pushes a tool-message into the dock so the user sees what ran.
   const onQatAction = (id) => {
-    if (id === 'undo' && window.__studioPopUndo) window.__studioPopUndo();
-    else if (id === 'redo' && window.__studioPopRedo) window.__studioPopRedo();
-    else if (id === 'play' && window.__studioToggleAnimating) window.__studioToggleAnimating();
-    else if (id === 'settings') setDockOpen(true);
+    const pushTool = (text) => { setThread((t) => [...t, { role: 'tool', text }]); setDockOpen(true); };
+    if (id === 'undo') {
+      const r = window.__studioUndo && window.__studioUndo();
+      pushTool(`__studioUndo → ${JSON.stringify(r)}`);
+    } else if (id === 'redo') {
+      const r = window.__studioRedo && window.__studioRedo();
+      pushTool(`__studioRedo → ${JSON.stringify(r)}`);
+    } else if (id === 'play') {
+      const r = window.__studioToggleAnimating && window.__studioToggleAnimating();
+      pushTool(`__studioToggleAnimating → ${JSON.stringify(r)}`);
+    } else if (id === 'pause') {
+      const r = window.__studioToggleAnimating && window.__studioToggleAnimating();
+      pushTool(`__studioToggleAnimating → ${JSON.stringify(r)}`);
+    } else if (id === 'save') {
+      const json = window.__studioSaveScene && window.__studioSaveScene();
+      pushTool(`__studioSaveScene → ${json ? json.length + ' bytes' : 'null'}`);
+      // Drop the JSON into a downloadable blob so the user can persist it.
+      if (json) {
+        try {
+          const blob = new Blob([json], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `studio-scene-${Date.now()}.json`;
+          a.click();
+          URL.revokeObjectURL(url);
+        } catch (_) {}
+      }
+    } else if (id === 'open') {
+      // Trigger a file picker; on pick, call __studioLoadScene with the
+      // file's JSON text.
+      const inp = document.createElement('input');
+      inp.type = 'file';
+      inp.accept = 'application/json,.json';
+      inp.onchange = async () => {
+        const f = inp.files && inp.files[0];
+        if (!f) return;
+        const text = await f.text();
+        const r = window.__studioLoadScene && window.__studioLoadScene(text);
+        pushTool(`__studioLoadScene("${f.name}") → ${JSON.stringify(r)}`);
+      };
+      inp.click();
+    } else if (id === 'new') {
+      const r = window.__studioRevealAll && window.__studioRevealAll();
+      pushTool(`new — __studioRevealAll → ${JSON.stringify(r)}`);
+    } else if (id === 'settings') {
+      setDockOpen(true);
+    }
   };
 
   return (
