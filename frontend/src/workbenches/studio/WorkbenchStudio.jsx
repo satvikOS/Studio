@@ -12153,6 +12153,10 @@ function WorkbenchStudio() {
                       <span className="ribbon-tool-icon">∮</span>
                       <span className="ribbon-tool-label">MoSpline</span>
                     </button>
+                    <button type="button" className="ribbon-tool" data-studio-primitive="mountain" onClick={() => window.__studioAddMountain && window.__studioAddMountain({ radius: 0.05, segments: 48, strength: 0.4, seed: Math.floor(Math.random() * 1024) })} title="Houdini Mountain SOP — fBm-displaced sphere">
+                      <span className="ribbon-tool-icon">▲</span>
+                      <span className="ribbon-tool-label">Mountain</span>
+                    </button>
                     <button type="button" className="ribbon-tool" data-studio-primitive="motext" onClick={() => window.__studioMoText && window.__studioMoText({ text: 'TEXT', size: 0.06 })} title="Cinema 4D MoText / 3ds Max Text — extruded 3D text">
                       <span className="ribbon-tool-icon">𝐓</span>
                       <span className="ribbon-tool-label">MoText</span>
