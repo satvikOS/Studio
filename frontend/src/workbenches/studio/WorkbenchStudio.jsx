@@ -4989,6 +4989,20 @@ function WorkbenchStudio() {
           window.__studioSelectMesh(fresh[fresh.length - 1]);
           selectedMeshesRef.current = fresh.slice();
         }
+      } else if (
+        // Slice 380 — Blender 1/2/3 edit-mode sub-mode hotkeys. Intercept
+        // BEFORE the numpad-view handler so '2'/'3' don't orbit the camera
+        // while we're in a sub-object edit mode. Plain key, no modifier.
+        (e.key === '1' || e.key === '2' || e.key === '3') &&
+        !e.ctrlKey && !e.altKey && !e.shiftKey &&
+        window.__studioEditModeRef &&
+        (window.__studioEditModeRef.current === 'vertex' ||
+         window.__studioEditModeRef.current === 'edge' ||
+         window.__studioEditModeRef.current === 'face')
+      ) {
+        const _map = { '1': 'vertex', '2': 'edge', '3': 'face' };
+        if (window.__studioSetEditMode) window.__studioSetEditMode(_map[e.key]);
+        e.preventDefault();
       } else if (['1','3','7','5','2','4','6','8','9','+','=','-'].includes(e.key)) {
         // Slice 193: Blender numpad view shortcuts. Numpad-1 front,
         // Numpad-3 right side, Numpad-7 top, Numpad-5 ortho/persp
