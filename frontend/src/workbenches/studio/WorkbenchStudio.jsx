@@ -13104,18 +13104,35 @@ function WorkbenchStudio() {
         {/* Slice 334 (UIUX v2) — slice 327 op toast removed.
             Last operation now shown as text in the status bar (no
             floating pill — industry-standard DCC pattern). */}
-        {/* Slice 335 — Archie portal floating bar. Always-visible chat-
-            style input pinned above the status bar, centred. Studio-brand
-            palette (deep #0d1117 + teal #1de9b6 Run button). Wraps the
-            same aiPrompt state + runAiPrompt action used in the N-panel
-            section. Doesn't infringe on competitor IP — single floating
-            bar matches modern AI-app conventions (Copilot / ChatGPT
-            input docks), not any specific DCC's chrome. */}
+        {/* Slice 335 + 340 — Archie portal floating bar. Slice 340 adds
+            an inline "last response" peek above the input pill so users
+            see what Archie just did without opening the N-panel log. */}
+        <div data-studio-archie-portal-wrap style={{
+          position: 'absolute', bottom: '32px', left: '50%',
+          transform: 'translateX(-50%)', zIndex: 25,
+          display: 'flex', flexDirection: 'column', alignItems: 'center',
+          gap: '6px', minWidth: '420px', maxWidth: '60vw',
+        }}>
+          {/* Last-response peek — slice 340 */}
+          {aiLog.length > 0 && (
+            <div
+              data-studio-archie-last-response
+              data-studio-archie-last-actions={aiLog[aiLog.length - 1].actions.length}
+              style={{
+                background: '#161b22', border: '1px solid #21262d',
+                borderRadius: '10px', padding: '6px 12px',
+                color: '#9aa6b2', fontSize: '11px',
+                maxWidth: '60vw', textAlign: 'center',
+                fontFamily: 'inherit',
+              }}
+            >
+              <span style={{ color: '#1de9b6', fontWeight: 600, marginRight: '6px' }}>archie</span>
+              ran {aiLog[aiLog.length - 1].actions.length} action{aiLog[aiLog.length - 1].actions.length === 1 ? '' : 's'} · <span style={{ color: '#e6edf3' }}>{aiLog[aiLog.length - 1].actions.slice(0, 4).join(' · ')}{aiLog[aiLog.length - 1].actions.length > 4 ? ' …' : ''}</span>
+            </div>
+          )}
         <div
           data-studio-archie-portal
           style={{
-            position: 'absolute', bottom: '32px', left: '50%',
-            transform: 'translateX(-50%)', zIndex: 25,
             display: 'flex', alignItems: 'center', gap: '6px',
             background: '#0d1117', border: '1px solid #21262d',
             borderRadius: '18px', padding: '4px 6px 4px 14px',
@@ -13155,6 +13172,7 @@ function WorkbenchStudio() {
               fontFamily: 'inherit', letterSpacing: '0.03em',
             }}
           >{aiRunning ? '…' : 'run'}</button>
+        </div>
         </div>
         {/* Slice 315: Blender bottom status bar — selected mesh stats +
             scene totals + FPS. Pinned to viewport footer, pointer-events
