@@ -1906,6 +1906,22 @@ function WorkbenchStudio() {
   const [physicsG, setPhysicsG]               = useState(9.8);
   const [physicsRestitution, setPhysicsRestitution] = useState(0.55);
   const physicsRafRef = useRef(null);
+  // Slice 315 — FPS counter for the status bar. Averages every 30 frames.
+  const [fps, setFps] = useState(0);
+  useEffect(() => {
+    let frames = 0, last = performance.now(), raf = 0;
+    const tick = (t) => {
+      frames++;
+      if (frames >= 30) {
+        const v = Math.round(1000 / ((t - last) / frames));
+        setFps(v); window.__studioFPS = v;
+        frames = 0; last = t;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => { cancelAnimationFrame(raf); delete window.__studioFPS; };
+  }, []);
   // Slice 300 — Unreal/PhysX distance constraint (point-to-point joint).
   // Each entry: {id, kind:'distance', bodyAName, bodyBName, anchorA[3],
   // anchorB[3], distance, iterations}. Solved Verlet-style after gravity
@@ -12690,6 +12706,42 @@ function WorkbenchStudio() {
               </>
             );
           })()}
+        </div>
+        {/* Slice 315: Blender bottom status bar — selected mesh stats +
+            scene totals + FPS. Pinned to viewport footer, pointer-events
+            off so it never blocks clicks. */}
+        <div
+          data-studio-viewport-status-bar
+          style={{
+            position: 'absolute', bottom: '0', left: '0', right: '0',
+            height: '22px', background: 'rgba(20,20,24,0.92)',
+            color: '#cfcfcf', fontSize: '11px', fontFamily: 'monospace',
+            padding: '2px 10px', zIndex: 24, display: 'flex', gap: '10px',
+            alignItems: 'center', pointerEvents: 'none',
+            borderTop: '1px solid #000',
+          }}
+        >
+          {(() => {
+            void selectedKind; void outlinerTick; void primitiveCount;
+            const m = selectedMeshRef.current;
+            const name = m ? (m.name || (m.userData && m.userData.archdiscStudioPrimitiveKind) || 'mesh') : '(no active)';
+            const verts = (m && m.geometry && m.geometry.attributes && m.geometry.attributes.position) ? m.geometry.attributes.position.count : 0;
+            const tris = (m && m.geometry) ? (m.geometry.index ? m.geometry.index.count / 3 : (m.geometry.attributes.position ? m.geometry.attributes.position.count / 3 : 0)) : 0;
+            return (
+              <>
+                <span data-studio-status-selected-name>{name}</span>
+                <span style={{ opacity: 0.35 }}>│</span>
+                <span data-studio-status-verts>V: {verts.toLocaleString()}</span>
+                <span data-studio-status-tris>T: {Math.round(tris).toLocaleString()}</span>
+              </>
+            );
+          })()}
+          <span style={{ opacity: 0.35 }}>║</span>
+          <span data-studio-status-bodies>Scene: {primitiveCount} bodies</span>
+          <span data-studio-status-scene-tris>Scene T: {faceCount.toLocaleString()}</span>
+          <span style={{ marginLeft: 'auto', opacity: 0.7 }}>
+            <span data-studio-status-fps>FPS: {fps || '–'}</span>
+          </span>
         </div>
         {/* Slice 269: mouse-position-in-world HUD pinned to the top-
             center of the viewport. Updates as the cursor moves over the
