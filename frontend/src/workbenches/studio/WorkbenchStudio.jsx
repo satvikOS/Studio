@@ -13869,6 +13869,33 @@ function WorkbenchStudio() {
                         <span style={{ opacity: 0.6 }}>Name:</span>{' '}
                         <span data-studio-npanel-selected-kind style={{ color: '#fff' }}>{selectedKind}</span>
                       </div>
+                      {/* Slice 333 — editable mesh name input. */}
+                      {(() => {
+                        const m = selectedMeshRef.current;
+                        if (!m) return null;
+                        return (
+                          <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <label style={{ opacity: 0.6, fontSize: '10px', width: '40px' }}>Mesh:</label>
+                            <input
+                              type="text"
+                              defaultValue={m.name || ''}
+                              key={`name-${m.uuid}`}
+                              data-studio-npanel-rename
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                m.name = v;
+                                if (window.__studioBumpOutliner) window.__studioBumpOutliner();
+                              }}
+                              style={{
+                                flex: 1, padding: '1px 4px', fontSize: '11px',
+                                fontFamily: 'monospace', background: '#1c1c20',
+                                color: '#dfe5ea', border: '1px solid #2c2c30',
+                                borderRadius: '2px',
+                              }}
+                            />
+                          </div>
+                        );
+                      })()}
                       {selectedTransform && (() => {
                         /* Slice 316 — editable numeric XYZ inputs for
                            Location/Rotation/Scale (Blender N-panel parity).
