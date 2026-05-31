@@ -12348,6 +12348,19 @@ function WorkbenchStudio() {
                     <button type="button" className="ribbon-tool" data-studio-ribbon-action="center-origin" onClick={() => window.__studioCenterAtOrigin && window.__studioCenterAtOrigin()} disabled={!selectedKind} title="Maya Center Object — move selected mesh's bbox centre to world origin">
                       <span className="ribbon-tool-icon">◯</span><span className="ribbon-tool-label">Center</span>
                     </button>
+                    <button
+                      type="button" className="ribbon-tool"
+                      data-studio-ribbon-action="merge-selected"
+                      onClick={() => {
+                        const set = (window.__studioSelectedMeshes ? window.__studioSelectedMeshes() : []) || [];
+                        const uuids = set.map((m) => m.uuid);
+                        if (uuids.length >= 2 && window.__studioMergeMeshes) window.__studioMergeMeshes(uuids);
+                      }}
+                      disabled={!selectedKind}
+                      title="Maya Combine / Blender Join — merge currently multi-selected meshes into one"
+                    >
+                      <span className="ribbon-tool-icon">∪</span><span className="ribbon-tool-label">Merge</span>
+                    </button>
                     <button type="button" className="ribbon-tool" data-studio-ribbon-action="corrective-smooth" onClick={() => correctiveSmooth(0.4)} disabled={!selectedKind} title="Blender MOD_correctivesmooth — volume-preserving smooth">
                       <span className="ribbon-tool-icon">≋</span><span className="ribbon-tool-label">Corr·Smth</span>
                     </button>
