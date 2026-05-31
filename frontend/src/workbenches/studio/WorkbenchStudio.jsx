@@ -15047,24 +15047,28 @@ function WorkbenchStudio() {
              aside (DesignHistory + PartBrowser + FeatureTree etc.). No
              rounded card chrome, no hover-glow — just dense data
              surface. */
+          /* Slice 344 — property sections on the Studio brand palette
+             (deep #0d1117 chrome + #1f2733 dividers + #9aa6b2 header
+             text). Headers slightly more legible than the legacy
+             #050505/#95a0a8 contrast. */
           [data-studio-properties="studio"] .property-section {
-            background: #050505;
+            background: #0d1117;
             border: none;
-            border-top: 1px solid rgba(255,255,255,0.04);
+            border-top: 1px solid #1f2733;
             border-radius: 0;
             padding: 8px 12px;
             margin: 0;
             transition: none;
           }
           [data-studio-properties="studio"] .property-section:hover {
-            background: #060606;
+            background: #11161e;
           }
           [data-studio-properties="studio"] .property-section:first-of-type {
             border-top: none;
           }
 
-          /* Section header — Mech-style small caps, no decorative stripe.
-             Click-toggles collapse via the chevron on the right. */
+          /* Section header — Studio brand small caps, click-toggles
+             collapse via the chevron on the right. */
           [data-studio-properties="studio"] .property-header {
             display: flex;
             align-items: center;
@@ -15075,9 +15079,12 @@ function WorkbenchStudio() {
             font-size: 10px;
             font-weight: 600;
             letter-spacing: 0.7px;
-            color: #95a0a8;
+            color: #9aa6b2;
             cursor: pointer;
             user-select: none;
+          }
+          [data-studio-properties="studio"] .property-header:hover {
+            color: #e6edf3;
           }
           [data-studio-properties="studio"] .property-header::before {
             content: none;
