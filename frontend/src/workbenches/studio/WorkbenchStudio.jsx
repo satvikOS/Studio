@@ -12011,6 +12011,38 @@ function WorkbenchStudio() {
             <div style={{ padding: '8px 10px', overflowY: 'auto', flex: 1 }}>
               {nPanelTab === 'Item' && (
                 <div data-studio-npanel-content="Item">
+                  {/* Slice 286: ZBrush sculpt-layer stack in N-panel Item.
+                      Lists every layer (built by sculptLayerAdd), each row
+                      shows toggle + strength slider + remove. */}
+                  {selectedKind && (
+                    <div data-studio-npanel-section="sculpt-layers" data-sculpt-layers-version={sculptLayersVersion} style={{ marginBottom: '10px' }}>
+                      <div style={{ opacity: 0.6, marginBottom: '3px', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Sculpt Layers</div>
+                      {sculptLayerList().length === 0 && (
+                        <div style={{ opacity: 0.45, fontSize: '10px' }} data-studio-sculpt-layer-empty>No layers — add via __studioSculptLayerAdd</div>
+                      )}
+                      {sculptLayerList().map((L, i) => (
+                        <div key={L.id} style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '2px' }}>
+                          <input
+                            type="checkbox" checked={L.enabled}
+                            data-studio-sculpt-layer-enabled={i}
+                            onChange={() => sculptLayerToggle(i)}
+                          />
+                          <span data-studio-sculpt-layer-name style={{ flex: 1, fontSize: '10px', opacity: L.enabled ? 1 : 0.5 }}>{L.name}</span>
+                          <input
+                            type="range" min="0" max="2" step="0.05" defaultValue={L.strength}
+                            data-studio-sculpt-layer-strength={i}
+                            onInput={(e) => sculptLayerSetStrength(i, parseFloat(e.target.value))}
+                            style={{ width: '60px' }}
+                          />
+                          <button
+                            data-studio-sculpt-layer-remove={i}
+                            onClick={() => sculptLayerRemove(i)}
+                            style={{ padding: '0 4px', fontSize: '10px' }}
+                          >×</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   {/* Slice 281: metalness + roughness sliders on the
                       active mesh material. */}
                   {selectedKind && (
