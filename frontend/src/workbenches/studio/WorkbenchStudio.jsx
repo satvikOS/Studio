@@ -12462,6 +12462,22 @@ function WorkbenchStudio() {
               )}
               {nPanelTab === 'View' && (
                 <div data-studio-npanel-content="View">
+                  {/* Slice 291: HDRI environment preset dropdown — UI hook
+                      for the slice 288 PMREM lighting API. */}
+                  <div style={{ marginBottom: '10px' }}>
+                    <div style={{ opacity: 0.6, marginBottom: '3px', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>HDRI Environment</div>
+                    <select
+                      data-studio-npanel-hdri
+                      defaultValue="off"
+                      onChange={(e) => { if (window.__studioSetHDRIEnvironment) window.__studioSetHDRIEnvironment(e.target.value); }}
+                      style={{ width: '100%', padding: '2px', fontSize: '11px' }}
+                    >
+                      <option value="off">Off</option>
+                      <option value="studio">Studio</option>
+                      <option value="sunset">Sunset</option>
+                      <option value="neutral">Neutral</option>
+                    </select>
+                  </div>
                   <div style={{ opacity: 0.6, marginBottom: '6px', textTransform: 'uppercase', fontSize: '10px', letterSpacing: '0.05em' }}>3D Viewport</div>
                   <div style={{ marginBottom: '8px' }}>
                     <span style={{ opacity: 0.6 }}>Primitives:</span>{' '}
