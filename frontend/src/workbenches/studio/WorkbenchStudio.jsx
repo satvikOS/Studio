@@ -3786,19 +3786,18 @@ function WorkbenchStudio() {
         // Slice 197: Shift+S snaps the 3D Cursor to the active mesh's
         // origin (Blender Shift+S "Cursor to Selected" menu pick).
         if (window.__studioSnapCursorSelection) window.__studioSnapCursorSelection();
-      } else if (k === 'z') {
-        // Slice 194: Z toggles wireframe shading on every primitive
-        // (Blender Z toggles between shading modes; Studio toggles
-        // wireframe overlay as the simplest equivalent).
-        const scene = window.__archdiscScene; if (!scene) return;
-        let any = false;
-        scene.traverse((o) => {
-          if (o.userData && o.userData.archdiscStudioPrimitive && o.material) {
-            o.material.wireframe = !o.material.wireframe;
-            any = any || o.material.wireframe;
-          }
-        });
-        window.__studioWireframeOn = any;
+      } else if (k === 'z' && !e.ctrlKey && !e.shiftKey && !e.altKey) {
+        // Slice 322: Z cycles shading modes (wireframe→solid→material→rendered,
+        // Blender Z-pie shortcut). Supersedes slice 194's wireframe-only toggle.
+        e.preventDefault();
+        if (window.__studioSetShadingMode) {
+          const MODES = ['wireframe', 'solid', 'material', 'rendered'];
+          const cur = window.__studioShadingMode || 'material';
+          const idx = MODES.indexOf(cur);
+          const next = MODES[(idx + 1) % MODES.length];
+          window.__studioSetShadingMode(next);
+          if (window.__studioBumpOutliner) window.__studioBumpOutliner();
+        }
       } else if (k === 'j' && e.ctrlKey && set.length >= 2) {
         // Slice 214: Ctrl+J joins the multi-select set into one mesh
         // (Blender's Object > Join). Bakes each source's world
