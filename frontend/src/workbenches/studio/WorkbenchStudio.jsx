@@ -330,6 +330,8 @@ function WorkbenchStudio() {
   // expanded on first mount (mirrors Blender on a fresh scene).
   const [outlinerTick, setOutlinerTick] = useState(0);
   const bumpOutliner = () => setOutlinerTick((v) => v + 1);
+  // Slice 317 — expose for the T-shelf toolbar so click can force a render.
+  if (typeof window !== 'undefined') window.__studioBumpOutliner = bumpOutliner;
   const [outlinerFilter, setOutlinerFilter] = useState('');
   const [outlinerCollections, setOutlinerCollections] = useState({ Primitives: true, Lights: true });
   const toggleCollection = (name) => setOutlinerCollections((s) => ({ ...s, [name]: !s[name] }));
@@ -12714,6 +12716,55 @@ function WorkbenchStudio() {
               </>
             );
           })()}
+        </div>
+        {/* Slice 317: Blender T-shelf / left toolbar — active tool palette.
+            Vertical strip pinned to the left edge of the viewport.
+            Click selects the active tool; the choice mirrors to
+            window.__studioActiveTool so gizmo logic can react. */}
+        <div
+          data-studio-viewport-toolbar
+          style={{
+            position: 'absolute', top: '40px', left: '4px',
+            width: '32px', zIndex: 24,
+            background: 'rgba(20,20,24,0.85)',
+            border: '1px solid #2a2a30', borderRadius: '4px',
+            padding: '3px 2px', display: 'flex', flexDirection: 'column',
+            gap: '2px', alignItems: 'center',
+          }}
+        >
+          {[
+            { id: 'select', label: '⬚', title: 'Select / box-select (default)' },
+            { id: 'cursor', label: '✛', title: '3D Cursor — sets origin for new primitives' },
+            { id: 'move',   label: '⇄', title: 'Move (G) — translate gizmo' },
+            { id: 'rotate', label: '⟲', title: 'Rotate (R) — rotation gizmo' },
+            { id: 'scale',  label: '⤢', title: 'Scale (S) — scale gizmo' },
+          ].map((t) => {
+            const active = (typeof window !== 'undefined' ? window.__studioActiveTool : 'select') === t.id;
+            return (
+              <button
+                key={t.id}
+                data-studio-tshelf-tool={t.id}
+                title={t.title}
+                onClick={() => {
+                  window.__studioActiveTool = t.id;
+                  // Bump the outliner tick so React re-renders the toolbar highlight.
+                  if (window.__studioBumpOutliner) window.__studioBumpOutliner();
+                  // Also map move/rotate/scale to the actual gizmo mode for parity.
+                  if (window.__studioGizmo && (t.id === 'move' || t.id === 'rotate' || t.id === 'scale')) {
+                    try { window.__studioGizmo.setMode(t.id === 'move' ? 'translate' : t.id); } catch (_) {}
+                  }
+                }}
+                style={{
+                  width: '26px', height: '26px', padding: 0,
+                  background: active ? '#3a6abf' : 'transparent',
+                  color: active ? '#fff' : '#cfcfcf',
+                  border: active ? '1px solid #6890e0' : '1px solid transparent',
+                  borderRadius: '3px', cursor: 'pointer',
+                  fontSize: '14px', lineHeight: '24px',
+                }}
+              >{t.label}</button>
+            );
+          })}
         </div>
         {/* Slice 315: Blender bottom status bar — selected mesh stats +
             scene totals + FPS. Pinned to viewport footer, pointer-events
