@@ -834,6 +834,7 @@ function WorkbenchStudio() {
     window.__studioClearMask = () => clearMaskOn(selectedMeshRef.current);
     window.__studioInvertMask = () => invertMaskOn(selectedMeshRef.current);
     window.__studioBrushStrokeAt = (pt, brush) => { const m = selectedMeshRef.current; if (!m) return null; paintBrushAt(m, new THREE.Vector3(pt[0], pt[1], pt[2]), brush || { mode: 'inflate', radius: 0.06, strength: 0.5 }); return true; };
+    window.__studioRunVexExpr = (exprString, opts) => runVexExpressionOnMesh(exprString, opts || {});
     // Geometry node graph: evaluate a {nodes,edges} graph -> scene primitive.
     window.__studioEvalNodeGraph = (graph) => evalNodeGraphToScene(graph);
     // Material/shader graph: evaluate a shading DAG -> PBR material on selected mesh.
@@ -897,7 +898,7 @@ function WorkbenchStudio() {
     window.__studioReadNormalTexel = (uv) => { const m = selectedMeshRef.current; const nc = m && m.userData && m.userData._normalCanvas; if (!nc) return null; const d = nc.getContext('2d').getImageData(Math.floor(uv[0] * 512), Math.floor((1 - uv[1]) * 512), 1, 1).data; return [d[0], d[1], d[2]]; };
     window.__studioPolyPaintAt = (pt, color, radius) => { const m = selectedMeshRef.current; if (!m) return null; return paintPolyAt(m, new THREE.Vector3(pt[0], pt[1], pt[2]), color || brushPaintColor, radius || 0.012); };
     window.__studioReadVertexColor = (i) => { const m = selectedMeshRef.current; const col = m && m.geometry && m.geometry.attributes.color; if (!col) return null; return [Math.round(col.getX(i) * 255), Math.round(col.getY(i) * 255), Math.round(col.getZ(i) * 255)]; };
-    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioEvalNiagara; delete window.__studioNiagaraStep; delete window.__studioBTTick; delete window.__studioStreamAround; delete window.__studioRevealAll; delete window.__studioAddAudioSource; delete window.__studioSetListener; delete window.__studioAudioState; delete window.__studioXRSupport; delete window.__studioEnterXR; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAnimBPSet; delete window.__studioAnimBPStep; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioTrimmedSurface; delete window.__studioAddNurbsCurve; delete window.__studioBRepBoolean; delete window.__studioSetReference; delete window.__studioClearReference; delete window.__studioReferenceState; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioFieldQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; };
+    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioEvalNiagara; delete window.__studioNiagaraStep; delete window.__studioBTTick; delete window.__studioStreamAround; delete window.__studioRevealAll; delete window.__studioAddAudioSource; delete window.__studioSetListener; delete window.__studioAudioState; delete window.__studioXRSupport; delete window.__studioEnterXR; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAnimBPSet; delete window.__studioAnimBPStep; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioTrimmedSurface; delete window.__studioAddNurbsCurve; delete window.__studioBRepBoolean; delete window.__studioSetReference; delete window.__studioClearReference; delete window.__studioReferenceState; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioFieldQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; delete window.__studioRunVexExpr; };
   });
   // Auto-frame on primitive count change so the camera always shows
   // the current scene without the user having to hit Home.
@@ -6536,6 +6537,51 @@ function WorkbenchStudio() {
     if (counter && mesh.userData) mesh.userData[counter] = (mesh.userData[counter] || 0) + 1;
     recomputeMeshStats(window.__archdiscScene);
     return { displaced: pos.count, ridged };
+  }
+
+  // Slice 282 — Houdini VEX-like expression evaluator. Compile a per-vertex
+  // expression ONCE via new Function inside a strict-mode body, then run it
+  // against P={x,y,z} for every vertex. Scalar return → write X (parity with
+  // @P.x = ...); array[3] / {x,y,z} object → write all three. Frozen Math
+  // namespace is the only globals the body can resolve — no window, no eval.
+  function runVexExpressionOnMesh(exprString, opts = {}) {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    const g = mesh.geometry;
+    const pos = g.attributes.position;
+    if (!pos) return null;
+    if (pos.count > 200000) return { ok: false, error: 'vertex cap exceeded' };
+    const MATH_SAFE = Object.freeze({
+      sin: Math.sin, cos: Math.cos, tan: Math.tan,
+      asin: Math.asin, acos: Math.acos, atan: Math.atan, atan2: Math.atan2,
+      sqrt: Math.sqrt, pow: Math.pow, exp: Math.exp, log: Math.log,
+      abs: Math.abs, sign: Math.sign, floor: Math.floor, ceil: Math.ceil, round: Math.round,
+      min: Math.min, max: Math.max, hypot: Math.hypot,
+      PI: Math.PI, E: Math.E, TAU: Math.PI * 2,
+    });
+    let fn;
+    try {
+      fn = new Function('P', 't', 'Math',
+        '"use strict"; return (' + String(exprString) + ');');
+    } catch (e) { return { ok: false, error: String(e && e.message || e) }; }
+    if (window.__studioPushUndo) window.__studioPushUndo();
+    const t = (opts.t != null) ? opts.t : (performance.now() / 1000);
+    const P = { x: 0, y: 0, z: 0 };
+    let changed = 0;
+    try {
+      for (let i = 0; i < pos.count; i++) {
+        P.x = pos.getX(i); P.y = pos.getY(i); P.z = pos.getZ(i);
+        const r = fn(P, t, MATH_SAFE);
+        if (typeof r === 'number') { pos.setX(i, r); changed++; }
+        else if (Array.isArray(r) && r.length === 3) { pos.setXYZ(i, r[0], r[1], r[2]); changed++; }
+        else if (r && typeof r === 'object' && 'x' in r) { pos.setXYZ(i, r.x, r.y, r.z); changed++; }
+      }
+    } catch (e) { return { ok: false, error: String(e && e.message || e) }; }
+    pos.needsUpdate = true;
+    g.computeVertexNormals(); g.computeBoundingSphere(); g.computeBoundingBox();
+    mesh.userData.archdiscStudioVexExpr = (mesh.userData.archdiscStudioVexExpr || 0) + 1;
+    recomputeMeshStats(window.__archdiscScene);
+    return { ok: true, changed, expr: exprString };
   }
 
   // Erode — ridged-multifractal carve with gravity bias → weathered rock.
