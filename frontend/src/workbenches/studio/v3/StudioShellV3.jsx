@@ -3,6 +3,7 @@ import './tokens.css';
 import { StudioMark, StudioWordmark } from './StudioLogo';
 import { Icon } from './Icons';
 import Viewport3D from '../../../components/Viewport3D';
+import { spawnPrimitive } from './spawn';
 
 // ArchDisc Studio V3 — application shell.
 //
@@ -226,24 +227,43 @@ function WorkbenchRail({ activeId, onSwitch }) {
 }
 
 // ─── Toolbar (per-discipline) ─────────────────────────────────────────────
-function Toolbar({ wbId, activeTool, setTool }) {
+// Primitive tools (cube/sphere/etc) spawn instantly on click; transform
+// tools toggle into the active-tool slot; mesh ops run on the current
+// selection; view tools are deferred to slice 396+. The discriminator is
+// the GROUP label — Add groups always spawn, Transform groups always
+// toggle. Keeps the click semantics predictable per discipline.
+const PRIMITIVE_KINDS = new Set([
+  'cube', 'sphere', 'plane', 'cylinder', 'cone', 'torus',
+  'icosahedron', 'text', 'curve', 'empty',
+]);
+const TRANSFORM_TOOLS = new Set(['select', 'move', 'rotate', 'scale']);
+
+function Toolbar({ wbId, activeTool, setTool, onInvoke }) {
   const groups = TOOLBAR[wbId] || TOOLBAR.model;
   return (
     <div className="studio-toolbar" data-studio-v3-toolbar>
       {groups.map((g, i) => (
         <div key={`${g.label}-${i}`} className="studio-toolbar-group" data-studio-v3-toolbar-group={g.label.toLowerCase()}>
           <span className="studio-toolbar-group-label">{g.label}</span>
-          {g.tools.map((t) => (
-            <button
-              key={t}
-              type="button"
-              className="studio-tool"
-              data-studio-v3-tool={t}
-              data-active={t === activeTool ? 'true' : 'false'}
-              title={t}
-              onClick={() => setTool(t)}
-            ><Icon name={t} size={16} /></button>
-          ))}
+          {g.tools.map((t) => {
+            const isTransform = g.label === 'Transform' || TRANSFORM_TOOLS.has(t);
+            const active = isTransform && t === activeTool;
+            return (
+              <button
+                key={t}
+                type="button"
+                className="studio-tool"
+                data-studio-v3-tool={t}
+                data-studio-v3-tool-group={g.label.toLowerCase()}
+                data-active={active ? 'true' : 'false'}
+                title={t}
+                onClick={() => {
+                  if (isTransform) setTool(t);
+                  else onInvoke && onInvoke(t, g.label.toLowerCase());
+                }}
+              ><Icon name={t} size={16} /></button>
+            );
+          })}
         </div>
       ))}
     </div>
@@ -615,7 +635,30 @@ export function StudioShellV3({ mode = 'dark' }) {
         activeId={activeWb}
         onSwitch={(id) => { setActiveWb(id); setActiveTool('select'); }}
       />
-      <Toolbar wbId={activeWb} activeTool={activeTool} setTool={setActiveTool} />
+      <Toolbar
+        wbId={activeWb}
+        activeTool={activeTool}
+        setTool={setActiveTool}
+        onInvoke={(toolId, group) => {
+          // Add group → spawn primitive into the live scene.
+          if (group === 'add' && PRIMITIVE_KINDS.has(toolId)) {
+            const scene = window.__archdiscScene;
+            if (scene) spawnPrimitive(toolId, scene);
+            return;
+          }
+          // Mesh ops → call into the slice 388/389/390 window APIs if
+          // V2 is mounted alongside (won't be in v3-only mode yet, but
+          // future slices port these into V3).
+          if (group === 'mesh') {
+            const m = toolId;
+            if (m === 'extrude' && window.__studioExtrudeSelectedFaces) window.__studioExtrudeSelectedFaces(0.005);
+            else if (m === 'inset' && window.__studioInsetSelectedFaces) window.__studioInsetSelectedFaces(0.3);
+            else if (m === 'subdivide' && window.__studioSubdivideSelectedFaces) window.__studioSubdivideSelectedFaces();
+            return;
+          }
+          // Other groups — placeholder; surfaced in slice 396+.
+        }}
+      />
       <main className="studio-viewport workbench-viewport studio-viewport-canvas" data-studio-v3-viewport>
         <Viewport3D canvasId="render-canvas-studio-v3" domain="studio" />
         <ViewportHUD
