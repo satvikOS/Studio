@@ -14138,6 +14138,17 @@ function WorkbenchStudio() {
           >frame</button>
           <button
             type="button"
+            data-studio-viewport-fit-selected
+            onClick={() => { if (window.__studioFitSelected) window.__studioFitSelected(); }}
+            title="Frame Selected (Blender Numpad-.) — zoom to active mesh"
+            style={{
+              background: 'transparent', color: '#9aa6b2', border: '1px solid #21262d',
+              cursor: 'pointer', fontFamily: 'inherit', fontSize: '11px',
+              padding: '2px 8px', marginRight: '4px', borderRadius: '3px',
+            }}
+          >fit</button>
+          <button
+            type="button"
             data-studio-viewport-screenshot
             onClick={() => { if (window.__archieCaptureRender) window.__archieCaptureRender(); }}
             title="Capture render (F12)"
