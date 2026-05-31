@@ -14655,40 +14655,6 @@ function WorkbenchStudioV2() {
             fontFamily: 'monospace', fontSize: '11px', pointerEvents: 'none',
           }}
         >Frame {currentFrame}</div>
-        {/* Slice 392 (UIUX v2) — Empty-scene welcome card. Centred in
-            the viewport while the scene has no Studio primitives; fades
-            out the moment the user spawns the first mesh. Studio brand
-            palette, terse copy, gentle intro to the workspace. */}
-        {primitiveCount === 0 && (
-          <div
-            data-studio-viewport-welcome
-            style={{
-              position: 'absolute', top: '50%', left: '50%',
-              transform: 'translate(-50%, -50%)', zIndex: 21,
-              background: 'rgba(13, 17, 23, 0.78)',
-              border: '1px solid #1f2733',
-              borderRadius: '6px',
-              padding: '18px 22px',
-              color: '#e6edf3', fontFamily: 'inherit', fontSize: '12px',
-              pointerEvents: 'none',
-              boxShadow: '0 8px 24px rgba(0, 0, 0, 0.45)',
-              minWidth: '260px',
-              textAlign: 'center',
-            }}
-          >
-            <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: '8px', color: '#1de9b6', letterSpacing: '0.03em' }}>
-              ArchDisc Studio
-            </div>
-            <div style={{ marginBottom: '10px', opacity: 0.8 }}>
-              Pick a primitive in the ribbon to start.
-            </div>
-            <div style={{ fontSize: '11px', opacity: 0.55, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>
-              Tab — edit mode<br />
-              1 · 2 · 3 — vert · edge · face<br />
-              N — sidebar &nbsp;·&nbsp; T — tools
-            </div>
-          </div>
-        )}
         {/* Slice 391 (UIUX v2) — Selected-mesh stats overlay. Sits just
             above the FPS counter. Polls __studioSelectedMesh once a second
             and shows V / E / T counts for the active mesh. Empty when no

@@ -1,0 +1,618 @@
+/* ArchDisc Studio V3 — design tokens.
+ *
+ * Mirrors the refined zone-grid architecture proven in Forge v4 — same
+ * OLED dark + warm off-white light strategy, same monochrome accent rule
+ * (the accent is "now / important", never decorative), same 4 px grid.
+ * Studio brand stays distinct from Forge via its own mark, icon set, and
+ * the central modelling-viewport canvas behaviour.
+ *
+ * The 7-zone shell geometry:
+ *
+ *   ┌─ topbar (36px) ───────────────────────────────────────────────┐
+ *   │ logo · menus · spacer · workbench chip · user · settings       │
+ *   ├─ qat   (28px) ─────────────────────────────────────────────────┤
+ *   │ undo · redo · save · load · framing · ⋯                        │
+ *   ├──┬─ toolbar (40px) ─────────────────────────┬─────────────────┤
+ *   │ W│                                            │  inspector     │
+ *   │ B│  viewport (fills)                          │  ─────────────  │
+ *   │ R│                                            │  outliner      │
+ *   │ A│                                            │                │
+ *   │ I│                                            │                │
+ *   │ L│                                            │                │
+ *   ├──┴────────────────────────────────────────────┴─────────────────┤
+ *   │ status bar (24px) — discipline · mode · selection · fps · units │
+ *   ├──────────────────────────────────────────────────────────────────┤
+ *   │ ⎈ Archie cmd bar (48px, always-on)              [open dock]      │
+ *   └──────────────────────────────────────────────────────────────────┘
+ *
+ * No zone overlaps any other. Every spacing value is on the 4 px grid
+ * (4 / 6 / 8 / 12 / 16 / 24 / 32 / 48 / 64).
+ *
+ * Theme switch: <html data-studio-theme="dark"> or "light". Defaults to
+ * dark when the attribute is absent.
+ */
+
+:root[data-studio-theme="dark"],
+:root:not([data-studio-theme]) {
+  /* Canvas */
+  --studio-canvas:      #000000;        /* OLED black — viewport background */
+  --studio-canvas-2:    #0a0b0e;        /* QAT, status, cmdbar */
+  --studio-canvas-3:    #14161b;        /* surfaces (right panel, popovers) */
+  --studio-rail:        #06070a;        /* workbench rail darker than canvas-2 */
+  --studio-rail-edge:   #1d2027;        /* divider line */
+  --studio-surface:     #14161b;
+  --studio-surface-2:   #1c1f26;        /* hover */
+  --studio-overlay:     rgba(0,0,0,0.72);
+
+  /* Ink */
+  --studio-ink:         #ebecef;        /* primary text */
+  --studio-ink-2:       #b0b4bd;        /* secondary */
+  --studio-ink-mute:    #757a85;        /* tertiary / labels */
+  --studio-ink-faint:   #3d4250;        /* disabled / divider text */
+
+  /* Accent — monochrome white in dark mode. Reads as "active / now"
+     without breaking the OLED palette. Studio's brand accent (teal) is
+     reserved for the brand mark only. */
+  --studio-accent:        #ebecef;
+  --studio-accent-hover:  #ffffff;
+  --studio-accent-press:  #c0c5cf;
+  --studio-accent-mute:   rgba(255,255,255,0.08);
+  --studio-accent-rim:    rgba(255,255,255,0.28);
+
+  /* Brand accent — only ever used on the disc mark + the cmdbar glyph,
+     so when the user sees teal they know it's Studio identity, not state. */
+  --studio-brand:         #0fd4a6;
+  --studio-brand-soft:    rgba(15,212,166,0.16);
+
+  /* Signal — grey-tinted, never primary saturation */
+  --studio-ok:    #5cc88f;
+  --studio-warn:  #e1b250;
+  --studio-err:   #e26a6a;
+
+  color-scheme: dark;
+}
+
+:root[data-studio-theme="light"] {
+  --studio-canvas:      #ebecee;        /* warm-ish greyish off-white */
+  --studio-canvas-2:    #e1e3e7;
+  --studio-canvas-3:    #d6d9de;
+  --studio-rail:        #ffffff;
+  --studio-rail-edge:   #c8ccd2;
+  --studio-surface:     #ffffff;
+  --studio-surface-2:   #f3f4f6;
+  --studio-overlay:     rgba(40,42,48,0.32);
+
+  --studio-ink:         #14161b;
+  --studio-ink-2:       #3e424c;
+  --studio-ink-mute:    #7a7f8a;
+  --studio-ink-faint:   #b8bcc4;
+
+  /* Monochrome deep graphite in light mode. */
+  --studio-accent:        #14161b;
+  --studio-accent-hover:  #000000;
+  --studio-accent-press:  #2a2d34;
+  --studio-accent-mute:   rgba(20,22,27,0.07);
+  --studio-accent-rim:    rgba(20,22,27,0.20);
+
+  /* Brand accent darker variant for legibility on warm paper. */
+  --studio-brand:         #0a9a78;
+  --studio-brand-soft:    rgba(10,154,120,0.12);
+
+  --studio-ok:    #2d9b65;
+  --studio-warn:  #b8870a;
+  --studio-err:   #c14545;
+
+  color-scheme: light;
+}
+
+/* Geometry — consistent everywhere */
+:root {
+  --studio-topbar-h:    36px;
+  --studio-qat-h:       28px;
+  --studio-toolbar-h:   40px;
+  --studio-statusbar-h: 24px;
+  --studio-cmdbar-h:    44px;
+
+  --studio-wb-rail-w:   60px;          /* left workbench rail */
+  --studio-right-w:     320px;         /* right panel */
+  --studio-right-collapsed-w: 32px;
+  --studio-archie-w:    360px;         /* archie dock when open */
+
+  --studio-tool-row-h:  32px;
+  --studio-tool-size:   28px;
+  --studio-tool-gap:    2px;
+
+  --studio-radius:      4px;
+  --studio-radius-lg:   8px;
+  --studio-radius-pill: 999px;
+
+  --studio-motion-fast:  90ms cubic-bezier(.22,1,.36,1);
+  --studio-motion-base: 160ms cubic-bezier(.22,1,.36,1);
+  --studio-motion-glide: 240ms cubic-bezier(.22,1,.36,1);
+
+  /* No Inter — Studio uses Geist for chrome (V3 brief). Stack falls back
+     gracefully if Geist isn't loaded yet. */
+  --studio-font:        'Geist Sans', 'Geist', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --studio-mono:        'JetBrains Mono', 'JetBrains Mono Variable', ui-monospace, 'SF Mono', monospace;
+}
+
+/* ============ App root ============ */
+.studio-app {
+  display: grid;
+  grid-template-rows:
+    var(--studio-topbar-h)
+    var(--studio-qat-h)
+    var(--studio-toolbar-h)
+    1fr
+    var(--studio-statusbar-h)
+    var(--studio-cmdbar-h);
+  grid-template-columns:
+    var(--studio-wb-rail-w)
+    1fr
+    auto;
+  grid-template-areas:
+    "topbar    topbar    topbar"
+    "qat       qat       qat"
+    "wb-rail   toolbar   right"
+    "wb-rail   viewport  right"
+    "wb-rail   statusbar right"
+    "cmdbar    cmdbar    cmdbar";
+  position: absolute;
+  inset: 0;
+  background: var(--studio-canvas);
+  color: var(--studio-ink);
+  font-family: var(--studio-font);
+  font-size: 12px;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+.studio-app[data-archie-open="true"] {
+  grid-template-columns: var(--studio-wb-rail-w) 1fr var(--studio-archie-w);
+}
+
+.studio-topbar    { grid-area: topbar; }
+.studio-qat       { grid-area: qat; }
+.studio-wb-rail   { grid-area: wb-rail; }
+.studio-toolbar   { grid-area: toolbar; }
+.studio-viewport  { grid-area: viewport; position: relative; overflow: hidden; }
+.studio-right     { grid-area: right; }
+.studio-statusbar { grid-area: statusbar; }
+.studio-cmdbar    { grid-area: cmdbar; }
+
+/* ============ Top bar ============ */
+.studio-topbar {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  background: var(--studio-canvas);
+  border-bottom: 1px solid var(--studio-rail-edge);
+  gap: 14px;
+}
+.studio-topbar-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--studio-ink);
+}
+.studio-topbar-menus {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.studio-topbar-menu {
+  background: transparent;
+  border: none;
+  color: var(--studio-ink-2);
+  font: inherit; font-size: 12px;
+  padding: 4px 9px;
+  border-radius: var(--studio-radius);
+  cursor: pointer;
+  transition: background var(--studio-motion-fast), color var(--studio-motion-fast);
+}
+.studio-topbar-menu:hover { background: var(--studio-surface); color: var(--studio-ink); }
+.studio-topbar-spacer { flex: 1; }
+.studio-topbar-wb-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 10px;
+  border: 1px solid var(--studio-rail-edge);
+  border-radius: var(--studio-radius-pill);
+  font-size: 11px;
+  color: var(--studio-ink-2);
+  background: var(--studio-canvas-2);
+}
+.studio-topbar-wb-chip strong { color: var(--studio-ink); font-weight: 500; }
+
+/* ============ Quick-Access Toolbar ============ */
+.studio-qat {
+  background: var(--studio-canvas);
+  border-bottom: 1px solid var(--studio-rail-edge);
+  display: flex; align-items: center;
+  padding: 0 12px; gap: 2px;
+}
+.studio-qat-btn {
+  width: 22px; height: 22px;
+  display: flex; align-items: center; justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  color: var(--studio-ink-2);
+  cursor: pointer;
+  transition: background var(--studio-motion-fast), color var(--studio-motion-fast);
+}
+.studio-qat-btn:hover {
+  background: var(--studio-surface);
+  color: var(--studio-ink);
+  border-color: var(--studio-rail-edge);
+}
+.studio-qat-sep {
+  width: 1px; height: 16px;
+  background: var(--studio-rail-edge);
+  margin: 0 6px;
+}
+
+/* ============ Workbench (discipline) rail ============ */
+.studio-wb-rail {
+  background: var(--studio-rail);
+  border-right: 1px solid var(--studio-rail-edge);
+  display: flex; flex-direction: column;
+  align-items: stretch;
+  padding: 8px 0; gap: 4px;
+  overflow-y: auto;
+}
+.studio-wb-tab {
+  position: relative;
+  margin: 0 6px;
+  padding: 6px 0 4px;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 3px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--studio-radius);
+  color: var(--studio-ink-2);
+  cursor: pointer;
+  transition: background var(--studio-motion-fast),
+              color var(--studio-motion-fast),
+              border-color var(--studio-motion-fast);
+}
+.studio-wb-tab:hover {
+  background: var(--studio-surface);
+  color: var(--studio-ink);
+}
+.studio-wb-tab[data-active="true"] {
+  background: var(--studio-accent-mute);
+  color: var(--studio-ink);
+  border-color: var(--studio-accent-rim);
+}
+.studio-wb-tab[data-active="true"]::before {
+  content: '';
+  position: absolute;
+  left: -7px; top: 8px; bottom: 8px;
+  width: 3px;
+  background: var(--studio-accent);
+  border-radius: 0 2px 2px 0;
+}
+.studio-wb-tab-glyph { width: 22px; height: 22px; }
+.studio-wb-tab-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: inherit;
+}
+
+/* ============ Toolbar (per-discipline) ============ */
+.studio-toolbar {
+  background: var(--studio-canvas-2);
+  border-bottom: 1px solid var(--studio-rail-edge);
+  display: flex; align-items: center;
+  padding: 0 8px; gap: 1px;
+  overflow-x: auto;
+}
+.studio-toolbar-group {
+  display: flex; align-items: center; gap: 1px;
+  padding: 0 6px; height: 100%;
+  border-right: 1px solid var(--studio-rail-edge);
+}
+.studio-toolbar-group:last-child { border-right: none; }
+.studio-toolbar-group-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--studio-ink-mute);
+  margin-right: 6px;
+  user-select: none;
+}
+.studio-tool {
+  width: var(--studio-tool-size);
+  height: var(--studio-tool-size);
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid transparent;
+  border-radius: var(--studio-radius);
+  background: transparent;
+  color: var(--studio-ink-2);
+  cursor: pointer;
+  transition: background var(--studio-motion-fast),
+              color var(--studio-motion-fast),
+              border-color var(--studio-motion-fast);
+}
+.studio-tool:hover {
+  background: var(--studio-surface);
+  color: var(--studio-ink);
+  border-color: var(--studio-rail-edge);
+}
+.studio-tool[data-active="true"] {
+  background: var(--studio-accent-mute);
+  color: var(--studio-accent);
+  border-color: var(--studio-accent-rim);
+}
+.studio-tool[disabled] {
+  color: var(--studio-ink-faint);
+  cursor: not-allowed;
+}
+
+/* ============ Viewport surface ============ */
+.studio-viewport-canvas {
+  background: radial-gradient(ellipse at 50% 35%, #0d1015 0%, var(--studio-canvas) 70%);
+}
+:root[data-studio-theme="light"] .studio-viewport-canvas {
+  background: radial-gradient(ellipse at 50% 35%, #f6f7f9 0%, var(--studio-canvas) 70%);
+}
+/* Viewport heads-up bar — edit-mode chips, axis chips, render-mode */
+.studio-vp-hud {
+  position: absolute;
+  top: 8px; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center;
+  gap: 2px;
+  background: rgba(0,0,0,0.40);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--studio-rail-edge);
+  border-radius: var(--studio-radius-pill);
+  padding: 3px 6px;
+  z-index: 5;
+}
+:root[data-studio-theme="light"] .studio-vp-hud {
+  background: rgba(255,255,255,0.55);
+}
+.studio-vp-hud-btn {
+  height: 22px;
+  min-width: 22px;
+  padding: 0 8px;
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 4px;
+  background: transparent; border: none;
+  border-radius: var(--studio-radius-pill);
+  color: var(--studio-ink-2);
+  font: inherit; font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background var(--studio-motion-fast), color var(--studio-motion-fast);
+}
+.studio-vp-hud-btn:hover { background: var(--studio-surface); color: var(--studio-ink); }
+.studio-vp-hud-btn[data-active="true"] { background: var(--studio-accent-mute); color: var(--studio-ink); }
+.studio-vp-hud-sep {
+  width: 1px; height: 14px;
+  background: var(--studio-rail-edge); margin: 0 3px;
+}
+/* Viewport axis chips (top/front/side/persp) */
+.studio-vp-axes {
+  position: absolute;
+  top: 8px; right: 12px;
+  display: grid;
+  grid-template-columns: repeat(4, 22px);
+  gap: 2px;
+  background: rgba(0,0,0,0.40);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--studio-rail-edge);
+  border-radius: var(--studio-radius);
+  padding: 4px;
+  z-index: 5;
+}
+:root[data-studio-theme="light"] .studio-vp-axes { background: rgba(255,255,255,0.55); }
+.studio-vp-axis {
+  background: var(--studio-surface);
+  border: 1px solid var(--studio-rail-edge);
+  border-radius: 2px;
+  color: var(--studio-ink-2);
+  font: 9px/1.2 var(--studio-mono);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 3px 0;
+  cursor: pointer;
+  text-align: center;
+  transition: background var(--studio-motion-fast), color var(--studio-motion-fast);
+}
+.studio-vp-axis:hover { background: var(--studio-surface-2); color: var(--studio-ink); }
+.studio-vp-axis[data-active="true"] {
+  background: var(--studio-accent-mute);
+  color: var(--studio-ink);
+  border-color: var(--studio-accent);
+}
+
+/* ============ Right panel ============ */
+.studio-right {
+  background: var(--studio-canvas-2);
+  border-left: 1px solid var(--studio-rail-edge);
+  display: flex; flex-direction: column;
+  width: var(--studio-right-w);
+  transition: width var(--studio-motion-base);
+}
+.studio-right[data-collapsed="true"] { width: var(--studio-right-collapsed-w); }
+.studio-right-tabs {
+  display: flex; align-items: stretch;
+  background: var(--studio-canvas);
+  border-bottom: 1px solid var(--studio-rail-edge);
+}
+.studio-right-tab {
+  flex: 1;
+  background: transparent; border: none;
+  color: var(--studio-ink-mute);
+  font: inherit; font-size: 10px; font-weight: 600;
+  letter-spacing: 0.05em; text-transform: uppercase;
+  padding: 8px 4px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color var(--studio-motion-fast), border-color var(--studio-motion-fast);
+}
+.studio-right-tab[data-active="true"] {
+  color: var(--studio-ink);
+  border-bottom-color: var(--studio-accent);
+}
+.studio-right-body {
+  flex: 1; min-height: 0;
+  padding: 12px 14px;
+  overflow-y: auto;
+  font-size: 11px;
+  color: var(--studio-ink-2);
+}
+.studio-right-collapsed {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 6px 0; gap: 4px;
+}
+.studio-right-collapsed-btn {
+  width: 22px; height: 22px;
+  background: transparent; border: none;
+  color: var(--studio-ink-2);
+  cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 3px;
+}
+.studio-right-collapsed-btn:hover { background: var(--studio-surface); color: var(--studio-ink); }
+.studio-right-section { margin-bottom: 14px; }
+.studio-right-section-title {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--studio-ink-mute);
+  margin-bottom: 6px;
+}
+.studio-right-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 3px 0;
+  font-size: 11px;
+  color: var(--studio-ink-2);
+}
+.studio-right-row strong { color: var(--studio-ink); font-weight: 500; }
+
+/* ============ Status bar ============ */
+.studio-statusbar {
+  background: var(--studio-canvas);
+  border-top: 1px solid var(--studio-rail-edge);
+  border-bottom: 1px solid var(--studio-rail-edge);
+  display: flex; align-items: center;
+  padding: 0 12px; gap: 16px;
+  font-size: 10px;
+  color: var(--studio-ink-mute);
+  font-family: var(--studio-mono);
+}
+.studio-statusbar strong { color: var(--studio-ink-2); font-weight: 500; }
+.studio-statusbar-spacer { flex: 1; }
+.studio-statusbar-dot {
+  display: inline-block;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--studio-ok);
+  margin-right: 4px;
+}
+
+/* ============ Command bar (always-on) ============ */
+.studio-cmdbar {
+  background: var(--studio-canvas);
+  border-top: 1px solid var(--studio-rail-edge);
+  display: flex; align-items: center;
+  padding: 0 14px; gap: 10px;
+}
+.studio-cmdbar-glyph {
+  color: var(--studio-brand);
+  font-size: 14px;
+  user-select: none;
+  display: inline-flex; align-items: center;
+}
+.studio-cmdbar-input {
+  flex: 1;
+  background: transparent;
+  border: none; outline: none;
+  color: var(--studio-ink);
+  font: inherit; font-size: 13px;
+  caret-color: var(--studio-brand);
+}
+.studio-cmdbar-input::placeholder {
+  color: var(--studio-ink-mute);
+  font-style: italic;
+}
+.studio-cmdbar-hint {
+  font-family: var(--studio-mono);
+  font-size: 10px;
+  color: var(--studio-ink-mute);
+}
+.studio-cmdbar-hint kbd {
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid var(--studio-rail-edge);
+  background: var(--studio-surface);
+  color: var(--studio-ink-2);
+  font-family: inherit;
+}
+.studio-cmdbar-toggle {
+  background: transparent;
+  border: 1px solid var(--studio-rail-edge);
+  color: var(--studio-ink-2);
+  padding: 4px 10px;
+  border-radius: var(--studio-radius);
+  font: inherit; font-size: 11px;
+  cursor: pointer;
+  transition: background var(--studio-motion-fast);
+}
+.studio-cmdbar-toggle:hover { background: var(--studio-surface); color: var(--studio-ink); }
+.studio-cmdbar-toggle[data-active="true"] {
+  background: var(--studio-brand-soft);
+  color: var(--studio-brand);
+  border-color: var(--studio-brand);
+}
+
+/* ============ Archie dock ============ */
+.studio-archie {
+  grid-area: right;
+  width: var(--studio-archie-w);
+  background: var(--studio-canvas-2);
+  border-left: 1px solid var(--studio-rail-edge);
+  display: flex; flex-direction: column;
+}
+.studio-archie-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 12px;
+  font-size: 11px;
+  color: var(--studio-ink);
+  font-weight: 500;
+  border-bottom: 1px solid var(--studio-rail-edge);
+  background: var(--studio-canvas);
+}
+.studio-archie-spark { color: var(--studio-brand); }
+.studio-archie-body {
+  flex: 1; overflow-y: auto;
+  padding: 12px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.studio-archie-msg {
+  font-size: 12px;
+  line-height: 1.55;
+  padding: 6px 10px;
+  border-radius: var(--studio-radius);
+}
+.studio-archie-msg[data-role="user"]   { background: var(--studio-surface); color: var(--studio-ink); }
+.studio-archie-msg[data-role="archie"] { background: var(--studio-brand-soft); border-left: 2px solid var(--studio-brand); color: var(--studio-ink); }
+.studio-archie-msg[data-role="tool"]   { background: var(--studio-surface-2); color: var(--studio-ink-2); font-family: var(--studio-mono); font-size: 11px; }
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .studio-app * { transition: none !important; }
+}
+
+/* Polite scrollbars — thin grey */
+.studio-app ::-webkit-scrollbar { width: 8px; height: 8px; }
+.studio-app ::-webkit-scrollbar-track { background: transparent; }
+.studio-app ::-webkit-scrollbar-thumb { background: var(--studio-rail-edge); border-radius: 4px; }
+.studio-app ::-webkit-scrollbar-thumb:hover { background: var(--studio-ink-faint); }

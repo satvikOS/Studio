@@ -1,472 +1,645 @@
-import React, { useState, useEffect } from 'react';
-import { tokens, edgeLight, accentRing } from './theme';
+import React, { useState, useEffect, useRef } from 'react';
+import './tokens.css';
 import { StudioMark, StudioWordmark } from './StudioLogo';
 import { Icon } from './Icons';
+import Viewport3D from '../../../components/Viewport3D';
 
-// ArchDisc Studio V3 — top-level shell.
+// ArchDisc Studio V3 — application shell.
 //
-// Topology (keeps V2 mental model but refreshed placements):
+// Mirrors the proven 7-zone CSS-grid architecture from Forge v4:
+//   topbar · qat · wb-rail · toolbar · viewport · right · statusbar · cmdbar
 //
-//   ┌──────────────────────────────────────────────────────────────────┐
-//   │  HeaderBar   logo · discipline tabs · spacer · workspace · u/r   │
-//   ├──┬───────────────────────────────────────────────────────┬───────┤
-//   │  │  ViewportHeader  mode pill · tools · stats · axes     │       │
-//   │  │  ──────────────────────────────────────────────────   │       │
-//   │  │                                                       │       │
-//   │RB│           CANVAS (Three.js viewport)                  │ NPnl  │
-//   │  │                                                       │       │
-//   │  │  ViewportFooter   coords · fps · frame · archie portal│       │
-//   ├──┴───────────────────────────────────────────────────────┴───────┤
-//   │  StatusBar   discipline · primitives · lights · selection · time │
-//   └──────────────────────────────────────────────────────────────────┘
+// Why this layout: every zone has a fixed role and never overlaps another.
+// The same shell holds every discipline — the workbench rail picks the
+// active discipline, the toolbar swaps out per discipline, the right
+// panel cycles through Inspector / Outliner / Layers per discipline.
+// The always-on Archie command bar at the bottom is Studio's primary
+// natural-language entry point and follows the user across every tool.
 //
-// Differences from V2:
-//   • No big top-strip menubar — collapsed into the HeaderBar.
-//   • Discipline tabs are inline at the top (icon + label, refreshed
-//     custom-authored marks from Icons.jsx) — not a separate side rail.
-//   • The viewport gets its own dedicated header/footer strip so the
-//     canvas owns the central real estate.
-//   • Left rail is a slim icon-only column (primary tool palette), not a
-//     wide button strip — gives the viewport ~30% more horizontal space.
-//   • N-panel collapses to a 24px rail (preserves access without
-//     stealing room).
-//   • All chrome uses theme.js tokens so a single light/dark flip works.
-//
-// The shell mounts INSIDE the existing WorkbenchStudio.jsx behind a
-// `?v3=1` URL flag — V2 stays the default; subsequent slices migrate
-// V2 pieces into V3 then delete V2.
+// Mounted behind ?v3=1 / localStorage.studioV3 — V2 stays default during
+// the rollout so the 50+ e2e specs targeting V2 attrs keep passing.
 
+const STORE = 'studio.v3';
+const lstor = {
+  get: (k, d) => {
+    if (typeof localStorage === 'undefined') return d;
+    try { const r = localStorage.getItem(`${STORE}.${k}`); return r ? JSON.parse(r) : d; }
+    catch { return d; }
+  },
+  set: (k, v) => {
+    if (typeof localStorage === 'undefined') return;
+    try { localStorage.setItem(`${STORE}.${k}`, JSON.stringify(v)); } catch {}
+  },
+};
+
+// ─── DISCIPLINES ─────────────────────────────────────────────────────────
+// 15 Studio disciplines. Each entry maps to a workbench rail tab + a
+// distinct toolbar group set + a right-panel content set. icons come
+// from Icons.jsx (disc-* custom marks, no library).
 const DISCIPLINES = [
-  { id: 'model',  label: 'Model',  icon: 'disc-model' },
-  { id: 'sculpt', label: 'Sculpt', icon: 'disc-sculpt' },
-  { id: 'paint',  label: 'Paint',  icon: 'disc-paint' },
-  { id: 'shade',  label: 'Shade',  icon: 'disc-shade' },
-  { id: 'anim',   label: 'Anim',   icon: 'disc-anim' },
-  { id: 'rig',    label: 'Rig',    icon: 'disc-rig' },
-  { id: 'render', label: 'Render', icon: 'disc-render' },
-  { id: 'fx',     label: 'FX',     icon: 'disc-fx' },
-  { id: 'world',  label: 'World',  icon: 'disc-world' },
-  { id: 'nurbs',  label: 'NURBS',  icon: 'disc-nurbs' },
-  { id: 'phys',   label: 'Physics',icon: 'disc-phys' },
-  { id: 'audio',  label: 'Audio',  icon: 'disc-audio' },
-  { id: 'xr',     label: 'XR',     icon: 'disc-xr' },
-  { id: 'script', label: 'Script', icon: 'disc-script' },
-  { id: 'archie', label: 'Archie', icon: 'disc-archie' },
+  { id: 'model',  label: 'Model',   icon: 'disc-model'  },
+  { id: 'sculpt', label: 'Sculpt',  icon: 'disc-sculpt' },
+  { id: 'paint',  label: 'Paint',   icon: 'disc-paint'  },
+  { id: 'shade',  label: 'Shade',   icon: 'disc-shade'  },
+  { id: 'anim',   label: 'Anim',    icon: 'disc-anim'   },
+  { id: 'rig',    label: 'Rig',     icon: 'disc-rig'    },
+  { id: 'render', label: 'Render',  icon: 'disc-render' },
+  { id: 'fx',     label: 'FX',      icon: 'disc-fx'     },
+  { id: 'world',  label: 'World',   icon: 'disc-world'  },
+  { id: 'nurbs',  label: 'NURBS',   icon: 'disc-nurbs'  },
+  { id: 'phys',   label: 'Physics', icon: 'disc-phys'   },
+  { id: 'audio',  label: 'Audio',   icon: 'disc-audio'  },
+  { id: 'xr',     label: 'XR',      icon: 'disc-xr'     },
+  { id: 'script', label: 'Script',  icon: 'disc-script' },
+  { id: 'archie', label: 'Archie',  icon: 'disc-archie' },
 ];
 
-const TOOLS = [
-  { id: 'select', label: 'Select', icon: 'select' },
-  { id: 'move',   label: 'Move',   icon: 'move' },
-  { id: 'rotate', label: 'Rotate', icon: 'rotate' },
-  { id: 'scale',  label: 'Scale',  icon: 'scale' },
-];
+// Toolbar groups per discipline. Each group is a labelled cluster of
+// tools; tool ids map into Icons.jsx names so the glyph stays crisp.
+const TOOLBAR = {
+  model: [
+    { label: 'Add',       tools: ['cube', 'sphere', 'plane', 'cylinder', 'cone', 'torus', 'icosahedron', 'text', 'curve', 'empty'] },
+    { label: 'Transform', tools: ['select', 'move', 'rotate', 'scale'] },
+    { label: 'Mesh',      tools: ['extrude', 'inset', 'subdivide', 'bevel', 'mirror'] },
+    { label: 'View',      tools: ['eye', 'camera', 'light', 'material'] },
+  ],
+  sculpt: [
+    { label: 'Brush',     tools: ['select', 'move', 'scale'] },
+    { label: 'Smooth',    tools: ['subdivide', 'mirror'] },
+    { label: 'View',      tools: ['eye', 'material'] },
+  ],
+  paint: [
+    { label: 'Brush',     tools: ['select', 'move'] },
+    { label: 'Layers',    tools: ['extrude', 'inset'] },
+    { label: 'View',      tools: ['eye', 'material'] },
+  ],
+  shade: [
+    { label: 'Materials', tools: ['material', 'eye'] },
+    { label: 'Topology',  tools: ['cube', 'sphere'] },
+  ],
+  anim: [
+    { label: 'Playback',  tools: ['play', 'pause'] },
+    { label: 'Keys',      tools: ['extrude', 'inset'] },
+    { label: 'View',      tools: ['eye', 'camera'] },
+  ],
+  rig: [
+    { label: 'Bones',     tools: ['move', 'rotate'] },
+    { label: 'Constraints', tools: ['mirror', 'extrude'] },
+  ],
+  render: [
+    { label: 'Capture',   tools: ['camera', 'eye'] },
+    { label: 'Light',     tools: ['light', 'material'] },
+    { label: 'Output',    tools: ['settings'] },
+  ],
+  fx: [
+    { label: 'Emitters',  tools: ['cube', 'sphere'] },
+    { label: 'Forces',    tools: ['move', 'rotate'] },
+  ],
+  world: [
+    { label: 'Terrain',   tools: ['plane', 'subdivide'] },
+    { label: 'Light',     tools: ['light', 'material'] },
+  ],
+  nurbs: [
+    { label: 'Curves',    tools: ['curve', 'cylinder'] },
+    { label: 'Surfaces',  tools: ['extrude', 'subdivide'] },
+  ],
+  phys: [
+    { label: 'Bodies',    tools: ['cube', 'sphere'] },
+    { label: 'Sim',       tools: ['play', 'pause'] },
+  ],
+  audio: [
+    { label: 'Source',    tools: ['cube'] },
+    { label: 'Mix',       tools: ['play', 'pause'] },
+  ],
+  xr: [
+    { label: 'Stage',     tools: ['cube', 'plane'] },
+    { label: 'Hands',     tools: ['select', 'move'] },
+  ],
+  script: [
+    { label: 'Run',       tools: ['play'] },
+    { label: 'Debug',     tools: ['eye'] },
+  ],
+  archie: [
+    { label: 'Thread',    tools: ['eye'] },
+    { label: 'Tools',     tools: ['settings'] },
+  ],
+};
 
 const EDIT_MODES = [
   { id: 'object', label: 'Object', icon: 'object-mode' },
   { id: 'vertex', label: 'Vertex', icon: 'vertex-mode' },
-  { id: 'edge',   label: 'Edge',   icon: 'edge-mode' },
-  { id: 'face',   label: 'Face',   icon: 'face-mode' },
+  { id: 'edge',   label: 'Edge',   icon: 'edge-mode'   },
+  { id: 'face',   label: 'Face',   icon: 'face-mode'   },
   { id: 'sculpt', label: 'Sculpt', icon: 'sculpt-mode' },
 ];
 
-// ─── HeaderBar ────────────────────────────────────────────────────────────
-function HeaderBar({ t, discipline, setDiscipline }) {
-  return (
-    <div
-      data-studio-v3-header
-      style={{
-        height: 40,
-        background: t['ink-1'],
-        borderBottom: `1px solid ${t['ink-4']}`,
-        display: 'flex',
-        alignItems: 'stretch',
-        flexShrink: 0,
-        boxShadow: edgeLight(t),
-        position: 'relative',
-        zIndex: t.z.header,
-      }}
-    >
-      {/* Logo lockup */}
-      <div style={{ display: 'flex', alignItems: 'center', padding: '0 16px', borderRight: `1px solid ${t['ink-4']}` }}>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-          <StudioMark size={20} ink={t['fg-1']} />
-          <StudioWordmark size={13} color={t['fg-1']} />
-        </div>
-      </div>
-      {/* Discipline tabs — inline, horizontally scrollable on narrow screens */}
-      <div
-        data-studio-v3-discipline-rail
-        style={{
-          display: 'flex',
-          alignItems: 'stretch',
-          flex: 1,
-          overflowX: 'auto',
-          scrollbarWidth: 'none',
-        }}
-      >
-        {DISCIPLINES.map((d) => {
-          const active = d.id === discipline;
-          return (
-            <button
-              key={d.id}
-              type="button"
-              data-studio-v3-discipline={d.id}
-              data-studio-v3-discipline-active={active ? '1' : '0'}
-              onClick={() => setDiscipline(d.id)}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                borderBottom: `2px solid ${active ? t.base : 'transparent'}`,
-                color: active ? t['fg-1'] : t['fg-2'],
-                padding: '0 14px',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 6,
-                fontFamily: t.font.sans,
-                fontSize: 11,
-                fontWeight: active ? 600 : 500,
-                letterSpacing: '0.02em',
-                cursor: 'pointer',
-                transition: `color ${t.motion.fast.duration}ms ${t.motion.fast.easing}, border-color ${t.motion.fast.duration}ms ${t.motion.fast.easing}`,
-                whiteSpace: 'nowrap',
-              }}
-            >
-              <Icon name={d.icon} size={16} color={active ? t.base : t['fg-2']} />
-              {d.label}
-            </button>
-          );
-        })}
-      </div>
-      {/* Right-side utility cluster */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '0 12px', borderLeft: `1px solid ${t['ink-4']}` }}>
-        <HeaderIconBtn t={t} icon="undo" label="Undo" />
-        <HeaderIconBtn t={t} icon="redo" label="Redo" />
-        <div style={{ width: 1, height: 18, background: t['ink-4'], margin: '0 6px' }} />
-        <HeaderIconBtn t={t} icon="settings" label="Settings" />
-      </div>
-    </div>
-  );
-}
+const AXES = [
+  { id: 'top',   label: 'T' },
+  { id: 'front', label: 'F' },
+  { id: 'side',  label: 'S' },
+  { id: 'persp', label: 'P' },
+];
 
-function HeaderIconBtn({ t, icon, label, onClick }) {
-  const [hover, setHover] = useState(false);
+// ─── TopBar ───────────────────────────────────────────────────────────────
+function TopBar({ onCycleTheme, theme }) {
   return (
-    <button
-      type="button"
-      title={label}
-      data-studio-v3-header-btn={icon}
-      onClick={onClick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      style={{
-        width: 26, height: 26,
-        background: hover ? t['ink-3'] : 'transparent',
-        border: `1px solid ${hover ? t['ink-4'] : 'transparent'}`,
-        borderRadius: t.radius.chip,
-        color: t['fg-2'],
-        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        cursor: 'pointer',
-        transition: `all ${t.motion.fast.duration}ms ${t.motion.fast.easing}`,
-      }}
-    >
-      <Icon name={icon} size={14} />
-    </button>
-  );
-}
-
-// ─── ToolRail ─────────────────────────────────────────────────────────────
-function ToolRail({ t, tool, setTool }) {
-  return (
-    <div
-      data-studio-v3-tool-rail
-      style={{
-        width: 36,
-        background: t['ink-1'],
-        borderRight: `1px solid ${t['ink-4']}`,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        padding: '8px 0',
-        gap: 2,
-        flexShrink: 0,
-        zIndex: t.z.ribbon,
-      }}
-    >
-      {TOOLS.map((tl) => {
-        const active = tl.id === tool;
-        return (
+    <div className="studio-topbar" data-studio-v3-topbar>
+      <div className="studio-topbar-brand">
+        <StudioMark size={18} ink="var(--studio-ink)" />
+        <StudioWordmark size={12} color="var(--studio-ink)" />
+      </div>
+      <div className="studio-topbar-menus">
+        {['File', 'Edit', 'Select', 'View', 'Window', 'Help'].map((m) => (
           <button
-            key={tl.id}
+            key={m}
             type="button"
-            data-studio-v3-tool={tl.id}
-            data-studio-v3-tool-active={active ? '1' : '0'}
-            title={tl.label}
-            onClick={() => setTool(tl.id)}
-            style={{
-              width: 28, height: 28,
-              background: active ? t.base : 'transparent',
-              border: `1px solid ${active ? t.base : 'transparent'}`,
-              borderRadius: t.radius.chip,
-              color: active ? t['ink-0'] : t['fg-2'],
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              cursor: 'pointer',
-              transition: `all ${t.motion.fast.duration}ms ${t.motion.fast.easing}`,
-            }}
-            onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = t['ink-3']; }}
-            onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent'; }}
-          >
-            <Icon name={tl.icon} size={16} />
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-// ─── ViewportHeader (mode pill + axes) ──────────────────────────────────
-function ViewportHeader({ t, editMode, setEditMode }) {
-  return (
-    <div
-      data-studio-v3-viewport-header
-      style={{
-        position: 'absolute',
-        top: 0, left: 0, right: 0,
-        height: 30,
-        background: `linear-gradient(180deg, ${t['ink-1']} 0%, rgba(8,9,11,0.4) 100%)`,
-        borderBottom: `1px solid ${t['ink-4']}`,
-        display: 'flex', alignItems: 'center',
-        gap: 8, padding: '0 12px',
-        zIndex: 22,
-        fontFamily: t.font.sans, fontSize: 11, color: t['fg-2'],
-      }}
-    >
-      <span style={{ opacity: 0.6, fontWeight: 500 }}>Viewport</span>
-      <span style={{ opacity: 0.3 }}>·</span>
-      <div style={{ display: 'flex', gap: 1 }}>
-        {EDIT_MODES.map((em) => {
-          const active = em.id === editMode;
-          return (
-            <button
-              key={em.id}
-              type="button"
-              data-studio-v3-edit-mode={em.id}
-              data-studio-v3-edit-mode-active={active ? '1' : '0'}
-              title={em.label}
-              onClick={() => setEditMode(em.id)}
-              style={{
-                background: active ? t.base : 'transparent',
-                color: active ? t['ink-0'] : t['fg-2'],
-                border: `1px solid ${active ? t.base : t['ink-4']}`,
-                borderRadius: t.radius.chip,
-                padding: '2px 8px', cursor: 'pointer',
-                fontSize: 10, fontWeight: 600, letterSpacing: '0.04em',
-                textTransform: 'uppercase',
-                fontFamily: t.font.sans,
-                display: 'inline-flex', alignItems: 'center', gap: 4,
-                transition: `all ${t.motion.fast.duration}ms ${t.motion.fast.easing}`,
-              }}
-            >
-              <Icon name={em.icon} size={11} />
-              {em.label}
-            </button>
-          );
-        })}
-      </div>
-      <span style={{ flex: 1 }} />
-      {/* Axis chips — top/front/side/persp */}
-      <div style={{ display: 'flex', gap: 0 }}>
-        {['T', 'F', 'S', 'P'].map((ax) => (
-          <button
-            key={ax}
-            type="button"
-            data-studio-v3-axis={ax.toLowerCase()}
-            style={{
-              width: 22, height: 20,
-              background: 'transparent', color: t['fg-2'],
-              border: `1px solid ${t['ink-4']}`, borderRadius: 0,
-              fontFamily: t.font.mono, fontSize: 10, fontWeight: 600,
-              cursor: 'pointer',
-              transition: `all ${t.motion.fast.duration}ms ${t.motion.fast.easing}`,
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = t['ink-3']; e.currentTarget.style.color = t['fg-1']; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = t['fg-2']; }}
-          >{ax}</button>
+            className="studio-topbar-menu"
+            data-studio-v3-menu={m.toLowerCase()}
+          >{m}</button>
         ))}
       </div>
-    </div>
-  );
-}
-
-// ─── NPanel rail (collapsed sidebar) ──────────────────────────────────────
-function NPanelRail({ t, onExpand }) {
-  return (
-    <div
-      data-studio-v3-npanel-rail
-      style={{
-        width: 28,
-        background: t['ink-1'],
-        borderLeft: `1px solid ${t['ink-4']}`,
-        display: 'flex', flexDirection: 'column', alignItems: 'center',
-        padding: '8px 0',
-        flexShrink: 0,
-        zIndex: t.z.npanel,
-      }}
-    >
+      <div className="studio-topbar-spacer" />
       <button
         type="button"
-        data-studio-v3-npanel-expand
-        title="Open N-panel"
-        onClick={onExpand}
-        style={{
-          width: 22, height: 22,
-          background: 'transparent', color: t['fg-2'],
-          border: 'none', cursor: 'pointer',
-          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        }}
-      >
-        <Icon name="npanel" size={14} />
-      </button>
+        className="studio-topbar-menu"
+        data-studio-v3-theme-toggle
+        onClick={onCycleTheme}
+        title="Toggle theme (Cmd+T)"
+      >{theme === 'dark' ? 'Dark' : 'Light'}</button>
     </div>
   );
 }
 
-// ─── NPanel (expanded sidebar) ────────────────────────────────────────────
-function NPanel({ t, onCollapse, discipline, editMode }) {
+// ─── QuickAccessBar ───────────────────────────────────────────────────────
+function QuickAccessBar({ onAction }) {
+  const items = [
+    { id: 'new',      icon: 'empty',    label: 'New' },
+    { id: 'open',     icon: 'tshelf',   label: 'Open' },
+    { id: 'save',     icon: 'check',    label: 'Save' },
+    null,
+    { id: 'undo',     icon: 'undo',     label: 'Undo' },
+    { id: 'redo',     icon: 'redo',     label: 'Redo' },
+    null,
+    { id: 'play',     icon: 'play',     label: 'Play' },
+    { id: 'pause',    icon: 'pause',    label: 'Pause' },
+    null,
+    { id: 'settings', icon: 'settings', label: 'Settings' },
+  ];
   return (
-    <div
-      data-studio-v3-npanel
-      style={{
-        width: 260,
-        background: t['ink-1'],
-        borderLeft: `1px solid ${t['ink-4']}`,
-        display: 'flex', flexDirection: 'column',
-        flexShrink: 0,
-        zIndex: t.z.npanel,
-      }}
-    >
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        height: 30, padding: '0 12px', borderBottom: `1px solid ${t['ink-4']}`,
-        fontFamily: t.font.sans, fontSize: 11, fontWeight: 600, color: t['fg-1'],
-        letterSpacing: '0.04em', textTransform: 'uppercase',
-      }}>
-        <span>Inspector</span>
+    <div className="studio-qat" data-studio-v3-qat>
+      {items.map((it, i) => it ? (
+        <button
+          key={it.id}
+          type="button"
+          className="studio-qat-btn"
+          data-studio-v3-qat-btn={it.id}
+          title={it.label}
+          onClick={() => onAction && onAction(it.id)}
+        ><Icon name={it.icon} size={13} /></button>
+      ) : (
+        <span key={`s-${i}`} className="studio-qat-sep" />
+      ))}
+    </div>
+  );
+}
+
+// ─── WorkbenchRail (left, 15 disciplines) ────────────────────────────────
+function WorkbenchRail({ activeId, onSwitch }) {
+  return (
+    <div className="studio-wb-rail" data-studio-v3-wb-rail>
+      {DISCIPLINES.map((d) => (
+        <button
+          key={d.id}
+          type="button"
+          className="studio-wb-tab"
+          data-studio-v3-wb={d.id}
+          data-active={d.id === activeId ? 'true' : 'false'}
+          title={d.label}
+          onClick={() => onSwitch(d.id)}
+        >
+          <span className="studio-wb-tab-glyph"><Icon name={d.icon} size={22} /></span>
+          <span className="studio-wb-tab-label">{d.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ─── Toolbar (per-discipline) ─────────────────────────────────────────────
+function Toolbar({ wbId, activeTool, setTool }) {
+  const groups = TOOLBAR[wbId] || TOOLBAR.model;
+  return (
+    <div className="studio-toolbar" data-studio-v3-toolbar>
+      {groups.map((g, i) => (
+        <div key={`${g.label}-${i}`} className="studio-toolbar-group" data-studio-v3-toolbar-group={g.label.toLowerCase()}>
+          <span className="studio-toolbar-group-label">{g.label}</span>
+          {g.tools.map((t) => (
+            <button
+              key={t}
+              type="button"
+              className="studio-tool"
+              data-studio-v3-tool={t}
+              data-active={t === activeTool ? 'true' : 'false'}
+              title={t}
+              onClick={() => setTool(t)}
+            ><Icon name={t} size={16} /></button>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Viewport HUD (edit-mode chips + axis chips) ─────────────────────────
+function ViewportHUD({ editMode, setEditMode, axis, setAxis }) {
+  return (
+    <>
+      <div className="studio-vp-hud" data-studio-v3-vp-hud>
+        {EDIT_MODES.map((em, i) => (
+          <React.Fragment key={em.id}>
+            <button
+              type="button"
+              className="studio-vp-hud-btn"
+              data-studio-v3-edit-mode={em.id}
+              data-active={em.id === editMode ? 'true' : 'false'}
+              title={em.label}
+              onClick={() => setEditMode(em.id)}
+            >
+              <Icon name={em.icon} size={11} />
+              <span>{em.label}</span>
+            </button>
+            {i === 0 && <span className="studio-vp-hud-sep" />}
+          </React.Fragment>
+        ))}
+      </div>
+      <div className="studio-vp-axes" data-studio-v3-vp-axes>
+        {AXES.map((ax) => (
+          <button
+            key={ax.id}
+            type="button"
+            className="studio-vp-axis"
+            data-studio-v3-axis={ax.id}
+            data-active={ax.id === axis ? 'true' : 'false'}
+            title={`View · ${ax.id}`}
+            onClick={() => setAxis(ax.id)}
+          >{ax.label}</button>
+        ))}
+      </div>
+    </>
+  );
+}
+
+// ─── RightPanel (Inspector / Outliner / Layers) ──────────────────────────
+function RightPanel({ collapsed, onToggle, activeWb, editMode }) {
+  const [tab, setTab] = useState('inspector');
+  if (collapsed) {
+    return (
+      <aside className="studio-right" data-studio-v3-right data-collapsed="true">
+        <div className="studio-right-collapsed">
+          <button
+            type="button"
+            className="studio-right-collapsed-btn"
+            data-studio-v3-right-expand
+            onClick={onToggle}
+            title="Expand inspector"
+          ><Icon name="npanel" size={14} /></button>
+        </div>
+      </aside>
+    );
+  }
+  return (
+    <aside className="studio-right" data-studio-v3-right data-collapsed="false">
+      <div className="studio-right-tabs" data-studio-v3-right-tabs>
+        {['inspector', 'outliner', 'layers'].map((t) => (
+          <button
+            key={t}
+            type="button"
+            className="studio-right-tab"
+            data-studio-v3-right-tab={t}
+            data-active={t === tab ? 'true' : 'false'}
+            onClick={() => setTab(t)}
+          >{t}</button>
+        ))}
         <button
           type="button"
-          data-studio-v3-npanel-collapse
-          onClick={onCollapse}
-          style={{
-            width: 18, height: 18,
-            background: 'transparent', border: 'none',
-            color: t['fg-2'], cursor: 'pointer',
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-          }}
-        ><Icon name="close" size={12} /></button>
+          className="studio-right-tab"
+          data-studio-v3-right-collapse
+          title="Collapse"
+          onClick={onToggle}
+          style={{ flex: '0 0 32px' }}
+        ><Icon name="close" size={11} /></button>
       </div>
-      <div style={{ flex: 1, padding: 12, overflowY: 'auto', fontFamily: t.font.sans, fontSize: 11, color: t['fg-2'] }}>
-        <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: t['fg-3'], marginBottom: 6 }}>Discipline</div>
-          <div style={{ color: t['fg-1'], fontSize: 12, fontWeight: 500, textTransform: 'capitalize' }}>{discipline}</div>
-        </div>
-        <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: t['fg-3'], marginBottom: 6 }}>Edit mode</div>
-          <div style={{ color: t['fg-1'], fontSize: 12, fontWeight: 500, textTransform: 'capitalize' }}>{editMode}</div>
-        </div>
-        <div style={{ marginBottom: 14, color: t['fg-3'], fontSize: 10, fontStyle: 'italic' }}>
-          Discipline-specific inspectors load in slice 394+.
+      <div className="studio-right-body" data-studio-v3-right-body={tab}>
+        {tab === 'inspector' && (
+          <>
+            <div className="studio-right-section">
+              <div className="studio-right-section-title">Active</div>
+              <div className="studio-right-row"><span>Discipline</span><strong style={{ textTransform: 'capitalize' }}>{activeWb}</strong></div>
+              <div className="studio-right-row"><span>Mode</span><strong style={{ textTransform: 'capitalize' }}>{editMode}</strong></div>
+            </div>
+            <div className="studio-right-section">
+              <div className="studio-right-section-title">Selection</div>
+              <SelectionRows />
+            </div>
+          </>
+        )}
+        {tab === 'outliner' && <OutlinerRows />}
+        {tab === 'layers' && (
+          <div className="studio-right-section">
+            <div className="studio-right-section-title">Layers</div>
+            <div className="studio-right-row" style={{ color: 'var(--studio-ink-mute)', fontStyle: 'italic' }}>
+              Layer manager lands in slice 395+.
+            </div>
+          </div>
+        )}
+      </div>
+    </aside>
+  );
+}
+
+function SelectionRows() {
+  const [s, setS] = useState({ vertices: 0, edges: 0, faces: 0 });
+  useEffect(() => {
+    const read = () => {
+      if (window.__studioGetEditSelection) {
+        const sel = window.__studioGetEditSelection();
+        setS({ vertices: sel.vertices.length, edges: sel.edges.length, faces: sel.faces.length });
+      }
+    };
+    const id = setInterval(read, 400);
+    read();
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <>
+      <div className="studio-right-row"><span>Vertices</span><strong>{s.vertices}</strong></div>
+      <div className="studio-right-row"><span>Edges</span><strong>{s.edges}</strong></div>
+      <div className="studio-right-row"><span>Faces</span><strong>{s.faces}</strong></div>
+    </>
+  );
+}
+
+function OutlinerRows() {
+  const [items, setItems] = useState([]);
+  useEffect(() => {
+    const read = () => {
+      const out = [];
+      if (window.__archdiscScene) {
+        try {
+          window.__archdiscScene.traverse((o) => {
+            if (o.userData && o.userData.archdiscStudioPrimitive) {
+              out.push({ uuid: o.uuid, name: o.name || o.userData.archdiscStudioPrimitiveKind || 'mesh' });
+            }
+          });
+        } catch (_) {}
+      }
+      setItems(out);
+    };
+    const id = setInterval(read, 600);
+    read();
+    return () => clearInterval(id);
+  }, []);
+  if (!items.length) {
+    return (
+      <div className="studio-right-section">
+        <div className="studio-right-section-title">Scene</div>
+        <div className="studio-right-row" style={{ color: 'var(--studio-ink-mute)', fontStyle: 'italic' }}>
+          Empty — add a primitive from the toolbar.
         </div>
       </div>
+    );
+  }
+  return (
+    <div className="studio-right-section">
+      <div className="studio-right-section-title">Scene · {items.length}</div>
+      {items.map((it) => (
+        <div key={it.uuid} className="studio-right-row" data-studio-v3-outliner-item={it.uuid}>
+          <span style={{ textTransform: 'capitalize' }}>{it.name}</span>
+          <strong style={{ fontFamily: 'var(--studio-mono)', fontSize: 10, color: 'var(--studio-ink-mute)' }}>{it.uuid.slice(0, 6)}</strong>
+        </div>
+      ))}
     </div>
   );
 }
 
-// ─── StatusBar ────────────────────────────────────────────────────────────
-function StatusBar({ t, discipline, editMode }) {
+// ─── StatusBar ───────────────────────────────────────────────────────────
+function StatusBar({ wb, editMode }) {
+  const [fps, setFps] = useState(0);
+  const [calls, setCalls] = useState(0);
+  const [primCount, setPrimCount] = useState(0);
+  useEffect(() => {
+    let frames = 0;
+    let last = performance.now();
+    let raf = 0;
+    const tick = () => {
+      frames++;
+      const now = performance.now();
+      if (now - last >= 500) {
+        setFps(Math.round((frames * 1000) / (now - last)));
+        const vp = window.__archdiscViewport;
+        if (vp && vp.renderer && vp.renderer.info) setCalls(vp.renderer.info.render.calls);
+        let n = 0;
+        if (window.__archdiscScene) {
+          try { window.__archdiscScene.traverse((o) => { if (o.userData && o.userData.archdiscStudioPrimitive) n++; }); } catch (_) {}
+        }
+        setPrimCount(n);
+        frames = 0; last = now;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
   return (
-    <div
-      data-studio-v3-status-bar
-      style={{
-        height: 24,
-        background: t['ink-1'],
-        borderTop: `1px solid ${t['ink-4']}`,
-        display: 'flex', alignItems: 'center',
-        gap: 16, padding: '0 12px',
-        fontFamily: t.font.mono, fontSize: 10, color: t['fg-2'],
-        flexShrink: 0,
-        boxShadow: edgeLight(t),
-        zIndex: t.z.status,
-      }}
-    >
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-        <StudioMark size={12} ink={t['fg-1']} />
-        <span style={{ color: t['fg-1'], fontWeight: 600, letterSpacing: '0.05em' }}>STUDIO</span>
-      </span>
-      <span data-studio-v3-status="discipline" style={{ textTransform: 'capitalize' }}>{discipline}</span>
-      <span data-studio-v3-status="mode" style={{ textTransform: 'capitalize' }}>· {editMode}</span>
-      <span style={{ flex: 1 }} />
-      <span data-studio-v3-status="ready" style={{ color: t.base }}>● ready</span>
+    <div className="studio-statusbar" data-studio-v3-statusbar>
+      <span data-studio-v3-status="brand"><strong>Studio</strong></span>
+      <span data-studio-v3-status="wb" style={{ textTransform: 'capitalize' }}>{wb}</span>
+      <span data-studio-v3-status="mode" style={{ textTransform: 'capitalize' }}>{editMode}</span>
+      <span data-studio-v3-status="primitives">{primCount} prim</span>
+      <span className="studio-statusbar-spacer" />
+      <span data-studio-v3-status="fps">{fps} fps</span>
+      <span data-studio-v3-status="calls">{calls} calls</span>
+      <span data-studio-v3-status="units">mm</span>
+      <span data-studio-v3-status="ready"><span className="studio-statusbar-dot" />ready</span>
     </div>
+  );
+}
+
+// ─── CommandBar (always-on Archie input) ──────────────────────────────────
+function CommandBar({ dockOpen, onToggleDock, onSubmit }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const onKey = (e) => {
+      const meta = e.metaKey || e.ctrlKey;
+      if (meta && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        ref.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+  return (
+    <div className="studio-cmdbar" data-studio-v3-cmdbar>
+      <span className="studio-cmdbar-glyph" title="Archie">◐</span>
+      <input
+        ref={ref}
+        className="studio-cmdbar-input"
+        data-studio-v3-cmdbar-input
+        placeholder="Ask Archie — try 'extrude this face 5mm', 'render iso PNG', 'array along X 5 copies'…"
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && e.currentTarget.value.trim()) {
+            const v = e.currentTarget.value.trim();
+            e.currentTarget.value = '';
+            onSubmit && onSubmit(v);
+          }
+        }}
+      />
+      <span className="studio-cmdbar-hint">
+        <kbd>⌘K</kbd>
+      </span>
+      <button
+        type="button"
+        className="studio-cmdbar-toggle"
+        data-studio-v3-cmdbar-toggle
+        data-active={dockOpen ? 'true' : 'false'}
+        onClick={onToggleDock}
+        title="Toggle Archie dock"
+      >Dock</button>
+    </div>
+  );
+}
+
+// ─── ArchieDock (overlays right panel) ────────────────────────────────────
+function ArchieDock({ thread, onClose }) {
+  return (
+    <aside className="studio-archie" data-studio-v3-archie>
+      <div className="studio-archie-header">
+        <span className="studio-archie-spark">◐</span>
+        <span>Archie</span>
+        <span style={{ flex: 1 }} />
+        <button
+          type="button"
+          className="studio-qat-btn"
+          data-studio-v3-archie-close
+          onClick={onClose}
+          title="Close dock"
+        ><Icon name="close" size={12} /></button>
+      </div>
+      <div className="studio-archie-body">
+        {thread.length === 0 && (
+          <div className="studio-archie-msg" data-role="archie">
+            Welcome. Ask anything — modelling ops, render queues, scene
+            queries. I drive Studio's tools directly.
+          </div>
+        )}
+        {thread.map((m, i) => (
+          <div key={i} className="studio-archie-msg" data-role={m.role}>{m.text}</div>
+        ))}
+      </div>
+    </aside>
   );
 }
 
 // ─── Top-level shell ──────────────────────────────────────────────────────
 export function StudioShellV3({ mode = 'dark' }) {
-  const t = tokens(mode);
-  const [discipline, setDiscipline] = useState('model');
-  const [tool, setTool] = useState('select');
+  const [theme, setTheme] = useState(() => lstor.get('theme', mode));
+  const [activeWb, setActiveWb] = useState(() => lstor.get('wb', 'model'));
+  const [activeTool, setActiveTool] = useState('select');
   const [editMode, setEditMode] = useState('object');
-  const [npanelOpen, setNpanelOpen] = useState(true);
+  const [axis, setAxis] = useState('persp');
+  const [rightCollapsed, setRightCollapsed] = useState(false);
+  const [dockOpen, setDockOpen] = useState(false);
+  const [thread, setThread] = useState([]);
 
-  // Mirror to existing V2 window APIs so the e2e suite keeps working.
+  // Theme → document attribute so tokens.css applies the right palette.
   useEffect(() => {
-    if (window.__studioSetEditMode && editMode && window.__studioGetEditMode && window.__studioGetEditMode() !== editMode) {
+    if (typeof document === 'undefined') return;
+    document.documentElement.setAttribute('data-studio-theme', theme);
+    lstor.set('theme', theme);
+  }, [theme]);
+  useEffect(() => { lstor.set('wb', activeWb); }, [activeWb]);
+
+  // Mirror edit-mode to the V2 window API so existing e2e specs + the
+  // V2 click router keep working while V3 stabilises.
+  useEffect(() => {
+    if (window.__studioSetEditMode && window.__studioGetEditMode &&
+        window.__studioGetEditMode() !== editMode) {
       window.__studioSetEditMode(editMode);
     }
   }, [editMode]);
 
+  // Cmd+T cycle theme; Cmd+/ toggle dock; Esc clears active tool.
+  useEffect(() => {
+    const onKey = (e) => {
+      const meta = e.metaKey || e.ctrlKey;
+      if (meta && e.key.toLowerCase() === 't') {
+        e.preventDefault();
+        setTheme((t) => t === 'dark' ? 'light' : 'dark');
+      } else if (meta && e.key === '/') {
+        e.preventDefault();
+        setDockOpen((v) => !v);
+      } else if (!meta && e.key === 'Escape') {
+        setActiveTool('select');
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const onCmdSubmit = (text) => {
+    setThread((t) => [...t, { role: 'user', text }, { role: 'archie', text: `(wired in a follow-up) — would run: "${text}"` }]);
+    setDockOpen(true);
+  };
+
+  const onQatAction = (id) => {
+    if (id === 'undo' && window.__studioPopUndo) window.__studioPopUndo();
+    else if (id === 'redo' && window.__studioPopRedo) window.__studioPopRedo();
+    else if (id === 'play' && window.__studioToggleAnimating) window.__studioToggleAnimating();
+    else if (id === 'settings') setDockOpen(true);
+  };
+
   return (
     <div
+      className="studio-app"
       data-studio-v3-shell
-      data-studio-v3-mode={mode}
-      style={{
-        position: 'absolute',
-        inset: 0,
-        display: 'flex',
-        flexDirection: 'column',
-        background: t['ink-0'],
-        color: t['fg-1'],
-        fontFamily: t.font.sans,
-        fontSize: 12,
-        overflow: 'hidden',
-      }}
+      data-studio-v3-mode={theme}
+      data-archie-open={String(dockOpen)}
     >
-      <HeaderBar t={t} discipline={discipline} setDiscipline={setDiscipline} />
-      <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
-        <ToolRail t={t} tool={tool} setTool={setTool} />
-        <main
-          data-studio-v3-viewport
-          style={{ flex: 1, position: 'relative', background: t['ink-0'], minWidth: 0 }}
-        >
-          <ViewportHeader t={t} editMode={editMode} setEditMode={setEditMode} />
-          {/* Viewport canvas mounts here. V2 renderer still owns this surface
-              during the rollout; later slices wire it through V3 directly. */}
-          <div style={{ position: 'absolute', inset: 0, top: 30, pointerEvents: 'none' }}>
-            <div style={{
-              position: 'absolute', top: '50%', left: '50%',
-              transform: 'translate(-50%, -50%)',
-              color: t['fg-3'], fontFamily: t.font.mono, fontSize: 10,
-              letterSpacing: '0.06em', textTransform: 'uppercase',
-              opacity: 0.4,
-              pointerEvents: 'none',
-            }}>v3 shell · viewport surface owned by canvas</div>
-          </div>
-        </main>
-        {npanelOpen
-          ? <NPanel t={t} onCollapse={() => setNpanelOpen(false)} discipline={discipline} editMode={editMode} />
-          : <NPanelRail t={t} onExpand={() => setNpanelOpen(true)} />
-        }
-      </div>
-      <StatusBar t={t} discipline={discipline} editMode={editMode} />
+      <TopBar
+        theme={theme}
+        onCycleTheme={() => setTheme((t) => t === 'dark' ? 'light' : 'dark')}
+      />
+      <QuickAccessBar onAction={onQatAction} />
+      <WorkbenchRail
+        activeId={activeWb}
+        onSwitch={(id) => { setActiveWb(id); setActiveTool('select'); }}
+      />
+      <Toolbar wbId={activeWb} activeTool={activeTool} setTool={setActiveTool} />
+      <main className="studio-viewport workbench-viewport studio-viewport-canvas" data-studio-v3-viewport>
+        <Viewport3D canvasId="render-canvas-studio-v3" domain="studio" />
+        <ViewportHUD
+          editMode={editMode}
+          setEditMode={setEditMode}
+          axis={axis}
+          setAxis={(a) => { setAxis(a); if (window.__studioSetCameraAxis) window.__studioSetCameraAxis(a); }}
+        />
+      </main>
+      {dockOpen
+        ? <ArchieDock thread={thread} onClose={() => setDockOpen(false)} />
+        : <RightPanel
+            collapsed={rightCollapsed}
+            onToggle={() => setRightCollapsed((v) => !v)}
+            activeWb={activeWb}
+            editMode={editMode}
+          />
+      }
+      <StatusBar wb={activeWb} editMode={editMode} />
+      <CommandBar
+        dockOpen={dockOpen}
+        onToggleDock={() => setDockOpen((v) => !v)}
+        onSubmit={onCmdSubmit}
+      />
     </div>
   );
 }
