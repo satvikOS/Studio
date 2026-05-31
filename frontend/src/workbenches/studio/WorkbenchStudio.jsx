@@ -13113,6 +13113,35 @@ function WorkbenchStudio() {
           display: 'flex', flexDirection: 'column', alignItems: 'center',
           gap: '6px', minWidth: '420px', maxWidth: '60vw',
         }}>
+          {/* Slice 342 — suggestion chips. One-click prompts that load
+              into the input. Hidden once the user has run their first
+              prompt (aiLog has entries) so they don't keep nagging. */}
+          {aiLog.length === 0 && (
+            <div data-studio-archie-suggestions style={{
+              display: 'flex', gap: '4px', flexWrap: 'wrap', justifyContent: 'center',
+              maxWidth: '60vw',
+            }}>
+              {[
+                'add a cube and a sphere',
+                'spin the selected mesh',
+                'apply smart-rust',
+                'frame all',
+              ].map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  data-studio-archie-suggestion={s}
+                  onClick={() => { setAiPrompt(s); }}
+                  style={{
+                    background: '#161b22', color: '#9aa6b2',
+                    border: '1px solid #21262d', borderRadius: '12px',
+                    padding: '3px 10px', fontSize: '10px',
+                    cursor: 'pointer', fontFamily: 'inherit',
+                  }}
+                >{s}</button>
+              ))}
+            </div>
+          )}
           {/* Last-response peek — slice 340 */}
           {aiLog.length > 0 && (
             <div
