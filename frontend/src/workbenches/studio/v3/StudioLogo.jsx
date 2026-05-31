@@ -12,7 +12,11 @@ import { ACCENT } from './theme';
 // Sized via the `size` prop; defaults to 20 (chrome). Always renders
 // crisp because it's a single inline SVG path, no rasterisation.
 
-export function StudioMark({ size = 20, accent = ACCENT.base, ink = 'currentColor', strokeWidth = 1.5 }) {
+// Slice 399 — V3 went fully monochrome. The mark no longer carries an
+// accent hue; the slice cut now uses the same ink as the rings, just
+// at a thicker stroke so it still reads as the brand's signature.
+export function StudioMark({ size = 20, ink = 'currentColor', strokeWidth = 1.5, accent }) {
+  const sliceColor = accent || ink;
   const r1 = 9.5;      // outer ring radius (centre 12, viewBox 24)
   const r2 = 5.5;      // inner ring radius
   const cx = 12, cy = 12;
@@ -41,10 +45,11 @@ export function StudioMark({ size = 20, accent = ACCENT.base, ink = 'currentColo
       <circle cx={cx} cy={cy} r={r1} stroke={ink} strokeWidth={strokeWidth} strokeOpacity={0.85} />
       {/* Inner ring */}
       <circle cx={cx} cy={cy} r={r2} stroke={ink} strokeWidth={strokeWidth - 0.5} strokeOpacity={0.55} />
-      {/* Accent slice */}
-      <path d={slice} stroke={accent} strokeWidth={strokeWidth + 0.5} strokeLinecap="square" />
+      {/* Slice — same ink as the rings, just heavier so it still reads
+          as the brand's signature without colour. */}
+      <path d={slice} stroke={sliceColor} strokeWidth={strokeWidth + 0.7} strokeLinecap="square" />
       {/* Centre point — anchors the eye */}
-      <circle cx={cx} cy={cy} r={0.9} fill={accent} />
+      <circle cx={cx} cy={cy} r={0.9} fill={sliceColor} />
     </svg>
   );
 }
@@ -70,7 +75,7 @@ export function StudioWordmark({ size = 13, color = 'currentColor', weight = 600
 }
 
 // Lockup — mark + wordmark, evenly spaced, vertically centred.
-export function StudioLogo({ size = 20, accent = ACCENT.base, ink = 'currentColor', tone = 'dark' }) {
+export function StudioLogo({ size = 20, ink = 'currentColor', tone = 'dark' }) {
   const wordColor = tone === 'dark' ? '#f0eee6' : '#1a1c22';
   return (
     <div
@@ -82,7 +87,7 @@ export function StudioLogo({ size = 20, accent = ACCENT.base, ink = 'currentColo
         userSelect: 'none',
       }}
     >
-      <StudioMark size={size} accent={accent} ink={ink} />
+      <StudioMark size={size} ink={ink} />
       <StudioWordmark size={Math.round(size * 0.7)} color={wordColor} />
     </div>
   );

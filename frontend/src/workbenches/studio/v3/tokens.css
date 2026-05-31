@@ -51,18 +51,21 @@
   --studio-ink-faint:   #3d4250;        /* disabled / divider text */
 
   /* Accent — monochrome white in dark mode. Reads as "active / now"
-     without breaking the OLED palette. Studio's brand accent (teal) is
-     reserved for the brand mark only. */
+     without breaking the OLED palette. Slice 399: V3 carries no chromatic
+     accent anywhere; the brand mark uses the same ink as everything else.
+     "Now / active" still reads via accent-mute background + accent-rim. */
   --studio-accent:        #ebecef;
   --studio-accent-hover:  #ffffff;
   --studio-accent-press:  #c0c5cf;
   --studio-accent-mute:   rgba(255,255,255,0.08);
   --studio-accent-rim:    rgba(255,255,255,0.28);
 
-  /* Brand accent — only ever used on the disc mark + the cmdbar glyph,
-     so when the user sees teal they know it's Studio identity, not state. */
-  --studio-brand:         #0fd4a6;
-  --studio-brand-soft:    rgba(15,212,166,0.16);
+  /* Brand accent — slice 399: removed. V3 is fully monochrome per user
+     direction; brand identity carried by the mark shape + wordmark
+     alone, not by hue. Aliased to the monochrome accent so any code
+     that still references --studio-brand reads cleanly. */
+  --studio-brand:         var(--studio-accent);
+  --studio-brand-soft:    var(--studio-accent-mute);
 
   /* Signal — grey-tinted, never primary saturation */
   --studio-ok:    #5cc88f;
@@ -94,9 +97,9 @@
   --studio-accent-mute:   rgba(20,22,27,0.07);
   --studio-accent-rim:    rgba(20,22,27,0.20);
 
-  /* Brand accent darker variant for legibility on warm paper. */
-  --studio-brand:         #0a9a78;
-  --studio-brand-soft:    rgba(10,154,120,0.12);
+  /* Brand accent — monochrome (see dark mode comment). */
+  --studio-brand:         var(--studio-accent);
+  --studio-brand-soft:    var(--studio-accent-mute);
 
   --studio-ok:    #2d9b65;
   --studio-warn:  #b8870a;
