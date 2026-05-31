@@ -1076,6 +1076,83 @@ function WorkbenchStudio() {
         state() { let c = 0; for (let i = 0; i < MAX; i++) c += alive[i]; return { alive: c, paused, stopped }; },
       };
     };
+    // Slice 298 — Rhino Grasshopper-style typed dataflow graph. Topo-sorts
+    // nodes by wire deps, evaluates each via a small component dispatch table
+    // (number/add/multiply/point/translate/spawnPoints), returns each node's
+    // computed output. `spawnPoints` instantiates a THREE.Points for visible
+    // demo output.
+    window.__studioRunGrasshopper = (graph) => {
+      const nodes = (graph && graph.nodes) || [];
+      const wires = (graph && graph.wires) || [];
+      const byId = new Map(nodes.map((n) => [n.id, n]));
+      const incoming = new Map();
+      const deps = new Map(nodes.map((n) => [n.id, new Set()]));
+      for (const w of wires) {
+        const [s, sp] = w.from.split('.'); const [d, dp] = w.to.split('.');
+        if (!byId.has(s) || !byId.has(d)) return { error: `bad wire ${w.from}->${w.to}` };
+        deps.get(d).add(s);
+        const inc = incoming.get(d) || {}; inc[dp] = { srcId: s, srcPort: sp || 'out' };
+        incoming.set(d, inc);
+      }
+      const order = []; const visited = new Set(); const temp = new Set();
+      const visit = (id) => {
+        if (temp.has(id)) throw new Error('cycle');
+        if (visited.has(id)) return;
+        temp.add(id);
+        for (const d of deps.get(id)) visit(d);
+        temp.delete(id); visited.add(id); order.push(id);
+      };
+      try { for (const n of nodes) visit(n.id); } catch (e) { return { error: e.message }; }
+      const OPS = {
+        number:   (p) => p.value,
+        add:      (_, i) => (i.a == null ? 0 : i.a) + (i.b == null ? 0 : i.b),
+        multiply: (_, i) => (i.a == null ? 1 : i.a) * (i.b == null ? 1 : i.b),
+        point:    (p, i) => [i.x == null ? (p.x || 0) : i.x, i.y == null ? (p.y || 0) : i.y, i.z == null ? (p.z || 0) : i.z],
+        translate:(p, i) => {
+          const pt = i.point || [0, 0, 0];
+          const d = i.delta || p.delta || [0, 0, 0];
+          return [pt[0] + d[0], pt[1] + d[1], pt[2] + d[2]];
+        },
+        spawnPoints: (p, i) => {
+          const pts = i.points || p.points || [];
+          const scene = window.__archdiscScene; if (!scene) return { value: null };
+          const geom = new THREE.BufferGeometry();
+          const arr = new Float32Array(pts.length * 3);
+          for (let k = 0; k < pts.length; k++) {
+            arr[k * 3] = pts[k][0]; arr[k * 3 + 1] = pts[k][1]; arr[k * 3 + 2] = pts[k][2];
+          }
+          geom.setAttribute('position', new THREE.BufferAttribute(arr, 3));
+          const mat = new THREE.PointsMaterial({ color: 0xff66aa, size: 0.06, sizeAttenuation: true });
+          const obj = new THREE.Points(geom, mat);
+          obj.userData.archdiscStudioPrimitive = true;
+          obj.userData.archdiscStudioPrimitiveKind = 'grasshopper-points';
+          obj.name = `studio-grasshopper-points`;
+          scene.add(obj);
+          if (primitiveStackRef.current) primitiveStackRef.current.push(obj);
+          setPrimitiveCount((c) => c + 1);
+          return { value: pts, spawnedUuid: obj.uuid };
+        },
+      };
+      const out = new Map();
+      let spawned = null;
+      for (const id of order) {
+        const n = byId.get(id);
+        const ins = {};
+        const inc = incoming.get(id) || {};
+        for (const k of Object.keys(inc)) ins[k] = out.get(inc[k].srcId);
+        const fn = OPS[n.type];
+        if (!fn) { out.set(id, null); continue; }
+        const r = fn(n.params || {}, ins);
+        if (r && typeof r === 'object' && 'value' in r && !Array.isArray(r)) {
+          out.set(id, r.value);
+          if (r.spawnedUuid) spawned = r.spawnedUuid;
+        } else { out.set(id, r); }
+      }
+      return {
+        nodes: order.map((id) => ({ id, type: byId.get(id).type, output: out.get(id) })),
+        spawned,
+      };
+    };
     // Slice 290 — Houdini PDG/TOPs task-graph runner. Each task is one of
     // {wait, spawn, bakeAOToTexture, screenshot}. Dependencies form a DAG;
     // independent tasks at the same level run via Promise.all. On dep error
@@ -1228,7 +1305,7 @@ function WorkbenchStudio() {
     window.__studioReadNormalTexel = (uv) => { const m = selectedMeshRef.current; const nc = m && m.userData && m.userData._normalCanvas; if (!nc) return null; const d = nc.getContext('2d').getImageData(Math.floor(uv[0] * 512), Math.floor((1 - uv[1]) * 512), 1, 1).data; return [d[0], d[1], d[2]]; };
     window.__studioPolyPaintAt = (pt, color, radius) => { const m = selectedMeshRef.current; if (!m) return null; return paintPolyAt(m, new THREE.Vector3(pt[0], pt[1], pt[2]), color || brushPaintColor, radius || 0.012); };
     window.__studioReadVertexColor = (i) => { const m = selectedMeshRef.current; const col = m && m.geometry && m.geometry.attributes.color; if (!col) return null; return [Math.round(col.getX(i) * 255), Math.round(col.getY(i) * 255), Math.round(col.getZ(i) * 255)]; };
-    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioEvalNiagara; delete window.__studioNiagaraStep; delete window.__studioBTTick; delete window.__studioStreamAround; delete window.__studioRevealAll; delete window.__studioAddAudioSource; delete window.__studioSetListener; delete window.__studioAudioState; delete window.__studioXRSupport; delete window.__studioEnterXR; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAnimBPSet; delete window.__studioAnimBPStep; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioTrimmedSurface; delete window.__studioAddNurbsCurve; delete window.__studioBRepBoolean; delete window.__studioSetReference; delete window.__studioClearReference; delete window.__studioReferenceState; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioFieldQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; delete window.__studioRunVexExpr; delete window.__studioPushFace; delete window.__studioBakeAOToTexture; delete window.__studioSculptLayerAdd; delete window.__studioSculptLayerList; delete window.__studioSculptLayerToggle; delete window.__studioSculptLayerStrength; delete window.__studioSculptLayerRemove; delete window.__studioMashDistribute; delete window.__studioSetHDRIEnvironment; delete window.__studioListHDRIPresets; delete window.__studioSolveIK2; delete window.__studioRunTaskGraph; delete window.__studioParticleEmitter; delete window.__studioFilletEdges; delete window.__studioProceduralTexture; delete window.__studioProjectPaintFromCamera; delete window.__studioFindSnapTarget; };
+    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioEvalNiagara; delete window.__studioNiagaraStep; delete window.__studioBTTick; delete window.__studioStreamAround; delete window.__studioRevealAll; delete window.__studioAddAudioSource; delete window.__studioSetListener; delete window.__studioAudioState; delete window.__studioXRSupport; delete window.__studioEnterXR; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAnimBPSet; delete window.__studioAnimBPStep; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioTrimmedSurface; delete window.__studioAddNurbsCurve; delete window.__studioBRepBoolean; delete window.__studioSetReference; delete window.__studioClearReference; delete window.__studioReferenceState; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioFieldQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; delete window.__studioRunVexExpr; delete window.__studioPushFace; delete window.__studioBakeAOToTexture; delete window.__studioSculptLayerAdd; delete window.__studioSculptLayerList; delete window.__studioSculptLayerToggle; delete window.__studioSculptLayerStrength; delete window.__studioSculptLayerRemove; delete window.__studioMashDistribute; delete window.__studioSetHDRIEnvironment; delete window.__studioListHDRIPresets; delete window.__studioSolveIK2; delete window.__studioRunTaskGraph; delete window.__studioParticleEmitter; delete window.__studioFilletEdges; delete window.__studioProceduralTexture; delete window.__studioProjectPaintFromCamera; delete window.__studioFindSnapTarget; delete window.__studioRunGrasshopper; };
   });
   // Auto-frame on primitive count change so the camera always shows
   // the current scene without the user having to hit Home.
