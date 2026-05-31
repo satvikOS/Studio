@@ -15382,25 +15382,35 @@ function WorkbenchStudio() {
             opacity: 0.32 !important;
             cursor: not-allowed;
           }
+          /* Slice 349 — ribbon tool icon + label polished. Larger, more
+             confident icons; tighter spacing between rows; teal accent
+             for the wordmark. */
           body:has([data-studio-properties="studio"]) .ribbon-tool-icon {
-            font-size: 16px !important;
+            font-size: 18px !important;
             line-height: 1 !important;
-            opacity: 0.85;
+            color: #9aa6b2 !important;
+          }
+          body:has([data-studio-properties="studio"]) .ribbon-tool:hover:not(:disabled) .ribbon-tool-icon {
+            color: #1de9b6 !important;
           }
           body:has([data-studio-properties="studio"]) .ribbon-tool-label {
             font-size: 10px !important;
-            letter-spacing: 0.2px !important;
-            opacity: 0.85 !important;
+            letter-spacing: 0.3px !important;
+            color: #c5cdd6 !important;
+            opacity: 1 !important;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
             max-width: 64px;
+            margin-top: 1px !important;
+          }
+          body:has([data-studio-properties="studio"]) .ribbon-tool:hover:not(:disabled) .ribbon-tool-label {
+            color: #e6edf3 !important;
           }
 
-          /* Workbench top header — apply Studio teal accent to the active
-             workbench wordmark. */
+          /* Slice 349 — Workbench top header wordmark uses Studio teal. */
           body:has([data-studio-properties="studio"]) .workbench-current .workbench-name {
-            color: #e6e6e6;
+            color: #e6edf3;
           }
 
           /* Left viewport tool strip — recolour Mech's pink/red accents
