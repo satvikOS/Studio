@@ -20,6 +20,12 @@ import { spawnPrimitive } from './spawn';
 // Mounted behind ?v3=1 / localStorage.studioV3 — V2 stays default during
 // the rollout so the 50+ e2e specs targeting V2 attrs keep passing.
 
+function isTypingTarget(el) {
+  if (!el) return false;
+  const tag = (el.tagName || '').toUpperCase();
+  return tag === 'INPUT' || tag === 'TEXTAREA' || el.isContentEditable;
+}
+
 const STORE = 'studio.v3';
 const lstor = {
   get: (k, d) => {
@@ -310,7 +316,7 @@ function ViewportHUD({ editMode, setEditMode, axis, setAxis }) {
 }
 
 // ─── RightPanel (Inspector / Outliner / Layers) ──────────────────────────
-function RightPanel({ collapsed, onToggle, activeWb, editMode }) {
+function RightPanel({ collapsed, onToggle, activeWb, editMode, selection }) {
   const [tab, setTab] = useState('inspector');
   if (collapsed) {
     return (
@@ -357,8 +363,23 @@ function RightPanel({ collapsed, onToggle, activeWb, editMode }) {
               <div className="studio-right-row"><span>Discipline</span><strong style={{ textTransform: 'capitalize' }}>{activeWb}</strong></div>
               <div className="studio-right-row"><span>Mode</span><strong style={{ textTransform: 'capitalize' }}>{editMode}</strong></div>
             </div>
+            {selection && (
+              <div className="studio-right-section" data-studio-v3-inspector-selection>
+                <div className="studio-right-section-title">Selected · {selection.type || 'object'}</div>
+                {selection.name && (
+                  <div className="studio-right-row"><span>Name</span><strong>{selection.name}</strong></div>
+                )}
+                {selection.position && (
+                  <>
+                    <div className="studio-right-row"><span>X</span><strong style={{ fontFamily: 'var(--studio-mono)' }}>{selection.position.x}</strong></div>
+                    <div className="studio-right-row"><span>Y</span><strong style={{ fontFamily: 'var(--studio-mono)' }}>{selection.position.y}</strong></div>
+                    <div className="studio-right-row"><span>Z</span><strong style={{ fontFamily: 'var(--studio-mono)' }}>{selection.position.z}</strong></div>
+                  </>
+                )}
+              </div>
+            )}
             <div className="studio-right-section">
-              <div className="studio-right-section-title">Selection</div>
+              <div className="studio-right-section-title">Edit selection</div>
               <SelectionRows />
             </div>
           </>
@@ -568,6 +589,9 @@ export function StudioShellV3({ mode = 'dark' }) {
   const [activeTool, setActiveTool] = useState('select');
   const [editMode, setEditMode] = useState('object');
   const [axis, setAxis] = useState('persp');
+  // Slice 396 — selected-object summary surfaced from Viewport3D so the
+  // status bar + inspector can read it without owning the raycaster.
+  const [selection, setSelection] = useState(null);
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const [dockOpen, setDockOpen] = useState(false);
   const [thread, setThread] = useState([]);
@@ -589,7 +613,8 @@ export function StudioShellV3({ mode = 'dark' }) {
     }
   }, [editMode]);
 
-  // Cmd+T cycle theme; Cmd+/ toggle dock; Esc clears active tool.
+  // Cmd+T cycle theme; Cmd+/ toggle dock; Esc clears active tool;
+  // X deletes the selected mesh (Blender X / Maya Backspace parity).
   useEffect(() => {
     const onKey = (e) => {
       const meta = e.metaKey || e.ctrlKey;
@@ -601,11 +626,36 @@ export function StudioShellV3({ mode = 'dark' }) {
         setDockOpen((v) => !v);
       } else if (!meta && e.key === 'Escape') {
         setActiveTool('select');
+      } else if (!meta && e.key.toLowerCase() === 'x' && !isTypingTarget(e.target)) {
+        const vp = window.__archdiscViewport;
+        const sel = vp && vp.getSelected && vp.getSelected();
+        if (sel && vp.scene) {
+          if (vp.transformControls && vp.transformControls.detach) vp.transformControls.detach();
+          vp.scene.remove(sel);
+          if (sel.geometry) sel.geometry.dispose();
+          if (sel.material) (Array.isArray(sel.material) ? sel.material : [sel.material]).forEach((m) => m.dispose && m.dispose());
+          setSelection(null);
+        }
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
+
+  // Slice 396 — drive the Viewport3D gizmo from the active Transform tool.
+  useEffect(() => {
+    const vp = window.__archdiscViewport;
+    if (!vp || !vp.transformControls) return;
+    if (activeTool === 'select') {
+      vp.transformControls.detach();
+    } else if (activeTool === 'move' || activeTool === 'rotate' || activeTool === 'scale') {
+      try {
+        vp.transformControls.setMode(activeTool === 'move' ? 'translate' : activeTool);
+        const sel = vp.getSelected && vp.getSelected();
+        if (sel && !vp.transformControls.object) vp.transformControls.attach(sel);
+      } catch (_) {}
+    }
+  }, [activeTool]);
 
   const onCmdSubmit = (text) => {
     setThread((t) => [...t, { role: 'user', text }, { role: 'archie', text: `(wired in a follow-up) — would run: "${text}"` }]);
@@ -660,7 +710,11 @@ export function StudioShellV3({ mode = 'dark' }) {
         }}
       />
       <main className="studio-viewport workbench-viewport studio-viewport-canvas" data-studio-v3-viewport>
-        <Viewport3D canvasId="render-canvas-studio-v3" domain="studio" />
+        <Viewport3D
+          canvasId="render-canvas-studio-v3"
+          domain="studio"
+          onSelectionChange={(s) => setSelection(s)}
+        />
         <ViewportHUD
           editMode={editMode}
           setEditMode={setEditMode}
@@ -675,6 +729,7 @@ export function StudioShellV3({ mode = 'dark' }) {
             onToggle={() => setRightCollapsed((v) => !v)}
             activeWb={activeWb}
             editMode={editMode}
+            selection={selection}
           />
       }
       <StatusBar wb={activeWb} editMode={editMode} />
