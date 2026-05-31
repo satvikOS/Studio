@@ -2067,6 +2067,27 @@ function WorkbenchStudio() {
   const [physicsG, setPhysicsG]               = useState(9.8);
   const [physicsRestitution, setPhysicsRestitution] = useState(0.55);
   const physicsRafRef = useRef(null);
+  // Slice 327 — operator toast. Mirrors window.__studioLastOp into local
+  // state with a 2.5s fade so any action (primitive spawn, ribbon click,
+  // command palette dispatch) gets a Blender-style "last operation" toast
+  // at the bottom of the viewport.
+  const [opToast, setOpToast] = useState(null);
+  useEffect(() => {
+    let last = null;
+    const iv = setInterval(() => {
+      const cur = (typeof window !== 'undefined') ? window.__studioLastOp : null;
+      if (cur && cur !== last) {
+        last = cur;
+        setOpToast({ ...cur, ts: Date.now() });
+      }
+    }, 200);
+    return () => clearInterval(iv);
+  }, []);
+  useEffect(() => {
+    if (!opToast) return undefined;
+    const t = setTimeout(() => setOpToast(null), 2500);
+    return () => clearTimeout(t);
+  }, [opToast]);
   // Slice 315 — FPS counter for the status bar. Averages over a longer
   // window (every 60 frames ≈ 1s) and only triggers a re-render when the
   // displayed value changes by ≥ 2 — otherwise the steady 60fps stream
@@ -13000,6 +13021,24 @@ function WorkbenchStudio() {
             );
           })}
         </div>
+        {/* Slice 327 — operator toast above the status bar. */}
+        {opToast && (
+          <div
+            data-studio-op-toast
+            data-studio-op-toast-kind={opToast.kind}
+            data-studio-op-toast-id={opToast.id}
+            style={{
+              position: 'absolute', bottom: '32px', left: '50%',
+              transform: 'translateX(-50%)', zIndex: 25,
+              background: 'rgba(50,140,220,0.92)', color: '#fff',
+              padding: '4px 12px', borderRadius: '14px',
+              fontSize: '11px', fontFamily: 'inherit',
+              pointerEvents: 'none', boxShadow: '0 2px 12px rgba(0,0,0,0.4)',
+            }}
+          >
+            {opToast.kind}: <strong>{opToast.id}</strong>
+          </div>
+        )}
         {/* Slice 315: Blender bottom status bar — selected mesh stats +
             scene totals + FPS. Pinned to viewport footer, pointer-events
             off so it never blocks clicks. */}
