@@ -13830,6 +13830,19 @@ function WorkbenchStudio() {
           <span style={{ opacity: 0.35 }}>║</span>
           <span data-studio-status-bodies>Scene: {primitiveCount} bodies</span>
           <span data-studio-status-scene-tris>Scene T: {faceCount.toLocaleString()}</span>
+          {/* Slice 372 — current tool indicator. */}
+          {(() => {
+            void outlinerTick;
+            const t = (typeof window !== 'undefined' ? window.__studioActiveTool : 'select') || 'select';
+            return (
+              <>
+                <span style={{ opacity: 0.35 }}>│</span>
+                <span data-studio-status-tool data-studio-status-tool-id={t} style={{ color: '#1de9b6' }}>
+                  Tool: {t}
+                </span>
+              </>
+            );
+          })()}
           {/* Slice 334 (UIUX v2) — last-op text replaces the slice-327 floating toast. */}
           {opToast && (
             <>
