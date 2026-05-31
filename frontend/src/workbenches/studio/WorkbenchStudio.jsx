@@ -10,6 +10,7 @@ import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { USDZLoader } from 'three/examples/jsm/loaders/USDZLoader.js';
 import { VertexNormalsHelper } from 'three/examples/jsm/helpers/VertexNormalsHelper.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { SUZANNE_POSITIONS, SUZANNE_INDICES } from './SuzanneGeometry.js';
 import { TEAPOT_POSITIONS, TEAPOT_INDICES } from './TeapotGeometry.js';
 import { COLOR_CUBE_POSITIONS, COLOR_CUBE_INDICES } from './ColorCubeGeometry.js';
@@ -779,6 +780,47 @@ function WorkbenchStudio() {
     // Scatter N copies of a source mesh (by uuid) onto a deterministic
     // distribution. Deterministic seeded RNG (mulberry32) so a given seed
     // reproduces exactly.
+    // Slice 288 — KeyShot / Cycles-style PMREM HDRI environment lighting.
+    // Generates a procedural RoomEnvironment scene, prefilters via PMREM, and
+    // assigns scene.environment so PBR materials pick up image-based bounce.
+    window.__studioSetHDRIEnvironment = (preset) => {
+      const vp = window.__archdiscViewport;
+      if (!vp || !vp.scene || !vp.renderer) return null;
+      if (!window.__studioHDRICache) window.__studioHDRICache = new Map();
+      const cache = window.__studioHDRICache;
+      if (preset === 'off') {
+        vp.scene.environment = null;
+        window.__studioHDRIPreset = 'off';
+        return { preset: 'off' };
+      }
+      if (!cache.has(preset)) {
+        const pmrem = new THREE.PMREMGenerator(vp.renderer);
+        pmrem.compileEquirectangularShader();
+        const roomScene = new RoomEnvironment();
+        const tint = preset === 'sunset' ? new THREE.Color(0xffd9a8)
+                   : preset === 'neutral' ? new THREE.Color(0xcccccc)
+                   : new THREE.Color(0xffffff);
+        roomScene.traverse((o) => {
+          if (o.isMesh && o.material && o.material.color) {
+            o.material = o.material.clone();
+            o.material.color.multiply(tint);
+          }
+        });
+        const target = pmrem.fromScene(roomScene, 0.04);
+        roomScene.traverse((o) => {
+          if (o.isMesh) {
+            if (o.geometry && o.geometry.dispose) o.geometry.dispose();
+            if (o.material && o.material.dispose) o.material.dispose();
+          }
+        });
+        pmrem.dispose();
+        cache.set(preset, target.texture);
+      }
+      vp.scene.environment = cache.get(preset);
+      window.__studioHDRIPreset = preset;
+      return { preset, uuid: cache.get(preset).uuid };
+    };
+    window.__studioListHDRIPresets = () => ['studio', 'sunset', 'neutral', 'off'];
     window.__studioMashDistribute = (opts) => {
       const scene = window.__archdiscScene;
       if (!scene) return null;
@@ -968,7 +1010,7 @@ function WorkbenchStudio() {
     window.__studioReadNormalTexel = (uv) => { const m = selectedMeshRef.current; const nc = m && m.userData && m.userData._normalCanvas; if (!nc) return null; const d = nc.getContext('2d').getImageData(Math.floor(uv[0] * 512), Math.floor((1 - uv[1]) * 512), 1, 1).data; return [d[0], d[1], d[2]]; };
     window.__studioPolyPaintAt = (pt, color, radius) => { const m = selectedMeshRef.current; if (!m) return null; return paintPolyAt(m, new THREE.Vector3(pt[0], pt[1], pt[2]), color || brushPaintColor, radius || 0.012); };
     window.__studioReadVertexColor = (i) => { const m = selectedMeshRef.current; const col = m && m.geometry && m.geometry.attributes.color; if (!col) return null; return [Math.round(col.getX(i) * 255), Math.round(col.getY(i) * 255), Math.round(col.getZ(i) * 255)]; };
-    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioEvalNiagara; delete window.__studioNiagaraStep; delete window.__studioBTTick; delete window.__studioStreamAround; delete window.__studioRevealAll; delete window.__studioAddAudioSource; delete window.__studioSetListener; delete window.__studioAudioState; delete window.__studioXRSupport; delete window.__studioEnterXR; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAnimBPSet; delete window.__studioAnimBPStep; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioTrimmedSurface; delete window.__studioAddNurbsCurve; delete window.__studioBRepBoolean; delete window.__studioSetReference; delete window.__studioClearReference; delete window.__studioReferenceState; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioFieldQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; delete window.__studioRunVexExpr; delete window.__studioPushFace; delete window.__studioBakeAOToTexture; delete window.__studioSculptLayerAdd; delete window.__studioSculptLayerList; delete window.__studioSculptLayerToggle; delete window.__studioSculptLayerStrength; delete window.__studioSculptLayerRemove; delete window.__studioMashDistribute; };
+    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioEvalNiagara; delete window.__studioNiagaraStep; delete window.__studioBTTick; delete window.__studioStreamAround; delete window.__studioRevealAll; delete window.__studioAddAudioSource; delete window.__studioSetListener; delete window.__studioAudioState; delete window.__studioXRSupport; delete window.__studioEnterXR; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAnimBPSet; delete window.__studioAnimBPStep; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioTrimmedSurface; delete window.__studioAddNurbsCurve; delete window.__studioBRepBoolean; delete window.__studioSetReference; delete window.__studioClearReference; delete window.__studioReferenceState; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioFieldQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; delete window.__studioRunVexExpr; delete window.__studioPushFace; delete window.__studioBakeAOToTexture; delete window.__studioSculptLayerAdd; delete window.__studioSculptLayerList; delete window.__studioSculptLayerToggle; delete window.__studioSculptLayerStrength; delete window.__studioSculptLayerRemove; delete window.__studioMashDistribute; delete window.__studioSetHDRIEnvironment; delete window.__studioListHDRIPresets; };
   });
   // Auto-frame on primitive count change so the camera always shows
   // the current scene without the user having to hit Home.
