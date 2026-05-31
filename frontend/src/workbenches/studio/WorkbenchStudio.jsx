@@ -11,6 +11,7 @@ import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { USDZLoader } from 'three/examples/jsm/loaders/USDZLoader.js';
 import { VertexNormalsHelper } from 'three/examples/jsm/helpers/VertexNormalsHelper.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { MarchingCubes } from 'three/examples/jsm/objects/MarchingCubes.js';
 import { SUZANNE_POSITIONS, SUZANNE_INDICES } from './SuzanneGeometry.js';
 import { TEAPOT_POSITIONS, TEAPOT_INDICES } from './TeapotGeometry.js';
 import { COLOR_CUBE_POSITIONS, COLOR_CUBE_INDICES } from './ColorCubeGeometry.js';
@@ -1509,6 +1510,56 @@ function WorkbenchStudio() {
     // rasterises a mesh into a resolution³ occupancy grid by barycentric
     // oversampling. Returns the grid + voxel count + bbox so callers can
     // feed marching cubes (deferred to a followup slice).
+    // Slice 306 — Cinema 4D Volume Mesher: marching-cubes extraction from a
+    // voxel occupancy grid (slice 299 output) into a fresh BufferGeometry,
+    // then add a Mesh to the scene. The result reads as a smooth blob —
+    // exactly Cinema 4D's "Volume Builder → Volume Mesher" pair.
+    window.__studioMarchVoxelGrid = (opts) => {
+      const scene = window.__archdiscScene; if (!scene) return { ok: false, error: 'no scene' };
+      const { grid, resolution, bbox } = (opts || {});
+      if (!grid || !resolution || !bbox) return { ok: false, error: 'grid/resolution/bbox required' };
+      const res = resolution | 0;
+      const mat = new THREE.MeshStandardMaterial({ color: 0x8a8f98, metalness: 0.15, roughness: 0.6 });
+      const mc = new MarchingCubes(res, mat, false, false, 60000);
+      mc.init(res); mc.isolation = 0.5;
+      for (let k = 0; k < res; k++) {
+        for (let j = 0; j < res; j++) {
+          for (let i = 0; i < res; i++) {
+            if (grid[(k * res + j) * res + i]) mc.setCell(i, j, k, 1.0);
+          }
+        }
+      }
+      try { mc.blur(1); } catch (_) {}
+      mc.update();
+      const vCount = mc.count;
+      if (!vCount) return { ok: false, error: 'no surface extracted' };
+      const minX = bbox.min[0], minY = bbox.min[1], minZ = bbox.min[2];
+      const sx = bbox.max[0] - bbox.min[0], sy = bbox.max[1] - bbox.min[1], sz = bbox.max[2] - bbox.min[2];
+      const posArr = new Float32Array(vCount * 3);
+      const nrmArr = new Float32Array(vCount * 3);
+      for (let n = 0; n < vCount * 3; n += 3) {
+        // MarchingCubes lives in [-1, 1]; remap to bbox world coords.
+        posArr[n]     = minX + (mc.positionArray[n]     + 1) * 0.5 * sx;
+        posArr[n + 1] = minY + (mc.positionArray[n + 1] + 1) * 0.5 * sy;
+        posArr[n + 2] = minZ + (mc.positionArray[n + 2] + 1) * 0.5 * sz;
+        nrmArr[n]     = mc.normalArray[n];
+        nrmArr[n + 1] = mc.normalArray[n + 1];
+        nrmArr[n + 2] = mc.normalArray[n + 2];
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
+      geo.setAttribute('normal',   new THREE.BufferAttribute(nrmArr, 3));
+      geo.computeBoundingSphere(); geo.computeBoundingBox();
+      const outMesh = new THREE.Mesh(geo, mat);
+      outMesh.userData.archdiscStudioPrimitive = true;
+      outMesh.userData.archdiscStudioPrimitiveKind = 'voxel-march';
+      outMesh.userData.archdiscStudioVoxelMarched = { resolution: res, vertices: vCount };
+      outMesh.name = `studio-primitive-voxelmarch`;
+      scene.add(outMesh);
+      if (primitiveStackRef.current) primitiveStackRef.current.push(outMesh);
+      setPrimitiveCount((c) => c + 1);
+      return { ok: true, uuid: outMesh.uuid, vertices: vCount, resolution: res };
+    };
     window.__studioVoxelizeMesh = (opts) => {
       const scene = window.__archdiscScene;
       if (!scene) return { ok: false, error: 'no scene' };
@@ -1617,7 +1668,7 @@ function WorkbenchStudio() {
     window.__studioReadNormalTexel = (uv) => { const m = selectedMeshRef.current; const nc = m && m.userData && m.userData._normalCanvas; if (!nc) return null; const d = nc.getContext('2d').getImageData(Math.floor(uv[0] * 512), Math.floor((1 - uv[1]) * 512), 1, 1).data; return [d[0], d[1], d[2]]; };
     window.__studioPolyPaintAt = (pt, color, radius) => { const m = selectedMeshRef.current; if (!m) return null; return paintPolyAt(m, new THREE.Vector3(pt[0], pt[1], pt[2]), color || brushPaintColor, radius || 0.012); };
     window.__studioReadVertexColor = (i) => { const m = selectedMeshRef.current; const col = m && m.geometry && m.geometry.attributes.color; if (!col) return null; return [Math.round(col.getX(i) * 255), Math.round(col.getY(i) * 255), Math.round(col.getZ(i) * 255)]; };
-    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioEvalNiagara; delete window.__studioNiagaraStep; delete window.__studioBTTick; delete window.__studioStreamAround; delete window.__studioRevealAll; delete window.__studioAddAudioSource; delete window.__studioSetListener; delete window.__studioAudioState; delete window.__studioXRSupport; delete window.__studioEnterXR; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAnimBPSet; delete window.__studioAnimBPStep; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioTrimmedSurface; delete window.__studioAddNurbsCurve; delete window.__studioBRepBoolean; delete window.__studioSetReference; delete window.__studioClearReference; delete window.__studioReferenceState; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioFieldQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; delete window.__studioRunVexExpr; delete window.__studioPushFace; delete window.__studioBakeAOToTexture; delete window.__studioSculptLayerAdd; delete window.__studioSculptLayerList; delete window.__studioSculptLayerToggle; delete window.__studioSculptLayerStrength; delete window.__studioSculptLayerRemove; delete window.__studioMashDistribute; delete window.__studioSetHDRIEnvironment; delete window.__studioListHDRIPresets; delete window.__studioSolveIK2; delete window.__studioRunTaskGraph; delete window.__studioParticleEmitter; delete window.__studioFilletEdges; delete window.__studioProceduralTexture; delete window.__studioProjectPaintFromCamera; delete window.__studioFindSnapTarget; delete window.__studioRunGrasshopper; delete window.__studioVoxelizeMesh; delete window.__studioPhysicsAddConstraint; delete window.__studioPhysicsListConstraints; delete window.__studioPhysicsRemoveConstraint; delete window.__studioPhysicsClearConstraints; delete window.__studioListEdges; delete window.__studioPickEdge; delete window.__studioClearEdgeSelection; delete window.__studioMoSpline; delete window.__studioWeightPaintAt; delete window.__studioReadWeight; delete window.__studioTerrainAdd; delete window.__studioTerrainSculpt; };
+    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioEvalNiagara; delete window.__studioNiagaraStep; delete window.__studioBTTick; delete window.__studioStreamAround; delete window.__studioRevealAll; delete window.__studioAddAudioSource; delete window.__studioSetListener; delete window.__studioAudioState; delete window.__studioXRSupport; delete window.__studioEnterXR; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAnimBPSet; delete window.__studioAnimBPStep; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioTrimmedSurface; delete window.__studioAddNurbsCurve; delete window.__studioBRepBoolean; delete window.__studioSetReference; delete window.__studioClearReference; delete window.__studioReferenceState; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioFieldQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; delete window.__studioRunVexExpr; delete window.__studioPushFace; delete window.__studioBakeAOToTexture; delete window.__studioSculptLayerAdd; delete window.__studioSculptLayerList; delete window.__studioSculptLayerToggle; delete window.__studioSculptLayerStrength; delete window.__studioSculptLayerRemove; delete window.__studioMashDistribute; delete window.__studioSetHDRIEnvironment; delete window.__studioListHDRIPresets; delete window.__studioSolveIK2; delete window.__studioRunTaskGraph; delete window.__studioParticleEmitter; delete window.__studioFilletEdges; delete window.__studioProceduralTexture; delete window.__studioProjectPaintFromCamera; delete window.__studioFindSnapTarget; delete window.__studioRunGrasshopper; delete window.__studioVoxelizeMesh; delete window.__studioPhysicsAddConstraint; delete window.__studioPhysicsListConstraints; delete window.__studioPhysicsRemoveConstraint; delete window.__studioPhysicsClearConstraints; delete window.__studioListEdges; delete window.__studioPickEdge; delete window.__studioClearEdgeSelection; delete window.__studioMoSpline; delete window.__studioWeightPaintAt; delete window.__studioReadWeight; delete window.__studioTerrainAdd; delete window.__studioTerrainSculpt; delete window.__studioMarchVoxelGrid; };
   });
   // Auto-frame on primitive count change so the camera always shows
   // the current scene without the user having to hit Home.
