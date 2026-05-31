@@ -250,6 +250,11 @@ export const PROVIDERS = {
   // The caller passes `discipline` and we map it to the adapter dir
   // (e.g. modeling -> adapters/archie/studio/modeling). Falls back to
   // the bare base model if no discipline is supplied.
+  //
+  // Runtime extractor: R1-distill emits <plan>{...}</plan> inside its
+  // <think> block instead of after it. After receiving the response we
+  // unwrap any <think>...</think> outer envelope and synthesize
+  // tool_calls from the plan if the model didn't emit them itself.
   archie: {
     label: 'Archie (local fleet, MLX)',
     defaultModel: 'archie-7b-base',
@@ -262,6 +267,109 @@ export const PROVIDERS = {
     adapterFor(discipline) {
       if (!discipline) return null;
       return `adapters/archie/studio/${discipline}`;
+    },
+    /**
+     * Unwrap an R1-distill response. Strips <think>...</think> if the
+     * thought block contains the entire plan + tool_calls; otherwise
+     * returns the text as-is.
+     */
+    _unwrapThink(text) {
+      if (!text || typeof text !== 'string') return text;
+      // If there is a closed </think>, everything after it is the real answer.
+      const closeIdx = text.search(/<\/think>/i);
+      if (closeIdx >= 0) {
+        const after = text.slice(closeIdx).replace(/^<\/think>\s*/i, '');
+        if (after && (/(<plan>|<tool_call>|<clarify>)/i).test(after)) {
+          return after;
+        }
+      }
+      // If there is an OPEN <think> but no close, strip the opener so any
+      // <plan> / <tool_call> blocks inside are visible to the parser.
+      const openIdx = text.search(/<think>/i);
+      if (openIdx >= 0) {
+        return text.replace(/<think>/gi, '').replace(/<\/think>/gi, '');
+      }
+      return text;
+    },
+    /**
+     * Salvage a plan + tool_calls from a partial Archie response so the
+     * caller always gets something dispatchable when the model emitted at
+     * least a plan. Returns {raw, unwrapped, plan, toolCalls, source}.
+     * source ∈ "literal" | "synthesized" | "raw".
+     */
+    extractDispatchable(raw, discipline) {
+      const unwrapped = this._unwrapThink(raw);
+      let plan = null;
+      const planMatch = unwrapped.match(/<plan>([\s\S]*?)<\/plan>/i);
+      if (planMatch) {
+        try { plan = JSON.parse(planMatch[1].trim()); } catch {}
+      }
+      if (!plan) {
+        const jStart = unwrapped.indexOf('{"goal"');
+        if (jStart >= 0) {
+          let depth = 0;
+          for (let i = jStart; i < unwrapped.length; i++) {
+            if (unwrapped[i] === '{') depth++;
+            else if (unwrapped[i] === '}') {
+              depth--;
+              if (depth === 0) {
+                try { plan = JSON.parse(unwrapped.slice(jStart, i + 1)); } catch {}
+                break;
+              }
+            }
+          }
+        }
+      }
+      const literal = [];
+      for (const m of unwrapped.matchAll(/<tool_call>([\s\S]*?)<\/tool_call>/gi)) {
+        try {
+          const o = JSON.parse(m[1].trim());
+          if (o && o.name) literal.push(o);
+        } catch {}
+      }
+      if (literal.length) return { raw, unwrapped, plan, toolCalls: literal, source: 'literal' };
+      if (plan) {
+        const synth = this._synthFromPlan(plan, discipline);
+        return { raw, unwrapped, plan, toolCalls: synth, source: synth.length ? 'synthesized' : 'raw' };
+      }
+      return { raw, unwrapped, plan: null, toolCalls: [], source: 'raw' };
+    },
+    _synthFromPlan(plan, discipline) {
+      const calls = [];
+      const disc = plan?.scene?.discipline || discipline || 'modeling';
+      calls.push({ name: 'click-discipline', arguments: { id: disc } });
+      const bodies = Array.isArray(plan?.bodies) ? plan.bodies : [];
+      for (const body of bodies) {
+        const prim = body.prim || body.primitive;
+        if (!prim) continue;
+        calls.push({ name: 'click-primitive', arguments: { id: prim } });
+        const t = body.transform;
+        if (Array.isArray(t?.scale)) {
+          const [sx, sy, sz] = t.scale;
+          if (sx > 0) calls.push({ name: 'set-selection', arguments: { axis: 'scale-x', value: sx } });
+          if (sy > 0) calls.push({ name: 'set-selection', arguments: { axis: 'scale-y', value: sy } });
+          if (sz > 0) calls.push({ name: 'set-selection', arguments: { axis: 'scale-z', value: sz } });
+        }
+        if (Array.isArray(body.ops)) {
+          for (const op of body.ops) calls.push({ name: 'click-action', arguments: { id: op } });
+        }
+        const count = body.count || body.instances?.count || (typeof body.instances === 'number' ? body.instances : null);
+        if (typeof count === 'number' && count > 1) {
+          calls.push({ name: 'set-param', arguments: { group: 'array', knob: 'count', value: count } });
+          calls.push({ name: 'click-action', arguments: { id: body.instances?.kind || 'apply-array' } });
+        }
+        const m = body.material || {};
+        if (typeof m.color === 'string') calls.push({ name: 'set-param', arguments: { group: 'material', knob: 'color', value: m.color } });
+        if (typeof m.metalness === 'number' && m.metalness >= 0 && m.metalness <= 1) calls.push({ name: 'set-param', arguments: { group: 'material', knob: 'metalness', value: m.metalness } });
+        if (typeof m.roughness === 'number' && m.roughness >= 0 && m.roughness <= 1) calls.push({ name: 'set-param', arguments: { group: 'material', knob: 'roughness', value: m.roughness } });
+      }
+      if (plan?.material && bodies.every(b => !b.material)) {
+        const m = plan.material;
+        if (typeof m.color === 'string') calls.push({ name: 'set-param', arguments: { group: 'material', knob: 'color', value: m.color } });
+        if (typeof m.metalness === 'number' && m.metalness >= 0 && m.metalness <= 1) calls.push({ name: 'set-param', arguments: { group: 'material', knob: 'metalness', value: m.metalness } });
+        if (typeof m.roughness === 'number' && m.roughness >= 0 && m.roughness <= 1) calls.push({ name: 'set-param', arguments: { group: 'material', knob: 'roughness', value: m.roughness } });
+      }
+      return calls;
     },
     async generate({ model, baseUrl, system, userMessage, discipline, adapters }) {
       const url = `${(baseUrl ?? 'http://localhost:8080').replace(/\/+$/, '')}/v1/chat/completions`;
@@ -285,7 +393,8 @@ export const PROVIDERS = {
         throw new Error(`Archie ${res.status}: ${text.slice(0, 300)}`);
       }
       const json = await res.json();
-      return json.choices?.[0]?.message?.content ?? '';
+      const raw = json.choices?.[0]?.message?.content ?? '';
+      return this._unwrapThink(raw);
     },
     async generateStream({ model, baseUrl, system, userMessage, discipline, adapters, onToken }) {
       const url = `${(baseUrl ?? 'http://localhost:8080').replace(/\/+$/, '')}/v1/chat/completions`;
@@ -309,7 +418,8 @@ export const PROVIDERS = {
         const t = await res.text().catch(() => '');
         throw new Error(`Archie ${res.status}: ${t.slice(0, 300)}`);
       }
-      return readSSE(res, (j) => j?.choices?.[0]?.delta?.content ?? '', onToken);
+      const full = await readSSE(res, (j) => j?.choices?.[0]?.delta?.content ?? '', onToken);
+      return this._unwrapThink(full);
     },
   },
 
