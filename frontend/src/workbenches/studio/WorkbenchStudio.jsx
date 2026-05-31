@@ -10790,6 +10790,9 @@ function WorkbenchStudio() {
                     <button type="button" className="ribbon-tool" data-studio-ribbon-action="bevel" onClick={() => bevelModifier(0.3)} disabled={!selectedKind} title="Blender MOD_bevel — round corners">
                       <span className="ribbon-tool-icon">◐</span><span className="ribbon-tool-label">Bevel</span>
                     </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="fillet" onClick={() => filletEdges({ radius: 0.05, threshold: Math.PI / 6 })} disabled={!selectedKind} title="Plasticity/MoI fillet — round all sharp edges (dihedral > π/6)">
+                      <span className="ribbon-tool-icon">⌒</span><span className="ribbon-tool-label">Fillet</span>
+                    </button>
                     <button type="button" className="ribbon-tool" data-studio-ribbon-action="corrective-smooth" onClick={() => correctiveSmooth(0.4)} disabled={!selectedKind} title="Blender MOD_correctivesmooth — volume-preserving smooth">
                       <span className="ribbon-tool-icon">≋</span><span className="ribbon-tool-label">Corr·Smth</span>
                     </button>
