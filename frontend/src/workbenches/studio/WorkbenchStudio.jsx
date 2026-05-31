@@ -409,7 +409,13 @@ function HeaderMenuStrip({ addPrimitive, selectedKind }) {
   );
 }
 
-function WorkbenchStudio() {
+// Slice 393 — V3 shell mount. When the URL has ?v3=1 (or localStorage
+// studioV3=1), render the new shell instead of the V2 monolith. This
+// keeps the 50+ e2e specs that target data-studio-* attrs working while
+// V3 stabilises; later slices migrate V2 chunks into V3 then delete V2.
+import { StudioShellV3 } from './v3/StudioShellV3';
+
+function WorkbenchStudioV2() {
   const [activeTab, setActiveTab] = useState('modeling');
   // Blender workspace strip — see BLENDER_WORKSPACES. Selecting a workspace
   // activates the discipline its layout is built around (the mapping mirrors
@@ -19547,6 +19553,26 @@ function WorkbenchStudio() {
       />
     </>
   );
+}
+
+// Router — checks the V3 flag once and dispatches to either shell. Keeps
+// hooks rules intact (no early return inside a hook-using component).
+function WorkbenchStudio() {
+  const [v3Enabled] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      return new URLSearchParams(window.location.search).get('v3') === '1'
+        || window.localStorage.getItem('studioV3') === '1';
+    } catch (_) { return false; }
+  });
+  if (v3Enabled) {
+    const mode = (() => {
+      try { return window.localStorage.getItem('studioV3Theme') === 'light' ? 'light' : 'dark'; }
+      catch (_) { return 'dark'; }
+    })();
+    return <StudioShellV3 mode={mode} />;
+  }
+  return <WorkbenchStudioV2 />;
 }
 
 export default WorkbenchStudio;
