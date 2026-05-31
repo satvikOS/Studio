@@ -1008,6 +1008,72 @@ function WorkbenchStudio() {
     window.__studioApplyMaterialGraph = (graph) => applyMaterialGraph(graph);
     // Blueprint/visual-scripting: run an exec-flow graph against the scene.
     window.__studioRunBlueprint = (graph) => runBlueprintInScene(graph);
+    // Slice 292 — Unreal Niagara / Cascade-style continuous particle emitter.
+    // Fixed-size ring buffer; rAF-driven tick spawns rate*dt new particles per
+    // frame, ages all alive ones, integrates gravity+velocity. Returns a
+    // handle with stop/pause/state so the caller (and tests) can drive it.
+    window.__studioParticleEmitter = (opts) => {
+      const scene = window.__archdiscScene;
+      if (!scene) return null;
+      const { position = [0, 0, 0], rate = 100, lifetime = 1.0,
+              gravity = [0, -1, 0], initialVelocity = [0, 1, 0] } = (opts || {});
+      const MAX = 5000;
+      const positions = new Float32Array(MAX * 3);
+      const velocities = new Float32Array(MAX * 3);
+      const ages = new Float32Array(MAX);
+      const alive = new Uint8Array(MAX);
+      for (let i = 0; i < MAX; i++) ages[i] = -1;
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      const points = new THREE.Points(geo, new THREE.PointsMaterial({ size: 0.02, color: 0xffffff, sizeAttenuation: true, transparent: true, opacity: 0.9 }));
+      points.userData.archdiscStudioParticleEmitter = true;
+      scene.add(points);
+      let spawnPtr = 0, accum = 0, last = performance.now(), rafId = null, paused = false, stopped = false;
+      const px0 = position[0], py0 = position[1], pz0 = position[2];
+      const vx0 = initialVelocity[0], vy0 = initialVelocity[1], vz0 = initialVelocity[2];
+      const gx = gravity[0], gy = gravity[1], gz = gravity[2];
+      function jit() { return (Math.random() - 0.5) * 0.4; }
+      function tick(now) {
+        if (stopped) return;
+        const dt = Math.min(0.05, (now - last) / 1000);
+        last = now;
+        if (!paused) {
+          accum += rate * dt;
+          const toSpawn = Math.floor(accum);
+          accum -= toSpawn;
+          for (let n = 0; n < toSpawn; n++) {
+            const i = spawnPtr; spawnPtr = (spawnPtr + 1) % MAX;
+            positions[i * 3] = px0; positions[i * 3 + 1] = py0; positions[i * 3 + 2] = pz0;
+            velocities[i * 3] = vx0 + jit(); velocities[i * 3 + 1] = vy0 + jit(); velocities[i * 3 + 2] = vz0 + jit();
+            ages[i] = 0; alive[i] = 1;
+          }
+          for (let i = 0; i < MAX; i++) {
+            if (!alive[i]) continue;
+            ages[i] += dt;
+            if (ages[i] > lifetime) { alive[i] = 0; positions[i * 3 + 1] = 1e6; continue; }
+            velocities[i * 3] += gx * dt; velocities[i * 3 + 1] += gy * dt; velocities[i * 3 + 2] += gz * dt;
+            positions[i * 3] += velocities[i * 3] * dt;
+            positions[i * 3 + 1] += velocities[i * 3 + 1] * dt;
+            positions[i * 3 + 2] += velocities[i * 3 + 2] * dt;
+          }
+          geo.attributes.position.needsUpdate = true;
+        }
+        rafId = requestAnimationFrame(tick);
+      }
+      rafId = requestAnimationFrame(tick);
+      return {
+        points,
+        stop() {
+          stopped = true;
+          if (rafId != null) cancelAnimationFrame(rafId);
+          rafId = null;
+          scene.remove(points);
+          if (geo && geo.dispose) geo.dispose();
+        },
+        pause() { paused = !paused; return paused; },
+        state() { let c = 0; for (let i = 0; i < MAX; i++) c += alive[i]; return { alive: c, paused, stopped }; },
+      };
+    };
     // Slice 290 — Houdini PDG/TOPs task-graph runner. Each task is one of
     // {wait, spawn, bakeAOToTexture, screenshot}. Dependencies form a DAG;
     // independent tasks at the same level run via Promise.all. On dep error
@@ -1117,7 +1183,7 @@ function WorkbenchStudio() {
     window.__studioReadNormalTexel = (uv) => { const m = selectedMeshRef.current; const nc = m && m.userData && m.userData._normalCanvas; if (!nc) return null; const d = nc.getContext('2d').getImageData(Math.floor(uv[0] * 512), Math.floor((1 - uv[1]) * 512), 1, 1).data; return [d[0], d[1], d[2]]; };
     window.__studioPolyPaintAt = (pt, color, radius) => { const m = selectedMeshRef.current; if (!m) return null; return paintPolyAt(m, new THREE.Vector3(pt[0], pt[1], pt[2]), color || brushPaintColor, radius || 0.012); };
     window.__studioReadVertexColor = (i) => { const m = selectedMeshRef.current; const col = m && m.geometry && m.geometry.attributes.color; if (!col) return null; return [Math.round(col.getX(i) * 255), Math.round(col.getY(i) * 255), Math.round(col.getZ(i) * 255)]; };
-    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioEvalNiagara; delete window.__studioNiagaraStep; delete window.__studioBTTick; delete window.__studioStreamAround; delete window.__studioRevealAll; delete window.__studioAddAudioSource; delete window.__studioSetListener; delete window.__studioAudioState; delete window.__studioXRSupport; delete window.__studioEnterXR; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAnimBPSet; delete window.__studioAnimBPStep; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioTrimmedSurface; delete window.__studioAddNurbsCurve; delete window.__studioBRepBoolean; delete window.__studioSetReference; delete window.__studioClearReference; delete window.__studioReferenceState; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioFieldQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; delete window.__studioRunVexExpr; delete window.__studioPushFace; delete window.__studioBakeAOToTexture; delete window.__studioSculptLayerAdd; delete window.__studioSculptLayerList; delete window.__studioSculptLayerToggle; delete window.__studioSculptLayerStrength; delete window.__studioSculptLayerRemove; delete window.__studioMashDistribute; delete window.__studioSetHDRIEnvironment; delete window.__studioListHDRIPresets; delete window.__studioSolveIK2; delete window.__studioRunTaskGraph; };
+    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioEvalNiagara; delete window.__studioNiagaraStep; delete window.__studioBTTick; delete window.__studioStreamAround; delete window.__studioRevealAll; delete window.__studioAddAudioSource; delete window.__studioSetListener; delete window.__studioAudioState; delete window.__studioXRSupport; delete window.__studioEnterXR; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAnimBPSet; delete window.__studioAnimBPStep; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioTrimmedSurface; delete window.__studioAddNurbsCurve; delete window.__studioBRepBoolean; delete window.__studioSetReference; delete window.__studioClearReference; delete window.__studioReferenceState; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioFieldQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; delete window.__studioRunVexExpr; delete window.__studioPushFace; delete window.__studioBakeAOToTexture; delete window.__studioSculptLayerAdd; delete window.__studioSculptLayerList; delete window.__studioSculptLayerToggle; delete window.__studioSculptLayerStrength; delete window.__studioSculptLayerRemove; delete window.__studioMashDistribute; delete window.__studioSetHDRIEnvironment; delete window.__studioListHDRIPresets; delete window.__studioSolveIK2; delete window.__studioRunTaskGraph; delete window.__studioParticleEmitter; };
   });
   // Auto-frame on primitive count change so the camera always shows
   // the current scene without the user having to hit Home.
