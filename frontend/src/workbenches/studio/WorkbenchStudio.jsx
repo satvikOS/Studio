@@ -878,6 +878,7 @@ function WorkbenchStudio() {
     window.__studioTrimmedSurface = (opts) => addTrimmedSurface(opts);
     window.__studioAddNurbsCurve = (opts) => addNurbsCurve(opts);
     window.__studioBRepBoolean = (opts) => brepBooleanToScene(opts);
+    window.__studioPushFace = (uuid, faceIdx, dist) => pushFace(uuid, faceIdx, dist);
     // Reference overlay: pin a reference video/image in the viewport top-left.
     window.__studioSetReference = (url, opts) => { setReferenceUrl(url); setReferenceVisible((opts && opts.visible !== undefined) ? opts.visible : true); return { url, visible: true }; };
     window.__studioClearReference = () => { setReferenceUrl(null); return { cleared: true }; };
@@ -898,7 +899,7 @@ function WorkbenchStudio() {
     window.__studioReadNormalTexel = (uv) => { const m = selectedMeshRef.current; const nc = m && m.userData && m.userData._normalCanvas; if (!nc) return null; const d = nc.getContext('2d').getImageData(Math.floor(uv[0] * 512), Math.floor((1 - uv[1]) * 512), 1, 1).data; return [d[0], d[1], d[2]]; };
     window.__studioPolyPaintAt = (pt, color, radius) => { const m = selectedMeshRef.current; if (!m) return null; return paintPolyAt(m, new THREE.Vector3(pt[0], pt[1], pt[2]), color || brushPaintColor, radius || 0.012); };
     window.__studioReadVertexColor = (i) => { const m = selectedMeshRef.current; const col = m && m.geometry && m.geometry.attributes.color; if (!col) return null; return [Math.round(col.getX(i) * 255), Math.round(col.getY(i) * 255), Math.round(col.getZ(i) * 255)]; };
-    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioEvalNiagara; delete window.__studioNiagaraStep; delete window.__studioBTTick; delete window.__studioStreamAround; delete window.__studioRevealAll; delete window.__studioAddAudioSource; delete window.__studioSetListener; delete window.__studioAudioState; delete window.__studioXRSupport; delete window.__studioEnterXR; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAnimBPSet; delete window.__studioAnimBPStep; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioTrimmedSurface; delete window.__studioAddNurbsCurve; delete window.__studioBRepBoolean; delete window.__studioSetReference; delete window.__studioClearReference; delete window.__studioReferenceState; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioFieldQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; delete window.__studioRunVexExpr; };
+    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioEvalNiagara; delete window.__studioNiagaraStep; delete window.__studioBTTick; delete window.__studioStreamAround; delete window.__studioRevealAll; delete window.__studioAddAudioSource; delete window.__studioSetListener; delete window.__studioAudioState; delete window.__studioXRSupport; delete window.__studioEnterXR; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAnimBPSet; delete window.__studioAnimBPStep; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioTrimmedSurface; delete window.__studioAddNurbsCurve; delete window.__studioBRepBoolean; delete window.__studioSetReference; delete window.__studioClearReference; delete window.__studioReferenceState; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioFieldQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; delete window.__studioRunVexExpr; delete window.__studioPushFace; };
   });
   // Auto-frame on primitive count change so the camera always shows
   // the current scene without the user having to hit Home.
@@ -7482,6 +7483,48 @@ function WorkbenchStudio() {
     mesh.userData.archdiscStudioExtruded = (mesh.userData.archdiscStudioExtruded || 0) + 1;
     recomputeMeshStats(window.__archdiscScene);
     return { distance };
+  }
+
+  // Slice 283 — SketchUp Push/Pull (PushPullTool.cpp) single-face extrude.
+  // Move only the 3 verts of one triangle along its face normal by `distance`.
+  // Indexed geo: shared verts mean all adjacent triangles follow (BoxGeometry
+  // is non-indexed so only the picked face moves — same asymmetry SketchUp has
+  // between welded and unwelded meshes).
+  function pushFace(meshUuid, faceIndex, distance) {
+    const scene = window.__archdiscScene;
+    if (!scene) return null;
+    let mesh = null;
+    scene.traverse((o) => { if (o.isMesh && o.uuid === meshUuid) mesh = o; });
+    if (!mesh || !mesh.geometry) return null;
+    const geom = mesh.geometry;
+    const pos = geom.attributes.position;
+    const f = faceIndex | 0;
+    let a, b, c;
+    if (geom.index) {
+      const idx = geom.index.array;
+      if (f * 3 + 2 >= idx.length) return null;
+      a = idx[f * 3]; b = idx[f * 3 + 1]; c = idx[f * 3 + 2];
+    } else {
+      if (f * 3 + 2 >= pos.count) return null;
+      a = f * 3; b = f * 3 + 1; c = f * 3 + 2;
+    }
+    const vA = new THREE.Vector3().fromBufferAttribute(pos, a);
+    const vB = new THREE.Vector3().fromBufferAttribute(pos, b);
+    const vC = new THREE.Vector3().fromBufferAttribute(pos, c);
+    const e1 = new THREE.Vector3().subVectors(vB, vA);
+    const e2 = new THREE.Vector3().subVectors(vC, vA);
+    const n  = new THREE.Vector3().crossVectors(e1, e2).normalize();
+    const dx = n.x * distance, dy = n.y * distance, dz = n.z * distance;
+    if (window.__studioPushUndo) window.__studioPushUndo();
+    pos.setXYZ(a, vA.x + dx, vA.y + dy, vA.z + dz);
+    pos.setXYZ(b, vB.x + dx, vB.y + dy, vB.z + dz);
+    pos.setXYZ(c, vC.x + dx, vC.y + dy, vC.z + dz);
+    pos.needsUpdate = true;
+    geom.computeVertexNormals();
+    geom.computeBoundingSphere();
+    mesh.userData.archdiscStudioFacePushed = (mesh.userData.archdiscStudioFacePushed || 0) + 1;
+    recomputeMeshStats(scene);
+    return { meshUuid, faceIndex: f, distance, normal: [n.x, n.y, n.z] };
   }
 
   function spinAroundY(angleRad) {
