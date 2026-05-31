@@ -11795,6 +11795,15 @@ function WorkbenchStudio() {
                     <button type="button" className="ribbon-tool" data-studio-ribbon-action="bake-position" onClick={() => bakeOp('position')} disabled={!selectedKind} title="Blender bake.cc — vertex colors = RGB of positions">
                       <span className="ribbon-tool-icon">⊞</span><span className="ribbon-tool-label">Bake Pos</span>
                     </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="smart-rust" onClick={() => window.__studioApplySmartMaterial && window.__studioApplySmartMaterial('rust')} disabled={!selectedKind} title="Substance Painter smart-material — Rust: perlin color + voronoi rough + AO bake, metalness 0.65">
+                      <span className="ribbon-tool-icon">✦</span><span className="ribbon-tool-label">SM Rust</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="smart-concrete" onClick={() => window.__studioApplySmartMaterial && window.__studioApplySmartMaterial('concrete')} disabled={!selectedKind} title="Substance Painter smart-material — Concrete: perlin color + voronoi rough + AO bake">
+                      <span className="ribbon-tool-icon">▦</span><span className="ribbon-tool-label">SM Conc</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="smart-stone" onClick={() => window.__studioApplySmartMaterial && window.__studioApplySmartMaterial('stone')} disabled={!selectedKind} title="Substance Painter smart-material — Stone: perlin color + voronoi rough + AO bake">
+                      <span className="ribbon-tool-icon">◊</span><span className="ribbon-tool-label">SM Stone</span>
+                    </button>
                   </div>
                   <div className="ribbon-group-label">Bake</div>
                 </div>
