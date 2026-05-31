@@ -897,6 +897,31 @@ function WorkbenchStudio() {
     // Slice 318 — Blender numpad-1/3/7 + KP_0 axis-view presets. axis ∈
     // 'top'|'front'|'side'|'back'|'bottom'|'persp'. Persp restores the
     // default 3/4 view.
+    // Slice 321 — Blender 4-way viewport shading toggle. Wireframe/Solid/
+    // Material/Rendered. Traverses scene meshes and sets material flags +
+    // toggles renderer shadowMap. Mode persisted on window.__studioShadingMode.
+    window.__studioSetShadingMode = (mode) => {
+      const vp = window.__archdiscViewport;
+      if (!vp || !vp.scene || !vp.renderer) return { ok: false, error: 'no viewport' };
+      const VALID = ['wireframe', 'solid', 'material', 'rendered'];
+      if (!VALID.includes(mode)) return { ok: false, error: 'unknown mode: ' + mode };
+      let touched = 0;
+      vp.scene.traverse((o) => {
+        if (!o.isMesh || !o.material) return;
+        const mats = Array.isArray(o.material) ? o.material : [o.material];
+        mats.forEach((m) => {
+          m.wireframe   = (mode === 'wireframe');
+          m.flatShading = (mode === 'solid');
+          if ('envMapIntensity' in m) m.envMapIntensity = (mode === 'material' || mode === 'rendered') ? 1.0 : 0.0;
+          m.needsUpdate = true;
+        });
+        if (mode === 'rendered') { o.castShadow = true; o.receiveShadow = true; }
+        touched++;
+      });
+      vp.renderer.shadowMap.enabled = (mode === 'rendered');
+      window.__studioShadingMode = mode;
+      return { ok: true, mode, touched };
+    };
     window.__studioSetCameraAxis = (axis) => {
       const vp = window.__archdiscViewport;
       if (!vp || !vp.camera) return { ok: false, error: 'no viewport' };
@@ -1857,7 +1882,7 @@ function WorkbenchStudio() {
     window.__studioReadNormalTexel = (uv) => { const m = selectedMeshRef.current; const nc = m && m.userData && m.userData._normalCanvas; if (!nc) return null; const d = nc.getContext('2d').getImageData(Math.floor(uv[0] * 512), Math.floor((1 - uv[1]) * 512), 1, 1).data; return [d[0], d[1], d[2]]; };
     window.__studioPolyPaintAt = (pt, color, radius) => { const m = selectedMeshRef.current; if (!m) return null; return paintPolyAt(m, new THREE.Vector3(pt[0], pt[1], pt[2]), color || brushPaintColor, radius || 0.012); };
     window.__studioReadVertexColor = (i) => { const m = selectedMeshRef.current; const col = m && m.geometry && m.geometry.attributes.color; if (!col) return null; return [Math.round(col.getX(i) * 255), Math.round(col.getY(i) * 255), Math.round(col.getZ(i) * 255)]; };
-    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioEvalNiagara; delete window.__studioNiagaraStep; delete window.__studioBTTick; delete window.__studioStreamAround; delete window.__studioRevealAll; delete window.__studioAddAudioSource; delete window.__studioSetListener; delete window.__studioAudioState; delete window.__studioXRSupport; delete window.__studioEnterXR; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAnimBPSet; delete window.__studioAnimBPStep; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioTrimmedSurface; delete window.__studioAddNurbsCurve; delete window.__studioBRepBoolean; delete window.__studioSetReference; delete window.__studioClearReference; delete window.__studioReferenceState; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioFieldQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; delete window.__studioRunVexExpr; delete window.__studioPushFace; delete window.__studioBakeAOToTexture; delete window.__studioSculptLayerAdd; delete window.__studioSculptLayerList; delete window.__studioSculptLayerToggle; delete window.__studioSculptLayerStrength; delete window.__studioSculptLayerRemove; delete window.__studioMashDistribute; delete window.__studioSetHDRIEnvironment; delete window.__studioListHDRIPresets; delete window.__studioSolveIK2; delete window.__studioRunTaskGraph; delete window.__studioParticleEmitter; delete window.__studioFilletEdges; delete window.__studioProceduralTexture; delete window.__studioProjectPaintFromCamera; delete window.__studioFindSnapTarget; delete window.__studioRunGrasshopper; delete window.__studioVoxelizeMesh; delete window.__studioPhysicsAddConstraint; delete window.__studioPhysicsListConstraints; delete window.__studioPhysicsRemoveConstraint; delete window.__studioPhysicsClearConstraints; delete window.__studioListEdges; delete window.__studioPickEdge; delete window.__studioClearEdgeSelection; delete window.__studioMoSpline; delete window.__studioWeightPaintAt; delete window.__studioReadWeight; delete window.__studioTerrainAdd; delete window.__studioTerrainSculpt; delete window.__studioMarchVoxelGrid; delete window.__studioSetSunAngle; delete window.__studioApplySmartMaterial; delete window.__studioMoText; delete window.__studioMirrorAcrossAxis; delete window.__studioRaycastBVH; delete window.__studioSetCameraAxis; };
+    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioEvalNiagara; delete window.__studioNiagaraStep; delete window.__studioBTTick; delete window.__studioStreamAround; delete window.__studioRevealAll; delete window.__studioAddAudioSource; delete window.__studioSetListener; delete window.__studioAudioState; delete window.__studioXRSupport; delete window.__studioEnterXR; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAnimBPSet; delete window.__studioAnimBPStep; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioTrimmedSurface; delete window.__studioAddNurbsCurve; delete window.__studioBRepBoolean; delete window.__studioSetReference; delete window.__studioClearReference; delete window.__studioReferenceState; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioFieldQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; delete window.__studioRunVexExpr; delete window.__studioPushFace; delete window.__studioBakeAOToTexture; delete window.__studioSculptLayerAdd; delete window.__studioSculptLayerList; delete window.__studioSculptLayerToggle; delete window.__studioSculptLayerStrength; delete window.__studioSculptLayerRemove; delete window.__studioMashDistribute; delete window.__studioSetHDRIEnvironment; delete window.__studioListHDRIPresets; delete window.__studioSolveIK2; delete window.__studioRunTaskGraph; delete window.__studioParticleEmitter; delete window.__studioFilletEdges; delete window.__studioProceduralTexture; delete window.__studioProjectPaintFromCamera; delete window.__studioFindSnapTarget; delete window.__studioRunGrasshopper; delete window.__studioVoxelizeMesh; delete window.__studioPhysicsAddConstraint; delete window.__studioPhysicsListConstraints; delete window.__studioPhysicsRemoveConstraint; delete window.__studioPhysicsClearConstraints; delete window.__studioListEdges; delete window.__studioPickEdge; delete window.__studioClearEdgeSelection; delete window.__studioMoSpline; delete window.__studioWeightPaintAt; delete window.__studioReadWeight; delete window.__studioTerrainAdd; delete window.__studioTerrainSculpt; delete window.__studioMarchVoxelGrid; delete window.__studioSetSunAngle; delete window.__studioApplySmartMaterial; delete window.__studioMoText; delete window.__studioMirrorAcrossAxis; delete window.__studioRaycastBVH; delete window.__studioSetCameraAxis; delete window.__studioSetShadingMode; };
   });
   // Auto-frame on primitive count change so the camera always shows
   // the current scene without the user having to hit Home.
@@ -12772,6 +12797,44 @@ function WorkbenchStudio() {
               }}
             >{axis}</button>
           ))}
+        </div>
+        {/* Slice 321 — Blender 4-way viewport shading-mode chips below axis chips. */}
+        <div
+          data-studio-viewport-shading-chips
+          style={{
+            position: 'absolute', top: '68px', right: '8px',
+            zIndex: 24, display: 'flex', gap: '2px',
+            background: 'rgba(20,20,24,0.85)',
+            border: '1px solid #2a2a30', borderRadius: '4px',
+            padding: '2px',
+          }}
+        >
+          {[
+            { id: 'wireframe', l: '◫', t: 'Wireframe' },
+            { id: 'solid',     l: '■', t: 'Solid (faceted normals)' },
+            { id: 'material',  l: '◐', t: 'Material Preview' },
+            { id: 'rendered',  l: '◉', t: 'Rendered (with shadows)' },
+          ].map(({ id, l, t }) => {
+            const active = (typeof window !== 'undefined' ? window.__studioShadingMode : 'material') === id;
+            return (
+              <button
+                key={id}
+                data-studio-shading-chip={id}
+                title={`Shading: ${t}`}
+                onClick={() => {
+                  if (window.__studioSetShadingMode) window.__studioSetShadingMode(id);
+                  if (window.__studioBumpOutliner) window.__studioBumpOutliner();
+                }}
+                style={{
+                  padding: '2px 6px', fontSize: '11px',
+                  background: active ? '#3a6abf' : 'transparent',
+                  color: active ? '#fff' : '#cfcfcf',
+                  border: '1px solid ' + (active ? '#6890e0' : 'transparent'),
+                  borderRadius: '2px', cursor: 'pointer', fontFamily: 'inherit',
+                }}
+              >{l}</button>
+            );
+          })}
         </div>
         {/* Slice 317: Blender T-shelf / left toolbar — active tool palette.
             Vertical strip pinned to the left edge of the viewport.
