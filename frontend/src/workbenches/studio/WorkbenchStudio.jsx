@@ -2329,7 +2329,7 @@ function WorkbenchStudio() {
       const isAllowedModCombo = (
         (e.ctrlKey && (/^[a13750cvzmjinose]$/i.test(e.key) || e.key === '.' || e.key === 'PageUp' || e.key === 'PageDown')) ||
         (e.altKey && /^[ahgrscp]$/i.test(e.key)) ||
-        (e.shiftKey && /^[dcszghrlpm]$/i.test(e.key)) ||
+        (e.shiftKey && /^[dcszghrlpmn]$/i.test(e.key)) ||
         (e.ctrlKey && e.shiftKey && /^[l]$/i.test(e.key))
       );
       if ((e.metaKey || e.ctrlKey || e.altKey) && !isAllowedModCombo) return;
@@ -2445,6 +2445,17 @@ function WorkbenchStudio() {
           const i = cycle.indexOf(cur);
           return cycle[(i + 1) % cycle.length];
         });
+      } else if (k === 'n' && e.shiftKey && mesh) {
+        // Slice 280: Shift+N recomputes vertex normals on the active
+        // mesh. Blender Mesh > Normals > Recalculate Outside parity.
+        if (window.__studioPushUndo) window.__studioPushUndo();
+        if (mesh.geometry && mesh.geometry.computeVertexNormals) {
+          mesh.geometry.computeVertexNormals();
+          if (mesh.geometry.attributes && mesh.geometry.attributes.normal) {
+            mesh.geometry.attributes.normal.needsUpdate = true;
+          }
+          bumpOutliner();
+        }
       } else if (k === 'm' && e.shiftKey && mesh) {
         // Slice 278: Shift+M "Merge by Distance" — vertex weld at the
         // current geometry's tolerance (default 1e-4 in BufferGeometry
