@@ -13591,44 +13591,41 @@ function WorkbenchStudio() {
               marginRight: '6px',
             }}
           >reset</button>
-          {/* Slice 242: viewport-header gizmo toggle (mirrors Y key). */}
+          {/* Slice 347 — viewport-header utility buttons restyled to
+              Studio brand palette. */}
           <button
             type="button"
             data-studio-viewport-gizmo-toggle
             onClick={() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'y', bubbles: true }))}
             title="Toggle transform gizmo (Y)"
             style={{
-              background: '#3a3a3a', color: '#bdbdbd', border: '1px solid #1d1d1d',
+              background: 'transparent', color: '#9aa6b2', border: '1px solid #21262d',
               cursor: 'pointer', fontFamily: 'inherit', fontSize: '11px',
-              padding: '2px 8px', marginRight: '4px',
+              padding: '2px 8px', marginRight: '4px', borderRadius: '3px',
             }}
           >⇲</button>
-          {/* Slice 232: viewport-header Frame All button. Click fits
-              the camera to the whole scene (Home key + Numpad-Home). */}
           <button
             type="button"
             data-studio-viewport-frame-all
             onClick={() => { if (window.__studioFrameAll) window.__studioFrameAll(); }}
             title="Frame All (Home)"
             style={{
-              background: '#3a3a3a', color: '#bdbdbd', border: '1px solid #1d1d1d',
+              background: 'transparent', color: '#9aa6b2', border: '1px solid #21262d',
               cursor: 'pointer', fontFamily: 'inherit', fontSize: '11px',
-              padding: '2px 8px', marginRight: '4px',
+              padding: '2px 8px', marginRight: '4px', borderRadius: '3px',
             }}
-          >⬚</button>
-          {/* Slice 230: viewport-header screenshot button. Click runs
-              the same capture pipeline as F12 (slice 219). */}
+          >frame</button>
           <button
             type="button"
             data-studio-viewport-screenshot
             onClick={() => { if (window.__archieCaptureRender) window.__archieCaptureRender(); }}
             title="Capture render (F12)"
             style={{
-              background: '#3a3a3a', color: '#bdbdbd', border: '1px solid #1d1d1d',
+              background: 'transparent', color: '#9aa6b2', border: '1px solid #21262d',
               cursor: 'pointer', fontFamily: 'inherit', fontSize: '11px',
-              padding: '2px 8px', marginRight: '8px',
+              padding: '2px 8px', marginRight: '8px', borderRadius: '3px',
             }}
-          >📷</button>
+          >render</button>
           {/* Slice 335 — Studio-brand shading chips. Letter marks (w/s/m/r)
               are distinct from Blender's ⊞/●/◐/◉ set and read clearly at
               small sizes. Teal accent (#1de9b6) replaces the previous
