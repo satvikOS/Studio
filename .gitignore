@@ -23,12 +23,25 @@ test-*.js
 # Local LLM credentials — NEVER commit
 .llm-credentials.local.json
 
-# Build output (per-location so vendored upstream sources — e.g. Blender's
-# intern/libmv/libmv/build/build_config.h — are not accidentally excluded)
+# Build output
 /dist/
 frontend/dist/
 /build/
 .vite/
+
+# Slice 345 — removed from the repo for space (was 484 MB combined):
+#   blender/             — vendored Blender source (reference-only, public)
+#   foundation-output/   — stale Mech foundational-testing artefacts
+#   archive/             — old e2e specs + engine output
+# Re-ignore so they can't be re-committed accidentally.
+/blender/
+/foundation-output/
+/archive/
+
+# Playwright / e2e local artefacts — never need to ship
+/test-results/
+/e2e/screenshots/
+/playwright-report/
 
 # IDE
 .vscode/
