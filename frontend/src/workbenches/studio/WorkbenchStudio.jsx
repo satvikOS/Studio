@@ -349,6 +349,7 @@ function HeaderMenuStrip({ addPrimitive, selectedKind }) {
       { id: 'mirror-x',   label: 'Mirror X',     run: () => window.__studioMirrorAcrossAxis && window.__studioMirrorAcrossAxis('x'), needsSel: true },
       { id: 'fillet',     label: 'Fillet Edges', run: () => { const el = document.querySelector('[data-studio-ribbon-action="fillet"]'); if (el) el.click(); }, needsSel: true },
       { id: 'smart-rust', label: 'Smart · Rust', run: () => window.__studioApplySmartMaterial && window.__studioApplySmartMaterial('rust'), needsSel: true },
+      { id: 'apply-xform', label: 'Apply Transforms', run: () => window.__studioApplyTransforms && window.__studioApplyTransforms({}), needsSel: true },
     ]},
   ];
   return (
