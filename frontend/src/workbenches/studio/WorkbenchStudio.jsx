@@ -332,6 +332,36 @@ function WorkbenchStudio() {
   const bumpOutliner = () => setOutlinerTick((v) => v + 1);
   // Slice 317 — expose for the T-shelf toolbar so click can force a render.
   if (typeof window !== 'undefined') window.__studioBumpOutliner = bumpOutliner;
+  // Slice 325 — command palette query state. The existing stub modal at
+  // line ~14300 (slice 223) is upgraded below to actually filter TOOL_REGISTRY
+  // and dispatch the chosen op (click-primitive / click-action / fn).
+  // Also: document-level Escape handler closes the palette so the test (and
+  // power users) can close without first focusing the input.
+  const [commandPaletteQuery, setCommandPaletteQuery] = useState('');
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const onKey = (e) => {
+      if (e.key === 'Escape') setCommandPaletteOpen(false);
+    };
+    document.addEventListener('keydown', onKey, true);
+    return () => document.removeEventListener('keydown', onKey, true);
+  }, []);
+  const _dispatchPaletteTool = (tool) => {
+    setCommandPaletteOpen(false);
+    setCommandPaletteQuery('');
+    if (!tool || !tool.exec) return;
+    const ex = tool.exec;
+    if (ex.type === 'click-primitive') {
+      const el = document.querySelector(`[data-studio-primitive="${ex.id}"]`);
+      if (el) el.click();
+    } else if (ex.type === 'click-action') {
+      const el = document.querySelector(`[data-studio-ribbon-action="${ex.id}"]`);
+      if (el) el.click();
+    } else if (ex.type === 'fn') {
+      const fn = window['__studio' + (ex.name[0].toUpperCase() + ex.name.slice(1))];
+      if (typeof fn === 'function') fn();
+    }
+  };
   const [outlinerFilter, setOutlinerFilter] = useState('');
   const [outlinerCollections, setOutlinerCollections] = useState({ Primitives: true, Lights: true });
   const toggleCollection = (name) => setOutlinerCollections((s) => ({ ...s, [name]: !s[name] }));
@@ -14233,9 +14263,19 @@ function WorkbenchStudio() {
                 type="text"
                 data-studio-command-palette-input
                 autoFocus
-                placeholder="Search ops..."
+                placeholder="Search ops (cube, fillet, bake AO…)"
+                onInput={(e) => setCommandPaletteQuery(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Escape') setCommandPaletteOpen(false);
+                  else if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const q = (e.target.value || '').toLowerCase();
+                    const hit = TOOL_REGISTRY.find((t) => (
+                      (t.id || '').toLowerCase().includes(q) ||
+                      (t.description || '').toLowerCase().includes(q)
+                    ));
+                    if (hit) _dispatchPaletteTool(hit);
+                  }
                 }}
                 style={{
                   width: '100%',
@@ -14247,12 +14287,45 @@ function WorkbenchStudio() {
                   fontFamily: 'monospace',
                 }}
               />
+              {/* Slice 325 — live filtered result list. */}
+              <div data-studio-command-palette-results style={{ marginTop: '8px', maxHeight: '40vh', overflowY: 'auto' }}>
+                {(() => {
+                  const q = commandPaletteQuery.toLowerCase();
+                  const matches = TOOL_REGISTRY.filter((t) => (
+                    (t.id || '').toLowerCase().includes(q) ||
+                    (t.description || '').toLowerCase().includes(q)
+                  )).slice(0, 20);
+                  if (!matches.length) {
+                    return <div style={{ padding: '6px 4px', opacity: 0.5, fontSize: '11px' }}>No matches</div>;
+                  }
+                  return matches.map((t) => (
+                    <div
+                      key={t.id}
+                      data-studio-palette-item={t.id}
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        setCommandPaletteOpen(false);
+                        setCommandPaletteQuery('');
+                        setTimeout(() => _dispatchPaletteTool(t), 0);
+                      }}
+                      style={{
+                        padding: '4px 6px', cursor: 'pointer', fontSize: '11px',
+                        borderBottom: '1px solid rgba(255,255,255,0.04)',
+                        fontFamily: 'monospace',
+                      }}
+                    >
+                      <span style={{ color: '#dfe5ea' }}>{t.id}</span>
+                      <span style={{ color: '#888', fontSize: '10px', marginLeft: '8px' }}>{(t.description || t.kind || '').slice(0, 70)}</span>
+                    </div>
+                  ));
+                })()}
+              </div>
               <p style={{
-                margin: '10px 0 0 0', fontSize: '10px',
+                margin: '6px 0 0 0', fontSize: '10px',
                 color: '#95a0a8',
                 fontFamily: 'monospace',
               }}>
-                ↑↓ navigate · Enter run · Esc close
+                Enter → first match · Esc close
               </p>
             </div>
           </div>
