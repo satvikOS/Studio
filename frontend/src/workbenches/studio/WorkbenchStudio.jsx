@@ -14649,6 +14649,57 @@ function WorkbenchStudio() {
             fontFamily: 'monospace', fontSize: '11px', pointerEvents: 'none',
           }}
         >Frame {currentFrame}</div>
+        {/* Slice 391 (UIUX v2) — Selected-mesh stats overlay. Sits just
+            above the FPS counter. Polls __studioSelectedMesh once a second
+            and shows V / E / T counts for the active mesh. Empty when no
+            mesh is selected — declutters the corner. Studio brand muted
+            grey on translucent background. */}
+        <div
+          data-studio-viewport-mesh-stats
+          style={{
+            position: 'absolute', bottom: '32px', left: '8px', zIndex: 23,
+            background: 'rgba(0, 0, 0, 0.55)', color: '#9aa6b2',
+            padding: '3px 8px', borderRadius: '3px',
+            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '10px',
+            pointerEvents: 'none', display: 'none',
+          }}
+          ref={(el) => {
+            if (!el) return;
+            if (el.__studioMeshStatsTick) return;
+            const tick = () => {
+              const m = window.__studioSelectedMesh && window.__studioSelectedMesh();
+              if (!m || !m.geometry || !m.geometry.attributes.position) {
+                el.style.display = 'none';
+              } else {
+                const v = m.geometry.attributes.position.count;
+                const t = m.geometry.index ? Math.floor(m.geometry.index.array.length / 3) : Math.floor(v / 3);
+                // Edges = unique triangulation edges. Computed once per
+                // tick (cheap for hundreds of tris, skipped above a cap).
+                let e = 0;
+                if (m.geometry.index && t < 5000) {
+                  const idx = m.geometry.index.array;
+                  const set = new Set();
+                  for (let f = 0; f < t; f++) {
+                    const a = idx[f * 3]; const b = idx[f * 3 + 1]; const c = idx[f * 3 + 2];
+                    set.add(a < b ? `${a}_${b}` : `${b}_${a}`);
+                    set.add(b < c ? `${b}_${c}` : `${c}_${b}`);
+                    set.add(c < a ? `${c}_${a}` : `${a}_${c}`);
+                  }
+                  e = set.size;
+                }
+                el.style.display = 'block';
+                el.setAttribute('data-studio-mesh-v', String(v));
+                el.setAttribute('data-studio-mesh-e', String(e));
+                el.setAttribute('data-studio-mesh-t', String(t));
+                el.textContent = e
+                  ? `v ${v} · e ${e} · t ${t}`
+                  : `v ${v} · t ${t}`;
+              }
+            };
+            el.__studioMeshStatsTick = setInterval(tick, 1000);
+            tick();
+          }}
+        />
         {/* Slice 233: live FPS counter pinned to the viewport's
             lower-left corner. Reads viewport renderer.info each second
             and computes frames-per-second + draw-call count. Helpful
