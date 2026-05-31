@@ -13413,6 +13413,31 @@ function WorkbenchStudio() {
                       key={entry.uuid}
                       data-studio-outliner-entry={i}
                       data-studio-outliner-kind={entry.kind}
+                      onMouseEnter={() => {
+                        // Slice 275: hover highlight — temporary emissive
+                        // boost on the matching mesh.
+                        if (!entry.isPrimitive) return;
+                        const obj = window.__archdiscScene && window.__archdiscScene.getObjectByProperty('uuid', entry.uuid);
+                        if (!obj || !obj.material) return;
+                        if (obj.userData.__studioHoverSaved == null) {
+                          obj.userData.__studioHoverSaved = obj.material.emissiveIntensity || 0;
+                        }
+                        if (obj.material.emissive) {
+                          obj.material.emissive.set(obj.material.color || new THREE.Color('#ffffff'));
+                        }
+                        obj.material.emissiveIntensity = 0.4;
+                        obj.material.needsUpdate = true;
+                        obj.userData.__studioHovered = true;
+                      }}
+                      onMouseLeave={() => {
+                        if (!entry.isPrimitive) return;
+                        const obj = window.__archdiscScene && window.__archdiscScene.getObjectByProperty('uuid', entry.uuid);
+                        if (!obj || !obj.material) return;
+                        obj.material.emissiveIntensity = obj.userData.__studioHoverSaved || 0;
+                        obj.material.needsUpdate = true;
+                        delete obj.userData.__studioHoverSaved;
+                        delete obj.userData.__studioHovered;
+                      }}
                       style={{
                         padding: '4px 8px',
                         borderRadius: '4px',
