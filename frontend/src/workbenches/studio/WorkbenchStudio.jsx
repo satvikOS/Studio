@@ -13100,6 +13100,58 @@ function WorkbenchStudio() {
         {/* Slice 334 (UIUX v2) — slice 327 op toast removed.
             Last operation now shown as text in the status bar (no
             floating pill — industry-standard DCC pattern). */}
+        {/* Slice 335 — Archie portal floating bar. Always-visible chat-
+            style input pinned above the status bar, centred. Studio-brand
+            palette (deep #0d1117 + teal #1de9b6 Run button). Wraps the
+            same aiPrompt state + runAiPrompt action used in the N-panel
+            section. Doesn't infringe on competitor IP — single floating
+            bar matches modern AI-app conventions (Copilot / ChatGPT
+            input docks), not any specific DCC's chrome. */}
+        <div
+          data-studio-archie-portal
+          style={{
+            position: 'absolute', bottom: '32px', left: '50%',
+            transform: 'translateX(-50%)', zIndex: 25,
+            display: 'flex', alignItems: 'center', gap: '6px',
+            background: '#0d1117', border: '1px solid #21262d',
+            borderRadius: '18px', padding: '4px 6px 4px 14px',
+            boxShadow: '0 4px 18px rgba(0,0,0,0.5)',
+            fontFamily: 'inherit', fontSize: '12px',
+            minWidth: '420px', maxWidth: '60vw',
+          }}
+        >
+          <span style={{ color: '#1de9b6', fontWeight: 600, fontSize: '11px', letterSpacing: '0.05em' }}>archie</span>
+          <span style={{ color: '#21262d' }}>·</span>
+          <input
+            type="text"
+            data-studio-archie-input
+            value={aiPrompt}
+            onChange={(e) => setAiPrompt(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !aiRunning && aiPrompt.trim()) runAiPrompt(); }}
+            placeholder="ask archie — e.g. add a cube and a sphere, then spin them"
+            style={{
+              flex: 1, background: 'transparent',
+              border: 'none', outline: 'none',
+              color: '#e6edf3', fontSize: '12px',
+              fontFamily: 'inherit', padding: '4px 0',
+            }}
+          />
+          <button
+            type="button"
+            data-studio-archie-run
+            disabled={!aiPrompt.trim() || aiRunning}
+            onClick={runAiPrompt}
+            style={{
+              background: aiRunning ? '#21262d' : '#1de9b6',
+              color: aiRunning ? '#7d8590' : '#0d1117',
+              border: 'none', borderRadius: '14px',
+              padding: '5px 14px',
+              fontSize: '11px', fontWeight: 600,
+              cursor: (aiRunning || !aiPrompt.trim()) ? 'default' : 'pointer',
+              fontFamily: 'inherit', letterSpacing: '0.03em',
+            }}
+          >{aiRunning ? '…' : 'run'}</button>
+        </div>
         {/* Slice 315: Blender bottom status bar — selected mesh stats +
             scene totals + FPS. Pinned to viewport footer, pointer-events
             off so it never blocks clicks. */}
@@ -13322,13 +13374,17 @@ function WorkbenchStudio() {
             4 round Wireframe / Solid / Material / Rendered shading-mode
             buttons (Blender's iconic shading toggle, fires the existing
             shade-* ribbon actions). Active shading is highlighted. */}
+        {/* Slice 335 — viewport header restyled to Studio brand palette
+            (deep #0d1117 background, teal #1de9b6 accents, lighter
+            #e6edf3 text). Distinct from Blender/Maya defaults. */}
         <div
           data-studio-viewport-header
+          data-studio-brand="v2"
           style={{
             position: 'absolute', top: 0, left: 0, right: 0, height: '28px',
-            background: '#2b2b2b', borderBottom: '1px solid #1d1d1d',
+            background: '#0d1117', borderBottom: '1px solid #1f2733',
             display: 'flex', alignItems: 'center', gap: '4px',
-            padding: '0 8px', fontSize: '11px', color: '#dfdfdf',
+            padding: '0 8px', fontSize: '11px', color: '#e6edf3',
             zIndex: 22,
             fontFamily: 'inherit',
           }}
@@ -13392,13 +13448,15 @@ function WorkbenchStudio() {
               }}
             >{m}</button>
           ))}
-          {/* Slice 334 (UIUX v2) — tool selector (replaces slice 317 floating T-shelf). */}
+          {/* Slice 334 (UIUX v2) — tool selector (replaces slice 317 floating T-shelf).
+              Slice 335 — Studio-brand teal accent + lowercase letter marks
+              (sel/mov/rot/scl) instead of Blender-lookalike unicode glyphs. */}
           <span style={{ marginLeft: '8px', display: 'flex', gap: '2px' }}>
             {[
-              { id: 'select', l: '⬚', t: 'Select' },
-              { id: 'move',   l: '⇄', t: 'Move (G)' },
-              { id: 'rotate', l: '⟲', t: 'Rotate (R)' },
-              { id: 'scale',  l: '⤢', t: 'Scale (S)' },
+              { id: 'select', l: 'sel', t: 'Select' },
+              { id: 'move',   l: 'mov', t: 'Move (G)' },
+              { id: 'rotate', l: 'rot', t: 'Rotate (R)' },
+              { id: 'scale',  l: 'scl', t: 'Scale (S)' },
             ].map((tool) => {
               const active = (typeof window !== 'undefined' ? window.__studioActiveTool : 'select') === tool.id;
               return (
@@ -13415,12 +13473,14 @@ function WorkbenchStudio() {
                     }
                   }}
                   style={{
-                    width: '22px', height: '20px', padding: 0,
-                    background: active ? '#4a90d9' : '#3a3a3a',
-                    color: active ? '#ffffff' : '#bdbdbd',
-                    border: '1px solid ' + (active ? '#4a90d9' : '#1d1d1d'),
-                    borderRadius: '2px', cursor: 'pointer',
-                    fontSize: '11px', fontFamily: 'inherit',
+                    minWidth: '28px', height: '20px', padding: '0 4px',
+                    background: active ? '#1de9b6' : 'transparent',
+                    color: active ? '#0d1117' : '#9aa6b2',
+                    border: '1px solid ' + (active ? '#1de9b6' : '#21262d'),
+                    borderRadius: '3px', cursor: 'pointer',
+                    fontSize: '10px', fontWeight: 600,
+                    fontFamily: 'inherit', textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
                   }}
                 >{tool.l}</button>
               );
@@ -13500,6 +13560,10 @@ function WorkbenchStudio() {
               padding: '2px 8px', marginRight: '8px',
             }}
           >📷</button>
+          {/* Slice 335 — Studio-brand shading chips. Letter marks (w/s/m/r)
+              are distinct from Blender's ⊞/●/◐/◉ set and read clearly at
+              small sizes. Teal accent (#1de9b6) replaces the previous
+              Blender-style blue. */}
           {['wireframe', 'solid', 'material', 'rendered'].map((mode) => (
             <button
               key={mode}
@@ -13509,18 +13573,19 @@ function WorkbenchStudio() {
               onClick={() => applyShading(mode)}
               title={mode.charAt(0).toUpperCase() + mode.slice(1) + ' shading'}
               style={{
-                width: '20px', height: '20px', borderRadius: '50%',
-                background: mode === viewportShading ? '#4a90d9' : '#3a3a3a',
-                color: mode === viewportShading ? '#ffffff' : '#bdbdbd',
-                border: '1px solid ' + (mode === viewportShading ? '#4a90d9' : '#1d1d1d'),
+                width: '20px', height: '20px', borderRadius: '4px',
+                background: mode === viewportShading ? '#1de9b6' : 'transparent',
+                color: mode === viewportShading ? '#0d1117' : '#9aa6b2',
+                border: '1px solid ' + (mode === viewportShading ? '#1de9b6' : '#21262d'),
                 cursor: 'pointer',
                 fontSize: '10px',
+                fontWeight: 600,
                 lineHeight: '18px',
                 padding: 0,
                 marginLeft: '3px',
                 fontFamily: 'inherit',
               }}
-            >{mode === 'wireframe' ? '⊞' : mode === 'solid' ? '●' : mode === 'material' ? '◐' : '◉'}</button>
+            >{mode === 'wireframe' ? 'w' : mode === 'solid' ? 's' : mode === 'material' ? 'm' : 'r'}</button>
           ))}
         </div>
         {/* BLENDER N-PANEL (slice 187) — viewport-overlay sidebar with
