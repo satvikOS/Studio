@@ -13623,15 +13623,16 @@ function WorkbenchStudio() {
           <aside
             data-studio-npanel="open"
             data-studio-npanel-tab={nPanelTab}
+            data-studio-brand="v2"
             style={{
               position: 'absolute',
               top: '28px',
               right: '0',
               bottom: '0',
               width: '240px',
-              background: '#262626',
-              borderLeft: '1px solid #1d1d1d',
-              color: '#dfdfdf',
+              background: '#0d1117',
+              borderLeft: '1px solid #1f2733',
+              color: '#e6edf3',
               fontSize: '11px',
               fontFamily: 'inherit',
               zIndex: 20,
@@ -13641,7 +13642,7 @@ function WorkbenchStudio() {
             }}
           >
             <div
-              style={{ display: 'flex', borderBottom: '1px solid #1d1d1d', background: '#2b2b2b' }}
+              style={{ display: 'flex', borderBottom: '1px solid #1f2733', background: '#161b22' }}
             >
               {['Item', 'Tool', 'View'].map((tab) => (
                 <button
@@ -13652,14 +13653,15 @@ function WorkbenchStudio() {
                   onClick={() => setNPanelTab(tab)}
                   style={{
                     flex: 1,
-                    background: tab === nPanelTab ? '#353535' : 'transparent',
-                    color: tab === nPanelTab ? '#ffffff' : '#bdbdbd',
+                    background: tab === nPanelTab ? '#21262d' : 'transparent',
+                    color: tab === nPanelTab ? '#e6edf3' : '#9aa6b2',
                     border: 'none',
-                    borderBottom: tab === nPanelTab ? '2px solid #4a90d9' : '2px solid transparent',
+                    borderBottom: tab === nPanelTab ? '2px solid #1de9b6' : '2px solid transparent',
                     padding: '6px 0',
                     cursor: 'pointer',
                     fontFamily: 'inherit',
                     fontSize: '11px',
+                    fontWeight: tab === nPanelTab ? 600 : 400,
                   }}
                 >{tab}</button>
               ))}
