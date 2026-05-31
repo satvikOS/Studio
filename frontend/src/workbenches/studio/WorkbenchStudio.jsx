@@ -13419,6 +13419,27 @@ function WorkbenchStudio() {
                   {selectedKind && (
                     <div data-studio-npanel-section="pbr" style={{ marginBottom: '10px' }}>
                       <div style={{ opacity: 0.6, marginBottom: '3px', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>PBR</div>
+                      {/* Slice 324: base color swatch — the most basic material
+                          tweak Blender's Item tab ships with. */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                        <label style={{ opacity: 0.6, width: '64px', fontSize: '10px' }}>Color:</label>
+                        <input
+                          type="color"
+                          defaultValue={(() => {
+                            const m = selectedMeshRef.current;
+                            if (!m || !m.material || !m.material.color) return '#888888';
+                            return '#' + m.material.color.getHexString();
+                          })()}
+                          data-studio-npanel-color
+                          onChange={(e) => {
+                            const m = selectedMeshRef.current;
+                            if (!m || !m.material || !m.material.color) return;
+                            m.material.color.set(e.target.value);
+                            m.material.needsUpdate = true;
+                          }}
+                          style={{ width: '60px', height: '20px', padding: 0, background: '#000', border: '1px solid #2c2c30', cursor: 'pointer' }}
+                        />
+                      </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
                         <label style={{ opacity: 0.6, width: '64px', fontSize: '10px' }}>Metalness:</label>
                         <input
