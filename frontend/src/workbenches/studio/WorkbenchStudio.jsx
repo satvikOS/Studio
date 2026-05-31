@@ -13203,6 +13203,24 @@ function WorkbenchStudio() {
           >{aiRunning ? '…' : 'run'}</button>
         </div>
         </div>
+        {/* Slice 343 — Studio brand watermark. Tiny, subtle wordmark
+            pinned bottom-right above the status bar. Brand presence
+            without infringing on competitor IP (text-only, Studio's
+            signature teal accent). */}
+        <div
+          data-studio-brand-watermark
+          style={{
+            position: 'absolute', bottom: '30px', right: '12px',
+            zIndex: 23, pointerEvents: 'none',
+            fontSize: '10px', fontFamily: 'inherit',
+            color: '#3a4956', letterSpacing: '0.12em',
+            textTransform: 'uppercase',
+            display: 'flex', alignItems: 'baseline', gap: '4px',
+          }}
+        >
+          <span style={{ color: '#1de9b6', fontWeight: 700 }}>◆</span>
+          <span>archdisc · studio</span>
+        </div>
         {/* Slice 315: Blender bottom status bar — selected mesh stats +
             scene totals + FPS. Pinned to viewport footer, pointer-events
             off so it never blocks clicks. */}
