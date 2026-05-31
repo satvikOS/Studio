@@ -10985,6 +10985,10 @@ function WorkbenchStudio() {
                       <span className="ribbon-tool-icon">∿</span>
                       <span className="ribbon-tool-label">NURBS Crv</span>
                     </button>
+                    <button type="button" className="ribbon-tool" data-studio-primitive="terrain" onClick={() => window.__studioTerrainAdd && window.__studioTerrainAdd({ width: 10, depth: 10, segments: 64 })} title="Unreal Landscape / Unity Terrain — heightmap-backed plane primitive, sculpt with __studioTerrainSculpt (raise/lower/smooth/flatten)">
+                      <span className="ribbon-tool-icon">⛰</span>
+                      <span className="ribbon-tool-label">Terrain</span>
+                    </button>
                     <button type="button" className="ribbon-tool" data-studio-primitive="brep-boolean" data-studio-brep-status={brepStatus} onClick={() => brepBooleanToScene({ op: 'cut' })} title="Solid B-rep boolean (Rhino/Maya/Plasticity) — real OCCT NURBS-trimmed cut/fuse/common. First click lazily loads the OCCT WASM kernel.">
                       <span className="ribbon-tool-icon">⊖</span>
                       <span className="ribbon-tool-label">B-rep Bool</span>
