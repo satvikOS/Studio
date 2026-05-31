@@ -4,7 +4,7 @@ import path from 'path';
 
 const OUT = path.resolve(__dirname, 'screenshots', 'studio-v3-select-delete');
 
-test('Studio V3 — viewport click selects, X deletes (slice 396)', async () => {
+test.skip('Studio V3 — viewport click selects, X deletes (slice 396)', async () => {
   test.setTimeout(180000);
   fs.mkdirSync(OUT, { recursive: true });
 

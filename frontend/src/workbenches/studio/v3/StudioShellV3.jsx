@@ -2,8 +2,18 @@ import React, { useState, useEffect, useRef } from 'react';
 import './tokens.css';
 import { StudioMark, StudioWordmark } from './StudioLogo';
 import { Icon } from './Icons';
-import Viewport3D from '../../../components/Viewport3D';
 import { spawnPrimitive } from './spawn';
+
+// Slice 397 — V3 mounts V2 in headless mode inside its viewport zone so
+// every V2 useEffect runs, the entire 206-strong window.__studio* API
+// surface registers, the scene + Viewport3D mount once, and the 268
+// data-studio-* attribute surface stays available. V3 owns the visible
+// chrome on top.
+//
+// Lazy import dodges a circular dep — V3 is imported from V2's router
+// before V2 finishes its own module evaluation; a static import here
+// would create the cycle and break the module graph.
+const WorkbenchStudioV2 = React.lazy(() => import('../WorkbenchStudio').then((m) => ({ default: m.WorkbenchStudioV2 })));
 
 // ArchDisc Studio V3 — application shell.
 //
@@ -626,17 +636,10 @@ export function StudioShellV3({ mode = 'dark' }) {
         setDockOpen((v) => !v);
       } else if (!meta && e.key === 'Escape') {
         setActiveTool('select');
-      } else if (!meta && e.key.toLowerCase() === 'x' && !isTypingTarget(e.target)) {
-        const vp = window.__archdiscViewport;
-        const sel = vp && vp.getSelected && vp.getSelected();
-        if (sel && vp.scene) {
-          if (vp.transformControls && vp.transformControls.detach) vp.transformControls.detach();
-          vp.scene.remove(sel);
-          if (sel.geometry) sel.geometry.dispose();
-          if (sel.material) (Array.isArray(sel.material) ? sel.material : [sel.material]).forEach((m) => m.dispose && m.dispose());
-          setSelection(null);
-        }
       }
+      // X-key delete handled by the V2 headless mount (its own X
+      // handler covers undo + ref cleanup). Adding another here would
+      // double-delete.
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -709,12 +712,13 @@ export function StudioShellV3({ mode = 'dark' }) {
           // Other groups — placeholder; surfaced in slice 396+.
         }}
       />
-      <main className="studio-viewport workbench-viewport studio-viewport-canvas" data-studio-v3-viewport>
-        <Viewport3D
-          canvasId="render-canvas-studio-v3"
-          domain="studio"
-          onSelectionChange={(s) => setSelection(s)}
-        />
+      <main className="studio-viewport studio-viewport-canvas" data-studio-v3-viewport>
+        {/* V2 mounted headless — gives V3 the full 206-API surface +
+            scene + the live Viewport3D canvas with raycaster + gizmo,
+            without rendering any of V2's own chrome. */}
+        <React.Suspense fallback={null}>
+          <WorkbenchStudioV2 headless />
+        </React.Suspense>
         <ViewportHUD
           editMode={editMode}
           setEditMode={setEditMode}

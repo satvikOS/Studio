@@ -415,7 +415,7 @@ function HeaderMenuStrip({ addPrimitive, selectedKind }) {
 // V3 stabilises; later slices migrate V2 chunks into V3 then delete V2.
 import { StudioShellV3 } from './v3/StudioShellV3';
 
-function WorkbenchStudioV2() {
+function WorkbenchStudioV2({ headless = false } = {}) {
   const [activeTab, setActiveTab] = useState('modeling');
   // Blender workspace strip — see BLENDER_WORKSPACES. Selecting a workspace
   // activates the discipline its layout is built around (the mapping mirrors
@@ -12751,6 +12751,20 @@ function WorkbenchStudioV2() {
     } catch (_) { /* cleanup best-effort */ } };
   }, []);
 
+  // Slice 397 — headless mode. When V3 mounts V2 inside its shell,
+  // we want every useEffect + every window.__studio* registration to
+  // fire (so all 206 APIs + the scene + Viewport3D are live), but NONE
+  // of V2's chrome should render — V3 owns the chrome. The hooks above
+  // have already run by this point, so the API surface is set up; we
+  // just strip the visible UI.
+  if (headless) {
+    return (
+      <div data-studio-v2-headless style={{ position: 'absolute', inset: 0, display: 'flex' }}>
+        <Viewport3D canvasId="render-canvas-studio" domain="studio" />
+      </div>
+    );
+  }
+
   return (
     <>
       {/* BLENDER WORKSPACES STRIP — top-of-window tab strip mirroring
@@ -19542,3 +19556,5 @@ function WorkbenchStudio() {
 }
 
 export default WorkbenchStudio;
+// Named export so the V3 shell can mount V2 in headless mode.
+export { WorkbenchStudioV2 };

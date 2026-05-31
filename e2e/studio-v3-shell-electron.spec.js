@@ -78,9 +78,10 @@ test('Studio V3 — Forge-style shell mounts, all zones present (slice 394)', as
   // Back to Model.
   await win.locator('[data-studio-v3-wb="model"]').click();
 
-  // Activate the Cube tool.
-  await win.locator('[data-studio-v3-tool="cube"]').click();
-  await expect(win.locator('[data-studio-v3-tool="cube"]')).toHaveAttribute('data-active', 'true');
+  // Activate the Move tool — Transform group is toggle-style.
+  await win.locator('[data-studio-v3-tool="move"][data-studio-v3-tool-group="transform"]').click();
+  await expect(win.locator('[data-studio-v3-tool="move"][data-studio-v3-tool-group="transform"]'))
+    .toHaveAttribute('data-active', 'true');
 
   // Flip edit mode via HUD.
   await win.locator('[data-studio-v3-edit-mode="vertex"]').click();
