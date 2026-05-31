@@ -14850,6 +14850,8 @@ function WorkbenchStudio() {
           /* Also free up the left edge that the toolbar used to reserve so
              the viewport extends to the window's left edge. */
           body:has([data-studio-properties="studio"]) .workbench-viewport { left: 0 !important; }
+          /* Slice 338 — workspaces strip restyled to Studio brand palette.
+             #0d1117 chrome, #e6edf3 text, teal #1de9b6 active indicator. */
           .blender-workspaces-strip {
             position: absolute;
             top: 0;
@@ -14861,8 +14863,8 @@ function WorkbenchStudio() {
             align-items: center;
             gap: 2px;
             padding: 4px 8px;
-            background: #2b2b2b;
-            border-bottom: 1px solid #1d1d1d;
+            background: #0d1117;
+            border-bottom: 1px solid #1f2733;
             overflow-x: auto;
             overflow-y: hidden;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -14871,7 +14873,7 @@ function WorkbenchStudio() {
             box-sizing: border-box;
           }
           .blender-workspaces-strip::-webkit-scrollbar { height: 4px; }
-          .blender-workspaces-strip::-webkit-scrollbar-thumb { background: #555; border-radius: 2px; }
+          .blender-workspaces-strip::-webkit-scrollbar-thumb { background: #21262d; border-radius: 2px; }
           .blender-workspace-tab {
             display: inline-flex;
             align-items: center;
@@ -14879,17 +14881,17 @@ function WorkbenchStudio() {
             background: transparent;
             border: none;
             border-top: 2px solid transparent;
-            color: #bdbdbd;
+            color: #9aa6b2;
             cursor: pointer;
             white-space: nowrap;
             user-select: none;
             transition: background 0.08s ease, color 0.08s ease, border-color 0.08s ease;
           }
-          .blender-workspace-tab:hover { background: #3a3a3a; color: #f0f0f0; }
+          .blender-workspace-tab:hover { background: #161b22; color: #e6edf3; }
           .blender-workspace-tab.active {
-            background: #353535;
-            color: #ffffff;
-            border-top-color: #4a90d9;
+            background: #161b22;
+            color: #e6edf3;
+            border-top-color: #1de9b6;
           }
           [data-studio-properties="studio"] [data-studio-section="mesh"],
           [data-studio-properties="studio"] [data-studio-section="reference"],
