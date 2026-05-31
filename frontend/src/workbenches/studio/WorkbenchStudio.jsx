@@ -575,6 +575,27 @@ function WorkbenchStudio() {
     if (window.__studioEditModeRef && window.__studioEditModeRef.current) setEditModeUI(window.__studioEditModeRef.current);
     return () => window.removeEventListener('studio-edit-mode-changed', onChange);
   }, []);
+  // Slice 383 — Edit-mode selection counts (vert/edge/face). Updated on
+  // each studio-pick so the viewport-header badge reflects the live set.
+  const [editSelCounts, setEditSelCounts] = useState({ vertices: 0, edges: 0, faces: 0 });
+  useEffect(() => {
+    const readSel = () => {
+      if (window.__studioGetEditSelection) {
+        const s = window.__studioGetEditSelection();
+        setEditSelCounts({ vertices: s.vertices.length, edges: s.edges.length, faces: s.faces.length });
+      }
+    };
+    // Defer one microtask so the marker renderer's listener has run
+    // (it's what mutates __studioEditSelection on each pick).
+    const refresh = () => { queueMicrotask(readSel); };
+    window.addEventListener('studio-pick', refresh);
+    window.addEventListener('studio-edit-mode-changed', refresh);
+    readSel();
+    return () => {
+      window.removeEventListener('studio-pick', refresh);
+      window.removeEventListener('studio-edit-mode-changed', refresh);
+    };
+  }, []);
   const [primitiveCount, setPrimitiveCount] = useState(0);
   const [vertexCount, setVertexCount] = useState(0);
   const [faceCount, setFaceCount] = useState(0);
@@ -14503,6 +14524,27 @@ function WorkbenchStudio() {
               );
             })}
           </span>
+          {/* Slice 383 (UIUX v2) — Edit-mode selection-count badge. Only
+              renders in a sub-object mode; shows live counts of selected
+              verts / edges / faces. Studio teal text, monospace digits. */}
+          {(editModeUI === 'vertex' || editModeUI === 'edge' || editModeUI === 'face') && (
+            <span
+              data-studio-edit-sel-counts
+              data-studio-edit-sel-verts={editSelCounts.vertices}
+              data-studio-edit-sel-edges={editSelCounts.edges}
+              data-studio-edit-sel-faces={editSelCounts.faces}
+              style={{
+                marginLeft: '8px', padding: '2px 8px',
+                background: '#161b22', border: '1px solid #21262d',
+                borderRadius: '3px', color: '#1de9b6',
+                fontSize: '10px', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                letterSpacing: '0.04em',
+              }}
+              title={`Selected — verts: ${editSelCounts.vertices} · edges: ${editSelCounts.edges} · faces: ${editSelCounts.faces}`}
+            >
+              v{editSelCounts.vertices} · e{editSelCounts.edges} · f{editSelCounts.faces}
+            </span>
+          )}
           <span style={{ flex: 1 }} />
           {/* Slice 334 (UIUX v2) — axis-view chips (replaces slice 318 floating right-rail). */}
           {['top', 'front', 'side', 'persp'].map((axis) => (
