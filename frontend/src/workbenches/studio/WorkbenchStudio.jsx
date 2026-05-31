@@ -11976,6 +11976,16 @@ function WorkbenchStudio() {
                       );
                     })()}
                   </div>
+                  {/* Slice 273: camera FOV slider. */}
+                  <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <label style={{ opacity: 0.6 }}>FOV:</label>
+                    <input
+                      type="range" min="10" max="110" step="1" defaultValue="50"
+                      data-studio-npanel-fov
+                      onInput={(e) => { if (window.__studioSetFov) window.__studioSetFov(parseInt(e.target.value, 10)); }}
+                      style={{ flex: 1 }}
+                    />
+                  </div>
                   {/* Slice 256: tone mapping dropdown. */}
                   <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <label style={{ opacity: 0.6 }}>Tone map:</label>

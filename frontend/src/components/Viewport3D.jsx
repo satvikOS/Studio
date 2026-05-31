@@ -107,6 +107,15 @@ function Viewport3D({ canvasId = 'render-canvas', domain = 'mechanical', onReady
         // Slice 254: shadow-quality control. setQuality('off' / 'low' /
         // 'medium' / 'high') toggles shadowMap.enabled + resizes any
         // existing shadow.mapSize. Lets the user trade quality for FPS.
+        // Slice 273: camera FOV control. Range [10, 110]. Updates the
+        // projection matrix in place — orbit controls keep working.
+        window.__studioSetFov = (deg) => {
+          const v = Math.max(10, Math.min(110, Number(deg) || 50));
+          camera.fov = v;
+          camera.updateProjectionMatrix();
+          window.__studioCamFov = v;
+        };
+        window.__studioGetFov = () => camera.fov;
         // Slice 256: tone mapping selector. Real DCC parity — Blender,
         // Unreal, Maya all ship tone-map presets. Names match the
         // three.js constants. Maps "ACES" / "Cineon" / "Reinhard" /
