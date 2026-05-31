@@ -763,13 +763,14 @@ function Viewport3D({ canvasId = 'render-canvas', domain = 'mechanical', onReady
             // object edit mode, dispatch to the corresponding picker and
             // emit a 'studio-pick' event with the result. Skip the default
             // object-pick so the selection set doesn't change underneath.
+            // Slice 381 — pass shift modifier as additive-select flag.
             const editMode = window.__studioEditModeRef && window.__studioEditModeRef.current;
             if (editMode && editMode !== 'object' && editMode !== 'sculpt') {
                 let res = null;
                 if (editMode === 'vertex' && window.__studioPickVertexFromClick) res = window.__studioPickVertexFromClick(mouse.x, mouse.y);
                 else if (editMode === 'edge'  && window.__studioPickEdgeFromClick)  res = window.__studioPickEdgeFromClick(mouse.x, mouse.y);
                 else if (editMode === 'face'  && window.__studioPickFaceFromClick)  res = window.__studioPickFaceFromClick(mouse.x, mouse.y);
-                window.dispatchEvent(new CustomEvent('studio-pick', { detail: { mode: editMode, result: res } }));
+                window.dispatchEvent(new CustomEvent('studio-pick', { detail: { mode: editMode, result: res, additive: !!event.shiftKey } }));
                 return;
             }
 

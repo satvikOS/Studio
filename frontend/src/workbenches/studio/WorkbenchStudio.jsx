@@ -2130,6 +2130,31 @@ function WorkbenchStudio() {
       return { ok: true, mode, prev };
     };
     window.__studioGetEditMode = () => window.__studioEditModeRef.current;
+    // Slice 381 — Edit-mode multi-selection set. Persists across re-renders
+    // on a window-level container. Click adds (shift) or replaces (plain).
+    // Vert items are vert indices; edge items are [v0,v1] pairs; face items
+    // are face triangle indices.
+    if (!window.__studioEditSelection) window.__studioEditSelection = { current: { vertices: [], edges: [], faces: [] } };
+    window.__studioGetEditSelection = () => {
+      const s = window.__studioEditSelection.current;
+      return { vertices: s.vertices.slice(), edges: s.edges.map((e) => e.slice()), faces: s.faces.slice() };
+    };
+    window.__studioClearEditSelection = () => { window.__studioEditSelection.current = { vertices: [], edges: [], faces: [] }; if (window.__studioRenderEditSelectionMarkers) window.__studioRenderEditSelectionMarkers(); return { ok: true }; };
+    window.__studioAddToEditSelection = (mode, item) => {
+      const s = window.__studioEditSelection.current;
+      if (mode === 'vertex' && Number.isInteger(item)) { if (!s.vertices.includes(item)) s.vertices.push(item); }
+      else if (mode === 'edge' && Array.isArray(item) && item.length === 2) {
+        const exists = s.edges.find((e) => (e[0] === item[0] && e[1] === item[1]) || (e[0] === item[1] && e[1] === item[0]));
+        if (!exists) s.edges.push([item[0], item[1]]);
+      }
+      else if (mode === 'face' && Number.isInteger(item)) { if (!s.faces.includes(item)) s.faces.push(item); }
+      else return { ok: false, error: 'bad mode/item' };
+      return { ok: true, count: { vertices: s.vertices.length, edges: s.edges.length, faces: s.faces.length } };
+    };
+    window.__studioReplaceEditSelection = (mode, item) => {
+      window.__studioEditSelection.current = { vertices: [], edges: [], faces: [] };
+      return window.__studioAddToEditSelection(mode, item);
+    };
     // Slice 378 — Render selection markers on edit-mode pick. Listens to
     // the 'studio-pick' event from slice 377 and adds a Three.js helper
     // mesh (sphere for vert, line for edge, triangle for face) so the
@@ -2144,48 +2169,75 @@ function WorkbenchStudio() {
       toRemove.forEach((o) => { scene.remove(o); if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
     };
     window.__studioClearPickMarkers = () => { _clearMarkers(); return { ok: true }; };
+    const _teal = 0x1de9b6;
     window.__studioRenderPickMarker = (detail) => {
       const scene = window.__archdiscScene;
       if (!scene || !detail || !detail.result || !detail.result.ok) return { ok: false };
-      _clearMarkers();
+      // Slice 381 — push the pick into the multi-set (replace unless
+      // shift-modifier flag is set on the event detail), then render all.
       const mode = detail.mode;
       const r = detail.result;
-      const teal = 0x1de9b6;
-      let helper = null;
-      if (mode === 'vertex' && r.point) {
+      if (mode === 'vertex' && Number.isInteger(r.vertIdx)) {
+        if (detail.additive) window.__studioAddToEditSelection('vertex', r.vertIdx);
+        else window.__studioReplaceEditSelection('vertex', r.vertIdx);
+      } else if (mode === 'edge' && Array.isArray(r.vertIdx) && r.vertIdx.length === 2) {
+        if (detail.additive) window.__studioAddToEditSelection('edge', r.vertIdx);
+        else window.__studioReplaceEditSelection('edge', r.vertIdx);
+      } else if (mode === 'face' && Number.isInteger(r.faceIdx)) {
+        if (detail.additive) window.__studioAddToEditSelection('face', r.faceIdx);
+        else window.__studioReplaceEditSelection('face', r.faceIdx);
+      }
+      window.__studioRenderEditSelectionMarkers();
+      return { ok: true, mode };
+    };
+    window.__studioRenderEditSelectionMarkers = () => {
+      const scene = window.__archdiscScene;
+      const m = selectedMeshRef.current;
+      if (!scene || !m || !m.geometry || !m.geometry.attributes.position) return { ok: false };
+      _clearMarkers();
+      const pos = m.geometry.attributes.position;
+      const idx = m.geometry.index ? m.geometry.index.array : null;
+      const sel = window.__studioEditSelection.current;
+      m.updateMatrixWorld(true);
+      for (const v of sel.vertices) {
+        const p = new THREE.Vector3().fromBufferAttribute(pos, v).applyMatrix4(m.matrixWorld);
         const g = new THREE.SphereGeometry(0.0012, 16, 12);
-        helper = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: teal, depthTest: false, transparent: true, opacity: 0.95 }));
-        helper.position.set(r.point[0], r.point[1], r.point[2]);
-      } else if (mode === 'edge' && r.midpoint) {
-        const m = selectedMeshRef.current; if (!m) return { ok: false };
-        const pos = m.geometry.attributes.position; const idx = r.vertIdx;
-        const vA = new THREE.Vector3().fromBufferAttribute(pos, idx[0]).applyMatrix4(m.matrixWorld);
-        const vB = new THREE.Vector3().fromBufferAttribute(pos, idx[1]).applyMatrix4(m.matrixWorld);
+        const h = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: _teal, depthTest: false, transparent: true, opacity: 0.95 }));
+        h.position.copy(p);
+        h.name = MARKER_GROUP; h.renderOrder = 999; h.userData.isHelper = true;
+        scene.add(h);
+      }
+      for (const e of sel.edges) {
+        const vA = new THREE.Vector3().fromBufferAttribute(pos, e[0]).applyMatrix4(m.matrixWorld);
+        const vB = new THREE.Vector3().fromBufferAttribute(pos, e[1]).applyMatrix4(m.matrixWorld);
         const g = new THREE.BufferGeometry().setFromPoints([vA, vB]);
-        helper = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: teal, depthTest: false, transparent: true, opacity: 0.95, linewidth: 2 }));
-      } else if (mode === 'face' && r.vertIdx) {
-        const m = selectedMeshRef.current; if (!m) return { ok: false };
-        const pos = m.geometry.attributes.position;
-        const vA = new THREE.Vector3().fromBufferAttribute(pos, r.vertIdx[0]).applyMatrix4(m.matrixWorld);
-        const vB = new THREE.Vector3().fromBufferAttribute(pos, r.vertIdx[1]).applyMatrix4(m.matrixWorld);
-        const vC = new THREE.Vector3().fromBufferAttribute(pos, r.vertIdx[2]).applyMatrix4(m.matrixWorld);
-        const g = new THREE.BufferGeometry().setFromPoints([vA, vB, vC]);
-        g.setIndex([0, 1, 2]);
-        helper = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: teal, side: THREE.DoubleSide, depthTest: false, transparent: true, opacity: 0.4 }));
+        const h = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: _teal, depthTest: false, transparent: true, opacity: 0.95 }));
+        h.name = MARKER_GROUP; h.renderOrder = 999; h.userData.isHelper = true;
+        scene.add(h);
       }
-      if (helper) {
-        helper.name = MARKER_GROUP;
-        helper.renderOrder = 999;
-        helper.userData.isHelper = true;
-        scene.add(helper);
-        return { ok: true, mode };
+      for (const f of sel.faces) {
+        const a = idx ? idx[f * 3] : f * 3;
+        const b = idx ? idx[f * 3 + 1] : f * 3 + 1;
+        const c = idx ? idx[f * 3 + 2] : f * 3 + 2;
+        const vA = new THREE.Vector3().fromBufferAttribute(pos, a).applyMatrix4(m.matrixWorld);
+        const vB = new THREE.Vector3().fromBufferAttribute(pos, b).applyMatrix4(m.matrixWorld);
+        const vC = new THREE.Vector3().fromBufferAttribute(pos, c).applyMatrix4(m.matrixWorld);
+        const g = new THREE.BufferGeometry().setFromPoints([vA, vB, vC]); g.setIndex([0, 1, 2]);
+        const h = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: _teal, side: THREE.DoubleSide, depthTest: false, transparent: true, opacity: 0.4 }));
+        h.name = MARKER_GROUP; h.renderOrder = 999; h.userData.isHelper = true;
+        scene.add(h);
       }
-      return { ok: false };
+      return { ok: true, counts: { vertices: sel.vertices.length, edges: sel.edges.length, faces: sel.faces.length } };
     };
     // Auto-wire the listener (idempotent: one listener per window).
     if (!window.__studioPickMarkerWired) {
       window.addEventListener('studio-pick', (ev) => { if (window.__studioRenderPickMarker) window.__studioRenderPickMarker(ev.detail); });
-      window.addEventListener('studio-edit-mode-changed', (ev) => { if (ev.detail && ev.detail.mode === 'object') _clearMarkers(); });
+      window.addEventListener('studio-edit-mode-changed', (ev) => {
+        if (ev.detail && ev.detail.mode === 'object') {
+          if (window.__studioClearEditSelection) window.__studioClearEditSelection();
+          _clearMarkers();
+        }
+      });
       window.__studioPickMarkerWired = true;
     }
     // Slice 375 — Click-pick edge from NDC. Picks the triangle the ray
@@ -2933,7 +2985,7 @@ function WorkbenchStudio() {
     window.__studioReadNormalTexel = (uv) => { const m = selectedMeshRef.current; const nc = m && m.userData && m.userData._normalCanvas; if (!nc) return null; const d = nc.getContext('2d').getImageData(Math.floor(uv[0] * 512), Math.floor((1 - uv[1]) * 512), 1, 1).data; return [d[0], d[1], d[2]]; };
     window.__studioPolyPaintAt = (pt, color, radius) => { const m = selectedMeshRef.current; if (!m) return null; return paintPolyAt(m, new THREE.Vector3(pt[0], pt[1], pt[2]), color || brushPaintColor, radius || 0.012); };
     window.__studioReadVertexColor = (i) => { const m = selectedMeshRef.current; const col = m && m.geometry && m.geometry.attributes.color; if (!col) return null; return [Math.round(col.getX(i) * 255), Math.round(col.getY(i) * 255), Math.round(col.getZ(i) * 255)]; };
-    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioEvalNiagara; delete window.__studioNiagaraStep; delete window.__studioBTTick; delete window.__studioStreamAround; delete window.__studioRevealAll; delete window.__studioAddAudioSource; delete window.__studioSetListener; delete window.__studioAudioState; delete window.__studioXRSupport; delete window.__studioEnterXR; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAnimBPSet; delete window.__studioAnimBPStep; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioTrimmedSurface; delete window.__studioAddNurbsCurve; delete window.__studioBRepBoolean; delete window.__studioSetReference; delete window.__studioClearReference; delete window.__studioReferenceState; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioFieldQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; delete window.__studioRunVexExpr; delete window.__studioPushFace; delete window.__studioBakeAOToTexture; delete window.__studioSculptLayerAdd; delete window.__studioSculptLayerList; delete window.__studioSculptLayerToggle; delete window.__studioSculptLayerStrength; delete window.__studioSculptLayerRemove; delete window.__studioMashDistribute; delete window.__studioSetHDRIEnvironment; delete window.__studioListHDRIPresets; delete window.__studioSolveIK2; delete window.__studioRunTaskGraph; delete window.__studioParticleEmitter; delete window.__studioFilletEdges; delete window.__studioProceduralTexture; delete window.__studioProjectPaintFromCamera; delete window.__studioFindSnapTarget; delete window.__studioRunGrasshopper; delete window.__studioVoxelizeMesh; delete window.__studioPhysicsAddConstraint; delete window.__studioPhysicsListConstraints; delete window.__studioPhysicsRemoveConstraint; delete window.__studioPhysicsClearConstraints; delete window.__studioListEdges; delete window.__studioPickEdge; delete window.__studioClearEdgeSelection; delete window.__studioMarkEdgeSeam; delete window.__studioListSeams; delete window.__studioClearSeams; delete window.__studioLookAt; delete window.__studioAlignToGround; delete window.__studioCloneAlongAxis; delete window.__studioRandomScatter; delete window.__studioCenterAtOrigin; delete window.__studioSnapToVertex; delete window.__studioSymmetrize; delete window.__studioGroupSelected; delete window.__studioPickVertexAt; delete window.__studioPickVertexFromClick; delete window.__studioPickFaceFromClick; delete window.__studioPickEdgeFromClick; delete window.__studioSetEditMode; delete window.__studioGetEditMode; delete window.__studioRenderPickMarker; delete window.__studioClearPickMarkers; delete window.__studioMoveVertex; delete window.__studioInsertVertexOnEdge; delete window.__studioMergeMeshes; delete window.__studioListSceneStats; delete window.__studioSelectAll; delete window.__studioSelectInverse; delete window.__studioFitSelected; delete window.__studioAddMountain; delete window.__studioMoSpline; delete window.__studioWeightPaintAt; delete window.__studioReadWeight; delete window.__studioTerrainAdd; delete window.__studioTerrainSculpt; delete window.__studioMarchVoxelGrid; delete window.__studioSetSunAngle; delete window.__studioApplySmartMaterial; delete window.__studioMoText; delete window.__studioMirrorAcrossAxis; delete window.__studioRaycastBVH; delete window.__studioSetCameraAxis; delete window.__studioSetShadingMode; delete window.__studioAddVolume; delete window.__studioApplyTransforms; delete window.__studioRecenterPivot; };
+    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioEvalNiagara; delete window.__studioNiagaraStep; delete window.__studioBTTick; delete window.__studioStreamAround; delete window.__studioRevealAll; delete window.__studioAddAudioSource; delete window.__studioSetListener; delete window.__studioAudioState; delete window.__studioXRSupport; delete window.__studioEnterXR; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAnimBPSet; delete window.__studioAnimBPStep; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioTrimmedSurface; delete window.__studioAddNurbsCurve; delete window.__studioBRepBoolean; delete window.__studioSetReference; delete window.__studioClearReference; delete window.__studioReferenceState; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioFieldQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; delete window.__studioRunVexExpr; delete window.__studioPushFace; delete window.__studioBakeAOToTexture; delete window.__studioSculptLayerAdd; delete window.__studioSculptLayerList; delete window.__studioSculptLayerToggle; delete window.__studioSculptLayerStrength; delete window.__studioSculptLayerRemove; delete window.__studioMashDistribute; delete window.__studioSetHDRIEnvironment; delete window.__studioListHDRIPresets; delete window.__studioSolveIK2; delete window.__studioRunTaskGraph; delete window.__studioParticleEmitter; delete window.__studioFilletEdges; delete window.__studioProceduralTexture; delete window.__studioProjectPaintFromCamera; delete window.__studioFindSnapTarget; delete window.__studioRunGrasshopper; delete window.__studioVoxelizeMesh; delete window.__studioPhysicsAddConstraint; delete window.__studioPhysicsListConstraints; delete window.__studioPhysicsRemoveConstraint; delete window.__studioPhysicsClearConstraints; delete window.__studioListEdges; delete window.__studioPickEdge; delete window.__studioClearEdgeSelection; delete window.__studioMarkEdgeSeam; delete window.__studioListSeams; delete window.__studioClearSeams; delete window.__studioLookAt; delete window.__studioAlignToGround; delete window.__studioCloneAlongAxis; delete window.__studioRandomScatter; delete window.__studioCenterAtOrigin; delete window.__studioSnapToVertex; delete window.__studioSymmetrize; delete window.__studioGroupSelected; delete window.__studioPickVertexAt; delete window.__studioPickVertexFromClick; delete window.__studioPickFaceFromClick; delete window.__studioPickEdgeFromClick; delete window.__studioSetEditMode; delete window.__studioGetEditMode; delete window.__studioRenderPickMarker; delete window.__studioClearPickMarkers; delete window.__studioGetEditSelection; delete window.__studioClearEditSelection; delete window.__studioAddToEditSelection; delete window.__studioReplaceEditSelection; delete window.__studioRenderEditSelectionMarkers; delete window.__studioMoveVertex; delete window.__studioInsertVertexOnEdge; delete window.__studioMergeMeshes; delete window.__studioListSceneStats; delete window.__studioSelectAll; delete window.__studioSelectInverse; delete window.__studioFitSelected; delete window.__studioAddMountain; delete window.__studioMoSpline; delete window.__studioWeightPaintAt; delete window.__studioReadWeight; delete window.__studioTerrainAdd; delete window.__studioTerrainSculpt; delete window.__studioMarchVoxelGrid; delete window.__studioSetSunAngle; delete window.__studioApplySmartMaterial; delete window.__studioMoText; delete window.__studioMirrorAcrossAxis; delete window.__studioRaycastBVH; delete window.__studioSetCameraAxis; delete window.__studioSetShadingMode; delete window.__studioAddVolume; delete window.__studioApplyTransforms; delete window.__studioRecenterPivot; };
   });
   // Auto-frame on primitive count change so the camera always shows
   // the current scene without the user having to hit Home.
