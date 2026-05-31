@@ -15857,9 +15857,15 @@ function WorkbenchStudio() {
           );
         })()}
 
-        <div className="property-section" data-studio-section="ai">
+        {/* Slice 341 — N-panel AI section decluttered. The duplicate
+            input + Run button have been removed (the slice-335 Archie
+            portal pill at viewport bottom is the canonical prompt
+            entry). Only the run history + active plan remain — useful
+            power-user info that the portal peek (slice 340) summarises
+            but doesn't replace. */}
+        <div className="property-section" data-studio-section="ai" data-studio-archie-log-section>
           <h3 className="property-header">
-            AI Prompt
+            Archie Log
             <span
               data-studio-ai-runs
               style={{ float: 'right', opacity: 0.6, fontSize: '11px', fontWeight: 'normal' }}
@@ -15867,25 +15873,11 @@ function WorkbenchStudio() {
               {aiLog.length} run{aiLog.length === 1 ? '' : 's'}
             </span>
           </h3>
-          <div className="property-row" style={{ alignItems: 'stretch' }}>
-            <input
-              type="text"
-              className="property-input"
-              data-studio-ai="prompt"
-              value={aiPrompt}
-              onChange={e => setAiPrompt(e.target.value)}
-              placeholder="e.g. add a cube and a sphere, then spin them"
-              style={{ flex: 1 }}
-            />
-          </div>
-          <button
-            className="property-button"
-            data-studio-action="run-ai-prompt"
-            onClick={runAiPrompt}
-            disabled={!aiPrompt.trim() || aiRunning}
-          >
-            {aiRunning ? 'Running…' : 'Run Prompt'}
-          </button>
+          {aiLog.length === 0 && !aiRunning && (
+            <div data-studio-archie-log-empty style={{ opacity: 0.5, fontSize: '10px', padding: '4px 0' }}>
+              Use the floating archie bar at the bottom of the viewport.
+            </div>
+          )}
           {aiPlan.length > 0 && aiRunning && (
             <div
               data-studio-ai-plan
