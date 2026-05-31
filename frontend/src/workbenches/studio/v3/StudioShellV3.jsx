@@ -3,17 +3,13 @@ import './tokens.css';
 import { StudioMark, StudioWordmark } from './StudioLogo';
 import { Icon } from './Icons';
 import { spawnPrimitive } from './spawn';
+import Viewport3D from '../../../components/Viewport3D';
+import { registerV3Api, unregisterV3Api } from './api';
 
-// Slice 397 — V3 mounts V2 in headless mode inside its viewport zone so
-// every V2 useEffect runs, the entire 206-strong window.__studio* API
-// surface registers, the scene + Viewport3D mount once, and the 268
-// data-studio-* attribute surface stays available. V3 owns the visible
-// chrome on top.
-//
-// Lazy import dodges a circular dep — V3 is imported from V2's router
-// before V2 finishes its own module evaluation; a static import here
-// would create the cycle and break the module graph.
-const WorkbenchStudioV2 = React.lazy(() => import('../WorkbenchStudio').then((m) => ({ default: m.WorkbenchStudioV2 })));
+// Slice 401 — V3 stops using V2. V3 owns its own Viewport3D mount + its
+// own spawn / selection / undo / file-io implementations (built up in
+// subsequent slices). The 206-strong V2 API surface gets ported into
+// v3-native modules one batch at a time.
 
 // ArchDisc Studio V3 — application shell.
 //
@@ -643,6 +639,13 @@ export function StudioShellV3({ mode = 'dark' }) {
   const [dockOpen, setDockOpen] = useState(false);
   const [thread, setThread] = useState([]);
 
+  // Slice 401 — register V3's native window.__studio* API surface on
+  // mount; unregister on unmount so re-mounts don't leak.
+  useEffect(() => {
+    registerV3Api();
+    return () => unregisterV3Api();
+  }, []);
+
   // Theme → document attribute so tokens.css applies the right palette.
   useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -811,12 +814,13 @@ export function StudioShellV3({ mode = 'dark' }) {
         }}
       />
       <main className="studio-viewport studio-viewport-canvas" data-studio-v3-viewport>
-        {/* V2 mounted headless — gives V3 the full 206-API surface +
-            scene + the live Viewport3D canvas with raycaster + gizmo,
-            without rendering any of V2's own chrome. */}
-        <React.Suspense fallback={null}>
-          <WorkbenchStudioV2 headless />
-        </React.Suspense>
+        {/* V3's own Viewport3D — owns the scene + camera + gizmo +
+            raycaster. No V2 dependency. */}
+        <Viewport3D
+          canvasId="render-canvas-studio-v3"
+          domain="studio"
+          onSelectionChange={(s) => setSelection(s)}
+        />
         <ViewportHUD
           editMode={editMode}
           setEditMode={setEditMode}
