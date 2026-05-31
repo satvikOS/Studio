@@ -12058,6 +12058,21 @@ function WorkbenchStudio() {
                       return d.toLocaleTimeString();
                     })()}</span>
                   </div>
+                  {/* Slice 276: 3D cursor position readout + reset. */}
+                  <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px', fontFamily: 'monospace', fontSize: '10px' }}>
+                    <span style={{ opacity: 0.6 }}>3D Cursor:</span>
+                    <span data-studio-npanel-cursor-pos>{(() => {
+                      void primitiveCount; void lightCount; void outlinerTick; void currentFrame;
+                      const c = (typeof window !== 'undefined' && window.__studioGetCursor) ? window.__studioGetCursor() : [0, 0, 0];
+                      return `${c[0].toFixed(2)} ${c[1].toFixed(2)} ${c[2].toFixed(2)}`;
+                    })()}</span>
+                    <button
+                      type="button"
+                      data-studio-npanel-cursor-reset
+                      onClick={() => { if (window.__studioSnapCursorOrigin) window.__studioSnapCursorOrigin(); bumpOutliner(); }}
+                      style={{ background: '#2a2a3a', color: '#bdbdbd', border: '1px solid #3a3a4a', borderRadius: '3px', padding: '1px 6px', fontSize: '9px', cursor: 'pointer', fontFamily: 'inherit', marginLeft: 'auto' }}
+                    >0</button>
+                  </div>
                   {/* Slice 268: turntable autorotate. */}
                   <div style={{ marginBottom: '8px' }}>
                     <button
