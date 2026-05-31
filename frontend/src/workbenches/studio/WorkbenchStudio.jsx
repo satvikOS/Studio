@@ -1906,15 +1906,23 @@ function WorkbenchStudio() {
   const [physicsG, setPhysicsG]               = useState(9.8);
   const [physicsRestitution, setPhysicsRestitution] = useState(0.55);
   const physicsRafRef = useRef(null);
-  // Slice 315 — FPS counter for the status bar. Averages every 30 frames.
+  // Slice 315 — FPS counter for the status bar. Averages over a longer
+  // window (every 60 frames ≈ 1s) and only triggers a re-render when the
+  // displayed value changes by ≥ 2 — otherwise the steady 60fps stream
+  // re-renders the WorkbenchStudio twice a second and corrupts focus /
+  // controlled-input flows like the N-panel transform editors.
   const [fps, setFps] = useState(0);
+  const fpsRef = useRef(0);
   useEffect(() => {
     let frames = 0, last = performance.now(), raf = 0;
     const tick = (t) => {
       frames++;
-      if (frames >= 30) {
+      if (frames >= 60) {
         const v = Math.round(1000 / ((t - last) / frames));
-        setFps(v); window.__studioFPS = v;
+        window.__studioFPS = v;
+        if (Math.abs(v - fpsRef.current) >= 2) {
+          fpsRef.current = v; setFps(v);
+        }
         frames = 0; last = t;
       }
       raf = requestAnimationFrame(tick);
@@ -13319,34 +13327,92 @@ function WorkbenchStudio() {
                         <span style={{ opacity: 0.6 }}>Name:</span>{' '}
                         <span data-studio-npanel-selected-kind style={{ color: '#fff' }}>{selectedKind}</span>
                       </div>
-                      {selectedTransform && (
-                        <>
-                          <div data-studio-npanel-section="transform" style={{ marginBottom: '6px' }}>
-                            <div style={{ opacity: 0.6, marginBottom: '3px' }}>Location</div>
-                            <div style={{ fontFamily: 'monospace', color: '#cfd5dc' }}>
-                              <span data-studio-npanel-loc-x>{selectedTransform.position?.x?.toFixed(3) ?? '0.000'}</span>{' '}
-                              <span data-studio-npanel-loc-y>{selectedTransform.position?.y?.toFixed(3) ?? '0.000'}</span>{' '}
-                              <span data-studio-npanel-loc-z>{selectedTransform.position?.z?.toFixed(3) ?? '0.000'}</span>
+                      {selectedTransform && (() => {
+                        /* Slice 316 — editable numeric XYZ inputs for
+                           Location/Rotation/Scale (Blender N-panel parity).
+                           Each input writes back to mesh.{position,rotation,
+                           scale}.{x,y,z}, then mirrors the change via
+                           setSelectedTransform so the gizmo + status bar
+                           re-render. Rotation is degrees for UI, radians
+                           on the mesh. */
+                        const inStyle = {
+                          width: '52px', padding: '1px 3px', fontSize: '11px',
+                          fontFamily: 'monospace', background: '#1c1c20',
+                          color: '#dfe5ea', border: '1px solid #2c2c30',
+                          borderRadius: '2px',
+                        };
+                        const writeMesh = (kind, axis, v) => {
+                          const m = selectedMeshRef.current; if (!m) return;
+                          if (kind === 'position') m.position[axis] = v;
+                          else if (kind === 'rotation') m.rotation[axis] = v;
+                          else if (kind === 'scale') m.scale[axis] = Math.max(0.001, v);
+                          m.updateMatrixWorld(true);
+                          // Update the underlying refs but DON'T setSelectedTransform here
+                          // — that would re-render the parent and destroy focus on the
+                          // input the user is typing into. The status bar reads live
+                          // via window.__studioFPS / selectedMeshRef during its render.
+                        };
+                        const numIn = (kind, axis, getDisplay, onCommit) => (
+                          <input
+                            type="number" step="0.05"
+                            defaultValue={Number(getDisplay()).toFixed(3)}
+                            key={`${kind}-${axis}-${selectedMeshRef.current && selectedMeshRef.current.uuid}`}
+                            data-studio-npanel-edit={`${kind}-${axis}`}
+                            onChange={(e) => {
+                              const v = parseFloat(e.target.value);
+                              if (!Number.isFinite(v)) return;
+                              onCommit(v);
+                            }}
+                            style={inStyle}
+                          />
+                        );
+                        return (
+                          <>
+                            <div data-studio-npanel-section="transform" style={{ marginBottom: '6px' }}>
+                              <div style={{ opacity: 0.6, marginBottom: '3px' }}>Location</div>
+                              <div style={{ display: 'flex', gap: '4px' }}>
+                                {numIn('position', 'x',
+                                  () => selectedTransform.position?.x ?? 0,
+                                  (v) => writeMesh('position', 'x', v))}
+                                {numIn('position', 'y',
+                                  () => selectedTransform.position?.y ?? 0,
+                                  (v) => writeMesh('position', 'y', v))}
+                                {numIn('position', 'z',
+                                  () => selectedTransform.position?.z ?? 0,
+                                  (v) => writeMesh('position', 'z', v))}
+                              </div>
                             </div>
-                          </div>
-                          <div style={{ marginBottom: '6px' }}>
-                            <div style={{ opacity: 0.6, marginBottom: '3px' }}>Rotation (rad)</div>
-                            <div style={{ fontFamily: 'monospace', color: '#cfd5dc' }}>
-                              <span data-studio-npanel-rot-x>{selectedTransform.rotation?.x?.toFixed(3) ?? '0.000'}</span>{' '}
-                              <span data-studio-npanel-rot-y>{selectedTransform.rotation?.y?.toFixed(3) ?? '0.000'}</span>{' '}
-                              <span data-studio-npanel-rot-z>{selectedTransform.rotation?.z?.toFixed(3) ?? '0.000'}</span>
+                            <div style={{ marginBottom: '6px' }}>
+                              <div style={{ opacity: 0.6, marginBottom: '3px' }}>Rotation (deg)</div>
+                              <div style={{ display: 'flex', gap: '4px' }}>
+                                {numIn('rotation', 'x',
+                                  () => (selectedTransform.rotation?.x ?? 0) * 180 / Math.PI,
+                                  (v) => writeMesh('rotation', 'x', v * Math.PI / 180))}
+                                {numIn('rotation', 'y',
+                                  () => (selectedTransform.rotation?.y ?? 0) * 180 / Math.PI,
+                                  (v) => writeMesh('rotation', 'y', v * Math.PI / 180))}
+                                {numIn('rotation', 'z',
+                                  () => (selectedTransform.rotation?.z ?? 0) * 180 / Math.PI,
+                                  (v) => writeMesh('rotation', 'z', v * Math.PI / 180))}
+                              </div>
                             </div>
-                          </div>
-                          <div>
-                            <div style={{ opacity: 0.6, marginBottom: '3px' }}>Scale</div>
-                            <div style={{ fontFamily: 'monospace', color: '#cfd5dc' }}>
-                              <span data-studio-npanel-scale-x>{selectedTransform.scale?.x?.toFixed(3) ?? '1.000'}</span>{' '}
-                              <span data-studio-npanel-scale-y>{selectedTransform.scale?.y?.toFixed(3) ?? '1.000'}</span>{' '}
-                              <span data-studio-npanel-scale-z>{selectedTransform.scale?.z?.toFixed(3) ?? '1.000'}</span>
+                            <div>
+                              <div style={{ opacity: 0.6, marginBottom: '3px' }}>Scale</div>
+                              <div style={{ display: 'flex', gap: '4px' }}>
+                                {numIn('scale', 'x',
+                                  () => selectedTransform.scale?.x ?? 1,
+                                  (v) => writeMesh('scale', 'x', v))}
+                                {numIn('scale', 'y',
+                                  () => selectedTransform.scale?.y ?? 1,
+                                  (v) => writeMesh('scale', 'y', v))}
+                                {numIn('scale', 'z',
+                                  () => selectedTransform.scale?.z ?? 1,
+                                  (v) => writeMesh('scale', 'z', v))}
+                              </div>
                             </div>
-                          </div>
-                        </>
-                      )}
+                          </>
+                        );
+                      })()}
                     </>
                   ) : (
                     <div data-studio-npanel-empty style={{ opacity: 0.5 }}>(no selection)</div>
