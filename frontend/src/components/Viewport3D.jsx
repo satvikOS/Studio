@@ -350,7 +350,7 @@ function Viewport3D({ canvasId = 'render-canvas', domain = 'mechanical', onReady
           // world-space centroid to a screen pixel and drive the viewport
           // with REAL mouse clicks / drag-orbits (motionCapture.js helpers).
           // Read-only from the spec side — never mutated by e2e.
-          window.__archdiscViewport = { scene, camera, renderer, orbitControls };
+          window.__archdiscViewport = { scene, camera, renderer, orbitControls, keyLight: key };
         }
 
         // --- Raycaster ---
