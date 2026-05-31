@@ -1222,6 +1222,34 @@ function WorkbenchStudio() {
     window.__studioPhysicsStep = (steps, dt) => { const n = steps || 1; const h = dt || 0.016; for (let i = 0; i < n; i++) physicsTick(h); return window.__studioPhysicsState(); };
     window.__studioPhysicsState = () => { const scene = window.__archdiscScene; if (!scene) return []; return physicsBodies(scene).map(b => ({ name: b.o.name, pos: [b.o.position.x, b.o.position.y, b.o.position.z], vel: [b.v[0], b.v[1], b.v[2]], radius: b.radius })); };
     window.__studioResetPhysics = () => resetPhysics();
+    // Slice 300 — distance-constraint manage API.
+    window.__studioPhysicsAddConstraint = (opts) => {
+      const { kind = 'distance', bodyA, bodyB, anchorA = [0, 0, 0], anchorB = [0, 0, 0],
+              distance, iterations = 6 } = (opts || {});
+      const scene = window.__archdiscScene;
+      if (!scene || !bodyA || !bodyB) return null;
+      let oa = null, ob = null;
+      scene.traverse((o) => { if (o.name === bodyA) oa = o; if (o.name === bodyB) ob = o; });
+      if (!oa || !ob) return null;
+      const dist = distance != null ? distance : oa.position.distanceTo(ob.position);
+      const id = 'c_' + (physicsConstraintsRef.current.length + 1) + '_' + Date.now();
+      physicsConstraintsRef.current.push({
+        id, kind, bodyAName: bodyA, bodyBName: bodyB,
+        anchorA: anchorA.slice(), anchorB: anchorB.slice(), distance: dist, iterations,
+      });
+      return { id, kind, bodyA, bodyB, distance: dist };
+    };
+    window.__studioPhysicsListConstraints = () => physicsConstraintsRef.current.map((c) => ({
+      id: c.id, kind: c.kind, bodyA: c.bodyAName, bodyB: c.bodyBName, distance: c.distance, iterations: c.iterations,
+    }));
+    window.__studioPhysicsRemoveConstraint = (id) => {
+      const arr = physicsConstraintsRef.current;
+      const idx = arr.findIndex((c) => c.id === id);
+      if (idx < 0) return false;
+      arr.splice(idx, 1);
+      return true;
+    };
+    window.__studioPhysicsClearConstraints = () => { physicsConstraintsRef.current = []; return true; };
     // Sequencer / timeline: scrub the frame, insert a key at an explicit frame, read keys.
     window.__studioSetFrame = (f) => {
       const n = Math.max(0, Math.round(f));
@@ -1358,7 +1386,7 @@ function WorkbenchStudio() {
     window.__studioReadNormalTexel = (uv) => { const m = selectedMeshRef.current; const nc = m && m.userData && m.userData._normalCanvas; if (!nc) return null; const d = nc.getContext('2d').getImageData(Math.floor(uv[0] * 512), Math.floor((1 - uv[1]) * 512), 1, 1).data; return [d[0], d[1], d[2]]; };
     window.__studioPolyPaintAt = (pt, color, radius) => { const m = selectedMeshRef.current; if (!m) return null; return paintPolyAt(m, new THREE.Vector3(pt[0], pt[1], pt[2]), color || brushPaintColor, radius || 0.012); };
     window.__studioReadVertexColor = (i) => { const m = selectedMeshRef.current; const col = m && m.geometry && m.geometry.attributes.color; if (!col) return null; return [Math.round(col.getX(i) * 255), Math.round(col.getY(i) * 255), Math.round(col.getZ(i) * 255)]; };
-    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioEvalNiagara; delete window.__studioNiagaraStep; delete window.__studioBTTick; delete window.__studioStreamAround; delete window.__studioRevealAll; delete window.__studioAddAudioSource; delete window.__studioSetListener; delete window.__studioAudioState; delete window.__studioXRSupport; delete window.__studioEnterXR; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAnimBPSet; delete window.__studioAnimBPStep; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioTrimmedSurface; delete window.__studioAddNurbsCurve; delete window.__studioBRepBoolean; delete window.__studioSetReference; delete window.__studioClearReference; delete window.__studioReferenceState; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioFieldQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; delete window.__studioRunVexExpr; delete window.__studioPushFace; delete window.__studioBakeAOToTexture; delete window.__studioSculptLayerAdd; delete window.__studioSculptLayerList; delete window.__studioSculptLayerToggle; delete window.__studioSculptLayerStrength; delete window.__studioSculptLayerRemove; delete window.__studioMashDistribute; delete window.__studioSetHDRIEnvironment; delete window.__studioListHDRIPresets; delete window.__studioSolveIK2; delete window.__studioRunTaskGraph; delete window.__studioParticleEmitter; delete window.__studioFilletEdges; delete window.__studioProceduralTexture; delete window.__studioProjectPaintFromCamera; delete window.__studioFindSnapTarget; delete window.__studioRunGrasshopper; delete window.__studioVoxelizeMesh; };
+    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioEvalNiagara; delete window.__studioNiagaraStep; delete window.__studioBTTick; delete window.__studioStreamAround; delete window.__studioRevealAll; delete window.__studioAddAudioSource; delete window.__studioSetListener; delete window.__studioAudioState; delete window.__studioXRSupport; delete window.__studioEnterXR; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAnimBPSet; delete window.__studioAnimBPStep; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioTrimmedSurface; delete window.__studioAddNurbsCurve; delete window.__studioBRepBoolean; delete window.__studioSetReference; delete window.__studioClearReference; delete window.__studioReferenceState; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioFieldQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; delete window.__studioRunVexExpr; delete window.__studioPushFace; delete window.__studioBakeAOToTexture; delete window.__studioSculptLayerAdd; delete window.__studioSculptLayerList; delete window.__studioSculptLayerToggle; delete window.__studioSculptLayerStrength; delete window.__studioSculptLayerRemove; delete window.__studioMashDistribute; delete window.__studioSetHDRIEnvironment; delete window.__studioListHDRIPresets; delete window.__studioSolveIK2; delete window.__studioRunTaskGraph; delete window.__studioParticleEmitter; delete window.__studioFilletEdges; delete window.__studioProceduralTexture; delete window.__studioProjectPaintFromCamera; delete window.__studioFindSnapTarget; delete window.__studioRunGrasshopper; delete window.__studioVoxelizeMesh; delete window.__studioPhysicsAddConstraint; delete window.__studioPhysicsListConstraints; delete window.__studioPhysicsRemoveConstraint; delete window.__studioPhysicsClearConstraints; };
   });
   // Auto-frame on primitive count change so the camera always shows
   // the current scene without the user having to hit Home.
@@ -1435,6 +1463,11 @@ function WorkbenchStudio() {
   const [physicsG, setPhysicsG]               = useState(9.8);
   const [physicsRestitution, setPhysicsRestitution] = useState(0.55);
   const physicsRafRef = useRef(null);
+  // Slice 300 — Unreal/PhysX distance constraint (point-to-point joint).
+  // Each entry: {id, kind:'distance', bodyAName, bodyBName, anchorA[3],
+  // anchorB[3], distance, iterations}. Solved Verlet-style after gravity
+  // integrate, before pairwise collision response.
+  const physicsConstraintsRef = useRef([]);
   // Texture — procedural canvas pattern applied to the selected mesh's material.
   const [texPattern, setTexPattern] = useState('checker');
   const [texTiles,   setTexTiles]   = useState(8);
@@ -9558,6 +9591,33 @@ function WorkbenchStudio() {
       b.o.position.y += b.v[1] * dt;
       b.o.position.z += b.v[2] * dt;
     }
+    // 1.5) Distance constraints (Verlet position projection, mass-weighted).
+    const cs = physicsConstraintsRef.current;
+    if (cs && cs.length) {
+      const byName = new Map(bodies.map((b) => [b.o.name, b]));
+      const tmpA = new THREE.Vector3(), tmpB = new THREE.Vector3();
+      for (const c of cs) {
+        const ba = byName.get(c.bodyAName), bb = byName.get(c.bodyBName);
+        if (!ba || !bb) continue;
+        const iters = c.iterations || 6;
+        for (let it = 0; it < iters; it++) {
+          ba.o.updateMatrixWorld(true); bb.o.updateMatrixWorld(true);
+          tmpA.fromArray(c.anchorA).applyMatrix4(ba.o.matrixWorld);
+          tmpB.fromArray(c.anchorB).applyMatrix4(bb.o.matrixWorld);
+          const dx = tmpB.x - tmpA.x, dy = tmpB.y - tmpA.y, dz = tmpB.z - tmpA.z;
+          const d = Math.hypot(dx, dy, dz) || 1e-6;
+          const diff = (d - c.distance) / d;
+          const wsum = ba.invMass + bb.invMass;
+          const wa = ba.invMass / wsum, wb = bb.invMass / wsum;
+          ba.o.position.x += dx * diff * wa;
+          ba.o.position.y += dy * diff * wa;
+          ba.o.position.z += dz * diff * wa;
+          bb.o.position.x -= dx * diff * wb;
+          bb.o.position.y -= dy * diff * wb;
+          bb.o.position.z -= dz * diff * wb;
+        }
+      }
+    }
     // 2) pairwise sphere collisions — impulse + positional correction.
     for (let i = 0; i < bodies.length; i++) {
       for (let j = i + 1; j < bodies.length; j++) {
@@ -9634,6 +9694,7 @@ function WorkbenchStudio() {
         o.position.y = 0;
       }
     });
+    physicsConstraintsRef.current = [];
   }
 
   /*
