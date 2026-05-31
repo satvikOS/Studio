@@ -11523,6 +11523,9 @@ function WorkbenchStudio() {
                     <button type="button" className="ribbon-tool" data-studio-ribbon-action="fillet" onClick={() => filletEdges({ radius: 0.05, threshold: Math.PI / 6 })} disabled={!selectedKind} title="Plasticity/MoI fillet — round all sharp edges (dihedral > π/6)">
                       <span className="ribbon-tool-icon">⌒</span><span className="ribbon-tool-label">Fillet</span>
                     </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="mirror-x" onClick={() => window.__studioMirrorAcrossAxis && window.__studioMirrorAcrossAxis('x')} disabled={!selectedKind} title="Blender Mirror Modifier — clone selected mesh with X-axis-flipped scale">
+                      <span className="ribbon-tool-icon">⇋</span><span className="ribbon-tool-label">Mirror X</span>
+                    </button>
                     <button type="button" className="ribbon-tool" data-studio-ribbon-action="corrective-smooth" onClick={() => correctiveSmooth(0.4)} disabled={!selectedKind} title="Blender MOD_correctivesmooth — volume-preserving smooth">
                       <span className="ribbon-tool-icon">≋</span><span className="ribbon-tool-label">Corr·Smth</span>
                     </button>
