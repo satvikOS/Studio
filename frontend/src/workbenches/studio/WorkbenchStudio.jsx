@@ -11382,6 +11382,19 @@ function WorkbenchStudio() {
           <span data-studio-viewport-title>Untitled scene</span>
           <span style={{ opacity: 0.4 }}>·</span>
           <span data-studio-viewport-title-count>{primitiveCount} bodies</span>
+          {/* Slice 279: last-op label. __studioLastOp gets stamped on
+              every meaningful action (slice 220 et al). */}
+          {(() => {
+            void outlinerTick; void selectedKind;
+            const last = (typeof window !== 'undefined') ? window.__studioLastOp : null;
+            if (!last) return null;
+            return (
+              <>
+                <span style={{ opacity: 0.4 }}>·</span>
+                <span data-studio-viewport-title-lastop style={{ color: '#ffd9a0' }}>{last.kind}:{last.id}</span>
+              </>
+            );
+          })()}
           {/* Slice 277: selection count badge — only shows when > 0. */}
           {(() => {
             void selectedKind; void outlinerTick;
