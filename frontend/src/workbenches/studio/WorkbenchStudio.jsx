@@ -13428,8 +13428,29 @@ function WorkbenchStudio() {
                         transition: 'background 0.12s',
                       }}
                     >
+                      {/* Slice 274: click swatch → native colour picker
+                          opens, picked colour writes to mesh.material. */}
                       <span
                         data-studio-outliner-swatch={entry.swatch || ''}
+                        onClick={(ev) => {
+                          if (!entry.isPrimitive) return;
+                          ev.stopPropagation();
+                          const inp = document.createElement('input');
+                          inp.type = 'color';
+                          inp.value = entry.swatch || '#888888';
+                          inp.style.position = 'fixed'; inp.style.left = '-9999px';
+                          document.body.appendChild(inp);
+                          inp.addEventListener('change', () => {
+                            const obj = window.__archdiscScene && window.__archdiscScene.getObjectByProperty('uuid', entry.uuid);
+                            if (obj && obj.material && obj.material.color) {
+                              obj.material.color.set(inp.value);
+                              obj.material.needsUpdate = true;
+                              bumpOutliner();
+                            }
+                            document.body.removeChild(inp);
+                          });
+                          inp.click();
+                        }}
                         style={{
                           display: 'inline-block',
                           width: '10px',
@@ -13438,6 +13459,7 @@ function WorkbenchStudio() {
                           background: entry.swatch || (entry.isPrimitive ? '#888' : '#bfbfbf'),
                           border: '1px solid rgba(255,255,255,0.18)',
                           flexShrink: 0,
+                          cursor: entry.isPrimitive ? 'pointer' : 'default',
                         }}
                       />
                       <span
