@@ -15184,21 +15184,23 @@ function WorkbenchStudio() {
           body:has([data-studio-properties="studio"]) .workbench-stage {
             grid-template-rows: 168px minmax(0, 1fr) !important;
           }
+          /* Slice 339 — ribbon restyled to Studio brand palette.
+             Surface tones #0d1117 / #161b22, teal #1de9b6 active accent. */
           body:has([data-studio-properties="studio"]) .ribbon-container {
-            background: #000000 !important;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.10) !important;
+            background: #0d1117 !important;
+            border-bottom: 1px solid #1f2733 !important;
             display: flex !important;
             flex-direction: column !important;
           }
           body:has([data-studio-properties="studio"]) .ribbon-tabs {
-            background: #050505 !important;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+            background: #0d1117 !important;
+            border-bottom: 1px solid #1f2733 !important;
             padding: 0 8px !important;
             height: 24px !important;
           }
           body:has([data-studio-properties="studio"]) .ribbon-tab {
             background: transparent !important;
-            color: #95a0a8 !important;
+            color: #9aa6b2 !important;
             border: none !important;
             border-bottom: 2px solid transparent !important;
             font-size: 11px !important;
@@ -15210,18 +15212,18 @@ function WorkbenchStudio() {
             font-family: inherit !important;
           }
           body:has([data-studio-properties="studio"]) .ribbon-tab:hover {
-            color: #e6e6e6 !important;
-            background: rgba(255,255,255,0.04) !important;
-            border-bottom-color: rgba(255,255,255,0.25) !important;
+            color: #e6edf3 !important;
+            background: #161b22 !important;
+            border-bottom-color: #21262d !important;
           }
           body:has([data-studio-properties="studio"]) .ribbon-tab.active,
           body:has([data-studio-properties="studio"]) .ribbon-tab[data-studio-active="1"] {
-            color: #f0f0f0 !important;
-            background: rgba(255,255,255,0.06) !important;
-            border-bottom-color: #e6e6e6 !important;
+            color: #e6edf3 !important;
+            background: #161b22 !important;
+            border-bottom-color: #1de9b6 !important;
           }
           body:has([data-studio-properties="studio"]) .ribbon-content {
-            background: #050505 !important;
+            background: #161b22 !important;
             padding: 4px 8px !important;
             display: flex !important;
             gap: 0 !important;
@@ -15281,7 +15283,7 @@ function WorkbenchStudio() {
           body:has([data-studio-properties="studio"]) .ribbon-tool {
             background: transparent !important;
             border: 1px solid transparent !important;
-            color: #d4dadf !important;
+            color: #c5cdd6 !important;
             border-radius: 5px !important;
             padding: 4px 6px !important;
             min-width: 56px !important;
@@ -15295,15 +15297,16 @@ function WorkbenchStudio() {
             font-family: inherit !important;
           }
           body:has([data-studio-properties="studio"]) .ribbon-tool:hover:not(:disabled) {
-            background: rgba(255,255,255,0.06) !important;
-            border-color: rgba(255,255,255,0.18) !important;
-            color: #f0f0f0 !important;
+            background: #21262d !important;
+            border-color: #1de9b6 !important;
+            color: #e6edf3 !important;
           }
           body:has([data-studio-properties="studio"]) .ribbon-tool:active:not(:disabled) {
-            background: rgba(255,255,255,0.12) !important;
+            background: #1de9b6 !important;
+            color: #0d1117 !important;
           }
           body:has([data-studio-properties="studio"]) .ribbon-tool:disabled {
-            opacity: 0.35 !important;
+            opacity: 0.32 !important;
             cursor: not-allowed;
           }
           body:has([data-studio-properties="studio"]) .ribbon-tool-icon {
