@@ -14680,23 +14680,27 @@ function WorkbenchStudio() {
           </div>
         )}
 
+        {/* Slice 346 — empty-state hero card restyled to Studio brand.
+            Centered card with the teal diamond mark, dark #0d1117 surface,
+            #1f2733 border, signature teal primary CTA, secondary buttons
+            on the standard chrome palette. */}
         {primitiveCount === 0 && (
           <div
             data-studio-empty-hero
+            data-studio-brand="v2"
             style={{
               position: 'absolute',
               left: '50%',
               top: '50%',
               transform: 'translate(-50%, -50%)',
-              padding: '24px 32px',
-              minWidth: '320px',
-              background: 'rgba(8,8,8,0.96)',
-              border: '1px solid rgba(255,255,255,0.32)',
-              borderRadius: '14px',
-              boxShadow: 'none',
-              backdropFilter: 'none',
+              padding: '28px 36px',
+              minWidth: '340px',
+              background: '#0d1117',
+              border: '1px solid #1f2733',
+              borderRadius: '12px',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.55)',
               textAlign: 'center',
-              color: '#e9ecef',
+              color: '#e6edf3',
               fontFamily: 'system-ui, -apple-system, sans-serif',
               zIndex: 5,
               pointerEvents: 'auto',
@@ -14706,86 +14710,80 @@ function WorkbenchStudio() {
               display: 'inline-flex',
               alignItems: 'center',
               gap: '10px',
-              marginBottom: '6px',
+              marginBottom: '8px',
             }}>
-              <Wand2 size={22} style={{ color: '#e6e6e6', filter: 'none' }} />
-              <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 700, letterSpacing: '0.5px' }}>
-                ArchDisc <span style={{ color: '#e6e6e6' }}>Studio</span>
+              <span style={{ color: '#1de9b6', fontSize: '22px', lineHeight: 1 }}>◆</span>
+              <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 600, letterSpacing: '0.5px', color: '#e6edf3' }}>
+                archdisc <span style={{ color: '#1de9b6' }}>studio</span>
               </h2>
             </div>
-            <p style={{ margin: '0 0 16px 0', fontSize: '12px', opacity: 0.65, lineHeight: 1.5 }}>
-              3D content creation — modelling · sculpting · rigging · animation ·<br />
-              VFX · simulation · texturing · rendering
+            <p style={{ margin: '0 0 18px 0', fontSize: '11.5px', color: '#9aa6b2', lineHeight: 1.6 }}>
+              modelling · sculpting · rigging · animation · vfx<br />
+              simulation · texturing · rendering · compositing
             </p>
             <div
               data-studio-hero-actions
-              style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}
+              style={{ display: 'flex', gap: '6px', justifyContent: 'center', flexWrap: 'wrap' }}
             >
               <button
                 data-studio-hero-action="add-cube"
                 onClick={() => addPrimitive('cube')}
                 style={{
-                  background: 'rgba(255,255,255,0.18)',
-                  border: '1px solid rgba(255,255,255,0.55)',
-                  color: '#e6e6e6',
+                  background: '#1de9b6',
+                  border: '1px solid #1de9b6',
+                  color: '#0d1117',
                   fontSize: '11.5px',
-                  fontWeight: 600,
-                  padding: '8px 14px',
-                  borderRadius: '7px',
+                  fontWeight: 700,
+                  padding: '8px 16px',
+                  borderRadius: '6px',
                   cursor: 'pointer',
-                  transition: 'background 0.15s, box-shadow 0.15s',
+                  letterSpacing: '0.04em',
                 }}
-                onMouseEnter={e => { e.target.style.background = 'rgba(255,255,255,0.18)'; }}
-                onMouseLeave={e => { e.target.style.background = 'rgba(255,255,255,0.10)'; }}
               >
-                + Add Cube
+                + add cube
               </button>
               <button
                 data-studio-hero-action="load-preset"
                 onClick={() => loadPreset('crystal-garden')}
                 style={{
-                  background: 'rgba(255,255,255,0.04)',
-                  border: '1px solid rgba(255,255,255,0.18)',
-                  color: '#d4dadf',
+                  background: '#161b22',
+                  border: '1px solid #21262d',
+                  color: '#e6edf3',
                   fontSize: '11.5px',
                   padding: '8px 14px',
-                  borderRadius: '7px',
+                  borderRadius: '6px',
                   cursor: 'pointer',
-                  transition: 'background 0.15s',
+                  letterSpacing: '0.04em',
                 }}
-                onMouseEnter={e => { e.target.style.background = 'rgba(255,255,255,0.10)'; }}
-                onMouseLeave={e => { e.target.style.background = 'rgba(255,255,255,0.04)'; }}
               >
-                Load Crystal Garden
+                crystal garden
               </button>
               <button
                 data-studio-hero-action="load-suzanne"
                 onClick={() => addPrimitive('suzanne')}
                 style={{
-                  background: 'rgba(255,255,255,0.04)',
-                  border: '1px solid rgba(255,255,255,0.18)',
-                  color: '#d4dadf',
+                  background: '#161b22',
+                  border: '1px solid #21262d',
+                  color: '#e6edf3',
                   fontSize: '11.5px',
                   padding: '8px 14px',
-                  borderRadius: '7px',
+                  borderRadius: '6px',
                   cursor: 'pointer',
-                  transition: 'background 0.15s',
+                  letterSpacing: '0.04em',
                 }}
-                onMouseEnter={e => { e.target.style.background = 'rgba(255,255,255,0.10)'; }}
-                onMouseLeave={e => { e.target.style.background = 'rgba(255,255,255,0.04)'; }}
               >
-                Spawn Suzanne
+                spawn suzanne
               </button>
             </div>
             <p style={{
               margin: '14px 0 0 0',
               fontSize: '9.5px',
-              opacity: 0.45,
-              fontFamily: 'monospace',
+              color: '#5d6670',
+              fontFamily: 'inherit',
               letterSpacing: '0.6px',
               textTransform: 'uppercase',
             }}>
-              Or pick any tool from the ribbon above
+              or ask archie below · or pick from the ribbon above
             </p>
           </div>
         )}
