@@ -565,6 +565,16 @@ function WorkbenchStudio() {
     }
   };
   const [activeTool, setActiveTool] = useState('select');
+  // Slice 379 — Edit-mode pill state. Mirrors window.__studioEditModeRef
+  // for the viewport-header buttons; listens to the custom event so
+  // programmatic mode flips also update the chip UI.
+  const [editModeUI, setEditModeUI] = useState('object');
+  useEffect(() => {
+    const onChange = (ev) => { if (ev && ev.detail && ev.detail.mode) setEditModeUI(ev.detail.mode); };
+    window.addEventListener('studio-edit-mode-changed', onChange);
+    if (window.__studioEditModeRef && window.__studioEditModeRef.current) setEditModeUI(window.__studioEditModeRef.current);
+    return () => window.removeEventListener('studio-edit-mode-changed', onChange);
+  }, []);
   const [primitiveCount, setPrimitiveCount] = useState(0);
   const [vertexCount, setVertexCount] = useState(0);
   const [faceCount, setFaceCount] = useState(0);
@@ -14351,6 +14361,41 @@ function WorkbenchStudio() {
                     letterSpacing: '0.05em',
                   }}
                 >{tool.l}</button>
+              );
+            })}
+          </span>
+          {/* Slice 379 (UIUX v2) — Edit-mode pill (obj/vert/edge/face/sculpt).
+              Maps each chip click → window.__studioSetEditMode so the click
+              router + marker overlay react. Studio teal accent for the
+              active chip; muted background otherwise. */}
+          <span style={{ marginLeft: '10px', display: 'flex', gap: '1px', borderLeft: '1px solid #21262d', paddingLeft: '8px' }}>
+            {[
+              { id: 'object', l: 'obj', t: 'Object Mode' },
+              { id: 'vertex', l: 'vrt', t: 'Vertex Edit (1)' },
+              { id: 'edge',   l: 'edg', t: 'Edge Edit (2)' },
+              { id: 'face',   l: 'fac', t: 'Face Edit (3)' },
+              { id: 'sculpt', l: 'scu', t: 'Sculpt Mode' },
+            ].map((m) => {
+              const active = editModeUI === m.id;
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  data-studio-edit-mode-chip={m.id}
+                  data-studio-edit-mode-active={active ? '1' : '0'}
+                  title={m.t}
+                  onClick={() => { if (window.__studioSetEditMode) window.__studioSetEditMode(m.id); }}
+                  style={{
+                    minWidth: '28px', height: '20px', padding: '0 5px',
+                    background: active ? '#1de9b6' : 'transparent',
+                    color: active ? '#0d1117' : '#9aa6b2',
+                    border: '1px solid ' + (active ? '#1de9b6' : '#21262d'),
+                    borderRadius: '3px', cursor: 'pointer',
+                    fontSize: '10px', fontWeight: 600,
+                    fontFamily: 'inherit', textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                  }}
+                >{m.l}</button>
               );
             })}
           </span>
