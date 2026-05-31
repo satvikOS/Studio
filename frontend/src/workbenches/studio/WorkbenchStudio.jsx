@@ -12043,6 +12043,12 @@ function WorkbenchStudio() {
                     <button type="button" className="ribbon-tool" data-studio-ribbon-action="mirror-x" onClick={() => window.__studioMirrorAcrossAxis && window.__studioMirrorAcrossAxis('x')} disabled={!selectedKind} title="Blender Mirror Modifier — clone selected mesh with X-axis-flipped scale">
                       <span className="ribbon-tool-icon">⇋</span><span className="ribbon-tool-label">Mirror X</span>
                     </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="drop-to-ground" onClick={() => window.__studioAlignToGround && window.__studioAlignToGround({})} disabled={!selectedKind} title="ArchViz drop-to-ground — snap selected mesh's bbox bottom to y=0">
+                      <span className="ribbon-tool-icon">↓</span><span className="ribbon-tool-label">Drop</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-ribbon-action="center-origin" onClick={() => window.__studioCenterAtOrigin && window.__studioCenterAtOrigin()} disabled={!selectedKind} title="Maya Center Object — move selected mesh's bbox centre to world origin">
+                      <span className="ribbon-tool-icon">◯</span><span className="ribbon-tool-label">Center</span>
+                    </button>
                     <button type="button" className="ribbon-tool" data-studio-ribbon-action="corrective-smooth" onClick={() => correctiveSmooth(0.4)} disabled={!selectedKind} title="Blender MOD_correctivesmooth — volume-preserving smooth">
                       <span className="ribbon-tool-icon">≋</span><span className="ribbon-tool-label">Corr·Smth</span>
                     </button>
