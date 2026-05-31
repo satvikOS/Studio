@@ -11397,6 +11397,14 @@ function WorkbenchStudio() {
                       <span className="ribbon-tool-icon">∮</span>
                       <span className="ribbon-tool-label">MoSpline</span>
                     </button>
+                    <button type="button" className="ribbon-tool" data-studio-primitive="motext" onClick={() => window.__studioMoText && window.__studioMoText({ text: 'TEXT', size: 0.06 })} title="Cinema 4D MoText / 3ds Max Text — extruded 3D text">
+                      <span className="ribbon-tool-icon">𝐓</span>
+                      <span className="ribbon-tool-label">MoText</span>
+                    </button>
+                    <button type="button" className="ribbon-tool" data-studio-primitive="volume" onClick={() => window.__studioAddVolume && window.__studioAddVolume({ size: 0.3, density: 0.6, color: 0xb0c4d8, steps: 32 })} title="Houdini OpenVDB / C4D Volume Builder — ray-marched fog cube">
+                      <span className="ribbon-tool-icon">☁</span>
+                      <span className="ribbon-tool-label">Volume</span>
+                    </button>
                     <button type="button" className="ribbon-tool" data-studio-primitive="brep-boolean" data-studio-brep-status={brepStatus} onClick={() => brepBooleanToScene({ op: 'cut' })} title="Solid B-rep boolean (Rhino/Maya/Plasticity) — real OCCT NURBS-trimmed cut/fuse/common. First click lazily loads the OCCT WASM kernel.">
                       <span className="ribbon-tool-icon">⊖</span>
                       <span className="ribbon-tool-label">B-rep Bool</span>
