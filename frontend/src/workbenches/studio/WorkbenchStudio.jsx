@@ -313,6 +313,97 @@ const TOOL_BUTTONS = [
   { id: 'render',    title: 'Render',         Icon: Camera },
 ];
 
+// Slice 328 — Blender-style top header menu strip with View + Add dropdowns.
+// Renders above the workspaces strip; click-away closes the open menu.
+function HeaderMenuStrip({ addPrimitive, selectedKind }) {
+  const [openMenu, setOpenMenu] = useState(null);
+  useEffect(() => {
+    if (!openMenu) return undefined;
+    const onClickAway = () => setOpenMenu(null);
+    const onKey = (e) => { if (e.key === 'Escape') setOpenMenu(null); };
+    document.addEventListener('click', onClickAway);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('click', onClickAway);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [openMenu]);
+  const MENUS = [
+    { id: 'view', label: 'View', items: [
+      { id: 'frame-all',  label: 'Frame All',         run: () => window.__studioFrameAll && window.__studioFrameAll() },
+      { id: 'axis-top',   label: 'View · Top',        run: () => window.__studioSetCameraAxis && window.__studioSetCameraAxis('top') },
+      { id: 'axis-front', label: 'View · Front',      run: () => window.__studioSetCameraAxis && window.__studioSetCameraAxis('front') },
+      { id: 'axis-side',  label: 'View · Side',       run: () => window.__studioSetCameraAxis && window.__studioSetCameraAxis('side') },
+      { id: 'axis-persp', label: 'View · Perspective',run: () => window.__studioSetCameraAxis && window.__studioSetCameraAxis('persp') },
+      { id: 'shade-wire', label: 'Shading · Wireframe', run: () => window.__studioSetShadingMode && window.__studioSetShadingMode('wireframe') },
+      { id: 'shade-mat',  label: 'Shading · Material',  run: () => window.__studioSetShadingMode && window.__studioSetShadingMode('material') },
+    ]},
+    { id: 'add', label: 'Add', items: [
+      { id: 'cube',     label: 'Cube',     run: () => addPrimitive('cube') },
+      { id: 'sphere',   label: 'Sphere',   run: () => addPrimitive('sphere') },
+      { id: 'plane',    label: 'Plane',    run: () => addPrimitive('plane') },
+      { id: 'cylinder', label: 'Cylinder', run: () => addPrimitive('cylinder') },
+      { id: 'cone',     label: 'Cone',     run: () => addPrimitive('cone') },
+    ]},
+    { id: 'object', label: 'Object', items: [
+      { id: 'mirror-x',   label: 'Mirror X',     run: () => window.__studioMirrorAcrossAxis && window.__studioMirrorAcrossAxis('x'), needsSel: true },
+      { id: 'fillet',     label: 'Fillet Edges', run: () => { const el = document.querySelector('[data-studio-ribbon-action="fillet"]'); if (el) el.click(); }, needsSel: true },
+      { id: 'smart-rust', label: 'Smart · Rust', run: () => window.__studioApplySmartMaterial && window.__studioApplySmartMaterial('rust'), needsSel: true },
+    ]},
+  ];
+  return (
+    <div data-studio-header-menubar style={{
+      display: 'flex', gap: '2px', alignItems: 'center',
+      background: '#1a1a1f', borderBottom: '1px solid #2a2a30',
+      padding: '0 6px', height: '22px', position: 'relative', zIndex: 30,
+      fontSize: '11px',
+    }}>
+      {MENUS.map((m) => (
+        <div key={m.id} style={{ position: 'relative' }} onClick={(e) => e.stopPropagation()}>
+          <button
+            type="button"
+            data-studio-header-menu-btn={m.id}
+            onClick={(e) => { e.stopPropagation(); setOpenMenu(openMenu === m.id ? null : m.id); }}
+            style={{
+              background: openMenu === m.id ? '#2a2a30' : 'transparent',
+              color: '#dfdfdf', border: 'none', padding: '2px 8px',
+              fontSize: '11px', cursor: 'pointer', fontFamily: 'inherit',
+            }}
+          >{m.label}</button>
+          {openMenu === m.id && (
+            <div
+              data-studio-header-menu-panel={m.id}
+              style={{
+                position: 'absolute', top: '22px', left: 0,
+                background: '#23232a', border: '1px solid #2a2a30',
+                minWidth: '180px', zIndex: 31,
+                display: 'flex', flexDirection: 'column',
+              }}
+            >
+              {m.items.map((it) => (
+                <button
+                  key={it.id}
+                  type="button"
+                  data-studio-header-menu-item={it.id}
+                  disabled={it.needsSel && !selectedKind}
+                  onClick={() => { it.run(); setOpenMenu(null); }}
+                  style={{
+                    background: 'transparent', border: 'none',
+                    color: (it.needsSel && !selectedKind) ? '#666' : '#dfdfdf',
+                    padding: '5px 12px', textAlign: 'left',
+                    fontSize: '11px', cursor: (it.needsSel && !selectedKind) ? 'default' : 'pointer',
+                    fontFamily: 'inherit',
+                  }}
+                >{it.label}</button>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function WorkbenchStudio() {
   const [activeTab, setActiveTab] = useState('modeling');
   // Blender workspace strip — see BLENDER_WORKSPACES. Selecting a workspace
@@ -11320,6 +11411,11 @@ function WorkbenchStudio() {
           the discipline tabs so users can stay in a workspace while
           sampling tools from other disciplines — exactly how Blender
           works. */}
+      {/* Slice 328 — Blender top header menus (View / Add). */}
+      <HeaderMenuStrip
+        addPrimitive={addPrimitive}
+        selectedKind={selectedKind}
+      />
       <div
         className="blender-workspaces-strip"
         data-blender-workspaces-strip="studio"
