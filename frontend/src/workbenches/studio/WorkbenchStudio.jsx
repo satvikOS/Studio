@@ -520,6 +520,11 @@ function WorkbenchStudio() {
   const [brushPaintColor, setBrushPaintColor] = useState('#d08a4a'); // Substance-style texture-paint colour
   const [brushPaintChannel, setBrushPaintChannel] = useState('color'); // PBR channel: color/roughness/metalness/emissive
   const [modStackVersion, setModStackVersion] = useState(0); // forces modifier-stack UI refresh
+  // Slice 285 — ZBrush sculpt-layer stack. Keyed by mesh uuid. Each layer
+  // snapshots the baseline position attribute and the deltas a sculpt op
+  // produced. Toggle/strength replays baseline + Σ(enabled × strength).
+  const sculptLayersRef = useRef(new Map());
+  const [sculptLayersVersion, setSculptLayersVersion] = useState(0);
   const [brushRadius, setBrushRadius]     = useState(0.012);
   const [brushFalloffStrength, setBrushFalloffStrength] = useState(0.4);
   const [brushSymmetryX, setBrushSymmetryX] = useState(false);
@@ -836,6 +841,11 @@ function WorkbenchStudio() {
     window.__studioInvertMask = () => invertMaskOn(selectedMeshRef.current);
     window.__studioBrushStrokeAt = (pt, brush) => { const m = selectedMeshRef.current; if (!m) return null; paintBrushAt(m, new THREE.Vector3(pt[0], pt[1], pt[2]), brush || { mode: 'inflate', radius: 0.06, strength: 0.5 }); return true; };
     window.__studioRunVexExpr = (exprString, opts) => runVexExpressionOnMesh(exprString, opts || {});
+    window.__studioSculptLayerAdd = (opName, strength) => sculptLayerAdd(opName, strength == null ? 1 : strength);
+    window.__studioSculptLayerList = () => sculptLayerList();
+    window.__studioSculptLayerToggle = (idx) => sculptLayerToggle(idx | 0);
+    window.__studioSculptLayerStrength = (idx, s) => sculptLayerSetStrength(idx | 0, s);
+    window.__studioSculptLayerRemove = (idx) => sculptLayerRemove(idx | 0);
     // Geometry node graph: evaluate a {nodes,edges} graph -> scene primitive.
     window.__studioEvalNodeGraph = (graph) => evalNodeGraphToScene(graph);
     // Material/shader graph: evaluate a shading DAG -> PBR material on selected mesh.
@@ -901,7 +911,7 @@ function WorkbenchStudio() {
     window.__studioReadNormalTexel = (uv) => { const m = selectedMeshRef.current; const nc = m && m.userData && m.userData._normalCanvas; if (!nc) return null; const d = nc.getContext('2d').getImageData(Math.floor(uv[0] * 512), Math.floor((1 - uv[1]) * 512), 1, 1).data; return [d[0], d[1], d[2]]; };
     window.__studioPolyPaintAt = (pt, color, radius) => { const m = selectedMeshRef.current; if (!m) return null; return paintPolyAt(m, new THREE.Vector3(pt[0], pt[1], pt[2]), color || brushPaintColor, radius || 0.012); };
     window.__studioReadVertexColor = (i) => { const m = selectedMeshRef.current; const col = m && m.geometry && m.geometry.attributes.color; if (!col) return null; return [Math.round(col.getX(i) * 255), Math.round(col.getY(i) * 255), Math.round(col.getZ(i) * 255)]; };
-    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioEvalNiagara; delete window.__studioNiagaraStep; delete window.__studioBTTick; delete window.__studioStreamAround; delete window.__studioRevealAll; delete window.__studioAddAudioSource; delete window.__studioSetListener; delete window.__studioAudioState; delete window.__studioXRSupport; delete window.__studioEnterXR; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAnimBPSet; delete window.__studioAnimBPStep; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioTrimmedSurface; delete window.__studioAddNurbsCurve; delete window.__studioBRepBoolean; delete window.__studioSetReference; delete window.__studioClearReference; delete window.__studioReferenceState; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioFieldQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; delete window.__studioRunVexExpr; delete window.__studioPushFace; delete window.__studioBakeAOToTexture; };
+    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioEvalNiagara; delete window.__studioNiagaraStep; delete window.__studioBTTick; delete window.__studioStreamAround; delete window.__studioRevealAll; delete window.__studioAddAudioSource; delete window.__studioSetListener; delete window.__studioAudioState; delete window.__studioXRSupport; delete window.__studioEnterXR; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAnimBPSet; delete window.__studioAnimBPStep; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioTrimmedSurface; delete window.__studioAddNurbsCurve; delete window.__studioBRepBoolean; delete window.__studioSetReference; delete window.__studioClearReference; delete window.__studioReferenceState; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioFieldQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; delete window.__studioRunVexExpr; delete window.__studioPushFace; delete window.__studioBakeAOToTexture; delete window.__studioSculptLayerAdd; delete window.__studioSculptLayerList; delete window.__studioSculptLayerToggle; delete window.__studioSculptLayerStrength; delete window.__studioSculptLayerRemove; };
   });
   // Auto-frame on primitive count change so the camera always shows
   // the current scene without the user having to hit Home.
@@ -6585,6 +6595,99 @@ function WorkbenchStudio() {
     mesh.userData.archdiscStudioVexExpr = (mesh.userData.archdiscStudioVexExpr || 0) + 1;
     recomputeMeshStats(window.__archdiscScene);
     return { ok: true, changed, expr: exprString };
+  }
+
+  // Slice 285 — ZBrush sculpt-layer stack helpers.
+  // Each layer = { id, name, opName, deltas: Float32Array (per-vertex Δxyz),
+  //                strength, enabled }. recomposeSculptLayers(meshUuid)
+  // rewrites the position attribute from baseline + Σ(enabled × strength).
+  function _sculptLayersBucket(meshUuid) {
+    let b = sculptLayersRef.current.get(meshUuid);
+    if (!b) { b = { layers: [], baseline: null }; sculptLayersRef.current.set(meshUuid, b); }
+    return b;
+  }
+  function _sculptSnapshotPositions(mesh) {
+    const p = mesh.geometry.attributes.position;
+    const out = new Float32Array(p.count * 3);
+    for (let i = 0; i < p.count; i++) {
+      out[i * 3] = p.getX(i); out[i * 3 + 1] = p.getY(i); out[i * 3 + 2] = p.getZ(i);
+    }
+    return out;
+  }
+  function _recomposeSculptLayers(mesh) {
+    const b = _sculptLayersBucket(mesh.uuid);
+    if (!b.baseline) return;
+    const p = mesh.geometry.attributes.position;
+    const N = p.count;
+    if (b.baseline.length !== N * 3) return;
+    const out = new Float32Array(b.baseline);
+    for (const L of b.layers) {
+      if (!L.enabled) continue;
+      const s = L.strength;
+      const d = L.deltas;
+      for (let i = 0; i < N * 3; i++) out[i] += d[i] * s;
+    }
+    for (let i = 0; i < N; i++) p.setXYZ(i, out[i * 3], out[i * 3 + 1], out[i * 3 + 2]);
+    p.needsUpdate = true;
+    mesh.geometry.computeVertexNormals();
+    mesh.geometry.computeBoundingSphere();
+  }
+  function sculptLayerAdd(opName, strength = 1.0) {
+    const mesh = selectedMeshRef.current;
+    if (!mesh || !mesh.geometry) return null;
+    const b = _sculptLayersBucket(mesh.uuid);
+    if (!b.baseline) b.baseline = _sculptSnapshotPositions(mesh);
+    const before = _sculptSnapshotPositions(mesh);
+    let ranOp = false;
+    if (opName === 'erode')      { sculptErode(0.6);  ranOp = true; }
+    else if (opName === 'clay')  { sculptClay(0.5);   ranOp = true; }
+    else if (opName === 'weather'){ sculptWeather(0.4); ranOp = true; }
+    if (!ranOp) return { ok: false, error: 'unknown op: ' + opName };
+    const after = _sculptSnapshotPositions(mesh);
+    const deltas = new Float32Array(after.length);
+    for (let i = 0; i < after.length; i++) deltas[i] = after[i] - before[i];
+    const id = 'L' + Date.now() + '-' + Math.floor(Math.random() * 1e4);
+    b.layers.push({ id, name: opName + '#' + (b.layers.length + 1), opName, deltas, strength, enabled: true });
+    _recomposeSculptLayers(mesh);
+    setSculptLayersVersion((v) => v + 1);
+    recomputeMeshStats(window.__archdiscScene);
+    return { ok: true, id, count: b.layers.length };
+  }
+  function sculptLayerList() {
+    const mesh = selectedMeshRef.current;
+    if (!mesh) return [];
+    const b = _sculptLayersBucket(mesh.uuid);
+    return b.layers.map(({ id, name, opName, strength, enabled }) => ({ id, name, opName, strength, enabled }));
+  }
+  function sculptLayerToggle(idx) {
+    const mesh = selectedMeshRef.current;
+    if (!mesh) return null;
+    const b = _sculptLayersBucket(mesh.uuid);
+    if (idx < 0 || idx >= b.layers.length) return null;
+    b.layers[idx].enabled = !b.layers[idx].enabled;
+    _recomposeSculptLayers(mesh);
+    setSculptLayersVersion((v) => v + 1);
+    return { ok: true, enabled: b.layers[idx].enabled };
+  }
+  function sculptLayerSetStrength(idx, s) {
+    const mesh = selectedMeshRef.current;
+    if (!mesh) return null;
+    const b = _sculptLayersBucket(mesh.uuid);
+    if (idx < 0 || idx >= b.layers.length) return null;
+    b.layers[idx].strength = s;
+    _recomposeSculptLayers(mesh);
+    setSculptLayersVersion((v) => v + 1);
+    return { ok: true, strength: s };
+  }
+  function sculptLayerRemove(idx) {
+    const mesh = selectedMeshRef.current;
+    if (!mesh) return null;
+    const b = _sculptLayersBucket(mesh.uuid);
+    if (idx < 0 || idx >= b.layers.length) return null;
+    b.layers.splice(idx, 1);
+    _recomposeSculptLayers(mesh);
+    setSculptLayersVersion((v) => v + 1);
+    return { ok: true, count: b.layers.length };
   }
 
   // Erode — ridged-multifractal carve with gravity bias → weathered rock.
