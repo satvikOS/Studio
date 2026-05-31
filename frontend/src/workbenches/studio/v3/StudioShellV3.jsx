@@ -517,6 +517,43 @@ function StatusBar({ wb, editMode }) {
 }
 
 // ─── CommandBar (always-on Archie input) ──────────────────────────────────
+// Slice 398 — direct-call mode: any cmdbar string that matches the shape
+// `studioFoo arg1 arg2 ...` (V2 window-API style) invokes the matching
+// window.__studioFoo(...args) with JSON-parsed numeric / boolean / array
+// args, and pushes the result back into the dock as a tool message. NL
+// queries fall through to the (future) Archie router. This is how "no
+// V2 capability is missed" stays provable — the user can hit any of
+// V2's 206 APIs by typing the name.
+function callDirectIfPossible(input) {
+  const m = input.match(/^\s*(?:\/)?(studio[A-Za-z]+)\s*(.*)$/);
+  if (!m) return null;
+  const fname = '__' + m[1];
+  const fn = window[fname];
+  if (typeof fn !== 'function') return { ok: false, fname, error: `${fname} is not a function` };
+  const rest = m[2].trim();
+  let args = [];
+  if (rest.length) {
+    try {
+      args = JSON.parse(`[${rest}]`);
+    } catch (_) {
+      args = rest.split(/\s+/).map((s) => {
+        const n = Number(s);
+        if (!Number.isNaN(n) && s.trim() !== '') return n;
+        if (s === 'true') return true;
+        if (s === 'false') return false;
+        if (s === 'null') return null;
+        return s;
+      });
+    }
+  }
+  try {
+    const result = fn(...args);
+    return { ok: true, fname, args, result };
+  } catch (err) {
+    return { ok: false, fname, args, error: String(err) };
+  }
+}
+
 function CommandBar({ dockOpen, onToggleDock, onSubmit }) {
   const ref = useRef(null);
   useEffect(() => {
@@ -537,7 +574,7 @@ function CommandBar({ dockOpen, onToggleDock, onSubmit }) {
         ref={ref}
         className="studio-cmdbar-input"
         data-studio-v3-cmdbar-input
-        placeholder="Ask Archie — try 'extrude this face 5mm', 'render iso PNG', 'array along X 5 copies'…"
+        placeholder="Ask Archie — or type a Studio API: studioListSceneStats / studioExtrudeSelectedFaces 0.005"
         onKeyDown={(e) => {
           if (e.key === 'Enter' && e.currentTarget.value.trim()) {
             const v = e.currentTarget.value.trim();
@@ -661,7 +698,22 @@ export function StudioShellV3({ mode = 'dark' }) {
   }, [activeTool]);
 
   const onCmdSubmit = (text) => {
-    setThread((t) => [...t, { role: 'user', text }, { role: 'archie', text: `(wired in a follow-up) — would run: "${text}"` }]);
+    // Direct V2-API call path — any `studioFoo arg1 arg2` runs the API
+    // and pushes the result. Surfaces every V2 capability through one
+    // line of text, so coverage is provable.
+    const direct = callDirectIfPossible(text);
+    if (direct) {
+      setThread((t) => [
+        ...t,
+        { role: 'user', text },
+        direct.ok
+          ? { role: 'tool', text: `${direct.fname}(${(direct.args || []).map(JSON.stringify).join(', ')}) → ${JSON.stringify(direct.result)}` }
+          : { role: 'tool', text: `${direct.fname}: ${direct.error}` },
+      ]);
+      setDockOpen(true);
+      return;
+    }
+    setThread((t) => [...t, { role: 'user', text }, { role: 'archie', text: `(NL routing wired in a follow-up) — heard: "${text}"` }]);
     setDockOpen(true);
   };
 
