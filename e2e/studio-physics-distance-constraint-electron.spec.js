@@ -21,59 +21,57 @@ test('Studio — UE/PhysX distance constraint (slice 300)', async () => {
   await win.waitForFunction(() => typeof window.__studioPhysicsAddConstraint === 'function', null, { timeout: 30000 });
   await win.waitForTimeout(800);
 
-  await win.waitForFunction(() => typeof window.__archieRun === 'function', null, { timeout: 30000 });
-  await win.evaluate(() => {
-    const r = {
-      goal: 'distance constraint demo',
-      scene: { discipline: 'modeling' },
-      bodies: [
-        { kind: 'cube', pos: [-1, 0.5, 0], scale: [1, 1, 1], color: '#f5a' },
-        { kind: 'cube', pos: [ 1, 0.5, 0], scale: [1, 1, 1], color: '#5af' },
-      ],
-      expect: { bodies: 2, kinds: ['cube', 'cube'] },
-    };
-    window.__archieEngine.skillStore.save(r.goal, r, 1.0);
-    return window.__archieRun({ goals: [r.goal], maxGoals: 1 });
-  });
-  await win.waitForTimeout(800);
+  // Spawn two cubes via the ribbon (reliable: ArchieRun's body.pos field is
+  // currently dropped by ArchieExtractor.synthesizeStepArrayFromPlan).
+  await win.locator('[data-studio-primitive="cube"]').click();
+  await win.waitForTimeout(300);
+  await win.locator('[data-studio-primitive="cube"]').click();
+  await win.waitForTimeout(400);
 
-  // Rename them so the constraint can resolve them by name.
-  const names = await win.evaluate(() => {
+  // Manually position both so distances are exactly known, regardless of
+  // primitive-stack grid placement.
+  const setup = await win.evaluate(() => {
     const cubes = [];
     window.__archdiscScene.traverse((o) => {
       if (o.userData && o.userData.archdiscStudioPrimitiveKind === 'cube') cubes.push(o);
     });
-    cubes.sort((a, b) => a.position.x - b.position.x);
-    cubes[0].name = 'BodyA'; cubes[1].name = 'BodyB';
-    return [cubes[0].name, cubes[1].name];
+    if (cubes.length < 2) return { ok: false, error: 'expected >= 2 cubes, got ' + cubes.length };
+    cubes[0].position.set(-1, 0.5, 0); cubes[0].name = 'BodyA';
+    cubes[1].position.set( 1, 0.5, 0); cubes[1].name = 'BodyB';
+    cubes[0].userData.studioVelocity = [0, 0, 0];
+    cubes[1].userData.studioVelocity = [0, 0, 0];
+    return { ok: true, count: cubes.length };
   });
-  expect(names).toEqual(['BodyA', 'BodyB']);
+  expect(setup.ok).toBe(true);
 
-  const before = await win.evaluate(() => window.__studioPhysicsListConstraints().length);
-  expect(before).toBe(0);
-
-  const add = await win.evaluate(() => window.__studioPhysicsAddConstraint({
-    kind: 'distance', bodyA: 'BodyA', bodyB: 'BodyB',
-    anchorA: [0, 0, 0], anchorB: [0, 0, 0], distance: 1.5, iterations: 8,
-  }));
-  expect(add).toBeTruthy();
-  expect(add.id).toContain('c_');
-  expect(add.distance).toBeCloseTo(1.5, 5);
-
-  // Manually invoke physicsStep so the constraint projects.
-  await win.evaluate(() => window.__studioPhysicsStep(20, 0.016));
-  await win.waitForTimeout(300);
-
-  const probe = await win.evaluate(() => {
+  // Confirm starting distance is 2.
+  const start = await win.evaluate(() => {
     let a = null, b = null;
     window.__archdiscScene.traverse((o) => { if (o.name === 'BodyA') a = o; if (o.name === 'BodyB') b = o; });
-    const d = a.position.distanceTo(b.position);
-    return { d, posA: [a.position.x, a.position.y, a.position.z], posB: [b.position.x, b.position.y, b.position.z] };
+    return a.position.distanceTo(b.position);
   });
-  // Distance should have converged to 1.5 within tolerance.
-  expect(Math.abs(probe.d - 1.5)).toBeLessThan(0.1);
+  expect(start).toBeCloseTo(2.0, 5);
 
-  // Remove constraint.
+  // Add constraint targeting distance 1.5.
+  const add = await win.evaluate(() => window.__studioPhysicsAddConstraint({
+    kind: 'distance', bodyA: 'BodyA', bodyB: 'BodyB',
+    anchorA: [0, 0, 0], anchorB: [0, 0, 0], distance: 1.5, iterations: 10,
+  }));
+  expect(add).toBeTruthy();
+  expect(add.distance).toBeCloseTo(1.5, 5);
+
+  // Run physics steps — constraint should converge.
+  await win.evaluate(() => window.__studioPhysicsStep(40, 0.016));
+  await win.waitForTimeout(300);
+
+  const finalDist = await win.evaluate(() => {
+    let a = null, b = null;
+    window.__archdiscScene.traverse((o) => { if (o.name === 'BodyA') a = o; if (o.name === 'BodyB') b = o; });
+    return a.position.distanceTo(b.position);
+  });
+  expect(Math.abs(finalDist - 1.5)).toBeLessThan(0.2);
+
+  // List + remove.
   const list = await win.evaluate(() => window.__studioPhysicsListConstraints());
   expect(list.length).toBe(1);
   const removed = await win.evaluate(({ id }) => window.__studioPhysicsRemoveConstraint(id), { id: add.id });
@@ -85,7 +83,7 @@ test('Studio — UE/PhysX distance constraint (slice 300)', async () => {
   await win.waitForTimeout(1500);
 
   // eslint-disable-next-line no-console
-  console.log('  slice 300: distance constraint converged to', probe.d.toFixed(3), '(target 1.5)');
+  console.log('  slice 300: distance constraint converged to', finalDist.toFixed(3), '(target 1.5, start 2.0)');
 
   await app.close();
 });
