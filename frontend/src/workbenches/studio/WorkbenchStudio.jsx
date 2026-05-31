@@ -780,6 +780,63 @@ function WorkbenchStudio() {
     // Scatter N copies of a source mesh (by uuid) onto a deterministic
     // distribution. Deterministic seeded RNG (mulberry32) so a given seed
     // reproduces exactly.
+    // Slice 289 — Cascadeur-style analytic 2-bone IK. Pure: given current
+    // joint positions + a target, returns the rotations (Euler XYZ rad)
+    // that put the end-effector on the target while honoring bone lengths.
+    // No scene mutation — caller applies rootRot/midRot to its rig.
+    window.__studioSolveIK2 = (opts) => {
+      const { rootPos, midPos, endPos, targetPos, poleHint = [0, 0, 1] } = (opts || {});
+      if (!rootPos || !midPos || !endPos || !targetPos) return null;
+      const root = new THREE.Vector3().fromArray(rootPos);
+      const mid  = new THREE.Vector3().fromArray(midPos);
+      const end  = new THREE.Vector3().fromArray(endPos);
+      const tgt  = new THREE.Vector3().fromArray(targetPos);
+      const L1 = mid.distanceTo(root);
+      const L2 = end.distanceTo(mid);
+      if (L1 <= 0 || L2 <= 0) return null;
+      const total = L1 + L2;
+      const toTgt = tgt.clone().sub(root);
+      let D = toTgt.length();
+      let clamped = false;
+      if (D > total - 1e-6) { D = total - 1e-6; clamped = true; toTgt.setLength(D); }
+      if (D < 1e-6) { D = 1e-6; toTgt.set(0, 1e-6, 0); }
+      const cosT = Math.max(-1, Math.min(1, (L1 * L1 + L2 * L2 - D * D) / (2 * L1 * L2)));
+      const bend = Math.PI - Math.acos(cosT);
+      const cosA = Math.max(-1, Math.min(1, (L1 * L1 + D * D - L2 * L2) / (2 * L1 * D)));
+      const shoulderOffset = Math.acos(cosA);
+      // Build the bend axis from toTgt × poleHint (fall back if parallel).
+      const dirN = toTgt.clone().normalize();
+      let pole = new THREE.Vector3().fromArray(poleHint);
+      let bendAxis = new THREE.Vector3().crossVectors(dirN, pole);
+      if (bendAxis.lengthSq() < 1e-8) {
+        pole.set(0, 0, 1);
+        bendAxis = new THREE.Vector3().crossVectors(dirN, pole);
+        if (bendAxis.lengthSq() < 1e-8) {
+          pole.set(1, 0, 0);
+          bendAxis = new THREE.Vector3().crossVectors(dirN, pole);
+        }
+      }
+      bendAxis.normalize();
+      // Aim chain at target (root from +Y → toTgt direction), then offset.
+      const yAxis = new THREE.Vector3(0, 1, 0);
+      const aim = new THREE.Quaternion().setFromUnitVectors(yAxis, dirN);
+      const shoulder = new THREE.Quaternion().setFromAxisAngle(bendAxis, -shoulderOffset);
+      const rootQ = new THREE.Quaternion().multiplyQuaternions(aim, shoulder);
+      const midQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), bend);
+      const rE = new THREE.Euler().setFromQuaternion(rootQ, 'XYZ');
+      const mE = new THREE.Euler().setFromQuaternion(midQ, 'XYZ');
+      // Compute the resulting end position so the caller can verify convergence.
+      const tipLocal = new THREE.Vector3(0, L1, 0).add(new THREE.Vector3(0, L2, 0).applyEuler(mE));
+      const solvedEnd = tipLocal.applyQuaternion(rootQ).add(root);
+      return {
+        rootRot: [rE.x, rE.y, rE.z],
+        midRot:  [mE.x, mE.y, mE.z],
+        L1, L2, totalLen: total, reach: tgt.distanceTo(root),
+        clamped, bendAngle: bend,
+        solvedEnd: [solvedEnd.x, solvedEnd.y, solvedEnd.z],
+      };
+    };
+
     // Slice 288 — KeyShot / Cycles-style PMREM HDRI environment lighting.
     // Generates a procedural RoomEnvironment scene, prefilters via PMREM, and
     // assigns scene.environment so PBR materials pick up image-based bounce.
@@ -1010,7 +1067,7 @@ function WorkbenchStudio() {
     window.__studioReadNormalTexel = (uv) => { const m = selectedMeshRef.current; const nc = m && m.userData && m.userData._normalCanvas; if (!nc) return null; const d = nc.getContext('2d').getImageData(Math.floor(uv[0] * 512), Math.floor((1 - uv[1]) * 512), 1, 1).data; return [d[0], d[1], d[2]]; };
     window.__studioPolyPaintAt = (pt, color, radius) => { const m = selectedMeshRef.current; if (!m) return null; return paintPolyAt(m, new THREE.Vector3(pt[0], pt[1], pt[2]), color || brushPaintColor, radius || 0.012); };
     window.__studioReadVertexColor = (i) => { const m = selectedMeshRef.current; const col = m && m.geometry && m.geometry.attributes.color; if (!col) return null; return [Math.round(col.getX(i) * 255), Math.round(col.getY(i) * 255), Math.round(col.getZ(i) * 255)]; };
-    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioEvalNiagara; delete window.__studioNiagaraStep; delete window.__studioBTTick; delete window.__studioStreamAround; delete window.__studioRevealAll; delete window.__studioAddAudioSource; delete window.__studioSetListener; delete window.__studioAudioState; delete window.__studioXRSupport; delete window.__studioEnterXR; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAnimBPSet; delete window.__studioAnimBPStep; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioTrimmedSurface; delete window.__studioAddNurbsCurve; delete window.__studioBRepBoolean; delete window.__studioSetReference; delete window.__studioClearReference; delete window.__studioReferenceState; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioFieldQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; delete window.__studioRunVexExpr; delete window.__studioPushFace; delete window.__studioBakeAOToTexture; delete window.__studioSculptLayerAdd; delete window.__studioSculptLayerList; delete window.__studioSculptLayerToggle; delete window.__studioSculptLayerStrength; delete window.__studioSculptLayerRemove; delete window.__studioMashDistribute; delete window.__studioSetHDRIEnvironment; delete window.__studioListHDRIPresets; };
+    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioEvalNiagara; delete window.__studioNiagaraStep; delete window.__studioBTTick; delete window.__studioStreamAround; delete window.__studioRevealAll; delete window.__studioAddAudioSource; delete window.__studioSetListener; delete window.__studioAudioState; delete window.__studioXRSupport; delete window.__studioEnterXR; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAnimBPSet; delete window.__studioAnimBPStep; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioTrimmedSurface; delete window.__studioAddNurbsCurve; delete window.__studioBRepBoolean; delete window.__studioSetReference; delete window.__studioClearReference; delete window.__studioReferenceState; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioFieldQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; delete window.__studioRunVexExpr; delete window.__studioPushFace; delete window.__studioBakeAOToTexture; delete window.__studioSculptLayerAdd; delete window.__studioSculptLayerList; delete window.__studioSculptLayerToggle; delete window.__studioSculptLayerStrength; delete window.__studioSculptLayerRemove; delete window.__studioMashDistribute; delete window.__studioSetHDRIEnvironment; delete window.__studioListHDRIPresets; delete window.__studioSolveIK2; };
   });
   // Auto-frame on primitive count change so the camera always shows
   // the current scene without the user having to hit Home.
