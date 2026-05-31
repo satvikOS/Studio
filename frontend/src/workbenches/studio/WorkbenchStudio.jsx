@@ -11804,6 +11804,43 @@ function WorkbenchStudio() {
             <div style={{ padding: '8px 10px', overflowY: 'auto', flex: 1 }}>
               {nPanelTab === 'Item' && (
                 <div data-studio-npanel-content="Item">
+                  {/* Slice 281: metalness + roughness sliders on the
+                      active mesh material. */}
+                  {selectedKind && (
+                    <div data-studio-npanel-section="pbr" style={{ marginBottom: '10px' }}>
+                      <div style={{ opacity: 0.6, marginBottom: '3px', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>PBR</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                        <label style={{ opacity: 0.6, width: '64px', fontSize: '10px' }}>Metalness:</label>
+                        <input
+                          type="range" min="0" max="1" step="0.05" defaultValue="0.25"
+                          data-studio-npanel-metalness
+                          onInput={(e) => {
+                            const v = parseFloat(e.target.value);
+                            const m = selectedMeshRef.current;
+                            if (!m || !m.material) return;
+                            m.material.metalness = v; m.material.needsUpdate = true;
+                            window.__studioMeshMetalness = v;
+                          }}
+                          style={{ flex: 1 }}
+                        />
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <label style={{ opacity: 0.6, width: '64px', fontSize: '10px' }}>Roughness:</label>
+                        <input
+                          type="range" min="0" max="1" step="0.05" defaultValue="0.45"
+                          data-studio-npanel-roughness
+                          onInput={(e) => {
+                            const v = parseFloat(e.target.value);
+                            const m = selectedMeshRef.current;
+                            if (!m || !m.material) return;
+                            m.material.roughness = v; m.material.needsUpdate = true;
+                            window.__studioMeshRoughness = v;
+                          }}
+                          style={{ flex: 1 }}
+                        />
+                      </div>
+                    </div>
+                  )}
                   {/* Slice 267: flat-shading toggle on the active mesh
                       material. material.flatShading flips per-vertex
                       normals OFF — pure faceted look every DCC ships. */}
