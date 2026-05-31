@@ -1973,6 +1973,14 @@ function WorkbenchStudio() {
     primitiveStackRef.current.push(mesh);
     setPrimitiveCount(c => c + 1);
     recomputeMeshStats(scene);
+    // Slice 313 — auto-select newly spawned primitive (Blender parity).
+    // Before this, ribbon spawn left selectedKind/selectedMeshRef stale, so
+    // selection-gated ribbon buttons (Fillet, SM Rust/Concrete/Stone) and
+    // the N-panel Item tab stayed disabled until the user clicked the mesh
+    // in the viewport. Blender, Maya, C4D all auto-select new primitives.
+    if (window.__studioSelectMesh && !window.__studioReplayingScene) {
+      window.__studioSelectMesh(mesh);
+    }
     return mesh;
   }
 
