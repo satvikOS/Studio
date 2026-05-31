@@ -1835,6 +1835,68 @@ function WorkbenchStudio() {
     // a vert-drag interaction loop. Local-space delta is computed by
     // inverting the mesh.matrixWorld so the per-vert position attribute
     // stays in local coords.
+    // Slice 362 — Blender Subdivide-edge / 3ds Max Connect. Inserts a
+    // new vertex at the midpoint of the given edge, splitting one
+    // triangle into two. MVP: works on non-indexed geometry (BoxGeometry
+    // primitives ship non-indexed) by appending three new vertices
+    // and re-emitting the two child triangles in place of the parent.
+    window.__studioInsertVertexOnEdge = (meshUuid, edgeIdx) => {
+      const scene = window.__archdiscScene; if (!scene) return { ok: false, error: 'no scene' };
+      let m = selectedMeshRef.current;
+      if (meshUuid) scene.traverse((o) => { if (o.isMesh && o.uuid === meshUuid) m = o; });
+      if (!m || !m.geometry || !m.geometry.attributes.position) return { ok: false, error: 'no mesh' };
+      // For indexed geometry, snapshot to non-indexed so the per-tri vert
+      // duplication below has clean per-face positions to operate on.
+      if (m.geometry.index) {
+        const flat = m.geometry.toNonIndexed();
+        if (m.geometry.dispose) m.geometry.dispose();
+        m.geometry = flat;
+      }
+      const edges = window.__studioListEdges(m.uuid);
+      const e = edges[edgeIdx | 0];
+      if (!e) return { ok: false, error: 'edge idx out of range' };
+      const pos = m.geometry.attributes.position;
+      const a = e.fromVertIdx, b = e.toVertIdx;
+      const ax = pos.getX(a), ay = pos.getY(a), az = pos.getZ(a);
+      const bx = pos.getX(b), by = pos.getY(b), bz = pos.getZ(b);
+      const mx = (ax + bx) * 0.5, my = (ay + by) * 0.5, mz = (az + bz) * 0.5;
+      // Find every triangle that contains both a and b — append a new vertex M
+      // and split the triangle (a, b, c) into (a, m, c) and (m, b, c).
+      const triCount = pos.count / 3;
+      const newPositions = Array.from(pos.array);
+      let splits = 0;
+      for (let t = 0; t < triCount; t++) {
+        const i0 = t * 3, i1 = t * 3 + 1, i2 = t * 3 + 2;
+        const idxs = [i0, i1, i2];
+        // Find positions matching a + b (positional match, since non-indexed verts
+        // duplicate per face).
+        let posA = -1, posB = -1, posC = -1;
+        for (const ix of idxs) {
+          const vx = pos.getX(ix), vy = pos.getY(ix), vz = pos.getZ(ix);
+          if (vx === ax && vy === ay && vz === az) posA = ix;
+          else if (vx === bx && vy === by && vz === bz) posB = ix;
+          else posC = ix;
+        }
+        if (posA < 0 || posB < 0 || posC < 0) continue;
+        // Append vertex M at end and rewrite this triangle's b → M, then add a
+        // new triangle (M, b, c). To keep things simple we'll just push 3 new
+        // verts per split (M+b'+c' duplicates).
+        const cx = pos.getX(posC), cy = pos.getY(posC), cz = pos.getZ(posC);
+        // Modify current triangle to (a, m, c).
+        if (posB === i0) { newPositions[i0 * 3] = mx; newPositions[i0 * 3 + 1] = my; newPositions[i0 * 3 + 2] = mz; }
+        else if (posB === i1) { newPositions[i1 * 3] = mx; newPositions[i1 * 3 + 1] = my; newPositions[i1 * 3 + 2] = mz; }
+        else { newPositions[i2 * 3] = mx; newPositions[i2 * 3 + 1] = my; newPositions[i2 * 3 + 2] = mz; }
+        // Append new triangle (m, b, c).
+        newPositions.push(mx, my, mz, bx, by, bz, cx, cy, cz);
+        splits++;
+      }
+      m.geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(newPositions), 3));
+      m.geometry.computeVertexNormals();
+      m.geometry.computeBoundingSphere();
+      m.geometry.computeBoundingBox();
+      m.userData.archdiscStudioEdgeSplit = (m.userData.archdiscStudioEdgeSplit || 0) + splits;
+      return { ok: true, splits, newVertCount: m.geometry.attributes.position.count };
+    };
     window.__studioMoveVertex = (meshUuid, vertIdx, deltaWorld) => {
       const scene = window.__archdiscScene; if (!scene) return { ok: false, error: 'no scene' };
       let m = selectedMeshRef.current;
@@ -2473,7 +2535,7 @@ function WorkbenchStudio() {
     window.__studioReadNormalTexel = (uv) => { const m = selectedMeshRef.current; const nc = m && m.userData && m.userData._normalCanvas; if (!nc) return null; const d = nc.getContext('2d').getImageData(Math.floor(uv[0] * 512), Math.floor((1 - uv[1]) * 512), 1, 1).data; return [d[0], d[1], d[2]]; };
     window.__studioPolyPaintAt = (pt, color, radius) => { const m = selectedMeshRef.current; if (!m) return null; return paintPolyAt(m, new THREE.Vector3(pt[0], pt[1], pt[2]), color || brushPaintColor, radius || 0.012); };
     window.__studioReadVertexColor = (i) => { const m = selectedMeshRef.current; const col = m && m.geometry && m.geometry.attributes.color; if (!col) return null; return [Math.round(col.getX(i) * 255), Math.round(col.getY(i) * 255), Math.round(col.getZ(i) * 255)]; };
-    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioEvalNiagara; delete window.__studioNiagaraStep; delete window.__studioBTTick; delete window.__studioStreamAround; delete window.__studioRevealAll; delete window.__studioAddAudioSource; delete window.__studioSetListener; delete window.__studioAudioState; delete window.__studioXRSupport; delete window.__studioEnterXR; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAnimBPSet; delete window.__studioAnimBPStep; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioTrimmedSurface; delete window.__studioAddNurbsCurve; delete window.__studioBRepBoolean; delete window.__studioSetReference; delete window.__studioClearReference; delete window.__studioReferenceState; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioFieldQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; delete window.__studioRunVexExpr; delete window.__studioPushFace; delete window.__studioBakeAOToTexture; delete window.__studioSculptLayerAdd; delete window.__studioSculptLayerList; delete window.__studioSculptLayerToggle; delete window.__studioSculptLayerStrength; delete window.__studioSculptLayerRemove; delete window.__studioMashDistribute; delete window.__studioSetHDRIEnvironment; delete window.__studioListHDRIPresets; delete window.__studioSolveIK2; delete window.__studioRunTaskGraph; delete window.__studioParticleEmitter; delete window.__studioFilletEdges; delete window.__studioProceduralTexture; delete window.__studioProjectPaintFromCamera; delete window.__studioFindSnapTarget; delete window.__studioRunGrasshopper; delete window.__studioVoxelizeMesh; delete window.__studioPhysicsAddConstraint; delete window.__studioPhysicsListConstraints; delete window.__studioPhysicsRemoveConstraint; delete window.__studioPhysicsClearConstraints; delete window.__studioListEdges; delete window.__studioPickEdge; delete window.__studioClearEdgeSelection; delete window.__studioMarkEdgeSeam; delete window.__studioListSeams; delete window.__studioClearSeams; delete window.__studioLookAt; delete window.__studioAlignToGround; delete window.__studioCloneAlongAxis; delete window.__studioRandomScatter; delete window.__studioCenterAtOrigin; delete window.__studioSnapToVertex; delete window.__studioSymmetrize; delete window.__studioGroupSelected; delete window.__studioPickVertexAt; delete window.__studioMoveVertex; delete window.__studioMoSpline; delete window.__studioWeightPaintAt; delete window.__studioReadWeight; delete window.__studioTerrainAdd; delete window.__studioTerrainSculpt; delete window.__studioMarchVoxelGrid; delete window.__studioSetSunAngle; delete window.__studioApplySmartMaterial; delete window.__studioMoText; delete window.__studioMirrorAcrossAxis; delete window.__studioRaycastBVH; delete window.__studioSetCameraAxis; delete window.__studioSetShadingMode; delete window.__studioAddVolume; delete window.__studioApplyTransforms; delete window.__studioRecenterPivot; };
+    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioEvalNiagara; delete window.__studioNiagaraStep; delete window.__studioBTTick; delete window.__studioStreamAround; delete window.__studioRevealAll; delete window.__studioAddAudioSource; delete window.__studioSetListener; delete window.__studioAudioState; delete window.__studioXRSupport; delete window.__studioEnterXR; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAnimBPSet; delete window.__studioAnimBPStep; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioTrimmedSurface; delete window.__studioAddNurbsCurve; delete window.__studioBRepBoolean; delete window.__studioSetReference; delete window.__studioClearReference; delete window.__studioReferenceState; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioFieldQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; delete window.__studioRunVexExpr; delete window.__studioPushFace; delete window.__studioBakeAOToTexture; delete window.__studioSculptLayerAdd; delete window.__studioSculptLayerList; delete window.__studioSculptLayerToggle; delete window.__studioSculptLayerStrength; delete window.__studioSculptLayerRemove; delete window.__studioMashDistribute; delete window.__studioSetHDRIEnvironment; delete window.__studioListHDRIPresets; delete window.__studioSolveIK2; delete window.__studioRunTaskGraph; delete window.__studioParticleEmitter; delete window.__studioFilletEdges; delete window.__studioProceduralTexture; delete window.__studioProjectPaintFromCamera; delete window.__studioFindSnapTarget; delete window.__studioRunGrasshopper; delete window.__studioVoxelizeMesh; delete window.__studioPhysicsAddConstraint; delete window.__studioPhysicsListConstraints; delete window.__studioPhysicsRemoveConstraint; delete window.__studioPhysicsClearConstraints; delete window.__studioListEdges; delete window.__studioPickEdge; delete window.__studioClearEdgeSelection; delete window.__studioMarkEdgeSeam; delete window.__studioListSeams; delete window.__studioClearSeams; delete window.__studioLookAt; delete window.__studioAlignToGround; delete window.__studioCloneAlongAxis; delete window.__studioRandomScatter; delete window.__studioCenterAtOrigin; delete window.__studioSnapToVertex; delete window.__studioSymmetrize; delete window.__studioGroupSelected; delete window.__studioPickVertexAt; delete window.__studioMoveVertex; delete window.__studioInsertVertexOnEdge; delete window.__studioMoSpline; delete window.__studioWeightPaintAt; delete window.__studioReadWeight; delete window.__studioTerrainAdd; delete window.__studioTerrainSculpt; delete window.__studioMarchVoxelGrid; delete window.__studioSetSunAngle; delete window.__studioApplySmartMaterial; delete window.__studioMoText; delete window.__studioMirrorAcrossAxis; delete window.__studioRaycastBVH; delete window.__studioSetCameraAxis; delete window.__studioSetShadingMode; delete window.__studioAddVolume; delete window.__studioApplyTransforms; delete window.__studioRecenterPivot; };
   });
   // Auto-frame on primitive count change so the camera always shows
   // the current scene without the user having to hit Home.
