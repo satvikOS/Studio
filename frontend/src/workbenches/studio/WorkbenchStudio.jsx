@@ -13008,8 +13008,8 @@ function WorkbenchStudio() {
         <div
           data-studio-viewport-axis-chips
           style={{
-            position: 'absolute', top: '40px', right: '8px',
-            zIndex: 24, display: 'flex', gap: '2px',
+            position: 'absolute', top: '40px', right: '40px',
+            zIndex: 26, display: 'flex', gap: '2px',
             background: 'rgba(20,20,24,0.85)',
             border: '1px solid #2a2a30', borderRadius: '4px',
             padding: '2px',
@@ -13029,13 +13029,33 @@ function WorkbenchStudio() {
               }}
             >{axis}</button>
           ))}
+          {/* Slice 329 — Reset View chip restores the default 3/4 orbit. */}
+          <button
+            data-studio-axis-chip="reset"
+            title="Reset orbit (Numpad . in Blender)"
+            onClick={() => {
+              const vp = window.__archdiscViewport;
+              if (!vp || !vp.camera) return;
+              vp.camera.position.set(0.13, 0.06, 0.13);
+              const ctrl = vp.orbitControls || vp.controls;
+              if (ctrl) { ctrl.target.set(0, 0, 0); if (ctrl.update) ctrl.update(); }
+              vp.camera.lookAt(0, 0, 0);
+              window.__studioCameraAxis = 'persp';
+            }}
+            style={{
+              padding: '2px 6px', fontSize: '10px', textTransform: 'uppercase',
+              background: 'transparent', color: '#a8c8ff',
+              border: '1px solid transparent', borderRadius: '2px',
+              cursor: 'pointer', fontFamily: 'inherit', marginLeft: '4px',
+            }}
+          >reset</button>
         </div>
         {/* Slice 321 — Blender 4-way viewport shading-mode chips below axis chips. */}
         <div
           data-studio-viewport-shading-chips
           style={{
-            position: 'absolute', top: '68px', right: '8px',
-            zIndex: 24, display: 'flex', gap: '2px',
+            position: 'absolute', top: '68px', right: '40px',
+            zIndex: 26, display: 'flex', gap: '2px',
             background: 'rgba(20,20,24,0.85)',
             border: '1px solid #2a2a30', borderRadius: '4px',
             padding: '2px',
