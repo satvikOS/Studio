@@ -759,6 +759,20 @@ function Viewport3D({ canvasId = 'render-canvas', domain = 'mechanical', onReady
                 return;
             }
 
+            // Slice 377 — Edit-mode click routing. If Studio is in a sub-
+            // object edit mode, dispatch to the corresponding picker and
+            // emit a 'studio-pick' event with the result. Skip the default
+            // object-pick so the selection set doesn't change underneath.
+            const editMode = window.__studioEditModeRef && window.__studioEditModeRef.current;
+            if (editMode && editMode !== 'object' && editMode !== 'sculpt') {
+                let res = null;
+                if (editMode === 'vertex' && window.__studioPickVertexFromClick) res = window.__studioPickVertexFromClick(mouse.x, mouse.y);
+                else if (editMode === 'edge'  && window.__studioPickEdgeFromClick)  res = window.__studioPickEdgeFromClick(mouse.x, mouse.y);
+                else if (editMode === 'face'  && window.__studioPickFaceFromClick)  res = window.__studioPickFaceFromClick(mouse.x, mouse.y);
+                window.dispatchEvent(new CustomEvent('studio-pick', { detail: { mode: editMode, result: res } }));
+                return;
+            }
+
             // Collect pickable objects. Exclude an object if it — OR ANY
             // ANCESTOR — is flagged isHelper. The TransformControls gizmo's
             // handle meshes (X/Y/Z, XY/YZ/XZ, XYZ, START/END) are plain
