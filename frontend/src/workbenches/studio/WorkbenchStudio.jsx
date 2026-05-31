@@ -15224,29 +15224,37 @@ function WorkbenchStudio() {
                           style={{ cursor: 'pointer', opacity: 0.55, fontSize: '10px', padding: '0 4px', flexShrink: 0 }}
                         >S</span>
                       )}
-                      {/* Visibility toggle */}
-                      <span
-                        data-studio-outliner-visibility={entry.uuid}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (typeof window === 'undefined' || !window.__archdiscScene) return;
-                          const obj = window.__archdiscScene.getObjectByProperty('uuid', entry.uuid);
-                          if (!obj) return;
-                          obj.visible = !obj.visible;
-                          // Force re-render by nudging primitive count touch.
-                          setPrimitiveCount(c => c);
-                        }}
-                        style={{
-                          cursor: 'pointer',
-                          opacity: 0.55,
-                          fontSize: '10px',
-                          padding: '0 4px',
-                          flexShrink: 0,
-                        }}
-                        title="Toggle visibility"
-                      >
-                        ◉
-                      </span>
+                      {/* Slice 320 — Visibility toggle with REAL state (Blender
+                          eye-open / eye-closed). The previous icon was static
+                          ◉ and setPrimitiveCount(c => c) was a no-op so React
+                          never re-rendered. Now reads obj.visible live + calls
+                          bumpOutliner() so the icon flips and hidden rows dim. */}
+                      {(() => {
+                        const obj = (typeof window !== 'undefined' && window.__archdiscScene)
+                          ? window.__archdiscScene.getObjectByProperty('uuid', entry.uuid)
+                          : null;
+                        const visible = obj ? obj.visible : true;
+                        return (
+                          <span
+                            data-studio-outliner-visibility={entry.uuid}
+                            data-studio-outliner-visibility-state={visible ? 'visible' : 'hidden'}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (!obj) return;
+                              obj.visible = !obj.visible;
+                              bumpOutliner();
+                            }}
+                            style={{
+                              cursor: 'pointer',
+                              opacity: visible ? 0.85 : 0.35,
+                              fontSize: '11px',
+                              padding: '0 4px',
+                              flexShrink: 0,
+                            }}
+                            title={visible ? 'Hide in viewport' : 'Show in viewport'}
+                          >{visible ? '◉' : '○'}</span>
+                        );
+                      })()}
                       {/* Delete button — only for primitives */}
                       {entry.isPrimitive && (
                         <span
