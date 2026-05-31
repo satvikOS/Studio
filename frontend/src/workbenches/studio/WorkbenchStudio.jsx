@@ -355,9 +355,9 @@ function HeaderMenuStrip({ addPrimitive, selectedKind }) {
   return (
     <div data-studio-header-menubar style={{
       display: 'flex', gap: '2px', alignItems: 'center',
-      background: '#1a1a1f', borderBottom: '1px solid #2a2a30',
+      background: '#0d1117', borderBottom: '1px solid #1f2733',
       padding: '0 6px', height: '22px', position: 'relative', zIndex: 30,
-      fontSize: '11px',
+      fontSize: '11px', color: '#e6edf3',
     }}>
       {MENUS.map((m) => (
         <div key={m.id} style={{ position: 'relative' }} onClick={(e) => e.stopPropagation()}>
@@ -366,9 +366,11 @@ function HeaderMenuStrip({ addPrimitive, selectedKind }) {
             data-studio-header-menu-btn={m.id}
             onClick={(e) => { e.stopPropagation(); setOpenMenu(openMenu === m.id ? null : m.id); }}
             style={{
-              background: openMenu === m.id ? '#2a2a30' : 'transparent',
-              color: '#dfdfdf', border: 'none', padding: '2px 8px',
+              background: openMenu === m.id ? '#1de9b6' : 'transparent',
+              color: openMenu === m.id ? '#0d1117' : '#e6edf3',
+              border: 'none', padding: '2px 8px',
               fontSize: '11px', cursor: 'pointer', fontFamily: 'inherit',
+              fontWeight: openMenu === m.id ? 600 : 400,
             }}
           >{m.label}</button>
           {openMenu === m.id && (
@@ -376,7 +378,7 @@ function HeaderMenuStrip({ addPrimitive, selectedKind }) {
               data-studio-header-menu-panel={m.id}
               style={{
                 position: 'absolute', top: '22px', left: 0,
-                background: '#23232a', border: '1px solid #2a2a30',
+                background: '#161b22', border: '1px solid #21262d',
                 minWidth: '180px', zIndex: 31,
                 display: 'flex', flexDirection: 'column',
               }}
@@ -388,9 +390,11 @@ function HeaderMenuStrip({ addPrimitive, selectedKind }) {
                   data-studio-header-menu-item={it.id}
                   disabled={it.needsSel && !selectedKind}
                   onClick={() => { it.run(); setOpenMenu(null); }}
+                  onMouseEnter={(e) => { if (!(it.needsSel && !selectedKind)) e.currentTarget.style.background = '#21262d'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
                   style={{
                     background: 'transparent', border: 'none',
-                    color: (it.needsSel && !selectedKind) ? '#666' : '#dfdfdf',
+                    color: (it.needsSel && !selectedKind) ? '#5d6670' : '#e6edf3',
                     padding: '5px 12px', textAlign: 'left',
                     fontSize: '11px', cursor: (it.needsSel && !selectedKind) ? 'default' : 'pointer',
                     fontFamily: 'inherit',
@@ -13159,11 +13163,11 @@ function WorkbenchStudio() {
           data-studio-viewport-status-bar
           style={{
             position: 'absolute', bottom: '0', left: '0', right: '0',
-            height: '22px', background: 'rgba(20,20,24,0.92)',
-            color: '#cfcfcf', fontSize: '11px', fontFamily: 'monospace',
+            height: '22px', background: '#0d1117',
+            color: '#9aa6b2', fontSize: '11px', fontFamily: 'monospace',
             padding: '2px 10px', zIndex: 24, display: 'flex', gap: '10px',
             alignItems: 'center', pointerEvents: 'none',
-            borderTop: '1px solid #000',
+            borderTop: '1px solid #1f2733',
           }}
         >
           {(() => {
