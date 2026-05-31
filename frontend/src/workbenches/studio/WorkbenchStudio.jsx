@@ -11085,6 +11085,10 @@ function WorkbenchStudio() {
                       <span className="ribbon-tool-icon">⛰</span>
                       <span className="ribbon-tool-label">Terrain</span>
                     </button>
+                    <button type="button" className="ribbon-tool" data-studio-primitive="mospline" onClick={() => window.__studioMoSpline && window.__studioMoSpline({ type: 'helix', segments: 80, radius: 0.4, height: 1.0, turns: 3 })} title="Cinema 4D MoSpline / Houdini parametric curves — helix preset (call __studioMoSpline with type=helix/lissajous/spiral/sine)">
+                      <span className="ribbon-tool-icon">∮</span>
+                      <span className="ribbon-tool-label">MoSpline</span>
+                    </button>
                     <button type="button" className="ribbon-tool" data-studio-primitive="brep-boolean" data-studio-brep-status={brepStatus} onClick={() => brepBooleanToScene({ op: 'cut' })} title="Solid B-rep boolean (Rhino/Maya/Plasticity) — real OCCT NURBS-trimmed cut/fuse/common. First click lazily loads the OCCT WASM kernel.">
                       <span className="ribbon-tool-icon">⊖</span>
                       <span className="ribbon-tool-label">B-rep Bool</span>
