@@ -12982,6 +12982,11 @@ function WorkbenchStudio() {
           viewport's own absolute/fixed overlay children. */}
       <main className="workbench-viewport">
         <Viewport3D canvasId="render-canvas-studio" domain="studio" />
+        {/* Slice 334 — UIUX v2 foundation: floating T-shelf / axis chips /
+            shading chips / op toast have all been removed. The existing
+            viewport-header strip (~line 13498) is now the single canonical
+            location for all viewport controls (mode dropdown, tools, axis
+            chips, shading chips). See [[feedback-studio-uiux-v2-rebuild]]. */}
         {/* Slice 239: keymap cheat-sheet overlay (F1). */}
         {cheatSheetOpen && (
           <div
@@ -13084,158 +13089,17 @@ function WorkbenchStudio() {
             );
           })()}
         </div>
-        {/* Slice 318 — viewport top-right axis-view chips (Top/Front/Side/
-            Back/Persp). Mirrors Blender's numpad-1/3/7. */}
-        <div
-          data-studio-viewport-axis-chips
-          style={{
-            position: 'absolute', top: '40px', right: '40px',
-            zIndex: 26, display: 'flex', gap: '2px',
-            background: 'rgba(20,20,24,0.85)',
-            border: '1px solid #2a2a30', borderRadius: '4px',
-            padding: '2px',
-          }}
-        >
-          {['top', 'front', 'side', 'back', 'persp'].map((axis) => (
-            <button
-              key={axis}
-              data-studio-axis-chip={axis}
-              title={`View from ${axis} (Blender numpad)`}
-              onClick={() => { if (window.__studioSetCameraAxis) window.__studioSetCameraAxis(axis); }}
-              style={{
-                padding: '2px 6px', fontSize: '10px', textTransform: 'uppercase',
-                background: 'transparent', color: '#cfcfcf',
-                border: '1px solid transparent', borderRadius: '2px',
-                cursor: 'pointer', fontFamily: 'inherit',
-              }}
-            >{axis}</button>
-          ))}
-          {/* Slice 329 — Reset View chip restores the default 3/4 orbit. */}
-          <button
-            data-studio-axis-chip="reset"
-            title="Reset orbit (Numpad . in Blender)"
-            onClick={() => {
-              const vp = window.__archdiscViewport;
-              if (!vp || !vp.camera) return;
-              vp.camera.position.set(0.13, 0.06, 0.13);
-              const ctrl = vp.orbitControls || vp.controls;
-              if (ctrl) { ctrl.target.set(0, 0, 0); if (ctrl.update) ctrl.update(); }
-              vp.camera.lookAt(0, 0, 0);
-              window.__studioCameraAxis = 'persp';
-            }}
-            style={{
-              padding: '2px 6px', fontSize: '10px', textTransform: 'uppercase',
-              background: 'transparent', color: '#a8c8ff',
-              border: '1px solid transparent', borderRadius: '2px',
-              cursor: 'pointer', fontFamily: 'inherit', marginLeft: '4px',
-            }}
-          >reset</button>
-        </div>
-        {/* Slice 321 — Blender 4-way viewport shading-mode chips below axis chips. */}
-        <div
-          data-studio-viewport-shading-chips
-          style={{
-            position: 'absolute', top: '68px', right: '40px',
-            zIndex: 26, display: 'flex', gap: '2px',
-            background: 'rgba(20,20,24,0.85)',
-            border: '1px solid #2a2a30', borderRadius: '4px',
-            padding: '2px',
-          }}
-        >
-          {[
-            { id: 'wireframe', l: '◫', t: 'Wireframe' },
-            { id: 'solid',     l: '■', t: 'Solid (faceted normals)' },
-            { id: 'material',  l: '◐', t: 'Material Preview' },
-            { id: 'rendered',  l: '◉', t: 'Rendered (with shadows)' },
-          ].map(({ id, l, t }) => {
-            const active = (typeof window !== 'undefined' ? window.__studioShadingMode : 'material') === id;
-            return (
-              <button
-                key={id}
-                data-studio-shading-chip={id}
-                title={`Shading: ${t}`}
-                onClick={() => {
-                  if (window.__studioSetShadingMode) window.__studioSetShadingMode(id);
-                  if (window.__studioBumpOutliner) window.__studioBumpOutliner();
-                }}
-                style={{
-                  padding: '2px 6px', fontSize: '11px',
-                  background: active ? '#3a6abf' : 'transparent',
-                  color: active ? '#fff' : '#cfcfcf',
-                  border: '1px solid ' + (active ? '#6890e0' : 'transparent'),
-                  borderRadius: '2px', cursor: 'pointer', fontFamily: 'inherit',
-                }}
-              >{l}</button>
-            );
-          })}
-        </div>
-        {/* Slice 317: Blender T-shelf / left toolbar — active tool palette.
-            Vertical strip pinned to the left edge of the viewport.
-            Click selects the active tool; the choice mirrors to
-            window.__studioActiveTool so gizmo logic can react. */}
-        <div
-          data-studio-viewport-toolbar
-          style={{
-            position: 'absolute', top: '40px', left: '4px',
-            width: '32px', zIndex: 24,
-            background: 'rgba(20,20,24,0.85)',
-            border: '1px solid #2a2a30', borderRadius: '4px',
-            padding: '3px 2px', display: 'flex', flexDirection: 'column',
-            gap: '2px', alignItems: 'center',
-          }}
-        >
-          {[
-            { id: 'select', label: '⬚', title: 'Select / box-select (default)' },
-            { id: 'cursor', label: '✛', title: '3D Cursor — sets origin for new primitives' },
-            { id: 'move',   label: '⇄', title: 'Move (G) — translate gizmo' },
-            { id: 'rotate', label: '⟲', title: 'Rotate (R) — rotation gizmo' },
-            { id: 'scale',  label: '⤢', title: 'Scale (S) — scale gizmo' },
-          ].map((t) => {
-            const active = (typeof window !== 'undefined' ? window.__studioActiveTool : 'select') === t.id;
-            return (
-              <button
-                key={t.id}
-                data-studio-tshelf-tool={t.id}
-                title={t.title}
-                onClick={() => {
-                  window.__studioActiveTool = t.id;
-                  // Bump the outliner tick so React re-renders the toolbar highlight.
-                  if (window.__studioBumpOutliner) window.__studioBumpOutliner();
-                  // Also map move/rotate/scale to the actual gizmo mode for parity.
-                  if (window.__studioGizmo && (t.id === 'move' || t.id === 'rotate' || t.id === 'scale')) {
-                    try { window.__studioGizmo.setMode(t.id === 'move' ? 'translate' : t.id); } catch (_) {}
-                  }
-                }}
-                style={{
-                  width: '26px', height: '26px', padding: 0,
-                  background: active ? '#3a6abf' : 'transparent',
-                  color: active ? '#fff' : '#cfcfcf',
-                  border: active ? '1px solid #6890e0' : '1px solid transparent',
-                  borderRadius: '3px', cursor: 'pointer',
-                  fontSize: '14px', lineHeight: '24px',
-                }}
-              >{t.label}</button>
-            );
-          })}
-        </div>
-        {/* Slice 327 — operator toast above the status bar. */}
-        {opToast && (
-          <div
-            data-studio-op-toast
-            data-studio-op-toast-kind={opToast.kind}
-            data-studio-op-toast-id={opToast.id}
-            style={{
-              position: 'absolute', bottom: '32px', left: '50%',
-              transform: 'translateX(-50%)', zIndex: 25,
-              background: 'rgba(50,140,220,0.92)', color: '#fff',
-              padding: '4px 12px', borderRadius: '14px',
-              fontSize: '11px', fontFamily: 'inherit',
-              pointerEvents: 'none', boxShadow: '0 2px 12px rgba(0,0,0,0.4)',
-            }}
-          >
-            {opToast.kind}: <strong>{opToast.id}</strong>
-          </div>
-        )}
+        {/* Slice 334 (UIUX v2) — old floating axis-chip + shading-chip
+            strips removed. Both now live in the canonical viewport
+            header (line ~13497). The existing slice-321 round shading
+            buttons in that header use data-studio-viewport-shading={mode};
+            the slice-334 axis chips use data-studio-axis-chip. */}
+        {/* Slice 334 (UIUX v2) — slice 317 T-shelf removed.
+            Tool icons now live inside the canonical viewport header
+            strip below, not as a floating left rail. */}
+        {/* Slice 334 (UIUX v2) — slice 327 op toast removed.
+            Last operation now shown as text in the status bar (no
+            floating pill — industry-standard DCC pattern). */}
         {/* Slice 315: Blender bottom status bar — selected mesh stats +
             scene totals + FPS. Pinned to viewport footer, pointer-events
             off so it never blocks clicks. */}
@@ -13268,6 +13132,15 @@ function WorkbenchStudio() {
           <span style={{ opacity: 0.35 }}>║</span>
           <span data-studio-status-bodies>Scene: {primitiveCount} bodies</span>
           <span data-studio-status-scene-tris>Scene T: {faceCount.toLocaleString()}</span>
+          {/* Slice 334 (UIUX v2) — last-op text replaces the slice-327 floating toast. */}
+          {opToast && (
+            <>
+              <span style={{ opacity: 0.35 }}>│</span>
+              <span data-studio-status-lastop data-studio-status-lastop-id={opToast.id} style={{ color: '#a8c8ff' }}>
+                {opToast.kind}: {opToast.id}
+              </span>
+            </>
+          )}
           <span style={{ marginLeft: 'auto', opacity: 0.7 }}>
             <span data-studio-status-fps>FPS: {fps || '–'}</span>
           </span>
@@ -13519,7 +13392,76 @@ function WorkbenchStudio() {
               }}
             >{m}</button>
           ))}
+          {/* Slice 334 (UIUX v2) — tool selector (replaces slice 317 floating T-shelf). */}
+          <span style={{ marginLeft: '8px', display: 'flex', gap: '2px' }}>
+            {[
+              { id: 'select', l: '⬚', t: 'Select' },
+              { id: 'move',   l: '⇄', t: 'Move (G)' },
+              { id: 'rotate', l: '⟲', t: 'Rotate (R)' },
+              { id: 'scale',  l: '⤢', t: 'Scale (S)' },
+            ].map((tool) => {
+              const active = (typeof window !== 'undefined' ? window.__studioActiveTool : 'select') === tool.id;
+              return (
+                <button
+                  key={tool.id}
+                  type="button"
+                  data-studio-tshelf-tool={tool.id}
+                  title={tool.t}
+                  onClick={() => {
+                    window.__studioActiveTool = tool.id;
+                    if (window.__studioBumpOutliner) window.__studioBumpOutliner();
+                    if (window.__studioGizmo && (tool.id === 'move' || tool.id === 'rotate' || tool.id === 'scale')) {
+                      try { window.__studioGizmo.setMode(tool.id === 'move' ? 'translate' : tool.id); } catch (_) {}
+                    }
+                  }}
+                  style={{
+                    width: '22px', height: '20px', padding: 0,
+                    background: active ? '#4a90d9' : '#3a3a3a',
+                    color: active ? '#ffffff' : '#bdbdbd',
+                    border: '1px solid ' + (active ? '#4a90d9' : '#1d1d1d'),
+                    borderRadius: '2px', cursor: 'pointer',
+                    fontSize: '11px', fontFamily: 'inherit',
+                  }}
+                >{tool.l}</button>
+              );
+            })}
+          </span>
           <span style={{ flex: 1 }} />
+          {/* Slice 334 (UIUX v2) — axis-view chips (replaces slice 318 floating right-rail). */}
+          {['top', 'front', 'side', 'persp'].map((axis) => (
+            <button
+              key={axis}
+              type="button"
+              data-studio-axis-chip={axis}
+              title={`View · ${axis}`}
+              onClick={() => { if (window.__studioSetCameraAxis) window.__studioSetCameraAxis(axis); }}
+              style={{
+                background: 'transparent', color: '#bdbdbd', border: 'none',
+                padding: '2px 6px', fontSize: '10px', cursor: 'pointer',
+                fontFamily: 'inherit', textTransform: 'uppercase',
+              }}
+            >{axis}</button>
+          ))}
+          <button
+            type="button"
+            data-studio-axis-chip="reset"
+            title="Reset orbit (Numpad .)"
+            onClick={() => {
+              const vp = window.__archdiscViewport;
+              if (!vp || !vp.camera) return;
+              vp.camera.position.set(0.13, 0.06, 0.13);
+              const ctrl = vp.orbitControls || vp.controls;
+              if (ctrl) { ctrl.target.set(0, 0, 0); if (ctrl.update) ctrl.update(); }
+              vp.camera.lookAt(0, 0, 0);
+              window.__studioCameraAxis = 'persp';
+            }}
+            style={{
+              background: 'transparent', color: '#a8c8ff', border: 'none',
+              padding: '2px 6px', fontSize: '10px', cursor: 'pointer',
+              fontFamily: 'inherit', textTransform: 'uppercase',
+              marginRight: '6px',
+            }}
+          >reset</button>
           {/* Slice 242: viewport-header gizmo toggle (mirrors Y key). */}
           <button
             type="button"
