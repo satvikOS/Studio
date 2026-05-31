@@ -1657,6 +1657,84 @@ function WorkbenchStudio() {
     // voxel occupancy grid (slice 299 output) into a fresh BufferGeometry,
     // then add a Mesh to the scene. The result reads as a smooth blob —
     // exactly Cinema 4D's "Volume Builder → Volume Mesher" pair.
+    // Slice 323 — Houdini OpenVDB / C4D Volume Builder parity. Ray-marched
+    // fog cube via a custom ShaderMaterial. The fragment shader steps inside
+    // the cube and accumulates fbm-noise density. Camera-local raymarch via
+    // onBeforeRender so it follows orbit.
+    window.__studioAddVolume = (opts = {}) => {
+      const scene = window.__archdiscScene;
+      if (!scene) return { ok: false, error: 'no scene' };
+      const { size = 0.3, density = 0.6, color = 0xb0c4d8, steps = 32 } = opts;
+      const sz = Math.max(0.01, Number(size));
+      const stepsClamped = Math.max(8, Math.min(96, steps | 0));
+      const vertexShader = `
+        varying vec3 vLocalPos;
+        void main() {
+          vLocalPos = position;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `;
+      const fragmentShader = `
+        varying vec3 vLocalPos;
+        uniform vec3  uCamLocal;
+        uniform vec3  uColor;
+        uniform float uDensity;
+        uniform int   uSteps;
+        uniform float uTime;
+        float hash(vec3 p){ return fract(sin(dot(p, vec3(17.1,113.5,71.7))) * 43758.5453); }
+        float noise(vec3 p){
+          vec3 i = floor(p), f = fract(p);
+          f = f*f*(3.0-2.0*f);
+          float n = mix(mix(mix(hash(i), hash(i+vec3(1,0,0)),f.x),
+                            mix(hash(i+vec3(0,1,0)), hash(i+vec3(1,1,0)),f.x), f.y),
+                        mix(mix(hash(i+vec3(0,0,1)), hash(i+vec3(1,0,1)),f.x),
+                            mix(hash(i+vec3(0,1,1)), hash(i+vec3(1,1,1)),f.x), f.y), f.z);
+          return n;
+        }
+        float fbm(vec3 p){ return 0.5*noise(p) + 0.25*noise(p*2.03) + 0.125*noise(p*4.07); }
+        void main(){
+          vec3 rd = normalize(vLocalPos - uCamLocal);
+          float tStep = 1.0 / float(uSteps);
+          float alpha = 0.0;
+          vec3 pos = vLocalPos;
+          for (int i = 0; i < 96; i++) {
+            if (i >= uSteps) break;
+            if (any(greaterThan(abs(pos), vec3(0.5)))) break;
+            float d = fbm(pos * 4.0 + vec3(0.0, uTime * 0.05, 0.0));
+            d = smoothstep(0.45, 0.75, d);
+            alpha += (1.0 - alpha) * d * uDensity * tStep * float(uSteps);
+            pos += rd * tStep;
+          }
+          if (alpha < 0.01) discard;
+          gl_FragColor = vec4(uColor, clamp(alpha, 0.0, 1.0));
+        }
+      `;
+      const uniforms = {
+        uCamLocal: { value: new THREE.Vector3() },
+        uColor:    { value: new THREE.Color(color) },
+        uDensity:  { value: density },
+        uSteps:    { value: stepsClamped },
+        uTime:     { value: 0 },
+      };
+      const mat = new THREE.ShaderMaterial({
+        vertexShader, fragmentShader, uniforms,
+        transparent: true, depthWrite: false, side: THREE.BackSide,
+      });
+      const geo = new THREE.BoxGeometry(sz, sz, sz);
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.onBeforeRender = (renderer, _scene, camera) => {
+        mesh.worldToLocal(uniforms.uCamLocal.value.copy(camera.position));
+        uniforms.uTime.value = performance.now() / 1000;
+      };
+      mesh.userData.archdiscStudioPrimitive = true;
+      mesh.userData.archdiscStudioPrimitiveKind = 'volume';
+      mesh.userData.archdiscStudioVolume = { size: sz, density, color, steps: stepsClamped };
+      mesh.name = 'studio-primitive-volume';
+      scene.add(mesh);
+      if (primitiveStackRef.current) primitiveStackRef.current.push(mesh);
+      setPrimitiveCount((c) => c + 1);
+      return { ok: true, uuid: mesh.uuid, size: sz, density, color, steps: stepsClamped };
+    };
     window.__studioMarchVoxelGrid = (opts) => {
       const scene = window.__archdiscScene; if (!scene) return { ok: false, error: 'no scene' };
       const { grid, resolution, bbox } = (opts || {});
@@ -1882,7 +1960,7 @@ function WorkbenchStudio() {
     window.__studioReadNormalTexel = (uv) => { const m = selectedMeshRef.current; const nc = m && m.userData && m.userData._normalCanvas; if (!nc) return null; const d = nc.getContext('2d').getImageData(Math.floor(uv[0] * 512), Math.floor((1 - uv[1]) * 512), 1, 1).data; return [d[0], d[1], d[2]]; };
     window.__studioPolyPaintAt = (pt, color, radius) => { const m = selectedMeshRef.current; if (!m) return null; return paintPolyAt(m, new THREE.Vector3(pt[0], pt[1], pt[2]), color || brushPaintColor, radius || 0.012); };
     window.__studioReadVertexColor = (i) => { const m = selectedMeshRef.current; const col = m && m.geometry && m.geometry.attributes.color; if (!col) return null; return [Math.round(col.getX(i) * 255), Math.round(col.getY(i) * 255), Math.round(col.getZ(i) * 255)]; };
-    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioEvalNiagara; delete window.__studioNiagaraStep; delete window.__studioBTTick; delete window.__studioStreamAround; delete window.__studioRevealAll; delete window.__studioAddAudioSource; delete window.__studioSetListener; delete window.__studioAudioState; delete window.__studioXRSupport; delete window.__studioEnterXR; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAnimBPSet; delete window.__studioAnimBPStep; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioTrimmedSurface; delete window.__studioAddNurbsCurve; delete window.__studioBRepBoolean; delete window.__studioSetReference; delete window.__studioClearReference; delete window.__studioReferenceState; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioFieldQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; delete window.__studioRunVexExpr; delete window.__studioPushFace; delete window.__studioBakeAOToTexture; delete window.__studioSculptLayerAdd; delete window.__studioSculptLayerList; delete window.__studioSculptLayerToggle; delete window.__studioSculptLayerStrength; delete window.__studioSculptLayerRemove; delete window.__studioMashDistribute; delete window.__studioSetHDRIEnvironment; delete window.__studioListHDRIPresets; delete window.__studioSolveIK2; delete window.__studioRunTaskGraph; delete window.__studioParticleEmitter; delete window.__studioFilletEdges; delete window.__studioProceduralTexture; delete window.__studioProjectPaintFromCamera; delete window.__studioFindSnapTarget; delete window.__studioRunGrasshopper; delete window.__studioVoxelizeMesh; delete window.__studioPhysicsAddConstraint; delete window.__studioPhysicsListConstraints; delete window.__studioPhysicsRemoveConstraint; delete window.__studioPhysicsClearConstraints; delete window.__studioListEdges; delete window.__studioPickEdge; delete window.__studioClearEdgeSelection; delete window.__studioMoSpline; delete window.__studioWeightPaintAt; delete window.__studioReadWeight; delete window.__studioTerrainAdd; delete window.__studioTerrainSculpt; delete window.__studioMarchVoxelGrid; delete window.__studioSetSunAngle; delete window.__studioApplySmartMaterial; delete window.__studioMoText; delete window.__studioMirrorAcrossAxis; delete window.__studioRaycastBVH; delete window.__studioSetCameraAxis; delete window.__studioSetShadingMode; };
+    return () => { delete window.__studioFrameAll; delete window.__studioImportAsset; delete window.__studioExportGltfString; delete window.__studioAddRefPlane; delete window.__studioPaintMaskAt; delete window.__studioClearMask; delete window.__studioInvertMask; delete window.__studioBrushStrokeAt; delete window.__studioEvalNodeGraph; delete window.__studioApplyMaterialGraph; delete window.__studioRunBlueprint; delete window.__studioEvalNiagara; delete window.__studioNiagaraStep; delete window.__studioBTTick; delete window.__studioStreamAround; delete window.__studioRevealAll; delete window.__studioAddAudioSource; delete window.__studioSetListener; delete window.__studioAudioState; delete window.__studioXRSupport; delete window.__studioEnterXR; delete window.__studioPhysicsStep; delete window.__studioPhysicsState; delete window.__studioResetPhysics; delete window.__studioSetFrame; delete window.__studioInsertKeyframeAt; delete window.__studioGetKeyframes; delete window.__studioAnimBPSet; delete window.__studioAnimBPStep; delete window.__studioAddNurbsSurface; delete window.__studioSweepLoft; delete window.__studioTrimmedSurface; delete window.__studioAddNurbsCurve; delete window.__studioBRepBoolean; delete window.__studioSetReference; delete window.__studioClearReference; delete window.__studioReferenceState; delete window.__studioModStackAdd; delete window.__studioModStackRemove; delete window.__studioModStackReorder; delete window.__studioModStackGet; delete window.__studioDynaMesh; delete window.__studioQuadRemesh; delete window.__studioFieldQuadRemesh; delete window.__studioPaintTextureAt; delete window.__studioReadTexel; delete window.__studioBakeNormalFromHeight; delete window.__studioReadNormalTexel; delete window.__studioBakeAO; delete window.__studioPolyPaintAt; delete window.__studioReadVertexColor; delete window.__studioRunVexExpr; delete window.__studioPushFace; delete window.__studioBakeAOToTexture; delete window.__studioSculptLayerAdd; delete window.__studioSculptLayerList; delete window.__studioSculptLayerToggle; delete window.__studioSculptLayerStrength; delete window.__studioSculptLayerRemove; delete window.__studioMashDistribute; delete window.__studioSetHDRIEnvironment; delete window.__studioListHDRIPresets; delete window.__studioSolveIK2; delete window.__studioRunTaskGraph; delete window.__studioParticleEmitter; delete window.__studioFilletEdges; delete window.__studioProceduralTexture; delete window.__studioProjectPaintFromCamera; delete window.__studioFindSnapTarget; delete window.__studioRunGrasshopper; delete window.__studioVoxelizeMesh; delete window.__studioPhysicsAddConstraint; delete window.__studioPhysicsListConstraints; delete window.__studioPhysicsRemoveConstraint; delete window.__studioPhysicsClearConstraints; delete window.__studioListEdges; delete window.__studioPickEdge; delete window.__studioClearEdgeSelection; delete window.__studioMoSpline; delete window.__studioWeightPaintAt; delete window.__studioReadWeight; delete window.__studioTerrainAdd; delete window.__studioTerrainSculpt; delete window.__studioMarchVoxelGrid; delete window.__studioSetSunAngle; delete window.__studioApplySmartMaterial; delete window.__studioMoText; delete window.__studioMirrorAcrossAxis; delete window.__studioRaycastBVH; delete window.__studioSetCameraAxis; delete window.__studioSetShadingMode; delete window.__studioAddVolume; };
   });
   // Auto-frame on primitive count change so the camera always shows
   // the current scene without the user having to hit Home.
