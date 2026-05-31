@@ -13467,10 +13467,13 @@ function WorkbenchStudio() {
               data-studio-viewport-mode-open={modeDropdownOpen ? '1' : '0'}
               onClick={() => setModeDropdownOpen((v) => !v)}
               style={{
-                background: '#353535', color: '#fff',
-                border: '1px solid #1d1d1d', borderRadius: '3px',
-                padding: '2px 8px', cursor: 'pointer',
+                background: modeDropdownOpen ? '#1de9b6' : '#161b22',
+                color: modeDropdownOpen ? '#0d1117' : '#e6edf3',
+                border: '1px solid ' + (modeDropdownOpen ? '#1de9b6' : '#21262d'),
+                borderRadius: '3px',
+                padding: '2px 10px', cursor: 'pointer',
                 fontSize: '11px', fontFamily: 'inherit',
+                fontWeight: modeDropdownOpen ? 600 : 500,
               }}
             >{viewportMode} ▾</button>
             {modeDropdownOpen && (
@@ -13478,7 +13481,7 @@ function WorkbenchStudio() {
                 data-studio-viewport-mode-dropdown
                 style={{
                   position: 'absolute', top: '24px', left: 0, minWidth: '160px',
-                  background: '#1f1f1f', border: '1px solid #353535',
+                  background: '#161b22', border: '1px solid #21262d',
                   borderRadius: '3px', padding: '4px 0', zIndex: 30,
                   boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
                 }}
@@ -13490,13 +13493,16 @@ function WorkbenchStudio() {
                     data-studio-viewport-mode-option={m.id}
                     data-studio-viewport-mode-option-active={m.id === viewportMode ? '1' : '0'}
                     onClick={() => applyMode(m)}
+                    onMouseEnter={(e) => { if (m.id !== viewportMode) e.currentTarget.style.background = '#21262d'; }}
+                    onMouseLeave={(e) => { if (m.id !== viewportMode) e.currentTarget.style.background = 'transparent'; }}
                     style={{
                       display: 'block', width: '100%', textAlign: 'left',
-                      background: m.id === viewportMode ? '#353535' : 'transparent',
-                      color: m.id === viewportMode ? '#fff' : '#bdbdbd',
+                      background: m.id === viewportMode ? '#1de9b6' : 'transparent',
+                      color: m.id === viewportMode ? '#0d1117' : '#e6edf3',
                       border: 'none', padding: '5px 12px',
                       cursor: 'pointer', fontSize: '11px',
                       fontFamily: 'inherit',
+                      fontWeight: m.id === viewportMode ? 600 : 400,
                     }}
                   >{m.id}</button>
                 ))}
