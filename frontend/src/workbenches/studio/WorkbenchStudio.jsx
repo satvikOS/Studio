@@ -11364,6 +11364,19 @@ function WorkbenchStudio() {
           <span data-studio-viewport-title>Untitled scene</span>
           <span style={{ opacity: 0.4 }}>·</span>
           <span data-studio-viewport-title-count>{primitiveCount} bodies</span>
+          {/* Slice 277: selection count badge — only shows when > 0. */}
+          {(() => {
+            void selectedKind; void outlinerTick;
+            const set = (typeof window !== 'undefined' && window.__studioSelectedMeshes) ? window.__studioSelectedMeshes() : [];
+            const n = set.length;
+            if (!n) return null;
+            return (
+              <>
+                <span style={{ opacity: 0.4 }}>·</span>
+                <span data-studio-viewport-title-selected style={{ color: '#9ed7ff' }}>{n} selected</span>
+              </>
+            );
+          })()}
         </div>
         {/* Slice 269: mouse-position-in-world HUD pinned to the top-
             center of the viewport. Updates as the cursor moves over the
