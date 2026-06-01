@@ -303,6 +303,59 @@ function Toolbar({ wbId, activeTool, setTool, onInvoke }) {
   );
 }
 
+// ─── WelcomeCard ─────────────────────────────────────────────────────────
+// Slice 427 — Centered card in the viewport while the scene has no
+// Studio primitives. Studio teal title + brief muscle-memory hints.
+// Fades out the moment the user spawns the first mesh.
+function WelcomeCard() {
+  const [empty, setEmpty] = useState(true);
+  useEffect(() => {
+    const tick = () => {
+      let n = 0;
+      const s = window.__archdiscScene || (window.__archdiscViewport && window.__archdiscViewport.scene);
+      if (s) {
+        try { s.traverse((o) => { if (o.userData && o.userData.archdiscStudioPrimitive) n++; }); } catch (_) {}
+      }
+      setEmpty(n === 0);
+    };
+    tick();
+    const id = setInterval(tick, 500);
+    return () => clearInterval(id);
+  }, []);
+  if (!empty) return null;
+  return (
+    <div
+      data-studio-v3-welcome
+      style={{
+        position: 'absolute', top: '50%', left: '50%',
+        transform: 'translate(-50%, -50%)', zIndex: 21,
+        background: 'rgba(13, 17, 23, 0.78)',
+        border: '1px solid var(--studio-ink-mute, #1f2733)',
+        borderRadius: 6,
+        padding: '18px 22px',
+        color: 'var(--studio-ink, #e6edf3)',
+        fontFamily: 'inherit', fontSize: 12,
+        pointerEvents: 'none',
+        boxShadow: '0 8px 24px rgba(0, 0, 0, 0.45)',
+        minWidth: 260, textAlign: 'center',
+      }}
+    >
+      <div style={{
+        fontSize: 13, fontWeight: 600, marginBottom: 8,
+        color: 'var(--studio-accent, #1de9b6)', letterSpacing: '0.03em',
+      }}>ArchDisc Studio</div>
+      <div style={{ marginBottom: 10, opacity: 0.8 }}>
+        Pick a primitive in the toolbar to start.
+      </div>
+      <div style={{ fontSize: 11, opacity: 0.55, fontFamily: 'var(--studio-mono, ui-monospace)' }}>
+        Tab — edit mode<br />
+        1 · 2 · 3 — vert · edge · face<br />
+        Cmd+/ — focus command bar
+      </div>
+    </div>
+  );
+}
+
 // ─── Viewport HUD (edit-mode chips + axis chips + sub-object sel count) ──
 function ViewportHUD({ editMode, setEditMode, axis, setAxis }) {
   // Slice 426 — Live count of selected verts/edges/faces. Only renders
@@ -946,6 +999,7 @@ export function StudioShellV3({ mode = 'dark' }) {
           axis={axis}
           setAxis={(a) => { setAxis(a); if (window.__studioSetCameraAxis) window.__studioSetCameraAxis(a); }}
         />
+        <WelcomeCard />
       </main>
       {/* Slice 407 — right side is always the RightPanel now. Archie no
           longer overlays this slot; it lives only at the bottom. */}
