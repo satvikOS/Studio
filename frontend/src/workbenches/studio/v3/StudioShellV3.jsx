@@ -328,6 +328,7 @@ const KEYMAP = [
   { section: 'View / Cmd', rows: [
     ['Space', 'Play / pause animation'],
     ['← / →', 'Step animation frame ±1'],
+    ['K', 'Insert keyframe at current frame'],
     ['.', 'Frame selected (fallback: frame all)'],
     ['Cmd+Z', 'Undo'],
     ['Cmd+Shift+Z', 'Redo'],
@@ -1099,6 +1100,14 @@ export function StudioShellV3({ mode = 'dark' }) {
         const f = (window.__studioGetFrame && window.__studioGetFrame()) || 0;
         const next = e.key === 'ArrowRight' ? f + 1 : Math.max(0, f - 1);
         if (window.__studioSetFrame) window.__studioSetFrame(next);
+        e.preventDefault();
+      } else if (!meta && !e.shiftKey && !e.altKey && (e.key === 'k' || e.key === 'K')) {
+        // Slice 442 — K inserts a keyframe at the current frame (Blender K).
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        if (window.__studioInsertKeyframeAt && window.__studioGetFrame) {
+          window.__studioInsertKeyframeAt(window.__studioGetFrame());
+        }
         e.preventDefault();
       } else if (!meta && !e.shiftKey && !e.altKey && e.key === '.') {
         // Slice 435 — '.' frames the selected mesh in the viewport
