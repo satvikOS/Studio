@@ -754,6 +754,124 @@ function OutlinerRows() {
   );
 }
 
+// ─── TimelineStrip (slice 444) ───────────────────────────────────────────
+// Compact horizontal timeline showing frame 0..maxFrame, a teal marker
+// for the current frame, and amber dots for the active mesh's keyframes.
+// Click anywhere on the strip to scrub the frame; double-click clears
+// the keyframes display by jumping back to frame 0.
+function TimelineStrip() {
+  const [frame, setFrame] = useState(0);
+  const [maxFrame, setMaxFrame] = useState(60);
+  const [keyframes, setKeyframes] = useState([]);
+  const stripRef = React.useRef(null);
+  useEffect(() => {
+    const onFrame = (ev) => { if (ev && ev.detail && typeof ev.detail.frame === 'number') setFrame(ev.detail.frame); };
+    window.addEventListener('studio-frame-changed', onFrame);
+    let raf = 0;
+    const tick = () => {
+      if (window.__studioGetFrame) {
+        const f = window.__studioGetFrame();
+        if (f !== frame) setFrame(f);
+        if (f > maxFrame - 5) setMaxFrame(Math.max(maxFrame, f + 30));
+      }
+      // Pull keyframes for the active mesh (cheap — < 200 typical).
+      const m = window.__studioSelectedMesh && window.__studioSelectedMesh();
+      if (m && window.__studioGetKeyframes) {
+        const r = window.__studioGetKeyframes(m.uuid);
+        const kfs = (r && r.keyframes) || [];
+        const frames = kfs.map((k) => k.frame);
+        // Only update if changed (skip React churn).
+        if (frames.length !== keyframes.length || frames.some((f, i) => f !== keyframes[i])) {
+          setKeyframes(frames);
+        }
+      } else if (keyframes.length) {
+        setKeyframes([]);
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => {
+      window.removeEventListener('studio-frame-changed', onFrame);
+      cancelAnimationFrame(raf);
+    };
+  }, [frame, maxFrame, keyframes]);
+  const scrubTo = (e) => {
+    const el = stripRef.current; if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const t = Math.max(0, Math.min(1, x / rect.width));
+    const f = Math.round(t * maxFrame);
+    if (window.__studioSetFrame) window.__studioSetFrame(f);
+  };
+  const markerPct = (frame / maxFrame) * 100;
+  return (
+    <div
+      ref={stripRef}
+      data-studio-v3-timeline
+      data-studio-v3-frame={frame}
+      data-studio-v3-max-frame={maxFrame}
+      onClick={scrubTo}
+      onDoubleClick={() => window.__studioSetFrame && window.__studioSetFrame(0)}
+      title={`Frame ${frame} / ${maxFrame} — click to scrub`}
+      style={{
+        position: 'relative',
+        height: 18,
+        background: 'var(--studio-bg-elev, #161b22)',
+        borderTop: '1px solid var(--studio-ink-mute, #1f2733)',
+        cursor: 'crosshair',
+        fontFamily: 'var(--studio-mono, ui-monospace)',
+        fontSize: 9,
+        color: 'var(--studio-ink-mute, #9aa6b2)',
+        userSelect: 'none',
+      }}
+    >
+      {/* Major ticks every 10 frames. */}
+      {Array.from({ length: Math.floor(maxFrame / 10) + 1 }).map((_, i) => {
+        const f = i * 10;
+        const pct = (f / maxFrame) * 100;
+        return (
+          <span
+            key={f}
+            style={{
+              position: 'absolute', left: `${pct}%`, top: 0, bottom: 0,
+              width: 1, background: 'rgba(255,255,255,0.06)',
+            }}
+          >
+            <span style={{ position: 'absolute', left: 3, top: 2, fontSize: 8 }}>{f}</span>
+          </span>
+        );
+      })}
+      {/* Keyframe dots. */}
+      {keyframes.map((f, i) => (
+        <span
+          key={`kf-${i}-${f}`}
+          data-studio-v3-keyframe={f}
+          style={{
+            position: 'absolute',
+            left: `${(f / maxFrame) * 100}%`,
+            top: 6, width: 4, height: 6,
+            transform: 'translateX(-2px)',
+            background: '#ffcc55',
+            borderRadius: 1,
+          }}
+        />
+      ))}
+      {/* Current-frame marker. */}
+      <span
+        data-studio-v3-timeline-marker
+        style={{
+          position: 'absolute',
+          left: `${markerPct}%`, top: 0, bottom: 0,
+          width: 2,
+          transform: 'translateX(-1px)',
+          background: 'var(--studio-accent, #1de9b6)',
+          pointerEvents: 'none',
+        }}
+      />
+    </div>
+  );
+}
+
 // ─── StatusBar ───────────────────────────────────────────────────────────
 function StatusBar({ wb, editMode }) {
   const [fps, setFps] = useState(0);
@@ -1329,6 +1447,7 @@ export function StudioShellV3({ mode = 'dark' }) {
         editMode={editMode}
         selection={selection}
       />
+      <TimelineStrip />
       <StatusBar wb={activeWb} editMode={editMode} />
       <ArchieThread thread={thread} onClear={() => setThread([])} />
       <CommandBar onSubmit={onCmdSubmit} />
