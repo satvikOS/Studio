@@ -6,6 +6,7 @@ import { spawnPrimitive } from './spawn';
 import Viewport3D from '../../../components/Viewport3D';
 import { registerV3Api, unregisterV3Api } from './api';
 import { registerEditOps, unregisterEditOps } from './editops';
+import { registerCameraOps, unregisterCameraOps } from './cameraops';
 
 // Slice 401 — V3 stops using V2. V3 owns its own Viewport3D mount + its
 // own spawn / selection / undo / file-io implementations (built up in
@@ -645,7 +646,8 @@ export function StudioShellV3({ mode = 'dark' }) {
   useEffect(() => {
     registerV3Api();
     registerEditOps();
-    return () => { unregisterEditOps(); unregisterV3Api(); };
+    registerCameraOps();
+    return () => { unregisterCameraOps(); unregisterEditOps(); unregisterV3Api(); };
   }, []);
 
   // Theme → document attribute so tokens.css applies the right palette.
