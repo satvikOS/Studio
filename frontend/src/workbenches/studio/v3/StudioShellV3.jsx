@@ -2074,7 +2074,7 @@ function DirtyDot() {
   const [dirty, setDirty] = React.useState(false);
   React.useEffect(() => {
     let lastSaved = 0;
-    const onSaved = () => { lastSaved = Date.now(); setDirty(false); };
+    const onSaved = () => { lastSaved = Date.now(); setDirty(false); window.__studioV3Dirty = false; };
     window.addEventListener('studio-autosaved', onSaved);
     const id = setInterval(() => {
       // Anything in the scene + nothing autosaved in the past 30s → dirty.
@@ -2082,7 +2082,10 @@ function DirtyDot() {
       if (!s) return;
       let n = 0;
       s.traverse((o) => { if (o.userData && o.userData.archdiscStudioPrimitive) n++; });
-      if (n > 0 && (Date.now() - lastSaved) > 30_000) setDirty(true);
+      if (n > 0 && (Date.now() - lastSaved) > 30_000) {
+        setDirty(true);
+        window.__studioV3Dirty = true;
+      }
     }, 2000);
     return () => {
       window.removeEventListener('studio-autosaved', onSaved);
@@ -2300,6 +2303,21 @@ export function StudioShellV3({ mode = 'dark' }) {
       window.__studioSetEditMode(editMode);
     }
   }, [editMode]);
+
+  // Slice 471 — beforeunload prompt when the scene has unsaved changes.
+  // Reads the dirty signal from window.__studioV3Dirty (set by the
+  // DirtyDot component) and asks the browser to confirm.
+  useEffect(() => {
+    const onUnload = (e) => {
+      if (window.__studioV3Dirty) {
+        e.preventDefault();
+        e.returnValue = 'You have unsaved changes — save before leaving?';
+        return e.returnValue;
+      }
+    };
+    window.addEventListener('beforeunload', onUnload);
+    return () => window.removeEventListener('beforeunload', onUnload);
+  }, []);
 
   // Slice 465 — Autosave the scene to localStorage every 30s. Only saves
   // when at least one primitive exists. Fires 'studio-autosaved' so any
