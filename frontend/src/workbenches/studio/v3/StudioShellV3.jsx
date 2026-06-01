@@ -1067,6 +1067,8 @@ function RightPanel({ collapsed, onToggle, activeWb, editMode, selection }) {
                 )}
               </div>
             )}
+            {/* Slice 458 — Detailed stats for the active mesh. */}
+            <MeshStatsRows />
             <div className="studio-right-section">
               <div className="studio-right-section-title">Edit selection</div>
               <SelectionRows />
@@ -1138,6 +1140,74 @@ function SelectionRows() {
       <div className="studio-right-row"><span>Edges</span><strong>{s.edges}</strong></div>
       <div className="studio-right-row"><span>Faces</span><strong>{s.faces}</strong></div>
     </>
+  );
+}
+
+function MeshStatsRows() {
+  const [stats, setStats] = useState(null);
+  useEffect(() => {
+    const read = () => {
+      const m = window.__studioSelectedMesh && window.__studioSelectedMesh();
+      if (!m || !m.geometry || !m.geometry.attributes || !m.geometry.attributes.position) {
+        setStats(null);
+        return;
+      }
+      const g = m.geometry;
+      const pos = g.attributes.position;
+      const v = pos.count;
+      const idx = g.index ? g.index.array : null;
+      const t = idx ? Math.floor(idx.length / 3) : Math.floor(v / 3);
+      // Surface area (sum of triangle areas) + AABB volume — skip above
+      // 20k tris to keep the inspector cheap.
+      let area = 0;
+      let bboxVolume = 0;
+      if (t <= 20000) {
+        const a = pos.array;
+        const tmp = (x1, y1, z1, x2, y2, z2, x3, y3, z3) => {
+          const ux = x2 - x1, uy = y2 - y1, uz = z2 - z1;
+          const vx = x3 - x1, vy = y3 - y1, vz = z3 - z1;
+          const cx = uy * vz - uz * vy;
+          const cy = uz * vx - ux * vz;
+          const cz = ux * vy - uy * vx;
+          return 0.5 * Math.sqrt(cx * cx + cy * cy + cz * cz);
+        };
+        for (let i = 0; i < t; i++) {
+          const i0 = idx ? idx[i * 3] : i * 3;
+          const i1 = idx ? idx[i * 3 + 1] : i * 3 + 1;
+          const i2 = idx ? idx[i * 3 + 2] : i * 3 + 2;
+          area += tmp(a[i0 * 3], a[i0 * 3 + 1], a[i0 * 3 + 2],
+                      a[i1 * 3], a[i1 * 3 + 1], a[i1 * 3 + 2],
+                      a[i2 * 3], a[i2 * 3 + 1], a[i2 * 3 + 2]);
+        }
+        if (!g.boundingBox) g.computeBoundingBox();
+        if (g.boundingBox) {
+          const bb = g.boundingBox;
+          bboxVolume = (bb.max.x - bb.min.x) * (bb.max.y - bb.min.y) * (bb.max.z - bb.min.z);
+        }
+      }
+      setStats({
+        v, t, area, bboxVolume,
+        kind: m.userData && m.userData.archdiscStudioPrimitiveKind || 'mesh',
+      });
+    };
+    const id = setInterval(read, 1000);
+    read();
+    return () => clearInterval(id);
+  }, []);
+  if (!stats) return null;
+  return (
+    <div className="studio-right-section" data-studio-v3-mesh-stats>
+      <div className="studio-right-section-title">Mesh stats</div>
+      <div className="studio-right-row"><span>Kind</span><strong style={{ textTransform: 'capitalize' }}>{stats.kind}</strong></div>
+      <div className="studio-right-row"><span>Vertices</span><strong>{stats.v.toLocaleString()}</strong></div>
+      <div className="studio-right-row"><span>Triangles</span><strong>{stats.t.toLocaleString()}</strong></div>
+      {stats.area > 0 && (
+        <div className="studio-right-row"><span>Surface area</span><strong style={{ fontFamily: 'var(--studio-mono)' }}>{stats.area.toFixed(4)}</strong></div>
+      )}
+      {stats.bboxVolume > 0 && (
+        <div className="studio-right-row"><span>AABB volume</span><strong style={{ fontFamily: 'var(--studio-mono)' }}>{stats.bboxVolume.toFixed(6)}</strong></div>
+      )}
+    </div>
   );
 }
 
