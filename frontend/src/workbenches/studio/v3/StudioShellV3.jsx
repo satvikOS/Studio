@@ -437,6 +437,7 @@ const KEYMAP = [
     ['1 / 3 / 7', 'Camera front / right / top (object mode)'],
     ['5', 'Toggle perspective / orthographic'],
     ['Z', 'Cycle shading: wire → solid → material → rendered'],
+    ['+ / -', 'Dolly camera in / out'],
     ['Space', 'Play / pause animation'],
     ['← / →', 'Step animation frame ±1'],
     ['K', 'Insert keyframe at current frame'],
@@ -1300,6 +1301,22 @@ export function StudioShellV3({ mode = 'dark' }) {
         const ae = document.activeElement;
         if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
         if (window.__studioToggleViewProjection) window.__studioToggleViewProjection();
+        e.preventDefault();
+      } else if (!meta && !e.altKey && (e.key === '+' || e.key === '=' || e.key === '-')) {
+        // Slice 452 — Numpad +/- dolly the camera in / out (Blender parity).
+        // '=' on US layouts is the unshifted +, so treat it as +.
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        const v = window.__archdiscViewport;
+        if (!v || !v.camera) return;
+        const ctrl = v.orbitControls || v.controls;
+        if (!ctrl) return;
+        const target = ctrl.target;
+        const dir = v.camera.position.clone().sub(target);
+        const k = (e.key === '-') ? 1.12 : 0.89;
+        dir.multiplyScalar(k);
+        v.camera.position.copy(target).add(dir);
+        if (typeof ctrl.update === 'function') ctrl.update();
         e.preventDefault();
       } else if (!meta && !e.shiftKey && !e.altKey && (e.key === 'z' || e.key === 'Z')) {
         // Slice 451 — Z cycles wire → solid → material → rendered → wire …
