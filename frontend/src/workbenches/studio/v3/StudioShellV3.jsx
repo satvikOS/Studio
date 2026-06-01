@@ -431,6 +431,7 @@ const KEYMAP = [
     ['X / Delete', 'Delete selected mesh'],
     ['H', 'Hide selected'],
     ['Alt+H', 'Reveal everything'],
+    ['N', 'Toggle sidebar (right panel)'],
   ] },
   { section: 'View / Cmd', rows: [
     ['Space', 'Play / pause animation'],
@@ -1373,6 +1374,12 @@ export function StudioShellV3({ mode = 'dark' }) {
         if (window.__studioInsertKeyframeAt && window.__studioGetFrame) {
           window.__studioInsertKeyframeAt(window.__studioGetFrame());
         }
+        e.preventDefault();
+      } else if (!meta && !e.shiftKey && !e.altKey && (e.key === 'n' || e.key === 'N')) {
+        // Slice 448 — N toggles the right panel (Blender N sidebar).
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        setRightCollapsed((v) => !v);
         e.preventDefault();
       } else if (!meta && !e.shiftKey && !e.altKey && e.key === '.') {
         // Slice 435 — '.' frames the selected mesh in the viewport
