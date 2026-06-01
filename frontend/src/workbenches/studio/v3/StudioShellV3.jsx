@@ -1523,6 +1523,10 @@ function LayersRows() {
 
 function OutlinerRows() {
   const [items, setItems] = useState([]);
+  // Slice 463 — search filter, persisted across re-renders via window so
+  // the user's filter survives outliner unmount/mount cycles.
+  const [filter, setFilter] = useState(() => (typeof window !== 'undefined' && window.__studioV3OutlinerFilter) || '');
+  useEffect(() => { if (typeof window !== 'undefined') window.__studioV3OutlinerFilter = filter; }, [filter]);
   useEffect(() => {
     const read = () => {
       const out = [];
@@ -1541,6 +1545,9 @@ function OutlinerRows() {
     read();
     return () => clearInterval(id);
   }, []);
+  const visible = filter
+    ? items.filter((it) => it.name.toLowerCase().includes(filter.toLowerCase()))
+    : items;
   if (!items.length) {
     return (
       <div className="studio-right-section">
@@ -1572,8 +1579,25 @@ function OutlinerRows() {
   };
   return (
     <div className="studio-right-section">
-      <div className="studio-right-section-title">Scene · {items.length}</div>
-      {items.map((it) => {
+      <div className="studio-right-section-title">Scene · {items.length}{filter && ` · ${visible.length} match`}</div>
+      <div className="studio-right-row" style={{ marginBottom: 4 }}>
+        <input
+          type="text"
+          data-studio-v3-outliner-filter
+          value={filter}
+          placeholder="Filter…"
+          onChange={(e) => setFilter(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Escape') setFilter(''); }}
+          style={{
+            flex: 1, padding: '2px 6px', fontSize: 11,
+            background: 'var(--studio-bg-elev, #1c1c20)',
+            color: 'var(--studio-ink, #dfe5ea)',
+            border: '1px solid var(--studio-ink-mute, #2c2c30)',
+            borderRadius: 2, fontFamily: 'inherit',
+          }}
+        />
+      </div>
+      {visible.map((it) => {
         const active = it.uuid === activeUuid;
         return (
           <div
