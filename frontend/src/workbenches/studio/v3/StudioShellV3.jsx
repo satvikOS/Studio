@@ -874,6 +874,38 @@ function KeymapCheatsheet() {
   );
 }
 
+// ─── AutosaveToast (slice 465) ───────────────────────────────────────────
+// Brief floating toast shown when an autosave fires. Fades out after 2s.
+function AutosaveToast() {
+  const [msg, setMsg] = useState(null);
+  useEffect(() => {
+    const onSaved = (ev) => {
+      const d = ev.detail || {};
+      setMsg(`Autosaved · ${d.primitives || 0} prim · ${((d.bytes || 0) / 1024).toFixed(1)} KB`);
+      setTimeout(() => setMsg(null), 2200);
+    };
+    window.addEventListener('studio-autosaved', onSaved);
+    return () => window.removeEventListener('studio-autosaved', onSaved);
+  }, []);
+  if (!msg) return null;
+  return (
+    <div
+      data-studio-v3-autosave-toast
+      style={{
+        position: 'absolute', bottom: 60, right: 16, zIndex: 25,
+        background: 'rgba(13, 17, 23, 0.92)',
+        color: 'var(--studio-accent, #1de9b6)',
+        border: '1px solid var(--studio-ink-mute, #1f2733)',
+        borderRadius: 4, padding: '6px 12px',
+        fontFamily: 'inherit', fontSize: 11,
+        pointerEvents: 'none',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+        letterSpacing: '0.03em',
+      }}
+    >{msg}</div>
+  );
+}
+
 // ─── ViewportStatsOverlay (slice 460) ─────────────────────────────────────
 // Pinned to the viewport's bottom-left corner. Shows FPS · draw calls ·
 // scene triangle total. Blender stats-overlay parity. Toggleable via
@@ -2001,6 +2033,28 @@ export function StudioShellV3({ mode = 'dark' }) {
     }
   }, [editMode]);
 
+  // Slice 465 — Autosave the scene to localStorage every 30s. Only saves
+  // when at least one primitive exists. Fires 'studio-autosaved' so any
+  // UI can flash a notification.
+  useEffect(() => {
+    const tick = () => {
+      try {
+        let n = 0;
+        const s = window.__archdiscScene;
+        if (s) s.traverse((o) => { if (o.userData && o.userData.archdiscStudioPrimitive) n++; });
+        if (!n) return;
+        const json = window.__studioSaveScene && window.__studioSaveScene();
+        if (!json) return;
+        window.localStorage.setItem('archdisc.studio.autosave', json);
+        const ts = Date.now();
+        window.localStorage.setItem('archdisc.studio.autosave.ts', String(ts));
+        window.dispatchEvent(new CustomEvent('studio-autosaved', { detail: { ts, bytes: json.length, primitives: n } }));
+      } catch (_) {}
+    };
+    const id = setInterval(tick, 30_000);
+    return () => clearInterval(id);
+  }, []);
+
   // Cmd+T cycle theme; Cmd+/ toggle dock; Esc clears active tool;
   // X deletes the selected mesh (Blender X / Maya Backspace parity).
   useEffect(() => {
@@ -2416,6 +2470,7 @@ export function StudioShellV3({ mode = 'dark' }) {
         <QuickAddMenu />
         <SettingsModal />
         <ViewportStatsOverlay />
+        <AutosaveToast />
       </main>
       {/* Slice 407 — right side is always the RightPanel now. Archie no
           longer overlays this slot; it lives only at the bottom. */}
