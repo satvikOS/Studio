@@ -598,6 +598,38 @@ function RightPanel({ collapsed, onToggle, activeWb, editMode, selection }) {
               <div className="studio-right-section-title">Edit selection</div>
               <SelectionRows />
             </div>
+            {/* Slice 433 — Edit Tools buttons surface the slice 388/389/390/
+                386/387 edit-mode ops as one-click actions in V3 inspector.
+                Only shown in a sub-object mode. */}
+            {(editMode === 'vertex' || editMode === 'edge' || editMode === 'face') && (
+              <div className="studio-right-section" data-studio-v3-edit-tools>
+                <div className="studio-right-section-title">Edit tools</div>
+                {[
+                  { id: 'extrude',   label: 'Extrude  0.005',  call: () => window.__studioExtrudeSelectedFaces && window.__studioExtrudeSelectedFaces(0.005) },
+                  { id: 'inset',     label: 'Inset  0.3',      call: () => window.__studioInsetSelectedFaces && window.__studioInsetSelectedFaces(0.3) },
+                  { id: 'subdivide', label: 'Subdivide  1→4',  call: () => window.__studioSubdivideSelectedFaces && window.__studioSubdivideSelectedFaces() },
+                  { id: 'invert',    label: 'Invert',          call: () => window.__studioInvertEditSelection && window.__studioInvertEditSelection(editMode) },
+                  { id: 'all',       label: 'Select All',      call: () => window.__studioSelectAllEdit && window.__studioSelectAllEdit(editMode) },
+                  { id: 'clear',     label: 'Clear',           call: () => window.__studioClearEditSelection && window.__studioClearEditSelection() },
+                ].map((b) => (
+                  <button
+                    key={b.id}
+                    type="button"
+                    data-studio-v3-edit-tool={b.id}
+                    onClick={b.call}
+                    style={{
+                      display: 'block', width: '100%', marginBottom: 3,
+                      padding: '3px 8px', textAlign: 'left',
+                      background: 'var(--studio-bg-elev)',
+                      color: 'var(--studio-ink)',
+                      border: '1px solid var(--studio-ink-mute)',
+                      borderRadius: 3, cursor: 'pointer',
+                      fontSize: 11, fontFamily: 'inherit',
+                    }}
+                  >{b.label}</button>
+                ))}
+              </div>
+            )}
           </>
         )}
         {tab === 'outliner' && <OutlinerRows />}
