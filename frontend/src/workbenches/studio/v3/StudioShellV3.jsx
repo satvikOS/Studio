@@ -434,6 +434,7 @@ const KEYMAP = [
     ['N', 'Toggle sidebar (right panel)'],
   ] },
   { section: 'View / Cmd', rows: [
+    ['1 / 3 / 7', 'Camera front / right / top (object mode)'],
     ['Space', 'Play / pause animation'],
     ['← / →', 'Step animation frame ±1'],
     ['K', 'Insert keyframe at current frame'],
@@ -1292,15 +1293,25 @@ export function StudioShellV3({ mode = 'dark' }) {
         const i = cycle.indexOf(cur);
         const next = cycle[(i + 1) % cycle.length];
         if (window.__studioSetEditMode) window.__studioSetEditMode(next);
-      } else if (!meta && !e.shiftKey && !e.altKey && (e.key === '1' || e.key === '2' || e.key === '3')) {
+      } else if (!meta && !e.shiftKey && !e.altKey && (e.key === '1' || e.key === '2' || e.key === '3' || e.key === '7')) {
         // 1/2/3 flip vert/edge/face — ONLY when already in a sub-object
         // mode (avoids stealing the numpad-1/3 camera views in object mode).
+        // In object mode 1/3/7 set the canonical camera axis (Blender
+        // numpad-1 front, numpad-3 right, numpad-7 top).
         const ae = document.activeElement;
         if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
         const cur = window.__studioGetEditMode && window.__studioGetEditMode();
         if (cur === 'vertex' || cur === 'edge' || cur === 'face') {
+          if (e.key === '7') return; // no edit-mode handler for 7
           const map = { '1': 'vertex', '2': 'edge', '3': 'face' };
           if (window.__studioSetEditMode) window.__studioSetEditMode(map[e.key]);
+          e.preventDefault();
+        } else {
+          // Object mode → camera axis preset (Blender numpad parity).
+          if (e.key === '2') return; // no axis for 2
+          const axisMap = { '1': 'front', '3': 'side', '7': 'top' };
+          if (window.__studioSetCameraAxis) window.__studioSetCameraAxis(axisMap[e.key]);
+          setAxis(axisMap[e.key]);
           e.preventDefault();
         }
       } else if (!meta && !e.shiftKey && !e.altKey && (e.key === 'g' || e.key === 'r' || e.key === 's')) {
