@@ -1176,14 +1176,7 @@ function RightPanel({ collapsed, onToggle, activeWb, editMode, selection }) {
           </>
         )}
         {tab === 'outliner' && <OutlinerRows />}
-        {tab === 'layers' && (
-          <div className="studio-right-section">
-            <div className="studio-right-section-title">Layers</div>
-            <div className="studio-right-row" style={{ color: 'var(--studio-ink-mute)', fontStyle: 'italic' }}>
-              Layer manager lands in slice 395+.
-            </div>
-          </div>
-        )}
+        {tab === 'layers' && <LayersRows />}
       </div>
     </aside>
   );
@@ -1432,6 +1425,98 @@ function MeshStatsRows() {
       {stats.bboxVolume > 0 && (
         <div className="studio-right-row"><span>AABB volume</span><strong style={{ fontFamily: 'var(--studio-mono)' }}>{stats.bboxVolume.toFixed(6)}</strong></div>
       )}
+    </div>
+  );
+}
+
+// ─── LayersRows (slice 462) ──────────────────────────────────────────────
+// 8 view layers (Three.Object3D.layers mask) with visibility + isolate
+// toggles. Camera layers default to all 8 visible; each row's eye-toggle
+// flips camera.layers.toggle(i), and the solo button isolates that
+// layer (camera.layers.set(i) + remember prior set so unsolo restores).
+function LayersRows() {
+  const [version, setVersion] = useState(0);
+  const priorMask = React.useRef(null);
+  const refresh = () => setVersion((v) => v + 1);
+  const cam = () => {
+    const vp = window.__archdiscViewport;
+    return vp && vp.camera;
+  };
+  const isLayerOn = (i) => {
+    const c = cam(); if (!c) return false;
+    return (c.layers.mask & (1 << i)) !== 0;
+  };
+  const toggle = (i) => {
+    const c = cam(); if (!c) return;
+    c.layers.toggle(i);
+    refresh();
+  };
+  const solo = (i) => {
+    const c = cam(); if (!c) return;
+    if (priorMask.current == null) priorMask.current = c.layers.mask;
+    c.layers.set(i);
+    refresh();
+  };
+  const unsolo = () => {
+    const c = cam(); if (!c) return;
+    if (priorMask.current != null) {
+      c.layers.mask = priorMask.current;
+      priorMask.current = null;
+    } else {
+      c.layers.enableAll();
+    }
+    refresh();
+  };
+  const rows = [];
+  for (let i = 0; i < 8; i++) rows.push(i);
+  return (
+    <div className="studio-right-section" data-studio-v3-layers key={version}>
+      <div className="studio-right-section-title">View layers</div>
+      {rows.map((i) => (
+        <div
+          key={i}
+          className="studio-right-row"
+          data-studio-v3-layer={i}
+          data-studio-v3-layer-on={isLayerOn(i) ? 'true' : 'false'}
+          style={{ alignItems: 'center', gap: 6 }}
+        >
+          <input
+            type="checkbox"
+            data-studio-v3-layer-toggle={i}
+            checked={isLayerOn(i)}
+            onChange={() => toggle(i)}
+            title={`Toggle layer ${i}`}
+          />
+          <span style={{ flex: 1 }}>Layer {i}</span>
+          <button
+            type="button"
+            data-studio-v3-layer-solo={i}
+            onClick={() => solo(i)}
+            title="Isolate (solo)"
+            style={{
+              padding: '1px 6px', fontSize: 10,
+              background: 'var(--studio-bg-elev, #161b22)',
+              color: 'var(--studio-ink, #e6edf3)',
+              border: '1px solid var(--studio-ink-mute, #1f2733)',
+              borderRadius: 2, cursor: 'pointer', fontFamily: 'inherit',
+            }}
+          >solo</button>
+        </div>
+      ))}
+      <div className="studio-right-row" style={{ marginTop: 6 }}>
+        <button
+          type="button"
+          data-studio-v3-layer-unsolo
+          onClick={unsolo}
+          style={{
+            padding: '4px 10px', fontSize: 11,
+            background: 'var(--studio-bg-elev, #161b22)',
+            color: 'var(--studio-ink, #e6edf3)',
+            border: '1px solid var(--studio-ink-mute, #1f2733)',
+            borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit',
+          }}
+        >Reveal all layers</button>
+      </div>
     </div>
   );
 }
