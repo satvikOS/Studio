@@ -874,6 +874,14 @@ export function StudioShellV3({ mode = 'dark' }) {
           if (window.__studioSetEditMode) window.__studioSetEditMode(map[e.key]);
           e.preventDefault();
         }
+      } else if (!meta && !e.shiftKey && !e.altKey && (e.key === 'g' || e.key === 'r' || e.key === 's')) {
+        // Slice 429 — G/R/S set active transform tool (Blender muscle memory).
+        // Honors text inputs.
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        const map = { g: 'move', r: 'rotate', s: 'scale' };
+        setActiveTool(map[e.key]);
+        e.preventDefault();
       }
       // X-key delete handled by the V2 headless mount (its own X
       // handler covers undo + ref cleanup). Adding another here would
