@@ -882,6 +882,17 @@ export function StudioShellV3({ mode = 'dark' }) {
         const map = { g: 'move', r: 'rotate', s: 'scale' };
         setActiveTool(map[e.key]);
         e.preventDefault();
+      } else if (!meta && !e.shiftKey && (e.key === 'h' || e.key === 'H')) {
+        // Slice 430 — H hides selected, Alt+H reveals all (Blender H parity).
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        if (e.altKey) {
+          if (window.__studioRevealAll) window.__studioRevealAll();
+        } else {
+          const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+          if (sel) sel.visible = false;
+        }
+        e.preventDefault();
       }
       // X-key delete handled by the V2 headless mount (its own X
       // handler covers undo + ref cleanup). Adding another here would
