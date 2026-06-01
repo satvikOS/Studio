@@ -325,6 +325,7 @@ const KEYMAP = [
     ['Alt+H', 'Reveal everything'],
   ] },
   { section: 'View / Cmd', rows: [
+    ['.', 'Frame selected (fallback: frame all)'],
     ['Cmd+T', 'Toggle theme'],
     ['Cmd+/', 'Focus command bar'],
     ['F1 / ?', 'This cheatsheet'],
@@ -1053,6 +1054,16 @@ export function StudioShellV3({ mode = 'dark' }) {
           s.add(clone);
           if (window.__studioSelectMesh) window.__studioSelectMesh(clone);
         }
+        e.preventDefault();
+      } else if (!meta && !e.shiftKey && !e.altKey && e.key === '.') {
+        // Slice 435 — '.' frames the selected mesh in the viewport
+        // (Blender Numpad-. parity). Falls back to FrameAll if nothing
+        // is selected.
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+        if (sel && window.__studioFitSelected) window.__studioFitSelected();
+        else if (window.__studioFrameAll) window.__studioFrameAll();
         e.preventDefault();
       }
       // X-key delete handled by the V2 headless mount (its own X
