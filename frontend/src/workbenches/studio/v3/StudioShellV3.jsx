@@ -206,16 +206,19 @@ function TopBar({ onCycleTheme, theme }) {
 
 // ─── QuickAccessBar ───────────────────────────────────────────────────────
 function QuickAccessBar({ onAction }) {
+  // Slice 446 — Add export (GLTF) between save and undo. Tooltips spell
+  // out the hotkey so users discover it.
   const items = [
-    { id: 'new',      icon: 'empty',    label: 'New' },
-    { id: 'open',     icon: 'tshelf',   label: 'Open' },
-    { id: 'save',     icon: 'check',    label: 'Save' },
+    { id: 'new',      icon: 'empty',    label: 'New (clear scene)' },
+    { id: 'open',     icon: 'tshelf',   label: 'Open · Cmd+O' },
+    { id: 'save',     icon: 'check',    label: 'Save · Cmd+S' },
+    { id: 'export',   icon: 'tshelf',   label: 'Export GLTF · Cmd+E' },
     null,
-    { id: 'undo',     icon: 'undo',     label: 'Undo' },
-    { id: 'redo',     icon: 'redo',     label: 'Redo' },
+    { id: 'undo',     icon: 'undo',     label: 'Undo · Cmd+Z' },
+    { id: 'redo',     icon: 'redo',     label: 'Redo · Cmd+Shift+Z' },
     null,
-    { id: 'play',     icon: 'play',     label: 'Play' },
-    { id: 'pause',    icon: 'pause',    label: 'Pause' },
+    { id: 'play',     icon: 'play',     label: 'Play · Space' },
+    { id: 'pause',    icon: 'pause',    label: 'Pause · Space' },
     null,
     { id: 'settings', icon: 'settings', label: 'Settings' },
   ];
@@ -1382,8 +1385,29 @@ export function StudioShellV3({ mode = 'dark' }) {
       };
       inp.click();
     } else if (id === 'new') {
-      const r = window.__studioRevealAll && window.__studioRevealAll();
-      pushTool(`new — __studioRevealAll → ${JSON.stringify(r)}`);
+      // Slice 446 — New = clear every Studio primitive from the scene
+      // (RevealAll was unrelated). Push undo first so the user can
+      // recover via Cmd+Z.
+      if (window.__studioPushUndo) window.__studioPushUndo();
+      const s = window.__archdiscScene || (window.__archdiscViewport && window.__archdiscViewport.scene);
+      let n = 0;
+      if (s) {
+        const doomed = [];
+        s.traverse((o) => { if (o.userData && o.userData.archdiscStudioPrimitive) doomed.push(o); });
+        for (const o of doomed) {
+          s.remove(o);
+          if (o.geometry) o.geometry.dispose();
+          if (Array.isArray(o.material)) o.material.forEach((m) => m.dispose && m.dispose());
+          else if (o.material && o.material.dispose) o.material.dispose();
+          n++;
+        }
+        if (window.__studioDeselect) window.__studioDeselect();
+      }
+      pushTool(`new — cleared ${n} primitive${n === 1 ? '' : 's'}`);
+    } else if (id === 'export') {
+      // Slice 446 — Export GLTF (mirrors Cmd+E from slice 445).
+      if (window.__studioDownloadGLTF) window.__studioDownloadGLTF();
+      pushTool('__studioDownloadGLTF triggered');
     } else if (id === 'settings') {
       pushTool('settings — preferences panel lands in a follow-up');
     }
