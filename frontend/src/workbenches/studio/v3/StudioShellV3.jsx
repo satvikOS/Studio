@@ -18,6 +18,7 @@ import { registerRemeshOps, unregisterRemeshOps } from './remeshops';
 import { registerScriptOps, unregisterScriptOps } from './scriptops';
 import { registerMographOps, unregisterMographOps } from './mographops';
 import { registerIOOps, unregisterIOOps } from './ioops';
+import { registerRefSnapOps, unregisterRefSnapOps } from './refsnapops';
 
 // Slice 401 — V3 stops using V2. V3 owns its own Viewport3D mount + its
 // own spawn / selection / undo / file-io implementations (built up in
@@ -662,7 +663,9 @@ export function StudioShellV3({ mode = 'dark' }) {
     registerScriptOps();
     registerMographOps();
     registerIOOps();
+    registerRefSnapOps();
     return () => {
+      unregisterRefSnapOps();
       unregisterIOOps();
       unregisterMographOps();
       unregisterScriptOps();
