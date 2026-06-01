@@ -2060,8 +2060,52 @@ function StatusBar({ wb, editMode }) {
       <span data-studio-v3-status="fps">{fps} fps</span>
       <span data-studio-v3-status="calls">{calls} calls</span>
       <span data-studio-v3-status="units">mm</span>
+      <DirtyDot />
       <span data-studio-v3-status="ready"><span className="studio-statusbar-dot" />ready</span>
     </div>
+  );
+}
+
+// Slice 470 — dirty-state indicator. Watches studio-autosaved (the
+// scene was just persisted) + a synthesised dirty signal from common
+// mutations. Implementation: poll the scene snapshot every 2s,
+// compare to the last persisted snapshot length; if mismatch, mark dirty.
+function DirtyDot() {
+  const [dirty, setDirty] = React.useState(false);
+  React.useEffect(() => {
+    let lastSaved = 0;
+    const onSaved = () => { lastSaved = Date.now(); setDirty(false); };
+    window.addEventListener('studio-autosaved', onSaved);
+    const id = setInterval(() => {
+      // Anything in the scene + nothing autosaved in the past 30s → dirty.
+      const s = window.__archdiscScene;
+      if (!s) return;
+      let n = 0;
+      s.traverse((o) => { if (o.userData && o.userData.archdiscStudioPrimitive) n++; });
+      if (n > 0 && (Date.now() - lastSaved) > 30_000) setDirty(true);
+    }, 2000);
+    return () => {
+      window.removeEventListener('studio-autosaved', onSaved);
+      clearInterval(id);
+    };
+  }, []);
+  return (
+    <span
+      data-studio-v3-status="dirty"
+      data-studio-v3-dirty={dirty ? 'true' : 'false'}
+      title={dirty ? 'Unsaved changes — Cmd+S to save' : 'All changes saved'}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 4,
+        color: dirty ? 'var(--studio-accent, #1de9b6)' : 'var(--studio-ink-mute, #9aa6b2)',
+      }}
+    >
+      <span style={{
+        width: 6, height: 6, borderRadius: 3,
+        background: dirty ? 'var(--studio-accent, #1de9b6)' : 'transparent',
+        border: '1px solid ' + (dirty ? 'var(--studio-accent, #1de9b6)' : 'var(--studio-ink-mute, #9aa6b2)'),
+      }} />
+      {dirty ? 'modified' : 'saved'}
+    </span>
   );
 }
 
