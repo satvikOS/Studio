@@ -1135,6 +1135,8 @@ function RightPanel({ collapsed, onToggle, activeWb, editMode, selection }) {
             <MeshStatsRows />
             {/* Slice 459 — Editable transform XYZ inputs. */}
             <TransformRows />
+            {/* Slice 461 — Material properties. */}
+            <MaterialRows />
             <div className="studio-right-section">
               <div className="studio-right-section-title">Edit selection</div>
               <SelectionRows />
@@ -1274,6 +1276,93 @@ function TransformRows() {
         {numIn('scale', 'x', m.scale.x.toFixed(4))}
         {numIn('scale', 'y', m.scale.y.toFixed(4))}
         {numIn('scale', 'z', m.scale.z.toFixed(4))}
+      </div>
+    </div>
+  );
+}
+
+function MaterialRows() {
+  const [version, setVersion] = useState(0);
+  const meshRef = React.useRef(null);
+  useEffect(() => {
+    const id = setInterval(() => {
+      const m = window.__studioSelectedMesh && window.__studioSelectedMesh();
+      const cur = meshRef.current;
+      if ((cur && cur.uuid) !== (m && m.uuid)) {
+        meshRef.current = m;
+        setVersion((v) => v + 1);
+      }
+    }, 500);
+    return () => clearInterval(id);
+  }, []);
+  const m = meshRef.current;
+  if (!m || !m.material) return null;
+  const mat = Array.isArray(m.material) ? m.material[0] : m.material;
+  const hex = mat.color ? '#' + mat.color.getHexString() : '#888888';
+  const isStd = typeof mat.metalness === 'number';
+  return (
+    <div className="studio-right-section" data-studio-v3-material-rows key={version}>
+      <div className="studio-right-section-title">Material</div>
+      <div className="studio-right-row" style={{ alignItems: 'center' }}>
+        <span>Color</span>
+        <input
+          type="color"
+          data-studio-v3-material-color
+          defaultValue={hex}
+          onChange={(e) => {
+            if (mat.color) mat.color.set(e.target.value);
+            mat.needsUpdate = true;
+          }}
+          style={{ width: 40, height: 22, padding: 0, border: '1px solid var(--studio-ink-mute)', borderRadius: 2, background: 'transparent', cursor: 'pointer' }}
+        />
+      </div>
+      {isStd && (
+        <>
+          <div className="studio-right-row" style={{ alignItems: 'center' }}>
+            <span>Metalness</span>
+            <input
+              type="range" min="0" max="1" step="0.01"
+              data-studio-v3-material-metalness
+              defaultValue={mat.metalness}
+              onInput={(e) => { mat.metalness = parseFloat(e.target.value); mat.needsUpdate = true; }}
+              style={{ width: 90 }}
+            />
+          </div>
+          <div className="studio-right-row" style={{ alignItems: 'center' }}>
+            <span>Roughness</span>
+            <input
+              type="range" min="0" max="1" step="0.01"
+              data-studio-v3-material-roughness
+              defaultValue={mat.roughness}
+              onInput={(e) => { mat.roughness = parseFloat(e.target.value); mat.needsUpdate = true; }}
+              style={{ width: 90 }}
+            />
+          </div>
+        </>
+      )}
+      <div className="studio-right-row" style={{ alignItems: 'center' }}>
+        <span>Opacity</span>
+        <input
+          type="range" min="0" max="1" step="0.01"
+          data-studio-v3-material-opacity
+          defaultValue={typeof mat.opacity === 'number' ? mat.opacity : 1}
+          onInput={(e) => {
+            const v = parseFloat(e.target.value);
+            mat.opacity = v;
+            mat.transparent = v < 1;
+            mat.needsUpdate = true;
+          }}
+          style={{ width: 90 }}
+        />
+      </div>
+      <div className="studio-right-row" style={{ alignItems: 'center' }}>
+        <span>Wireframe</span>
+        <input
+          type="checkbox"
+          data-studio-v3-material-wireframe
+          defaultChecked={!!mat.wireframe}
+          onChange={(e) => { mat.wireframe = !!e.target.checked; mat.needsUpdate = true; }}
+        />
       </div>
     </div>
   );
