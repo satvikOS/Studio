@@ -725,6 +725,8 @@ function SettingsModal() {
             ))}
           </div>
         </div>
+        {/* HDRI Environment — slice 468. */}
+        <HDRIPickerRow />
         {/* Background color */}
         <div data-studio-v3-settings-section="bg" style={{ marginBottom: 16 }}>
           <div style={{ opacity: 0.55, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Background color</div>
@@ -753,6 +755,48 @@ function SettingsModal() {
             borderRadius: 3, cursor: 'pointer', fontSize: 11,
           }}
         >Done</button>
+      </div>
+    </div>
+  );
+}
+
+// Slice 468 — HDRI environment picker for the Settings modal.
+function HDRIPickerRow() {
+  const [presets, setPresets] = React.useState([]);
+  const [current, setCurrent] = React.useState('off');
+  React.useEffect(() => {
+    if (window.__studioListHDRIPresets) {
+      const r = window.__studioListHDRIPresets();
+      const list = (r && (r.presets || r)) || [];
+      setPresets(Array.isArray(list) ? list : []);
+    }
+    if (window.__studioHDRIPreset) setCurrent(window.__studioHDRIPreset);
+  }, []);
+  if (!presets.length) return null;
+  return (
+    <div data-studio-v3-settings-section="hdri" style={{ marginBottom: 12 }}>
+      <div style={{ opacity: 0.55, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>HDRI environment</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+        {presets.map((p) => (
+          <button
+            key={p}
+            type="button"
+            data-studio-v3-settings-hdri={p}
+            data-active={p === current ? 'true' : 'false'}
+            onClick={() => {
+              if (window.__studioSetHDRIEnvironment) window.__studioSetHDRIEnvironment(p);
+              setCurrent(p);
+            }}
+            style={{
+              padding: '4px 10px', fontSize: 11,
+              background: p === current ? 'var(--studio-accent, #1de9b6)' : 'var(--studio-bg-elev, #161b22)',
+              color: p === current ? 'var(--studio-bg, #0d1117)' : 'var(--studio-ink, #e6edf3)',
+              border: '1px solid var(--studio-ink-mute, #1f2733)',
+              borderRadius: 3, cursor: 'pointer',
+              textTransform: 'capitalize', fontFamily: 'inherit',
+            }}
+          >{p}</button>
+        ))}
       </div>
     </div>
   );
