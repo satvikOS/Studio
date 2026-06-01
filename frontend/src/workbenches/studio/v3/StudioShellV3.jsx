@@ -708,15 +708,48 @@ function OutlinerRows() {
       </div>
     );
   }
+  // Slice 443 — Click an outliner row to select the matching mesh.
+  // Tracks the active uuid for a visual highlight (border-left).
+  const [activeUuid, setActiveUuid] = useState(null);
+  useEffect(() => {
+    const read = () => {
+      const m = window.__studioSelectedMesh && window.__studioSelectedMesh();
+      setActiveUuid(m ? m.uuid : null);
+    };
+    const id = setInterval(read, 400);
+    read();
+    return () => clearInterval(id);
+  }, []);
+  const onPick = (uuid) => {
+    const s = window.__archdiscScene || (window.__archdiscViewport && window.__archdiscViewport.scene);
+    if (!s) return;
+    let m = null;
+    s.traverse((o) => { if (o.uuid === uuid) m = o; });
+    if (m && window.__studioSelectMesh) window.__studioSelectMesh(m);
+  };
   return (
     <div className="studio-right-section">
       <div className="studio-right-section-title">Scene · {items.length}</div>
-      {items.map((it) => (
-        <div key={it.uuid} className="studio-right-row" data-studio-v3-outliner-item={it.uuid}>
-          <span style={{ textTransform: 'capitalize' }}>{it.name}</span>
-          <strong style={{ fontFamily: 'var(--studio-mono)', fontSize: 10, color: 'var(--studio-ink-mute)' }}>{it.uuid.slice(0, 6)}</strong>
-        </div>
-      ))}
+      {items.map((it) => {
+        const active = it.uuid === activeUuid;
+        return (
+          <div
+            key={it.uuid}
+            className="studio-right-row"
+            data-studio-v3-outliner-item={it.uuid}
+            data-studio-v3-outliner-active={active ? 'true' : 'false'}
+            onClick={() => onPick(it.uuid)}
+            style={{
+              cursor: 'pointer',
+              borderLeft: '2px solid ' + (active ? 'var(--studio-accent, #1de9b6)' : 'transparent'),
+              paddingLeft: 6,
+            }}
+          >
+            <span style={{ textTransform: 'capitalize' }}>{it.name}</span>
+            <strong style={{ fontFamily: 'var(--studio-mono)', fontSize: 10, color: 'var(--studio-ink-mute)' }}>{it.uuid.slice(0, 6)}</strong>
+          </div>
+        );
+      })}
     </div>
   );
 }
