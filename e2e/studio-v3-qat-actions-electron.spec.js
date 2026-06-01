@@ -32,7 +32,7 @@ test('Studio V3 — QAT undo / redo / save / play call V2 APIs (slice 400)', asy
 
   // Click QAT Undo — fires __studioUndo, dock opens with tool message.
   await win.locator('[data-studio-v3-qat-btn="undo"]').click();
-  await expect(win.locator('[data-studio-v3-archie]')).toBeVisible({ timeout: 5000 });
+  await expect(win.locator('[data-studio-v3-archie-thread]')).toBeVisible({ timeout: 5000 });
   await expect(win.locator('.studio-archie-msg[data-role="tool"]').last()).toContainText('__studioUndo');
 
   // Redo.

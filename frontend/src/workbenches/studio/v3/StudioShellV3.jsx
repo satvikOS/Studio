@@ -554,7 +554,7 @@ function callDirectIfPossible(input) {
   }
 }
 
-function CommandBar({ dockOpen, onToggleDock, onSubmit }) {
+function CommandBar({ onSubmit }) {
   const ref = useRef(null);
   useEffect(() => {
     const onKey = (e) => {
@@ -586,46 +586,37 @@ function CommandBar({ dockOpen, onToggleDock, onSubmit }) {
       <span className="studio-cmdbar-hint">
         <kbd>⌘K</kbd>
       </span>
-      <button
-        type="button"
-        className="studio-cmdbar-toggle"
-        data-studio-v3-cmdbar-toggle
-        data-active={dockOpen ? 'true' : 'false'}
-        onClick={onToggleDock}
-        title="Toggle Archie dock"
-      >Dock</button>
     </div>
   );
 }
 
-// ─── ArchieDock (overlays right panel) ────────────────────────────────────
-function ArchieDock({ thread, onClose }) {
+// ─── ArchieThread (inline strip above cmdbar) ─────────────────────────────
+// Slice 407 — replaces the right-side ArchieDock. Archie now lives ONLY
+// at the bottom of the shell so its surface area matches Forge exactly.
+// When there are messages the strip slides up above the cmdbar showing
+// the most recent 8 entries; user can clear to collapse.
+function ArchieThread({ thread, onClear }) {
+  if (!thread.length) return null;
   return (
-    <aside className="studio-archie" data-studio-v3-archie>
-      <div className="studio-archie-header">
-        <span className="studio-archie-spark">◐</span>
-        <span>Archie</span>
+    <div className="studio-archie-thread" data-studio-v3-archie-thread>
+      <div className="studio-archie-thread-head">
+        <span className="studio-archie-thread-spark">◐</span>
+        <span>Archie · {thread.length}</span>
         <span style={{ flex: 1 }} />
         <button
           type="button"
-          className="studio-qat-btn"
-          data-studio-v3-archie-close
-          onClick={onClose}
-          title="Close dock"
-        ><Icon name="close" size={12} /></button>
+          className="studio-archie-thread-clear"
+          data-studio-v3-archie-clear
+          onClick={onClear}
+          title="Clear thread"
+        ><Icon name="close" size={11} /></button>
       </div>
-      <div className="studio-archie-body">
-        {thread.length === 0 && (
-          <div className="studio-archie-msg" data-role="archie">
-            Welcome. Ask anything — modelling ops, render queues, scene
-            queries. I drive Studio's tools directly.
-          </div>
-        )}
-        {thread.map((m, i) => (
+      <div className="studio-archie-thread-body">
+        {thread.slice(-8).map((m, i) => (
           <div key={i} className="studio-archie-msg" data-role={m.role}>{m.text}</div>
         ))}
       </div>
-    </aside>
+    </div>
   );
 }
 
@@ -640,8 +631,10 @@ export function StudioShellV3({ mode = 'dark' }) {
   // status bar + inspector can read it without owning the raycaster.
   const [selection, setSelection] = useState(null);
   const [rightCollapsed, setRightCollapsed] = useState(false);
-  const [dockOpen, setDockOpen] = useState(false);
   const [thread, setThread] = useState([]);
+  // Slice 407 — Archie's side dock removed; thread strip lives above the
+  // cmdbar instead, only visible when there are messages. Cmd+/ now
+  // focuses the cmdbar input (most useful alias of the old toggle).
 
   // Slice 401 — register V3's native window.__studio* API surface on
   // mount; unregister on unmount so re-mounts don't leak.
@@ -684,7 +677,9 @@ export function StudioShellV3({ mode = 'dark' }) {
         setTheme((t) => t === 'dark' ? 'light' : 'dark');
       } else if (meta && e.key === '/') {
         e.preventDefault();
-        setDockOpen((v) => !v);
+        // No dock in V3 — focus the cmdbar input as the most useful alias.
+        const inp = document.querySelector('[data-studio-v3-cmdbar-input]');
+        if (inp) inp.focus();
       } else if (!meta && e.key === 'Escape') {
         setActiveTool('select');
       }
@@ -712,9 +707,8 @@ export function StudioShellV3({ mode = 'dark' }) {
   }, [activeTool]);
 
   const onCmdSubmit = (text) => {
-    // Direct V2-API call path — any `studioFoo arg1 arg2` runs the API
-    // and pushes the result. Surfaces every V2 capability through one
-    // line of text, so coverage is provable.
+    // Direct V3-API call path — any `studioFoo arg1 arg2` runs the API
+    // and pushes the result. Thread strip auto-opens.
     const direct = callDirectIfPossible(text);
     if (direct) {
       setThread((t) => [
@@ -724,17 +718,15 @@ export function StudioShellV3({ mode = 'dark' }) {
           ? { role: 'tool', text: `${direct.fname}(${(direct.args || []).map(JSON.stringify).join(', ')}) → ${JSON.stringify(direct.result)}` }
           : { role: 'tool', text: `${direct.fname}: ${direct.error}` },
       ]);
-      setDockOpen(true);
       return;
     }
     setThread((t) => [...t, { role: 'user', text }, { role: 'archie', text: `(NL routing wired in a follow-up) — heard: "${text}"` }]);
-    setDockOpen(true);
   };
 
-  // Slice 400 — QAT actions hit V2's real APIs through the headless mount.
-  // Each pushes a tool-message into the dock so the user sees what ran.
+  // Slice 400/407 — QAT actions call V3 APIs and push a tool-message
+  // into the thread strip (which auto-shows above the cmdbar).
   const onQatAction = (id) => {
-    const pushTool = (text) => { setThread((t) => [...t, { role: 'tool', text }]); setDockOpen(true); };
+    const pushTool = (text) => setThread((t) => [...t, { role: 'tool', text }]);
     if (id === 'undo') {
       const r = window.__studioUndo && window.__studioUndo();
       pushTool(`__studioUndo → ${JSON.stringify(r)}`);
@@ -780,7 +772,7 @@ export function StudioShellV3({ mode = 'dark' }) {
       const r = window.__studioRevealAll && window.__studioRevealAll();
       pushTool(`new — __studioRevealAll → ${JSON.stringify(r)}`);
     } else if (id === 'settings') {
-      setDockOpen(true);
+      pushTool('settings — preferences panel lands in a follow-up');
     }
   };
 
@@ -789,7 +781,6 @@ export function StudioShellV3({ mode = 'dark' }) {
       className="studio-app"
       data-studio-v3-shell
       data-studio-v3-mode={theme}
-      data-archie-open={String(dockOpen)}
     >
       <TopBar
         theme={theme}
@@ -839,22 +830,18 @@ export function StudioShellV3({ mode = 'dark' }) {
           setAxis={(a) => { setAxis(a); if (window.__studioSetCameraAxis) window.__studioSetCameraAxis(a); }}
         />
       </main>
-      {dockOpen
-        ? <ArchieDock thread={thread} onClose={() => setDockOpen(false)} />
-        : <RightPanel
-            collapsed={rightCollapsed}
-            onToggle={() => setRightCollapsed((v) => !v)}
-            activeWb={activeWb}
-            editMode={editMode}
-            selection={selection}
-          />
-      }
-      <StatusBar wb={activeWb} editMode={editMode} />
-      <CommandBar
-        dockOpen={dockOpen}
-        onToggleDock={() => setDockOpen((v) => !v)}
-        onSubmit={onCmdSubmit}
+      {/* Slice 407 — right side is always the RightPanel now. Archie no
+          longer overlays this slot; it lives only at the bottom. */}
+      <RightPanel
+        collapsed={rightCollapsed}
+        onToggle={() => setRightCollapsed((v) => !v)}
+        activeWb={activeWb}
+        editMode={editMode}
+        selection={selection}
       />
+      <StatusBar wb={activeWb} editMode={editMode} />
+      <ArchieThread thread={thread} onClear={() => setThread([])} />
+      <CommandBar onSubmit={onCmdSubmit} />
     </div>
   );
 }

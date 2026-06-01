@@ -170,9 +170,8 @@
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
 }
-.studio-app[data-archie-open="true"] {
-  grid-template-columns: var(--studio-wb-rail-w) 1fr var(--studio-archie-w);
-}
+/* Slice 407 — archie dock removed; data-archie-open attribute no
+   longer set. Grid columns stay fixed: wb-rail / viewport / right-panel. */
 
 .studio-topbar    { grid-area: topbar; }
 .studio-qat       { grid-area: qat; }
@@ -590,28 +589,44 @@
   border-color: var(--studio-brand);
 }
 
-/* ============ Archie dock ============ */
-.studio-archie {
-  grid-area: right;
-  width: var(--studio-archie-w);
-  background: var(--studio-canvas-2);
-  border-left: 1px solid var(--studio-rail-edge);
+/* ============ Archie thread (above cmdbar, slice 407) ====================
+ * Replaces the right-side .studio-archie dock. Only renders when there
+ * are messages. Spans the full width above the cmdbar, max height ~33vh
+ * so it never crowds the viewport. */
+.studio-archie-thread {
+  grid-area: viewport / viewport / statusbar / right;
+  align-self: end;
+  margin: 0 8px 8px;
   display: flex; flex-direction: column;
+  background: var(--studio-canvas-2);
+  border: 1px solid var(--studio-rail-edge);
+  border-radius: var(--studio-radius);
+  max-height: 33vh;
+  overflow: hidden;
+  z-index: 6;
 }
-.studio-archie-header {
+.studio-archie-thread-head {
   display: flex; align-items: center; gap: 8px;
-  padding: 6px 12px;
-  font-size: 11px;
+  padding: 5px 10px 5px 12px;
+  font-size: 11px; font-weight: 500;
   color: var(--studio-ink);
-  font-weight: 500;
   border-bottom: 1px solid var(--studio-rail-edge);
   background: var(--studio-canvas);
 }
-.studio-archie-spark { color: var(--studio-brand); }
-.studio-archie-body {
-  flex: 1; overflow-y: auto;
-  padding: 12px;
-  display: flex; flex-direction: column; gap: 8px;
+.studio-archie-thread-spark { color: var(--studio-accent); }
+.studio-archie-thread-clear {
+  width: 20px; height: 20px;
+  background: transparent; border: none;
+  color: var(--studio-ink-2); cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 3px;
+}
+.studio-archie-thread-clear:hover { background: var(--studio-surface); color: var(--studio-ink); }
+.studio-archie-thread-body {
+  flex: 1; min-height: 0;
+  overflow-y: auto;
+  padding: 8px 12px;
+  display: flex; flex-direction: column; gap: 6px;
 }
 .studio-archie-msg {
   font-size: 12px;
@@ -620,7 +635,7 @@
   border-radius: var(--studio-radius);
 }
 .studio-archie-msg[data-role="user"]   { background: var(--studio-surface); color: var(--studio-ink); }
-.studio-archie-msg[data-role="archie"] { background: var(--studio-brand-soft); border-left: 2px solid var(--studio-brand); color: var(--studio-ink); }
+.studio-archie-msg[data-role="archie"] { background: var(--studio-accent-mute); border-left: 2px solid var(--studio-accent); color: var(--studio-ink); }
 .studio-archie-msg[data-role="tool"]   { background: var(--studio-surface-2); color: var(--studio-ink-2); font-family: var(--studio-mono); font-size: 11px; }
 
 /* Reduced motion */

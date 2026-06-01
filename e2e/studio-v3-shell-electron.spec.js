@@ -87,15 +87,15 @@ test('Studio V3 — Forge-style shell mounts, all zones present (slice 394)', as
   await win.locator('[data-studio-v3-edit-mode="vertex"]').click();
   await expect(win.locator('[data-studio-v3-edit-mode="vertex"]')).toHaveAttribute('data-active', 'true');
 
-  // Open Archie dock.
-  await win.locator('[data-studio-v3-cmdbar-toggle]').click();
-  await expect(win.locator('[data-studio-v3-archie]')).toBeVisible();
-  await expect(shell).toHaveAttribute('data-archie-open', 'true');
-  await win.screenshot({ path: path.join(OUT, '02-archie-open.png') });
+  // Trigger an Archie message via the cmdbar — thread strip slides up.
+  await win.locator('[data-studio-v3-cmdbar-input]').fill('hello there');
+  await win.locator('[data-studio-v3-cmdbar-input]').press('Enter');
+  await expect(win.locator('[data-studio-v3-archie-thread]')).toBeVisible({ timeout: 5000 });
+  await win.screenshot({ path: path.join(OUT, '02-archie-thread.png') });
 
-  // Close dock.
-  await win.locator('[data-studio-v3-archie-close]').click();
-  await expect(win.locator('[data-studio-v3-archie]')).toHaveCount(0);
+  // Clear the thread → strip collapses.
+  await win.locator('[data-studio-v3-archie-clear]').click();
+  await expect(win.locator('[data-studio-v3-archie-thread]')).toHaveCount(0);
 
   // Collapse + expand the right panel.
   await win.locator('[data-studio-v3-right-collapse]').click();

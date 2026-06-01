@@ -36,7 +36,7 @@ test('Studio V3 — cmdbar drives V2 APIs by name (slice 398)', async () => {
   await cmdInput.press('Enter');
 
   // Dock opens; a tool message renders with the API call + result.
-  await expect(win.locator('[data-studio-v3-archie]')).toBeVisible({ timeout: 5000 });
+  await expect(win.locator('[data-studio-v3-archie-thread]')).toBeVisible({ timeout: 5000 });
   const lastMsg = win.locator('.studio-archie-msg[data-role="tool"]').last();
   await expect(lastMsg).toContainText('__studioListSceneStats');
   await expect(lastMsg).toContainText('count');
