@@ -303,8 +303,28 @@ function Toolbar({ wbId, activeTool, setTool, onInvoke }) {
   );
 }
 
-// ─── Viewport HUD (edit-mode chips + axis chips) ─────────────────────────
+// ─── Viewport HUD (edit-mode chips + axis chips + sub-object sel count) ──
 function ViewportHUD({ editMode, setEditMode, axis, setAxis }) {
+  // Slice 426 — Live count of selected verts/edges/faces. Only renders
+  // in sub-object modes; reads __studioGetEditSelection on pick events.
+  const [counts, setCounts] = useState({ vertices: 0, edges: 0, faces: 0 });
+  useEffect(() => {
+    const readSel = () => {
+      if (window.__studioGetEditSelection) {
+        const s = window.__studioGetEditSelection();
+        setCounts({ vertices: s.vertices.length, edges: s.edges.length, faces: s.faces.length });
+      }
+    };
+    const refresh = () => { queueMicrotask(readSel); };
+    window.addEventListener('studio-pick', refresh);
+    window.addEventListener('studio-edit-mode-changed', refresh);
+    readSel();
+    return () => {
+      window.removeEventListener('studio-pick', refresh);
+      window.removeEventListener('studio-edit-mode-changed', refresh);
+    };
+  }, []);
+  const subMode = editMode === 'vertex' || editMode === 'edge' || editMode === 'face';
   return (
     <>
       <div className="studio-vp-hud" data-studio-v3-vp-hud>
@@ -324,6 +344,25 @@ function ViewportHUD({ editMode, setEditMode, axis, setAxis }) {
             {i === 0 && <span className="studio-vp-hud-sep" />}
           </React.Fragment>
         ))}
+        {subMode && (
+          <span
+            className="studio-vp-hud-counts"
+            data-studio-v3-edit-counts
+            data-studio-v3-edit-v={counts.vertices}
+            data-studio-v3-edit-e={counts.edges}
+            data-studio-v3-edit-f={counts.faces}
+            title={`Selected — verts ${counts.vertices} · edges ${counts.edges} · faces ${counts.faces}`}
+            style={{
+              marginLeft: 8, padding: '2px 8px',
+              background: 'var(--studio-bg-elev)', border: '1px solid var(--studio-ink-mute)',
+              borderRadius: 3, color: 'var(--studio-accent)',
+              fontSize: 10, fontFamily: 'var(--studio-mono)',
+              letterSpacing: '0.04em',
+            }}
+          >
+            v{counts.vertices} · e{counts.edges} · f{counts.faces}
+          </span>
+        )}
       </div>
       <div className="studio-vp-axes" data-studio-v3-vp-axes>
         {AXES.map((ax) => (
@@ -663,6 +702,14 @@ export function StudioShellV3({ mode = 'dark' }) {
   const [activeWb, setActiveWb] = useState(() => lstor.get('wb', 'model'));
   const [activeTool, setActiveTool] = useState('select');
   const [editMode, setEditMode] = useState('object');
+  // Slice 426 — Keep React editMode in sync with window.__studioEditModeRef.
+  // Without this, programmatic window.__studioSetEditMode() doesn't update
+  // the HUD chip / counts badge until the user clicks a chip.
+  useEffect(() => {
+    const onChange = (ev) => { if (ev && ev.detail && ev.detail.mode) setEditMode(ev.detail.mode); };
+    window.addEventListener('studio-edit-mode-changed', onChange);
+    return () => window.removeEventListener('studio-edit-mode-changed', onChange);
+  }, []);
   const [axis, setAxis] = useState('persp');
   // Slice 396 — selected-object summary surfaced from Viewport3D so the
   // status bar + inspector can read it without owning the raycaster.
