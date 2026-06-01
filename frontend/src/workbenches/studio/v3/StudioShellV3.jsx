@@ -1069,6 +1069,8 @@ function RightPanel({ collapsed, onToggle, activeWb, editMode, selection }) {
             )}
             {/* Slice 458 — Detailed stats for the active mesh. */}
             <MeshStatsRows />
+            {/* Slice 459 — Editable transform XYZ inputs. */}
+            <TransformRows />
             <div className="studio-right-section">
               <div className="studio-right-section-title">Edit selection</div>
               <SelectionRows />
@@ -1140,6 +1142,76 @@ function SelectionRows() {
       <div className="studio-right-row"><span>Edges</span><strong>{s.edges}</strong></div>
       <div className="studio-right-row"><span>Faces</span><strong>{s.faces}</strong></div>
     </>
+  );
+}
+
+function TransformRows() {
+  // Read the active mesh once per second and reflect into editable
+  // numeric inputs. The inputs use defaultValue + onBlur/Enter to
+  // commit so typing doesn't churn parent state on every keystroke.
+  const [version, setVersion] = useState(0);
+  const meshRef = React.useRef(null);
+  useEffect(() => {
+    const id = setInterval(() => {
+      const m = window.__studioSelectedMesh && window.__studioSelectedMesh();
+      const cur = meshRef.current;
+      if ((cur && cur.uuid) !== (m && m.uuid)) {
+        meshRef.current = m;
+        setVersion((v) => v + 1);
+      }
+    }, 500);
+    return () => clearInterval(id);
+  }, []);
+  const m = meshRef.current;
+  if (!m) return null;
+  const inStyle = {
+    width: 60, padding: '2px 4px', fontSize: 11,
+    fontFamily: 'var(--studio-mono, ui-monospace)',
+    background: 'var(--studio-bg-elev, #1c1c20)',
+    color: 'var(--studio-ink, #dfe5ea)',
+    border: '1px solid var(--studio-ink-mute, #2c2c30)',
+    borderRadius: 2,
+  };
+  const commit = (kind, axis, raw) => {
+    const v = Number(raw); if (!Number.isFinite(v)) return;
+    if (kind === 'position') m.position[axis] = v;
+    else if (kind === 'rotation') m.rotation[axis] = v * Math.PI / 180;
+    else if (kind === 'scale') m.scale[axis] = Math.max(0.001, v);
+    m.updateMatrixWorld(true);
+  };
+  const numIn = (kind, axis, value) => (
+    <input
+      type="number"
+      step="0.01"
+      data-studio-v3-transform={`${kind}-${axis}`}
+      defaultValue={value}
+      onBlur={(e) => commit(kind, axis, e.target.value)}
+      onKeyDown={(e) => { if (e.key === 'Enter') { commit(kind, axis, e.currentTarget.value); e.currentTarget.blur(); } }}
+      style={inStyle}
+    />
+  );
+  return (
+    <div className="studio-right-section" data-studio-v3-transform-rows key={version}>
+      <div className="studio-right-section-title">Transform</div>
+      <div className="studio-right-row"><span>Position</span></div>
+      <div className="studio-right-row" style={{ gap: 4 }}>
+        {numIn('position', 'x', m.position.x.toFixed(4))}
+        {numIn('position', 'y', m.position.y.toFixed(4))}
+        {numIn('position', 'z', m.position.z.toFixed(4))}
+      </div>
+      <div className="studio-right-row"><span>Rotation°</span></div>
+      <div className="studio-right-row" style={{ gap: 4 }}>
+        {numIn('rotation', 'x', (m.rotation.x * 180 / Math.PI).toFixed(2))}
+        {numIn('rotation', 'y', (m.rotation.y * 180 / Math.PI).toFixed(2))}
+        {numIn('rotation', 'z', (m.rotation.z * 180 / Math.PI).toFixed(2))}
+      </div>
+      <div className="studio-right-row"><span>Scale</span></div>
+      <div className="studio-right-row" style={{ gap: 4 }}>
+        {numIn('scale', 'x', m.scale.x.toFixed(4))}
+        {numIn('scale', 'y', m.scale.y.toFixed(4))}
+        {numIn('scale', 'z', m.scale.z.toFixed(4))}
+      </div>
+    </div>
   );
 }
 
