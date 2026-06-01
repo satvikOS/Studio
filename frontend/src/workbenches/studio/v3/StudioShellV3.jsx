@@ -590,6 +590,7 @@ const KEYMAP = [
     ['Cmd+S', 'Save scene (download .studio.json)'],
     ['Cmd+O', 'Open scene file'],
     ['Cmd+E', 'Export GLTF'],
+    ['Cmd+,', 'Settings'],
     ['Cmd+T', 'Toggle theme'],
     ['Cmd+/', 'Focus command bar'],
     ['F1 / ?', 'This cheatsheet'],
@@ -1426,6 +1427,12 @@ export function StudioShellV3({ mode = 'dark' }) {
         const ae = document.activeElement;
         if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
         if (window.__studioDownloadGLTF) window.__studioDownloadGLTF();
+        e.preventDefault();
+      } else if (meta && e.key === ',') {
+        // Slice 455 — Cmd/Ctrl+, opens Settings (macOS standard).
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        window.dispatchEvent(new CustomEvent('studio-settings-toggle'));
         e.preventDefault();
       } else if (meta && e.key === '/') {
         e.preventDefault();
