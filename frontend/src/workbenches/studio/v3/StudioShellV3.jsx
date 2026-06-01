@@ -1485,7 +1485,50 @@ function MaterialRows() {
           onChange={(e) => { mat.wireframe = !!e.target.checked; mat.needsUpdate = true; }}
         />
       </div>
+      {/* Slice 467 — Smart material preset buttons. Lazy-list the
+          available presets from __studioListSmartMaterials so the row
+          stays consistent with whatever V3 lightingops offers. */}
+      <SmartMaterialPresets onApply={() => setVersion((v) => v + 1)} />
     </div>
+  );
+}
+
+function SmartMaterialPresets({ onApply }) {
+  const [presets, setPresets] = React.useState([]);
+  React.useEffect(() => {
+    if (window.__studioListSmartMaterials) {
+      const r = window.__studioListSmartMaterials();
+      if (r && r.ok) setPresets(r.presets || []);
+    }
+  }, []);
+  if (!presets.length) return null;
+  return (
+    <>
+      <div className="studio-right-row" style={{ marginTop: 6 }}>
+        <span style={{ opacity: 0.55, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Smart materials</span>
+      </div>
+      <div className="studio-right-row" style={{ flexWrap: 'wrap', gap: 4 }}>
+        {presets.map((p) => (
+          <button
+            key={p}
+            type="button"
+            data-studio-v3-smart-material={p}
+            onClick={() => {
+              if (window.__studioApplySmartMaterial) window.__studioApplySmartMaterial(p);
+              if (onApply) onApply();
+            }}
+            style={{
+              padding: '3px 8px', fontSize: 10,
+              background: 'var(--studio-bg-elev, #161b22)',
+              color: 'var(--studio-ink, #e6edf3)',
+              border: '1px solid var(--studio-ink-mute, #1f2733)',
+              borderRadius: 3, cursor: 'pointer',
+              fontFamily: 'inherit', textTransform: 'capitalize',
+            }}
+          >{p}</button>
+        ))}
+      </div>
+    </>
   );
 }
 
