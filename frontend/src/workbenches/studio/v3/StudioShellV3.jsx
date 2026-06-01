@@ -410,6 +410,149 @@ function ContextMenu() {
   );
 }
 
+// ─── SettingsModal (slice 454) ───────────────────────────────────────────
+// Lightweight preferences panel surfaced via QAT settings or 'studio-
+// settings-toggle' custom event. Theme + shading + bg color today;
+// follow-up slices wire more.
+function SettingsModal() {
+  const [open, setOpen] = useState(false);
+  const [theme, setTheme] = useState('dark');
+  const [bg, setBg] = useState('#000000');
+  const [shading, setShading] = useState('solid');
+  useEffect(() => {
+    const onToggle = () => setOpen((v) => !v);
+    const onKey = (e) => {
+      const ae = document.activeElement;
+      if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+      if (e.key === 'Escape' && open) setOpen(false);
+    };
+    window.addEventListener('studio-settings-toggle', onToggle);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('studio-settings-toggle', onToggle);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    // Sync current state when opening.
+    setTheme(document.documentElement.getAttribute('data-studio-theme') || 'dark');
+    setBg(window.__studioBgColor || '#000000');
+    setShading((window.__studioGetShadingMode && window.__studioGetShadingMode()) || 'solid');
+  }, [open]);
+  if (!open) return null;
+  return (
+    <div
+      data-studio-v3-settings
+      onClick={() => setOpen(false)}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 9100,
+        background: 'rgba(0, 0, 0, 0.55)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          minWidth: 360, maxWidth: 480, width: '88vw',
+          background: 'var(--studio-bg, #0d1117)',
+          border: '1px solid var(--studio-ink-mute, #1f2733)',
+          borderRadius: 8, padding: '20px 24px',
+          color: 'var(--studio-ink, #e6edf3)',
+          fontFamily: 'inherit', fontSize: 12,
+          boxShadow: '0 16px 48px rgba(0, 0, 0, 0.55)',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 16 }}>
+          <strong style={{ fontSize: 14, color: 'var(--studio-accent, #1de9b6)', letterSpacing: '0.04em' }}>Settings</strong>
+          <span style={{ opacity: 0.5, fontSize: 10, fontFamily: 'var(--studio-mono, ui-monospace)' }}>Esc to close</span>
+        </div>
+        {/* Theme */}
+        <div data-studio-v3-settings-section="theme" style={{ marginBottom: 12 }}>
+          <div style={{ opacity: 0.55, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Theme</div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {['dark', 'light'].map((t) => (
+              <button
+                key={t}
+                type="button"
+                data-studio-v3-settings-theme={t}
+                data-active={t === theme ? 'true' : 'false'}
+                onClick={() => {
+                  setTheme(t);
+                  document.documentElement.setAttribute('data-studio-theme', t);
+                  try { window.localStorage.setItem('studio.v3.theme', t); } catch (_) {}
+                }}
+                style={{
+                  flex: 1, padding: '4px 10px',
+                  background: t === theme ? 'var(--studio-accent, #1de9b6)' : 'var(--studio-bg-elev, #161b22)',
+                  color: t === theme ? 'var(--studio-bg, #0d1117)' : 'var(--studio-ink, #e6edf3)',
+                  border: '1px solid var(--studio-ink-mute, #1f2733)',
+                  borderRadius: 3, cursor: 'pointer',
+                  textTransform: 'capitalize', fontSize: 11,
+                }}
+              >{t}</button>
+            ))}
+          </div>
+        </div>
+        {/* Shading */}
+        <div data-studio-v3-settings-section="shading" style={{ marginBottom: 12 }}>
+          <div style={{ opacity: 0.55, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Shading (Z to cycle)</div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {['wire', 'solid', 'material', 'rendered'].map((s) => (
+              <button
+                key={s}
+                type="button"
+                data-studio-v3-settings-shading={s}
+                data-active={s === shading ? 'true' : 'false'}
+                onClick={() => {
+                  setShading(s);
+                  if (window.__studioSetShadingMode) window.__studioSetShadingMode(s);
+                }}
+                style={{
+                  flex: 1, padding: '4px 10px',
+                  background: s === shading ? 'var(--studio-accent, #1de9b6)' : 'var(--studio-bg-elev, #161b22)',
+                  color: s === shading ? 'var(--studio-bg, #0d1117)' : 'var(--studio-ink, #e6edf3)',
+                  border: '1px solid var(--studio-ink-mute, #1f2733)',
+                  borderRadius: 3, cursor: 'pointer',
+                  textTransform: 'capitalize', fontSize: 11,
+                }}
+              >{s}</button>
+            ))}
+          </div>
+        </div>
+        {/* Background color */}
+        <div data-studio-v3-settings-section="bg" style={{ marginBottom: 16 }}>
+          <div style={{ opacity: 0.55, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Background color</div>
+          <input
+            type="color"
+            data-studio-v3-settings-bg
+            value={bg}
+            onChange={(e) => {
+              const hex = e.target.value;
+              setBg(hex);
+              if (window.__studioSetBgColor) window.__studioSetBgColor(hex);
+            }}
+            style={{ width: 60, height: 28, padding: 0, border: '1px solid var(--studio-ink-mute, #1f2733)', borderRadius: 3, background: 'transparent' }}
+          />
+        </div>
+        <button
+          type="button"
+          data-studio-v3-settings-close
+          onClick={() => setOpen(false)}
+          style={{
+            display: 'block', marginLeft: 'auto',
+            padding: '6px 14px',
+            background: 'var(--studio-bg-elev, #161b22)',
+            color: 'var(--studio-ink, #e6edf3)',
+            border: '1px solid var(--studio-ink-mute, #1f2733)',
+            borderRadius: 3, cursor: 'pointer', fontSize: 11,
+          }}
+        >Done</button>
+      </div>
+    </div>
+  );
+}
+
 // ─── KeymapCheatsheet ────────────────────────────────────────────────────
 // Slice 432 — F1 / ? overlay listing the V3 hotkeys. Listens to
 // __studioToggleCheatSheet's event so other UI / the cmdbar can also
@@ -1572,7 +1715,8 @@ export function StudioShellV3({ mode = 'dark' }) {
       if (window.__studioDownloadGLTF) window.__studioDownloadGLTF();
       pushTool('__studioDownloadGLTF triggered');
     } else if (id === 'settings') {
-      pushTool('settings — preferences panel lands in a follow-up');
+      window.dispatchEvent(new CustomEvent('studio-settings-toggle'));
+      pushTool('Settings opened');
     }
   };
 
@@ -1632,6 +1776,7 @@ export function StudioShellV3({ mode = 'dark' }) {
         <WelcomeCard />
         <KeymapCheatsheet />
         <ContextMenu />
+        <SettingsModal />
       </main>
       {/* Slice 407 — right side is always the RightPanel now. Archie no
           longer overlays this slot; it lives only at the bottom. */}
