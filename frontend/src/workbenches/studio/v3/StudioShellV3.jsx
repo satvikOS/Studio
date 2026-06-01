@@ -16,6 +16,7 @@ import { registerAudioXROps, unregisterAudioXROps } from './audioxrops';
 import { registerTerrainVoxOps, unregisterTerrainVoxOps } from './terrainvoxops';
 import { registerRemeshOps, unregisterRemeshOps } from './remeshops';
 import { registerScriptOps, unregisterScriptOps } from './scriptops';
+import { registerMographOps, unregisterMographOps } from './mographops';
 
 // Slice 401 — V3 stops using V2. V3 owns its own Viewport3D mount + its
 // own spawn / selection / undo / file-io implementations (built up in
@@ -658,7 +659,9 @@ export function StudioShellV3({ mode = 'dark' }) {
     registerTerrainVoxOps();
     registerRemeshOps();
     registerScriptOps();
+    registerMographOps();
     return () => {
+      unregisterMographOps();
       unregisterScriptOps();
       unregisterRemeshOps();
       unregisterTerrainVoxOps();
