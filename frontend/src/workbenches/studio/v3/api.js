@@ -12,6 +12,7 @@
 //   • The window registration runs once via registerV3Api() — called
 //     by StudioShellV3 on mount.
 
+import * as THREE from 'three';
 import { countPrimitives, clearPrimitives, spawnPrimitive } from './spawn';
 
 // ─── Edit-mode state (slice 376/377 V2 equivalent) ───────────────────────
@@ -38,9 +39,11 @@ function snapshotScene() {
     };
     if (o.geometry && o.geometry.attributes && o.geometry.attributes.position) {
       const pos = o.geometry.attributes.position;
-      // Only snapshot small geometries to keep undo cheap.
+      // Snapshot small geometries fully so ops that change index buffer
+      // (extrude, inset, subdivide, mirror, symmetrize) round-trip correctly.
       if (pos.count <= 4096) {
         entry.geomPos = Array.from(pos.array);
+        if (o.geometry.index) entry.geomIdx = Array.from(o.geometry.index.array);
       }
     }
     items.push(entry);
@@ -83,8 +86,21 @@ function restoreScene(snap) {
     mesh.visible = entry.visible;
     mesh.updateMatrixWorld(true);
     if (entry.geomPos && mesh.geometry && mesh.geometry.attributes && mesh.geometry.attributes.position) {
+      // Rebuild geometry from scratch when the vert count OR index buffer
+      // changed (true for extrude / inset / subdivide / mirror / symmetrize).
       const pos = mesh.geometry.attributes.position;
-      if (pos.array.length === entry.geomPos.length) {
+      const idxChanged = entry.geomIdx && mesh.geometry.index && entry.geomIdx.length !== mesh.geometry.index.array.length;
+      const vertCountChanged = pos.array.length !== entry.geomPos.length;
+      if (vertCountChanged || idxChanged) {
+        // Build a fresh BufferGeometry mirroring the snapshot.
+        const newGeo = new THREE.BufferGeometry();
+        newGeo.setAttribute('position', new THREE.Float32BufferAttribute(entry.geomPos, 3));
+        if (entry.geomIdx) newGeo.setIndex(Array.from(entry.geomIdx));
+        newGeo.computeVertexNormals();
+        newGeo.computeBoundingSphere();
+        mesh.geometry.dispose();
+        mesh.geometry = newGeo;
+      } else {
         for (let i = 0; i < entry.geomPos.length; i++) pos.array[i] = entry.geomPos[i];
         pos.needsUpdate = true;
         if (mesh.geometry.computeVertexNormals) mesh.geometry.computeVertexNormals();
