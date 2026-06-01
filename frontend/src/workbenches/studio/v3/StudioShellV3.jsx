@@ -893,6 +893,19 @@ export function StudioShellV3({ mode = 'dark' }) {
           if (sel) sel.visible = false;
         }
         e.preventDefault();
+      } else if (!meta && !e.altKey && (e.key === 'a' || e.key === 'A')) {
+        // Slice 431 — A toggles select-all ↔ deselect-all (Blender A parity).
+        // Alt+A is deselect; bare A selects everything when nothing is selected
+        // and deselects when something is selected.
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        const set = (window.__studioSelectedMeshes && window.__studioSelectedMeshes()) || [];
+        if (set.length === 0) {
+          if (window.__studioSelectAll) window.__studioSelectAll();
+        } else {
+          if (window.__studioDeselect) window.__studioDeselect();
+        }
+        e.preventDefault();
       }
       // X-key delete handled by the V2 headless mount (its own X
       // handler covers undo + ref cleanup). Adding another here would
