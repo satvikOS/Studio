@@ -326,6 +326,7 @@ const KEYMAP = [
     ['Alt+H', 'Reveal everything'],
   ] },
   { section: 'View / Cmd', rows: [
+    ['Space', 'Play / pause animation'],
     ['.', 'Frame selected (fallback: frame all)'],
     ['Cmd+Z', 'Undo'],
     ['Cmd+Shift+Z', 'Redo'],
@@ -1083,6 +1084,12 @@ export function StudioShellV3({ mode = 'dark' }) {
           s.add(clone);
           if (window.__studioSelectMesh) window.__studioSelectMesh(clone);
         }
+        e.preventDefault();
+      } else if (!meta && !e.shiftKey && !e.altKey && e.key === ' ') {
+        // Slice 440 — Space toggles animation play/pause (Blender Space).
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        if (window.__studioToggleAnimating) window.__studioToggleAnimating();
         e.preventDefault();
       } else if (!meta && !e.shiftKey && !e.altKey && e.key === '.') {
         // Slice 435 — '.' frames the selected mesh in the viewport
