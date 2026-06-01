@@ -874,6 +874,101 @@ function KeymapCheatsheet() {
   );
 }
 
+// ─── AutosaveRestorePrompt (slice 466) ────────────────────────────────────
+// On app load, if an autosave exists and the live scene is empty,
+// show a small banner asking whether to restore. Restore calls
+// __studioLoadScene with the localStorage JSON; Dismiss clears the
+// banner (autosave still in storage). The banner self-hides if the
+// user spawns anything in the meantime.
+function AutosaveRestorePrompt() {
+  const [info, setInfo] = useState(null);
+  useEffect(() => {
+    // Defer one tick so V3 API + scene have mounted.
+    const id = setTimeout(() => {
+      try {
+        const json = window.localStorage.getItem('archdisc.studio.autosave');
+        const ts = Number(window.localStorage.getItem('archdisc.studio.autosave.ts') || 0);
+        if (!json || !ts) return;
+        let n = 0;
+        if (window.__archdiscScene) {
+          window.__archdiscScene.traverse((o) => { if (o.userData && o.userData.archdiscStudioPrimitive) n++; });
+        }
+        // Only prompt if the live scene is empty (so we don't suggest
+        // replacing the user's current work).
+        if (n > 0) return;
+        setInfo({
+          ts,
+          bytes: json.length,
+          age: Math.round((Date.now() - ts) / 1000),
+        });
+      } catch (_) {}
+    }, 500);
+    return () => clearTimeout(id);
+  }, []);
+  useEffect(() => {
+    if (!info) return;
+    // Hide once the scene grows.
+    const id = setInterval(() => {
+      if (window.__archdiscScene) {
+        let n = 0;
+        window.__archdiscScene.traverse((o) => { if (o.userData && o.userData.archdiscStudioPrimitive) n++; });
+        if (n > 0) setInfo(null);
+      }
+    }, 1000);
+    return () => clearInterval(id);
+  }, [info]);
+  if (!info) return null;
+  return (
+    <div
+      data-studio-v3-autosave-restore
+      data-studio-v3-autosave-ts={info.ts}
+      style={{
+        position: 'absolute', top: 16, left: '50%',
+        transform: 'translateX(-50%)', zIndex: 30,
+        background: 'rgba(13, 17, 23, 0.92)',
+        color: 'var(--studio-ink, #e6edf3)',
+        border: '1px solid var(--studio-accent, #1de9b6)',
+        borderRadius: 4, padding: '8px 14px',
+        fontFamily: 'inherit', fontSize: 11,
+        boxShadow: '0 4px 16px rgba(0,0,0,0.45)',
+        display: 'flex', alignItems: 'center', gap: 12,
+      }}
+    >
+      <span>Autosave found · {(info.bytes / 1024).toFixed(1)} KB · {info.age}s ago</span>
+      <button
+        type="button"
+        data-studio-v3-autosave-restore-btn
+        onClick={() => {
+          const json = window.localStorage.getItem('archdisc.studio.autosave');
+          if (json && window.__studioLoadScene) {
+            try { window.__studioLoadScene(json); } catch (_) {}
+          }
+          setInfo(null);
+        }}
+        style={{
+          padding: '3px 10px', fontSize: 11,
+          background: 'var(--studio-accent, #1de9b6)',
+          color: 'var(--studio-bg, #0d1117)',
+          border: 'none', borderRadius: 3, cursor: 'pointer',
+          fontFamily: 'inherit', fontWeight: 600,
+        }}
+      >Restore</button>
+      <button
+        type="button"
+        data-studio-v3-autosave-dismiss-btn
+        onClick={() => setInfo(null)}
+        style={{
+          padding: '3px 10px', fontSize: 11,
+          background: 'transparent',
+          color: 'var(--studio-ink-mute, #9aa6b2)',
+          border: '1px solid var(--studio-ink-mute, #1f2733)',
+          borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit',
+        }}
+      >Dismiss</button>
+    </div>
+  );
+}
+
 // ─── AutosaveToast (slice 465) ───────────────────────────────────────────
 // Brief floating toast shown when an autosave fires. Fades out after 2s.
 function AutosaveToast() {
@@ -2471,6 +2566,7 @@ export function StudioShellV3({ mode = 'dark' }) {
         <SettingsModal />
         <ViewportStatsOverlay />
         <AutosaveToast />
+        <AutosaveRestorePrompt />
       </main>
       {/* Slice 407 — right side is always the RightPanel now. Archie no
           longer overlays this slot; it lives only at the bottom. */}
