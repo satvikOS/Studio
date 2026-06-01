@@ -321,6 +321,7 @@ const KEYMAP = [
   { section: 'Selection', rows: [
     ['A', 'Toggle select-all / deselect-all'],
     ['Shift+D', 'Duplicate selected'],
+    ['X / Delete', 'Delete selected mesh'],
     ['H', 'Hide selected'],
     ['Alt+H', 'Reveal everything'],
   ] },
@@ -1066,9 +1067,27 @@ export function StudioShellV3({ mode = 'dark' }) {
         else if (window.__studioFrameAll) window.__studioFrameAll();
         e.preventDefault();
       }
-      // X-key delete handled by the V2 headless mount (its own X
-      // handler covers undo + ref cleanup). Adding another here would
-      // double-delete.
+      // Slice 436 — X / Delete remove the active mesh from the scene
+      // (Blender X / Maya Backspace parity). V3 owns this directly now —
+      // the prior V2 headless-mount delegation is gone in V3-only mode.
+      else if (!meta && !e.shiftKey && !e.altKey && (e.key === 'x' || e.key === 'X' || e.key === 'Delete' || e.key === 'Backspace')) {
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+        const s = window.__archdiscScene || (window.__archdiscViewport && window.__archdiscViewport.scene);
+        if (sel && s) {
+          if (window.__studioPushUndo) window.__studioPushUndo();
+          if (sel.geometry) sel.geometry.dispose();
+          if (Array.isArray(sel.material)) sel.material.forEach((m) => m.dispose && m.dispose());
+          else if (sel.material && sel.material.dispose) sel.material.dispose();
+          s.remove(sel);
+          // Detach gizmo + clear active selection.
+          const vp = window.__archdiscViewport;
+          if (vp && vp.transformControls && vp.transformControls.object === sel) vp.transformControls.detach();
+          if (window.__studioDeselect) window.__studioDeselect();
+        }
+        e.preventDefault();
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
