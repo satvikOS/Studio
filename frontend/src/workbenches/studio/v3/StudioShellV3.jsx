@@ -25,6 +25,7 @@ import { registerCameraViewOps, unregisterCameraViewOps } from './cameraviewops'
 import { registerSelectionOps, unregisterSelectionOps } from './selectionops';
 import { registerMarkerOps, unregisterMarkerOps } from './markerops';
 import { registerUtilOps, unregisterUtilOps } from './utilops';
+import { registerDisplayOps, unregisterDisplayOps } from './displayops';
 
 // Slice 401 — V3 stops using V2. V3 owns its own Viewport3D mount + its
 // own spawn / selection / undo / file-io implementations (built up in
@@ -676,7 +677,9 @@ export function StudioShellV3({ mode = 'dark' }) {
     registerSelectionOps();
     registerMarkerOps();
     registerUtilOps();
+    registerDisplayOps();
     return () => {
+      unregisterDisplayOps();
       unregisterUtilOps();
       unregisterMarkerOps();
       unregisterSelectionOps();
