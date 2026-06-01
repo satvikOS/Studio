@@ -873,6 +873,70 @@ function KeymapCheatsheet() {
   );
 }
 
+// ─── ViewportStatsOverlay (slice 460) ─────────────────────────────────────
+// Pinned to the viewport's bottom-left corner. Shows FPS · draw calls ·
+// scene triangle total. Blender stats-overlay parity. Toggleable via
+// the 'studio-toggle-stats' event so the settings modal can disable it.
+function ViewportStatsOverlay() {
+  const [visible, setVisible] = useState(true);
+  const [stats, setStats] = useState({ fps: 0, calls: 0, tris: 0 });
+  useEffect(() => {
+    const onToggle = () => setVisible((v) => !v);
+    window.addEventListener('studio-toggle-stats', onToggle);
+    let frames = 0; let last = performance.now(); let raf = 0;
+    let cachedTris = 0; let lastTriPoll = 0;
+    const tick = () => {
+      frames++;
+      const now = performance.now();
+      if (now - last >= 500) {
+        const fps = Math.round((frames * 1000) / (now - last));
+        const vp = window.__archdiscViewport;
+        const calls = (vp && vp.renderer && vp.renderer.info) ? vp.renderer.info.render.calls : 0;
+        // Total tris — poll the scene at most once per second.
+        if (now - lastTriPoll >= 1000 && vp && vp.scene) {
+          let tris = 0;
+          vp.scene.traverse((o) => {
+            if (!o.isMesh || !o.geometry) return;
+            const g = o.geometry;
+            const idx = g.index ? g.index.array.length : g.attributes.position && g.attributes.position.count;
+            if (idx) tris += Math.floor(idx / 3);
+          });
+          cachedTris = tris;
+          lastTriPoll = now;
+        }
+        setStats({ fps, calls, tris: cachedTris });
+        frames = 0; last = now;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => {
+      window.removeEventListener('studio-toggle-stats', onToggle);
+      cancelAnimationFrame(raf);
+    };
+  }, []);
+  if (!visible) return null;
+  return (
+    <div
+      data-studio-v3-viewport-stats
+      data-studio-v3-stats-fps={stats.fps}
+      data-studio-v3-stats-calls={stats.calls}
+      data-studio-v3-stats-tris={stats.tris}
+      style={{
+        position: 'absolute', bottom: 28, left: 12, zIndex: 22,
+        background: 'rgba(0, 0, 0, 0.55)',
+        color: 'var(--studio-ink-mute, #9aa6b2)',
+        padding: '4px 10px', borderRadius: 3,
+        fontFamily: 'var(--studio-mono, ui-monospace)', fontSize: 10,
+        pointerEvents: 'none',
+        letterSpacing: '0.03em',
+      }}
+    >
+      {stats.fps} fps · {stats.calls} calls · {stats.tris.toLocaleString()} tris
+    </div>
+  );
+}
+
 // ─── WelcomeCard ─────────────────────────────────────────────────────────
 // Slice 427 — Centered card in the viewport while the scene has no
 // Studio primitives. Studio teal title + brief muscle-memory hints.
@@ -2133,6 +2197,7 @@ export function StudioShellV3({ mode = 'dark' }) {
         <MarkingMenu />
         <QuickAddMenu />
         <SettingsModal />
+        <ViewportStatsOverlay />
       </main>
       {/* Slice 407 — right side is always the RightPanel now. Archie no
           longer overlays this slot; it lives only at the bottom. */}
