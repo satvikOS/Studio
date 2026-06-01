@@ -495,10 +495,14 @@ function StatusBar({ wb, editMode }) {
   const [fps, setFps] = useState(0);
   const [calls, setCalls] = useState(0);
   const [primCount, setPrimCount] = useState(0);
+  // Slice 425 — selected-mesh V / T pinned to the right of primitive count.
+  // Polls once per second to keep the strip cheap.
+  const [meshStats, setMeshStats] = useState(null);
   useEffect(() => {
     let frames = 0;
     let last = performance.now();
     let raf = 0;
+    let lastSel = 0;
     const tick = () => {
       frames++;
       const now = performance.now();
@@ -513,6 +517,17 @@ function StatusBar({ wb, editMode }) {
         setPrimCount(n);
         frames = 0; last = now;
       }
+      if (now - lastSel >= 1000) {
+        lastSel = now;
+        const m = window.__studioSelectedMesh && window.__studioSelectedMesh();
+        if (!m || !m.geometry || !m.geometry.attributes || !m.geometry.attributes.position) {
+          setMeshStats(null);
+        } else {
+          const v = m.geometry.attributes.position.count;
+          const t = m.geometry.index ? Math.floor(m.geometry.index.array.length / 3) : Math.floor(v / 3);
+          setMeshStats({ v, t });
+        }
+      }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -524,6 +539,11 @@ function StatusBar({ wb, editMode }) {
       <span data-studio-v3-status="wb" style={{ textTransform: 'capitalize' }}>{wb}</span>
       <span data-studio-v3-status="mode" style={{ textTransform: 'capitalize' }}>{editMode}</span>
       <span data-studio-v3-status="primitives">{primCount} prim</span>
+      {meshStats && (
+        <span data-studio-v3-status="mesh" data-studio-v3-mesh-v={meshStats.v} data-studio-v3-mesh-t={meshStats.t}>
+          v {meshStats.v} · t {meshStats.t}
+        </span>
+      )}
       <span className="studio-statusbar-spacer" />
       <span data-studio-v3-status="fps">{fps} fps</span>
       <span data-studio-v3-status="calls">{calls} calls</span>
