@@ -13,6 +13,7 @@ import { registerAnimPhysOps, unregisterAnimPhysOps } from './animphysops';
 import { registerPaintOps, unregisterPaintOps } from './paintops';
 import { registerSurfOps, unregisterSurfOps } from './surfops';
 import { registerAudioXROps, unregisterAudioXROps } from './audioxrops';
+import { registerTerrainVoxOps, unregisterTerrainVoxOps } from './terrainvoxops';
 
 // Slice 401 — V3 stops using V2. V3 owns its own Viewport3D mount + its
 // own spawn / selection / undo / file-io implementations (built up in
@@ -652,7 +653,9 @@ export function StudioShellV3({ mode = 'dark' }) {
     registerPaintOps();
     registerSurfOps();
     registerAudioXROps();
+    registerTerrainVoxOps();
     return () => {
+      unregisterTerrainVoxOps();
       unregisterAudioXROps();
       unregisterSurfOps();
       unregisterPaintOps();
