@@ -306,6 +306,110 @@ function Toolbar({ wbId, activeTool, setTool, onInvoke }) {
   );
 }
 
+// ─── ContextMenu (slice 447) ──────────────────────────────────────────────
+// Right-click in the viewport opens a small floating list of common ops
+// against the active mesh: Duplicate / Hide / Frame / Delete. Esc, click-
+// outside, or pick-an-item dismisses. Studio teal accent on hover.
+function ContextMenu() {
+  const [pos, setPos] = useState(null); // { x, y } or null
+  useEffect(() => {
+    const onCtx = (e) => {
+      // Only fire on viewport canvas right-clicks.
+      const target = e.target;
+      if (!target || !target.closest || !target.closest('[data-studio-v3-viewport]')) return;
+      e.preventDefault();
+      setPos({ x: e.clientX, y: e.clientY });
+    };
+    const onClick = (e) => {
+      if (!pos) return;
+      // Close on any outside click.
+      const inside = e.target && e.target.closest && e.target.closest('[data-studio-v3-context-menu]');
+      if (!inside) setPos(null);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') setPos(null); };
+    window.addEventListener('contextmenu', onCtx);
+    window.addEventListener('mousedown', onClick);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('contextmenu', onCtx);
+      window.removeEventListener('mousedown', onClick);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [pos]);
+  if (!pos) return null;
+  const items = [
+    { id: 'duplicate', label: 'Duplicate', hint: 'Shift+D', call: () => {
+      const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+      const s = window.__archdiscScene || (window.__archdiscViewport && window.__archdiscViewport.scene);
+      if (!sel || !s) return;
+      const clone = sel.clone();
+      if (clone.geometry) clone.geometry = clone.geometry.clone();
+      if (Array.isArray(clone.material)) clone.material = clone.material.map((m) => m.clone());
+      else if (clone.material) clone.material = clone.material.clone();
+      clone.position.set(sel.position.x + 0.02, sel.position.y, sel.position.z + 0.02);
+      clone.userData = { ...sel.userData };
+      clone.name = (sel.name || 'mesh') + '-copy';
+      s.add(clone);
+      if (window.__studioSelectMesh) window.__studioSelectMesh(clone);
+    } },
+    { id: 'hide', label: 'Hide', hint: 'H', call: () => {
+      const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+      if (sel) sel.visible = false;
+    } },
+    { id: 'frame', label: 'Frame', hint: '.', call: () => {
+      if (window.__studioFitSelected) window.__studioFitSelected();
+    } },
+    { id: 'delete', label: 'Delete', hint: 'X', call: () => {
+      const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+      const s = window.__archdiscScene || (window.__archdiscViewport && window.__archdiscViewport.scene);
+      if (sel && s) {
+        if (window.__studioPushUndo) window.__studioPushUndo();
+        if (sel.geometry) sel.geometry.dispose();
+        if (Array.isArray(sel.material)) sel.material.forEach((m) => m.dispose && m.dispose());
+        else if (sel.material && sel.material.dispose) sel.material.dispose();
+        s.remove(sel);
+        if (window.__studioDeselect) window.__studioDeselect();
+      }
+    } },
+  ];
+  return (
+    <div
+      data-studio-v3-context-menu
+      onMouseDown={(e) => e.stopPropagation()}
+      style={{
+        position: 'fixed', left: pos.x, top: pos.y, zIndex: 8000,
+        background: 'var(--studio-bg, #0d1117)',
+        border: '1px solid var(--studio-ink-mute, #1f2733)',
+        borderRadius: 4, padding: '4px 0', minWidth: 140,
+        boxShadow: '0 4px 16px rgba(0,0,0,0.45)',
+        fontFamily: 'inherit', fontSize: 11,
+        color: 'var(--studio-ink, #e6edf3)',
+      }}
+    >
+      {items.map((it) => (
+        <button
+          key={it.id}
+          type="button"
+          data-studio-v3-context-item={it.id}
+          onClick={(e) => { e.stopPropagation(); it.call(); setPos(null); }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--studio-accent, #1de9b6)'; e.currentTarget.style.color = 'var(--studio-bg, #0d1117)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--studio-ink, #e6edf3)'; }}
+          style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+            width: '100%', padding: '4px 10px',
+            background: 'transparent', color: 'inherit',
+            border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11,
+            textAlign: 'left',
+          }}
+        >
+          <span>{it.label}</span>
+          <code style={{ opacity: 0.6, fontSize: 10, fontFamily: 'var(--studio-mono, ui-monospace)' }}>{it.hint}</code>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 // ─── KeymapCheatsheet ────────────────────────────────────────────────────
 // Slice 432 — F1 / ? overlay listing the V3 hotkeys. Listens to
 // __studioToggleCheatSheet's event so other UI / the cmdbar can also
@@ -1468,6 +1572,7 @@ export function StudioShellV3({ mode = 'dark' }) {
         />
         <WelcomeCard />
         <KeymapCheatsheet />
+        <ContextMenu />
       </main>
       {/* Slice 407 — right side is always the RightPanel now. Archie no
           longer overlays this slot; it lives only at the bottom. */}
