@@ -320,6 +320,7 @@ const KEYMAP = [
   ] },
   { section: 'Selection', rows: [
     ['A', 'Toggle select-all / deselect-all'],
+    ['Shift+D', 'Duplicate selected'],
     ['H', 'Hide selected'],
     ['Alt+H', 'Reveal everything'],
   ] },
