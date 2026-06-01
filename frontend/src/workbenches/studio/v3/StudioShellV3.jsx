@@ -327,6 +327,7 @@ const KEYMAP = [
   ] },
   { section: 'View / Cmd', rows: [
     ['Space', 'Play / pause animation'],
+    ['← / →', 'Step animation frame ±1'],
     ['.', 'Frame selected (fallback: frame all)'],
     ['Cmd+Z', 'Undo'],
     ['Cmd+Shift+Z', 'Redo'],
@@ -1090,6 +1091,14 @@ export function StudioShellV3({ mode = 'dark' }) {
         const ae = document.activeElement;
         if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
         if (window.__studioToggleAnimating) window.__studioToggleAnimating();
+        e.preventDefault();
+      } else if (!meta && !e.shiftKey && !e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+        // Slice 441 — ← / → step the active animation frame by 1.
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        const f = (window.__studioGetFrame && window.__studioGetFrame()) || 0;
+        const next = e.key === 'ArrowRight' ? f + 1 : Math.max(0, f - 1);
+        if (window.__studioSetFrame) window.__studioSetFrame(next);
         e.preventDefault();
       } else if (!meta && !e.shiftKey && !e.altKey && e.key === '.') {
         // Slice 435 — '.' frames the selected mesh in the viewport
