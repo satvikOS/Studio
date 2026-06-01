@@ -436,6 +436,7 @@ const KEYMAP = [
   { section: 'View / Cmd', rows: [
     ['1 / 3 / 7', 'Camera front / right / top (object mode)'],
     ['5', 'Toggle perspective / orthographic'],
+    ['Z', 'Cycle shading: wire → solid → material → rendered'],
     ['Space', 'Play / pause animation'],
     ['← / →', 'Step animation frame ±1'],
     ['K', 'Insert keyframe at current frame'],
@@ -1299,6 +1300,16 @@ export function StudioShellV3({ mode = 'dark' }) {
         const ae = document.activeElement;
         if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
         if (window.__studioToggleViewProjection) window.__studioToggleViewProjection();
+        e.preventDefault();
+      } else if (!meta && !e.shiftKey && !e.altKey && (e.key === 'z' || e.key === 'Z')) {
+        // Slice 451 — Z cycles wire → solid → material → rendered → wire …
+        // (Blender Z parity). Cmd/Ctrl+Z is undo; we only fire bare z.
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        const cycle = ['wire', 'solid', 'material', 'rendered'];
+        const cur = (window.__studioGetShadingMode && window.__studioGetShadingMode()) || 'solid';
+        const next = cycle[(cycle.indexOf(cur) + 1) % cycle.length];
+        if (window.__studioSetShadingMode) window.__studioSetShadingMode(next);
         e.preventDefault();
       } else if (!meta && !e.shiftKey && !e.altKey && (e.key === '1' || e.key === '2' || e.key === '3' || e.key === '7')) {
         // 1/2/3 flip vert/edge/face — ONLY when already in a sub-object
