@@ -303,6 +303,103 @@ function Toolbar({ wbId, activeTool, setTool, onInvoke }) {
   );
 }
 
+// ─── KeymapCheatsheet ────────────────────────────────────────────────────
+// Slice 432 — F1 / ? overlay listing the V3 hotkeys. Listens to
+// __studioToggleCheatSheet's event so other UI / the cmdbar can also
+// open it.
+const KEYMAP = [
+  { section: 'Mode', rows: [
+    ['Tab', 'Cycle edit mode (object → vert → edge → face → sculpt)'],
+    ['1 / 2 / 3', 'Vert / Edge / Face (only in sub-object mode)'],
+    ['Esc', 'Drop active tool back to Select'],
+  ] },
+  { section: 'Transform', rows: [
+    ['G', 'Move tool'],
+    ['R', 'Rotate tool'],
+    ['S', 'Scale tool'],
+  ] },
+  { section: 'Selection', rows: [
+    ['A', 'Toggle select-all / deselect-all'],
+    ['H', 'Hide selected'],
+    ['Alt+H', 'Reveal everything'],
+  ] },
+  { section: 'View / Cmd', rows: [
+    ['Cmd+T', 'Toggle theme'],
+    ['Cmd+/', 'Focus command bar'],
+    ['F1 / ?', 'This cheatsheet'],
+  ] },
+];
+function KeymapCheatsheet() {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const onToggle = (ev) => { if (ev && ev.detail) setOpen(!!ev.detail.open); };
+    window.addEventListener('studio-cheatsheet-toggle', onToggle);
+    const onKey = (e) => {
+      const ae = document.activeElement;
+      if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+      if (e.key === 'F1' || (e.key === '?' && !e.metaKey && !e.ctrlKey)) {
+        e.preventDefault();
+        setOpen((v) => !v);
+        // Mirror to the op event slot so other listeners can react.
+        window.__studioCheatSheetOpen = !window.__studioCheatSheetOpen;
+      } else if (e.key === 'Escape' && open) {
+        setOpen(false);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('studio-cheatsheet-toggle', onToggle);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+  if (!open) return null;
+  return (
+    <div
+      data-studio-v3-cheatsheet
+      onClick={() => setOpen(false)}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 9000,
+        background: 'rgba(0, 0, 0, 0.55)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        cursor: 'pointer',
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          maxWidth: 540, width: '88vw',
+          background: 'var(--studio-bg, #0d1117)',
+          border: '1px solid var(--studio-ink-mute, #1f2733)',
+          borderRadius: 8,
+          padding: '20px 24px',
+          color: 'var(--studio-ink, #e6edf3)',
+          fontFamily: 'inherit', fontSize: 12,
+          boxShadow: '0 16px 48px rgba(0, 0, 0, 0.55)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 14 }}>
+          <strong style={{ fontSize: 14, color: 'var(--studio-accent, #1de9b6)', letterSpacing: '0.04em' }}>Keymap</strong>
+          <span style={{ opacity: 0.6, fontSize: 11, fontFamily: 'var(--studio-mono, ui-monospace)' }}>F1 · ? · Esc</span>
+        </div>
+        {KEYMAP.map((sec) => (
+          <div key={sec.section} data-studio-v3-cheatsheet-section={sec.section} style={{ marginBottom: 12 }}>
+            <div style={{ opacity: 0.55, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>{sec.section}</div>
+            {sec.rows.map(([key, desc]) => (
+              <div key={key} style={{ display: 'flex', gap: 12, padding: '2px 0', alignItems: 'baseline' }}>
+                <code style={{
+                  minWidth: 70, fontFamily: 'var(--studio-mono, ui-monospace)',
+                  color: 'var(--studio-accent, #1de9b6)', fontSize: 11,
+                }}>{key}</code>
+                <span style={{ opacity: 0.85 }}>{desc}</span>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── WelcomeCard ─────────────────────────────────────────────────────────
 // Slice 427 — Centered card in the viewport while the scene has no
 // Studio primitives. Studio teal title + brief muscle-memory hints.
@@ -1054,6 +1151,7 @@ export function StudioShellV3({ mode = 'dark' }) {
           setAxis={(a) => { setAxis(a); if (window.__studioSetCameraAxis) window.__studioSetCameraAxis(a); }}
         />
         <WelcomeCard />
+        <KeymapCheatsheet />
       </main>
       {/* Slice 407 — right side is always the RightPanel now. Archie no
           longer overlays this slot; it lives only at the bottom. */}
