@@ -3,6 +3,10 @@ import './tokens.css';
 import { StudioMark, StudioWordmark } from './StudioLogo';
 import { Icon } from './Icons';
 import { spawnPrimitive } from './spawn';
+
+// Expose for the slice 457 quick-add menu (and any future modal that
+// needs to spawn without going through the toolbar React tree).
+if (typeof window !== 'undefined') window.__spawnPrimitive = spawnPrimitive;
 import Viewport3D from '../../../components/Viewport3D';
 import { registerV3Api, unregisterV3Api } from './api';
 import { registerEditOps, unregisterEditOps } from './editops';
@@ -301,6 +305,95 @@ function Toolbar({ wbId, activeTool, setTool, onInvoke }) {
             );
           })}
         </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── QuickAddMenu (slice 457) ─────────────────────────────────────────────
+// Shift+A opens a Blender-style quick-add list at the cursor — pick a
+// primitive to spawn it instantly. Esc / outside click / pick dismisses.
+function QuickAddMenu() {
+  const [pos, setPos] = useState(null);
+  useEffect(() => {
+    const onKey = (e) => {
+      const ae = document.activeElement;
+      if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+      if ((e.key === 'A' || e.key === 'a') && e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        // Position near the centre of the viewport.
+        const vp = document.querySelector('[data-studio-v3-viewport]');
+        if (vp) {
+          const r = vp.getBoundingClientRect();
+          setPos({ x: r.left + r.width / 2, y: r.top + r.height / 2 });
+        } else {
+          setPos({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+        }
+      } else if (e.key === 'Escape' && pos) {
+        setPos(null);
+      }
+    };
+    const onDown = (e) => {
+      if (!pos) return;
+      const inside = e.target && e.target.closest && e.target.closest('[data-studio-v3-quick-add]');
+      if (!inside) setPos(null);
+    };
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('mousedown', onDown);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('mousedown', onDown);
+    };
+  }, [pos]);
+  if (!pos) return null;
+  const items = [
+    'cube', 'sphere', 'plane', 'cylinder', 'cone', 'torus', 'icosahedron', 'empty',
+  ];
+  return (
+    <div
+      data-studio-v3-quick-add
+      onMouseDown={(e) => e.stopPropagation()}
+      style={{
+        position: 'fixed', left: pos.x, top: pos.y, zIndex: 9100,
+        background: 'var(--studio-bg, #0d1117)',
+        border: '1px solid var(--studio-ink-mute, #1f2733)',
+        borderRadius: 4, padding: '4px 0', minWidth: 160,
+        boxShadow: '0 4px 16px rgba(0,0,0,0.55)',
+        fontFamily: 'inherit', fontSize: 11,
+        color: 'var(--studio-ink, #e6edf3)',
+        transform: 'translate(-50%, -50%)',
+      }}
+    >
+      <div style={{
+        padding: '4px 10px 6px',
+        opacity: 0.55, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em',
+        borderBottom: '1px solid var(--studio-ink-mute, #1f2733)', marginBottom: 4,
+      }}>Add</div>
+      {items.map((kind) => (
+        <button
+          key={kind}
+          type="button"
+          data-studio-v3-quick-add-item={kind}
+          onClick={() => {
+            const s = window.__archdiscScene || (window.__archdiscViewport && window.__archdiscViewport.scene);
+            if (s && window.__spawnPrimitive) {
+              window.__spawnPrimitive(kind, s);
+            } else if (s) {
+              // Fallback: dispatch a synthetic toolbar click.
+              const btn = document.querySelector(`[data-studio-v3-tool="${kind}"][data-studio-v3-tool-group="add"]`);
+              if (btn) btn.click();
+            }
+            setPos(null);
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--studio-accent, #1de9b6)'; e.currentTarget.style.color = 'var(--studio-bg, #0d1117)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--studio-ink, #e6edf3)'; }}
+          style={{
+            display: 'block', width: '100%', padding: '4px 12px',
+            background: 'transparent', color: 'inherit',
+            border: 'none', cursor: 'pointer', textAlign: 'left',
+            fontFamily: 'inherit', fontSize: 11, textTransform: 'capitalize',
+          }}
+        >{kind}</button>
       ))}
     </div>
   );
@@ -682,6 +775,7 @@ const KEYMAP = [
   ] },
   { section: 'Selection', rows: [
     ['A', 'Toggle select-all / deselect-all'],
+    ['Shift+A', 'Quick-add primitive menu'],
     ['Shift+D', 'Duplicate selected'],
     ['X / Delete', 'Delete selected mesh'],
     ['H', 'Hide selected'],
@@ -1636,10 +1730,9 @@ export function StudioShellV3({ mode = 'dark' }) {
           if (sel) sel.visible = false;
         }
         e.preventDefault();
-      } else if (!meta && !e.altKey && (e.key === 'a' || e.key === 'A')) {
+      } else if (!meta && !e.altKey && !e.shiftKey && (e.key === 'a' || e.key === 'A')) {
         // Slice 431 — A toggles select-all ↔ deselect-all (Blender A parity).
-        // Alt+A is deselect; bare A selects everything when nothing is selected
-        // and deselects when something is selected.
+        // Bare A only; Shift+A is the slice 457 quick-add menu.
         const ae = document.activeElement;
         if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
         const set = (window.__studioSelectedMeshes && window.__studioSelectedMeshes()) || [];
@@ -1896,6 +1989,7 @@ export function StudioShellV3({ mode = 'dark' }) {
         <KeymapCheatsheet />
         <ContextMenu />
         <MarkingMenu />
+        <QuickAddMenu />
         <SettingsModal />
       </main>
       {/* Slice 407 — right side is always the RightPanel now. Archie no
