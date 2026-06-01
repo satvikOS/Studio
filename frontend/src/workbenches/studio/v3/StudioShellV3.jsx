@@ -327,6 +327,8 @@ const KEYMAP = [
   ] },
   { section: 'View / Cmd', rows: [
     ['.', 'Frame selected (fallback: frame all)'],
+    ['Cmd+Z', 'Undo'],
+    ['Cmd+Shift+Z', 'Redo'],
     ['Cmd+T', 'Toggle theme'],
     ['Cmd+/', 'Focus command bar'],
     ['F1 / ?', 'This cheatsheet'],
@@ -977,6 +979,18 @@ export function StudioShellV3({ mode = 'dark' }) {
       if (meta && e.key.toLowerCase() === 't') {
         e.preventDefault();
         setTheme((t) => t === 'dark' ? 'light' : 'dark');
+      } else if (meta && !e.shiftKey && e.key.toLowerCase() === 'z') {
+        // Slice 437 — Cmd/Ctrl+Z = undo. Honors text input.
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        if (window.__studioUndo) window.__studioUndo();
+        e.preventDefault();
+      } else if (meta && e.shiftKey && e.key.toLowerCase() === 'z') {
+        // Cmd/Ctrl+Shift+Z = redo.
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        if (window.__studioRedo) window.__studioRedo();
+        e.preventDefault();
       } else if (meta && e.key === '/') {
         e.preventDefault();
         // No dock in V3 — focus the cmdbar input as the most useful alias.
