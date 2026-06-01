@@ -993,6 +993,8 @@ function StatusBar({ wb, editMode }) {
   // Slice 425 — selected-mesh V / T pinned to the right of primitive count.
   // Polls once per second to keep the strip cheap.
   const [meshStats, setMeshStats] = useState(null);
+  // Slice 453 — current animation frame display.
+  const [frame, setFrame] = useState(0);
   useEffect(() => {
     let frames = 0;
     let last = performance.now();
@@ -1012,6 +1014,9 @@ function StatusBar({ wb, editMode }) {
         setPrimCount(n);
         frames = 0; last = now;
       }
+      // Frame cheap to read every tick — int compare gates re-render.
+      const f = (window.__studioGetFrame && window.__studioGetFrame()) || 0;
+      if (f !== frame) setFrame(f);
       if (now - lastSel >= 1000) {
         lastSel = now;
         const m = window.__studioSelectedMesh && window.__studioSelectedMesh();
@@ -1027,12 +1032,13 @@ function StatusBar({ wb, editMode }) {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, []);
+  }, [frame]);
   return (
     <div className="studio-statusbar" data-studio-v3-statusbar>
       <span data-studio-v3-status="brand"><strong>Studio</strong></span>
       <span data-studio-v3-status="wb" style={{ textTransform: 'capitalize' }}>{wb}</span>
       <span data-studio-v3-status="mode" style={{ textTransform: 'capitalize' }}>{editMode}</span>
+      <span data-studio-v3-status="frame" data-studio-v3-frame={frame}>f {frame}</span>
       <span data-studio-v3-status="primitives">{primCount} prim</span>
       {meshStats && (
         <span data-studio-v3-status="mesh" data-studio-v3-mesh-v={meshStats.v} data-studio-v3-mesh-t={meshStats.t}>
