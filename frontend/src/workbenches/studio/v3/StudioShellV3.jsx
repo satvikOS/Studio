@@ -306,6 +306,118 @@ function Toolbar({ wbId, activeTool, setTool, onInvoke }) {
   );
 }
 
+// ─── MarkingMenu (slice 456) ──────────────────────────────────────────────
+// Shift+right-click in the viewport opens an 8-direction radial menu of
+// common ops (Maya hotbox parity). The user can immediately click an
+// item, or hover-out → menu closes on next mousedown.
+function MarkingMenu() {
+  const [pos, setPos] = useState(null);
+  useEffect(() => {
+    const onCtx = (e) => {
+      // Only Shift+right-click in the viewport canvas.
+      if (!e.shiftKey) return;
+      const target = e.target;
+      if (!target || !target.closest || !target.closest('[data-studio-v3-viewport]')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setPos({ x: e.clientX, y: e.clientY });
+    };
+    const onClick = (e) => {
+      if (!pos) return;
+      const inside = e.target && e.target.closest && e.target.closest('[data-studio-v3-marking-menu]');
+      if (!inside) setPos(null);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') setPos(null); };
+    window.addEventListener('contextmenu', onCtx, true);  // capture so it runs before ContextMenu
+    window.addEventListener('mousedown', onClick);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('contextmenu', onCtx, true);
+      window.removeEventListener('mousedown', onClick);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [pos]);
+  if (!pos) return null;
+  // 8 cardinal directions; each holds a single op.
+  const r = 64;
+  const items = [
+    { angle: -90, label: 'Frame',    call: () => window.__studioFitSelected && window.__studioFitSelected() },
+    { angle: -45, label: 'Duplicate', call: () => {
+      const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+      const s = window.__archdiscScene || (window.__archdiscViewport && window.__archdiscViewport.scene);
+      if (!sel || !s) return;
+      const c = sel.clone();
+      if (c.geometry) c.geometry = c.geometry.clone();
+      if (c.material && c.material.clone) c.material = c.material.clone();
+      c.position.set(sel.position.x + 0.02, sel.position.y, sel.position.z + 0.02);
+      c.name = (sel.name || 'mesh') + '-copy';
+      s.add(c);
+      if (window.__studioSelectMesh) window.__studioSelectMesh(c);
+    } },
+    { angle: 0,   label: 'Move',     call: () => { const vp = window.__archdiscViewport; if (vp && vp.transformControls) vp.transformControls.setMode('translate'); } },
+    { angle: 45,  label: 'Rotate',   call: () => { const vp = window.__archdiscViewport; if (vp && vp.transformControls) vp.transformControls.setMode('rotate'); } },
+    { angle: 90,  label: 'Scale',    call: () => { const vp = window.__archdiscViewport; if (vp && vp.transformControls) vp.transformControls.setMode('scale'); } },
+    { angle: 135, label: 'Hide',     call: () => { const sel = window.__studioSelectedMesh && window.__studioSelectedMesh(); if (sel) sel.visible = false; } },
+    { angle: 180, label: 'Delete',   call: () => {
+      const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+      const s = window.__archdiscScene || (window.__archdiscViewport && window.__archdiscViewport.scene);
+      if (sel && s) {
+        if (window.__studioPushUndo) window.__studioPushUndo();
+        if (sel.geometry) sel.geometry.dispose();
+        if (sel.material && sel.material.dispose) sel.material.dispose();
+        s.remove(sel);
+        if (window.__studioDeselect) window.__studioDeselect();
+      }
+    } },
+    { angle: -135, label: 'Select All', call: () => window.__studioSelectAll && window.__studioSelectAll() },
+  ];
+  return (
+    <div
+      data-studio-v3-marking-menu
+      onMouseDown={(e) => e.stopPropagation()}
+      style={{
+        position: 'fixed', left: pos.x, top: pos.y, zIndex: 9050,
+        width: 0, height: 0, pointerEvents: 'none',
+      }}
+    >
+      {/* Centre dot. */}
+      <div style={{
+        position: 'absolute', left: -3, top: -3, width: 6, height: 6,
+        borderRadius: 3, background: 'var(--studio-accent, #1de9b6)',
+      }} />
+      {items.map((it) => {
+        const rad = (it.angle * Math.PI) / 180;
+        const x = Math.cos(rad) * r;
+        const y = Math.sin(rad) * r;
+        return (
+          <button
+            key={it.label}
+            type="button"
+            data-studio-v3-marking-item={it.label.toLowerCase().replace(/\s+/g, '-')}
+            onClick={() => { it.call(); setPos(null); }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--studio-accent, #1de9b6)'; e.currentTarget.style.color = 'var(--studio-bg, #0d1117)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--studio-bg-elev, #161b22)'; e.currentTarget.style.color = 'var(--studio-ink, #e6edf3)'; }}
+            style={{
+              position: 'absolute',
+              left: x - 36, top: y - 12,
+              width: 72, height: 24,
+              background: 'var(--studio-bg-elev, #161b22)',
+              color: 'var(--studio-ink, #e6edf3)',
+              border: '1px solid var(--studio-ink-mute, #1f2733)',
+              borderRadius: 12,
+              fontSize: 10, cursor: 'pointer',
+              pointerEvents: 'auto',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.45)',
+              padding: '0 6px', whiteSpace: 'nowrap',
+              fontFamily: 'inherit',
+            }}
+          >{it.label}</button>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── ContextMenu (slice 447) ──────────────────────────────────────────────
 // Right-click in the viewport opens a small floating list of common ops
 // against the active mesh: Duplicate / Hide / Frame / Delete. Esc, click-
@@ -1783,6 +1895,7 @@ export function StudioShellV3({ mode = 'dark' }) {
         <WelcomeCard />
         <KeymapCheatsheet />
         <ContextMenu />
+        <MarkingMenu />
         <SettingsModal />
       </main>
       {/* Slice 407 — right side is always the RightPanel now. Archie no
