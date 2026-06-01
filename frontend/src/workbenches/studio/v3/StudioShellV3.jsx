@@ -435,6 +435,7 @@ const KEYMAP = [
   ] },
   { section: 'View / Cmd', rows: [
     ['1 / 3 / 7', 'Camera front / right / top (object mode)'],
+    ['5', 'Toggle perspective / orthographic'],
     ['Space', 'Play / pause animation'],
     ['← / →', 'Step animation frame ±1'],
     ['K', 'Insert keyframe at current frame'],
@@ -1293,6 +1294,12 @@ export function StudioShellV3({ mode = 'dark' }) {
         const i = cycle.indexOf(cur);
         const next = cycle[(i + 1) % cycle.length];
         if (window.__studioSetEditMode) window.__studioSetEditMode(next);
+      } else if (!meta && !e.shiftKey && !e.altKey && e.key === '5') {
+        // Slice 450 — 5 toggles perspective / ortho projection.
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        if (window.__studioToggleViewProjection) window.__studioToggleViewProjection();
+        e.preventDefault();
       } else if (!meta && !e.shiftKey && !e.altKey && (e.key === '1' || e.key === '2' || e.key === '3' || e.key === '7')) {
         // 1/2/3 flip vert/edge/face — ONLY when already in a sub-object
         // mode (avoids stealing the numpad-1/3 camera views in object mode).
