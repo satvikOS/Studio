@@ -1035,6 +1035,24 @@ export function StudioShellV3({ mode = 'dark' }) {
           if (window.__studioDeselect) window.__studioDeselect();
         }
         e.preventDefault();
+      } else if (!meta && e.shiftKey && (e.key === 'd' || e.key === 'D')) {
+        // Slice 434 — Shift+D duplicates the selected mesh (Blender Shift+D).
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+        const s = window.__archdiscScene || (window.__archdiscViewport && window.__archdiscViewport.scene);
+        if (sel && s) {
+          const clone = sel.clone();
+          if (clone.geometry) clone.geometry = clone.geometry.clone();
+          if (Array.isArray(clone.material)) clone.material = clone.material.map((m) => m.clone());
+          else if (clone.material) clone.material = clone.material.clone();
+          clone.position.set(sel.position.x + 0.02, sel.position.y, sel.position.z + 0.02);
+          clone.userData = { ...sel.userData };
+          clone.name = (sel.name || 'mesh') + '-copy';
+          s.add(clone);
+          if (window.__studioSelectMesh) window.__studioSelectMesh(clone);
+        }
+        e.preventDefault();
       }
       // X-key delete handled by the V2 headless mount (its own X
       // handler covers undo + ref cleanup). Adding another here would
