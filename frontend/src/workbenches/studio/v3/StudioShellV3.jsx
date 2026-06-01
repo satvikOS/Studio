@@ -329,6 +329,7 @@ const KEYMAP = [
     ['.', 'Frame selected (fallback: frame all)'],
     ['Cmd+Z', 'Undo'],
     ['Cmd+Shift+Z', 'Redo'],
+    ['Cmd+S', 'Save scene (download .studio.json)'],
     ['Cmd+T', 'Toggle theme'],
     ['Cmd+/', 'Focus command bar'],
     ['F1 / ?', 'This cheatsheet'],
@@ -990,6 +991,12 @@ export function StudioShellV3({ mode = 'dark' }) {
         const ae = document.activeElement;
         if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
         if (window.__studioRedo) window.__studioRedo();
+        e.preventDefault();
+      } else if (meta && !e.shiftKey && e.key.toLowerCase() === 's') {
+        // Slice 438 — Cmd/Ctrl+S downloads the scene as JSON.
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        if (window.__studioDownloadScene) window.__studioDownloadScene();
         e.preventDefault();
       } else if (meta && e.key === '/') {
         e.preventDefault();
