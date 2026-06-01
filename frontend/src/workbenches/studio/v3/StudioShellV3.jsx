@@ -334,6 +334,7 @@ const KEYMAP = [
     ['Cmd+Shift+Z', 'Redo'],
     ['Cmd+S', 'Save scene (download .studio.json)'],
     ['Cmd+O', 'Open scene file'],
+    ['Cmd+E', 'Export GLTF'],
     ['Cmd+T', 'Toggle theme'],
     ['Cmd+/', 'Focus command bar'],
     ['F1 / ?', 'This cheatsheet'],
@@ -1158,6 +1159,12 @@ export function StudioShellV3({ mode = 'dark' }) {
         const ae = document.activeElement;
         if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
         if (window.__studioOpenSceneFile) window.__studioOpenSceneFile();
+        e.preventDefault();
+      } else if (meta && !e.shiftKey && e.key.toLowerCase() === 'e') {
+        // Slice 445 — Cmd/Ctrl+E exports the scene as GLTF (download).
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        if (window.__studioDownloadGLTF) window.__studioDownloadGLTF();
         e.preventDefault();
       } else if (meta && e.key === '/') {
         e.preventDefault();
