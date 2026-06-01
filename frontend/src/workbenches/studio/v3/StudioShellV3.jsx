@@ -727,6 +727,8 @@ function SettingsModal() {
         </div>
         {/* HDRI Environment — slice 468. */}
         <HDRIPickerRow />
+        {/* Sun angle — slice 469. */}
+        <SunAngleRow />
         {/* Background color */}
         <div data-studio-v3-settings-section="bg" style={{ marginBottom: 16 }}>
           <div style={{ opacity: 0.55, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Background color</div>
@@ -755,6 +757,46 @@ function SettingsModal() {
             borderRadius: 3, cursor: 'pointer', fontSize: 11,
           }}
         >Done</button>
+      </div>
+    </div>
+  );
+}
+
+// Slice 469 — Two-axis sun-angle slider for the Settings modal.
+function SunAngleRow() {
+  const [az, setAz] = React.useState(0);
+  const [el, setEl] = React.useState(0.785);
+  if (!window.__studioSetSunAngle) return null;
+  const apply = (newAz, newEl) => {
+    // V3 setSunAngle takes (azDeg, elDeg) — translate radians to degrees.
+    window.__studioSetSunAngle(newAz * 180 / Math.PI, newEl * 180 / Math.PI);
+  };
+  return (
+    <div data-studio-v3-settings-section="sun" style={{ marginBottom: 12 }}>
+      <div style={{ opacity: 0.55, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Sun angle</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
+          <span style={{ width: 64, opacity: 0.7 }}>Azimuth</span>
+          <input
+            type="range" min="0" max={Math.PI * 2} step="0.05"
+            data-studio-v3-settings-sun-azimuth
+            value={az}
+            onChange={(e) => { const v = parseFloat(e.target.value); setAz(v); apply(v, el); }}
+            style={{ flex: 1 }}
+          />
+          <span style={{ width: 36, textAlign: 'right', fontFamily: 'var(--studio-mono)', opacity: 0.7 }}>{(az * 180 / Math.PI).toFixed(0)}°</span>
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
+          <span style={{ width: 64, opacity: 0.7 }}>Elevation</span>
+          <input
+            type="range" min="0" max={Math.PI / 2} step="0.02"
+            data-studio-v3-settings-sun-elevation
+            value={el}
+            onChange={(e) => { const v = parseFloat(e.target.value); setEl(v); apply(az, v); }}
+            style={{ flex: 1 }}
+          />
+          <span style={{ width: 36, textAlign: 'right', fontFamily: 'var(--studio-mono)', opacity: 0.7 }}>{(el * 180 / Math.PI).toFixed(0)}°</span>
+        </label>
       </div>
     </div>
   );
