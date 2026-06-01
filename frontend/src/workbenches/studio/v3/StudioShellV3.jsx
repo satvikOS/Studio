@@ -852,6 +852,28 @@ export function StudioShellV3({ mode = 'dark' }) {
         if (inp) inp.focus();
       } else if (!meta && e.key === 'Escape') {
         setActiveTool('select');
+      } else if (!meta && !e.shiftKey && !e.altKey && e.key === 'Tab') {
+        // Slice 428 — Blender Tab cycle: object → vertex → edge → face → sculpt → object.
+        // Honors text inputs by checking the focused element.
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        e.preventDefault();
+        const cycle = ['object', 'vertex', 'edge', 'face', 'sculpt'];
+        const cur = window.__studioGetEditMode && window.__studioGetEditMode();
+        const i = cycle.indexOf(cur);
+        const next = cycle[(i + 1) % cycle.length];
+        if (window.__studioSetEditMode) window.__studioSetEditMode(next);
+      } else if (!meta && !e.shiftKey && !e.altKey && (e.key === '1' || e.key === '2' || e.key === '3')) {
+        // 1/2/3 flip vert/edge/face — ONLY when already in a sub-object
+        // mode (avoids stealing the numpad-1/3 camera views in object mode).
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        const cur = window.__studioGetEditMode && window.__studioGetEditMode();
+        if (cur === 'vertex' || cur === 'edge' || cur === 'face') {
+          const map = { '1': 'vertex', '2': 'edge', '3': 'face' };
+          if (window.__studioSetEditMode) window.__studioSetEditMode(map[e.key]);
+          e.preventDefault();
+        }
       }
       // X-key delete handled by the V2 headless mount (its own X
       // handler covers undo + ref cleanup). Adding another here would
