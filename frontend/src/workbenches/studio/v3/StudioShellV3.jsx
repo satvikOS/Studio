@@ -797,6 +797,7 @@ const KEYMAP = [
     ['Cmd+O', 'Open scene file'],
     ['Cmd+E', 'Export GLTF'],
     ['Cmd+,', 'Settings'],
+    ['Cmd+F', 'Focus outliner filter'],
     ['Cmd+T', 'Toggle theme'],
     ['Cmd+/', 'Focus command bar'],
     ['F1 / ?', 'This cheatsheet'],
@@ -2044,6 +2045,25 @@ export function StudioShellV3({ mode = 'dark' }) {
         if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
         window.dispatchEvent(new CustomEvent('studio-settings-toggle'));
         e.preventDefault();
+      } else if (meta && !e.shiftKey && e.key.toLowerCase() === 'f') {
+        // Slice 464 — Cmd/Ctrl+F focuses the outliner filter (standard
+        // search shortcut). Auto-expands the right panel + switches to
+        // outliner tab if needed.
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        e.preventDefault();
+        setRightCollapsed(false);
+        // Defer one tick so React renders the outliner if it just
+        // switched in.
+        requestAnimationFrame(() => {
+          // Switch to outliner tab — find the active tab button + click.
+          const ob = document.querySelector('[data-studio-v3-right-tab="outliner"]');
+          if (ob && ob.getAttribute('data-active') !== 'true') ob.click();
+          requestAnimationFrame(() => {
+            const inp = document.querySelector('[data-studio-v3-outliner-filter]');
+            if (inp) { inp.focus(); inp.select && inp.select(); }
+          });
+        });
       } else if (meta && e.key === '/') {
         e.preventDefault();
         // No dock in V3 — focus the cmdbar input as the most useful alias.
