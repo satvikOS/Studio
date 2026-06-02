@@ -248,6 +248,8 @@ function TopBar({ onCycleTheme, theme }) {
               else if (m === 'File') window.dispatchEvent(new CustomEvent('studio-file-menu-toggle'));
               // Slice 551 — Edit menu opens a floating actions panel.
               else if (m === 'Edit') window.dispatchEvent(new CustomEvent('studio-edit-menu-toggle'));
+              // Slice 552 — Select menu.
+              else if (m === 'Select') window.dispatchEvent(new CustomEvent('studio-select-menu-toggle'));
             }}
           >{m}</button>
         ))}
@@ -2338,6 +2340,85 @@ function EditMenu() {
           key={a.id}
           type="button"
           data-studio-v3-edit-action={a.id}
+          onClick={() => { try { a.call(); } catch (_) {} setOpen(false); }}
+          style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+            width: '100%', padding: '5px 14px', textAlign: 'left',
+            background: 'transparent', border: 0,
+            color: 'var(--studio-ink, #e6edf3)', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(29, 233, 182, 0.08)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+        >
+          <span>{a.label}</span>
+          <span style={{ opacity: 0.5, fontSize: 10, fontFamily: 'var(--studio-mono, ui-monospace)' }}>{a.hint || ''}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// Slice 552 — Select menu: all / deselect / invert / by-kind submenu.
+function SelectMenu() {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const onToggle = () => setOpen((v) => !v);
+    const onKey = (e) => { if (open && e.key === 'Escape') { setOpen(false); e.preventDefault(); } };
+    const onClickOutside = (e) => {
+      if (!open) return;
+      if (e.target && e.target.closest && e.target.closest('[data-studio-v3-select-menu], [data-studio-v3-menu="select"]')) return;
+      setOpen(false);
+    };
+    window.addEventListener('studio-select-menu-toggle', onToggle);
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('mousedown', onClickOutside);
+    return () => {
+      window.removeEventListener('studio-select-menu-toggle', onToggle);
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('mousedown', onClickOutside);
+    };
+  }, [open]);
+  if (!open) return null;
+  const selectByKind = (kind) => {
+    const s = window.__archdiscScene;
+    if (!s) return;
+    const set = [];
+    s.traverse((o) => {
+      if (o.userData && o.userData.archdiscStudioPrimitiveKind === kind) set.push(o);
+    });
+    window.__studioSelectedMeshesSet = set;
+    if (set.length && window.__studioSelectMesh) window.__studioSelectMesh(set[set.length - 1]);
+    if (window.__studioToast) window.__studioToast(`Selected ${set.length} ${kind}${set.length === 1 ? '' : 's'}`, 'info');
+  };
+  const actions = [
+    { id: 'all',       label: 'Select all',       hint: 'A',        call: () => window.__studioSelectAll && window.__studioSelectAll() },
+    { id: 'deselect',  label: 'Deselect all',                       call: () => { window.__studioSelectedMeshesSet = []; if (window.__studioDeselect) window.__studioDeselect(); } },
+    { id: 'box',       label: 'Box marquee',      hint: 'B',        call: () => window.dispatchEvent(new CustomEvent('studio-marquee-arm')) },
+    { id: 'cubes',     label: 'Cubes',                              call: () => selectByKind('cube') },
+    { id: 'spheres',   label: 'Spheres',                            call: () => selectByKind('sphere') },
+    { id: 'planes',    label: 'Planes',                             call: () => selectByKind('plane') },
+    { id: 'groups',    label: 'Groups',                             call: () => selectByKind('group') },
+  ];
+  return (
+    <div
+      data-studio-v3-select-menu
+      style={{
+        position: 'fixed', top: 36, left: 220, zIndex: 9300,
+        minWidth: 240,
+        background: 'var(--studio-bg-elev, #161b22)',
+        border: '1px solid var(--studio-ink-mute, #1f2733)',
+        borderRadius: 6,
+        boxShadow: '0 20px 50px rgba(0,0,0,0.55)',
+        color: 'var(--studio-ink, #e6edf3)',
+        fontFamily: 'inherit', fontSize: 12,
+        padding: '6px 0',
+      }}
+    >
+      {actions.map((a) => (
+        <button
+          key={a.id}
+          type="button"
+          data-studio-v3-select-action={a.id}
           onClick={() => { try { a.call(); } catch (_) {} setOpen(false); }}
           style={{
             display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
@@ -5696,6 +5777,7 @@ export function StudioShellV3({ mode = 'dark' }) {
       <AboutModal />
       <FileMenu />
       <EditMenu />
+      <SelectMenu />
       <SplashScreen />
       <SectionCollapser />
       <DocTitle activeWb={activeWb} />
