@@ -2149,6 +2149,8 @@ function RightPanel({ collapsed, onToggle, activeWb, editMode, selection }) {
             <CameraSection />
             {/* Slice 499 — Snap step inputs (translate / rotate / scale). */}
             <SnapSection />
+            {/* Slice 508 — World grid + background. */}
+            <WorldSection />
             <div className="studio-right-section">
               <div className="studio-right-section-title">Edit selection</div>
               <SelectionRows />
@@ -2377,6 +2379,78 @@ function CameraSection() {
             padding: '2px 8px', borderRadius: 3, fontSize: 11, cursor: 'pointer', textTransform: 'capitalize',
           }}
         >{proj}</button>
+      </div>
+    </div>
+  );
+}
+
+// Slice 508 — World section. Edits grid extent + canvas background tint.
+function WorldSection() {
+  const [grid, setGrid] = useState(1);
+  const [bg, setBg] = useState('#0d1117');
+  useEffect(() => {
+    const read = () => {
+      if (typeof window.__studioGridSize === 'number') setGrid(window.__studioGridSize);
+      const vp = window.__archdiscViewport;
+      if (vp && vp.scene && vp.scene.background && vp.scene.background.getHexString) {
+        setBg('#' + vp.scene.background.getHexString());
+      }
+    };
+    const id = setInterval(read, 800);
+    read();
+    return () => clearInterval(id);
+  }, []);
+  const onGrid = (e) => {
+    const v = Number(e.target.value);
+    if (!Number.isFinite(v) || v <= 0) return;
+    setGrid(v);
+    if (window.__studioSetGridSize) window.__studioSetGridSize(v, 20);
+  };
+  const onBg = (e) => {
+    const v = e.target.value;
+    setBg(v);
+    const vp = window.__archdiscViewport;
+    if (vp && vp.scene) {
+      const THREE = window.__archdiscTHREE || null;
+      if (THREE && vp.scene.background && vp.scene.background.set) {
+        vp.scene.background.set(v);
+      } else if (vp.scene.background && vp.scene.background.setHex) {
+        vp.scene.background.setHex(parseInt(v.slice(1), 16));
+      }
+    }
+  };
+  return (
+    <div className="studio-right-section" data-studio-v3-world-section>
+      <div className="studio-right-section-title">World</div>
+      <div className="studio-right-row">
+        <span>Grid size (m)</span>
+        <input
+          type="number"
+          min="0.05"
+          max="100"
+          step="0.05"
+          value={grid}
+          onChange={onGrid}
+          data-studio-v3-world-grid
+          style={{
+            width: 64, background: 'var(--studio-bg, #0d1117)', border: '1px solid var(--studio-ink-mute, #1f2733)',
+            color: 'var(--studio-ink, #e6edf3)', padding: '2px 6px', borderRadius: 3,
+            fontFamily: 'var(--studio-mono, ui-monospace)', fontSize: 11, textAlign: 'right',
+          }}
+        />
+      </div>
+      <div className="studio-right-row">
+        <span>Background</span>
+        <input
+          type="color"
+          value={bg}
+          onChange={onBg}
+          data-studio-v3-world-bg
+          style={{
+            width: 32, height: 18, padding: 0, border: '1px solid var(--studio-ink-mute, #1f2733)',
+            borderRadius: 3, cursor: 'pointer', background: 'transparent',
+          }}
+        />
       </div>
     </div>
   );
