@@ -1912,6 +1912,8 @@ function RightPanel({ collapsed, onToggle, activeWb, editMode, selection }) {
             <PivotActions />
             {/* Slice 461 — Material properties. */}
             <MaterialRows />
+            {/* Slice 498 — Camera FOV + projection. */}
+            <CameraSection />
             <div className="studio-right-section">
               <div className="studio-right-section-title">Edit selection</div>
               <SelectionRows />
@@ -2077,6 +2079,70 @@ function PivotActions() {
           }}
         >{a.label}</button>
       ))}
+    </div>
+  );
+}
+
+// Slice 498 — Camera inspector section. Edits FOV (perspective only)
+// and toggles ortho/persp via existing cameraviewops.
+function CameraSection() {
+  const [fov, setFov] = useState(50);
+  const [proj, setProj] = useState('persp');
+  useEffect(() => {
+    const read = () => {
+      const vp = window.__archdiscViewport;
+      if (vp && vp.camera && typeof vp.camera.fov === 'number') setFov(Math.round(vp.camera.fov));
+      setProj(window.__studioViewProjection === 'ortho' ? 'ortho' : 'persp');
+    };
+    const id = setInterval(read, 600);
+    read();
+    return () => clearInterval(id);
+  }, []);
+  const onFov = (e) => {
+    const v = Number(e.target.value);
+    setFov(v);
+    if (window.__studioSetFov) window.__studioSetFov(v);
+  };
+  const toggle = () => {
+    if (window.__studioToggleViewProjection) {
+      const r = window.__studioToggleViewProjection();
+      if (r && r.projection) setProj(r.projection);
+    }
+  };
+  return (
+    <div className="studio-right-section" data-studio-v3-camera-section>
+      <div className="studio-right-section-title">Camera</div>
+      <div className="studio-right-row">
+        <span>FOV</span>
+        <input
+          type="number"
+          min="10"
+          max="170"
+          step="1"
+          value={fov}
+          onChange={onFov}
+          data-studio-v3-camera-fov
+          style={{
+            width: 60, background: 'var(--studio-bg, #0d1117)', border: '1px solid var(--studio-ink-mute, #1f2733)',
+            color: 'var(--studio-ink, #e6edf3)', padding: '2px 6px', borderRadius: 3, fontFamily: 'var(--studio-mono, ui-monospace)',
+            fontSize: 11, textAlign: 'right',
+          }}
+        />
+      </div>
+      <div className="studio-right-row">
+        <span>Projection</span>
+        <button
+          type="button"
+          data-studio-v3-camera-proj
+          data-studio-v3-camera-proj-value={proj}
+          onClick={toggle}
+          style={{
+            background: 'transparent', border: '1px solid var(--studio-ink-mute, #1f2733)',
+            color: proj === 'ortho' ? 'var(--studio-accent, #1de9b6)' : 'var(--studio-ink, #e6edf3)',
+            padding: '2px 8px', borderRadius: 3, fontSize: 11, cursor: 'pointer', textTransform: 'capitalize',
+          }}
+        >{proj}</button>
+      </div>
     </div>
   );
 }
