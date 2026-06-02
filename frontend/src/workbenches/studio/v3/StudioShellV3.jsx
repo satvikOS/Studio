@@ -2279,6 +2279,7 @@ function OnboardingTour() {
 
 function WelcomeCard() {
   const [empty, setEmpty] = useState(true);
+  const [recent, setRecent] = useState([]);
   useEffect(() => {
     const tick = () => {
       let n = 0;
@@ -2287,6 +2288,10 @@ function WelcomeCard() {
         try { s.traverse((o) => { if (o.userData && o.userData.archdiscStudioPrimitive) n++; }); } catch (_) {}
       }
       setEmpty(n === 0);
+      if (n === 0) {
+        const list = (window.__studioListRecentFiles && window.__studioListRecentFiles()) || [];
+        setRecent(list.slice(0, 3));
+      }
     };
     tick();
     const id = setInterval(tick, 500);
@@ -2305,9 +2310,8 @@ function WelcomeCard() {
         padding: '18px 22px',
         color: 'var(--studio-ink, #e6edf3)',
         fontFamily: 'inherit', fontSize: 12,
-        pointerEvents: 'none',
         boxShadow: '0 8px 24px rgba(0, 0, 0, 0.45)',
-        minWidth: 260, textAlign: 'center',
+        minWidth: 280, maxWidth: 360, textAlign: 'center',
       }}
     >
       <div style={{
@@ -2317,11 +2321,40 @@ function WelcomeCard() {
       <div style={{ marginBottom: 10, opacity: 0.8 }}>
         Pick a primitive in the toolbar to start.
       </div>
-      <div style={{ fontSize: 11, opacity: 0.55, fontFamily: 'var(--studio-mono, ui-monospace)' }}>
+      <div style={{ fontSize: 11, opacity: 0.55, fontFamily: 'var(--studio-mono, ui-monospace)', marginBottom: recent.length ? 14 : 0 }}>
         Tab — edit mode<br />
         1 · 2 · 3 — vert · edge · face<br />
         Cmd+/ — focus command bar
       </div>
+      {recent.length > 0 && (
+        <div data-studio-v3-welcome-recent style={{
+          borderTop: '1px solid var(--studio-ink-mute, #1f2733)',
+          paddingTop: 10, textAlign: 'left',
+        }}>
+          <div style={{
+            fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em',
+            color: 'var(--studio-ink-mute, #9aa6b2)', marginBottom: 6,
+          }}>Recent</div>
+          {recent.map((it) => (
+            <button
+              key={it.name}
+              type="button"
+              data-studio-v3-welcome-recent-item={it.name}
+              onClick={() => {
+                if (window.__studioOpenRecentFile) window.__studioOpenRecentFile(it.name);
+              }}
+              style={{
+                display: 'block', width: '100%', marginBottom: 3,
+                padding: '4px 6px',
+                background: 'transparent', border: '1px solid var(--studio-ink-mute, #1f2733)',
+                color: 'var(--studio-ink, #e6edf3)', borderRadius: 3,
+                cursor: 'pointer', fontSize: 10, fontFamily: 'var(--studio-mono, ui-monospace)',
+                textAlign: 'left', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              }}
+            >{it.name}</button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
