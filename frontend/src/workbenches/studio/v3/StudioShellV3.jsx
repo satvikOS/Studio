@@ -729,6 +729,8 @@ function SettingsModal() {
         <HDRIPickerRow />
         {/* Sun angle — slice 469. */}
         <SunAngleRow />
+        {/* Render quality — slice 474. */}
+        <RenderQualityRow />
         {/* Background color */}
         <div data-studio-v3-settings-section="bg" style={{ marginBottom: 16 }}>
           <div style={{ opacity: 0.55, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Background color</div>
@@ -758,6 +760,53 @@ function SettingsModal() {
           }}
         >Done</button>
       </div>
+    </div>
+  );
+}
+
+// Slice 474 — Render quality controls for the Settings modal.
+function RenderQualityRow() {
+  const [pr, setPr] = React.useState(() => (typeof window !== 'undefined' && window.devicePixelRatio) || 1);
+  const [sq, setSq] = React.useState('medium');
+  if (!window.__studioSetPixelRatio && !window.__studioSetShadowQuality) return null;
+  return (
+    <div data-studio-v3-settings-section="render" style={{ marginBottom: 12 }}>
+      <div style={{ opacity: 0.55, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Render quality</div>
+      {window.__studioSetPixelRatio && (
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, marginBottom: 4 }}>
+          <span style={{ width: 76, opacity: 0.7 }}>Pixel ratio</span>
+          <input
+            type="range" min="0.5" max="3" step="0.1"
+            data-studio-v3-settings-pixel-ratio
+            value={pr}
+            onChange={(e) => { const v = parseFloat(e.target.value); setPr(v); window.__studioSetPixelRatio(v); }}
+            style={{ flex: 1 }}
+          />
+          <span style={{ width: 28, textAlign: 'right', fontFamily: 'var(--studio-mono)', opacity: 0.7 }}>{pr.toFixed(1)}</span>
+        </label>
+      )}
+      {window.__studioSetShadowQuality && (
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
+          <span style={{ width: 76, opacity: 0.7 }}>Shadows</span>
+          <select
+            data-studio-v3-settings-shadow-quality
+            value={sq}
+            onChange={(e) => { setSq(e.target.value); window.__studioSetShadowQuality(e.target.value); }}
+            style={{
+              flex: 1, padding: '2px 4px', fontSize: 11,
+              background: 'var(--studio-bg-elev, #1c1c20)',
+              color: 'var(--studio-ink, #dfe5ea)',
+              border: '1px solid var(--studio-ink-mute, #2c2c30)',
+              borderRadius: 2, fontFamily: 'inherit',
+            }}
+          >
+            <option value="off">Off</option>
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+          </select>
+        </label>
+      )}
     </div>
   );
 }
