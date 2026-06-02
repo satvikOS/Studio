@@ -1633,6 +1633,32 @@ function RightPanel({ collapsed, onToggle, activeWb, editMode, selection }) {
     window.addEventListener('studio-right-tab-set', onSet);
     return () => window.removeEventListener('studio-right-tab-set', onSet);
   }, []);
+  // Slice 493 — drag-to-resize splitter on the panel's left edge.
+  // Width persists across reloads via localStorage.
+  const RIGHT_W_KEY = 'studio.v3.rightWidth';
+  const RIGHT_W_MIN = 220, RIGHT_W_MAX = 640;
+  const [width, setWidth] = useState(() => {
+    const raw = typeof window !== 'undefined' ? Number(window.localStorage.getItem(RIGHT_W_KEY)) : 0;
+    return Number.isFinite(raw) && raw >= RIGHT_W_MIN && raw <= RIGHT_W_MAX ? raw : 280;
+  });
+  const dragRef = React.useRef(null);
+  const onDragStart = (e) => {
+    e.preventDefault();
+    dragRef.current = { startX: e.clientX, startW: width };
+    const onMove = (ev) => {
+      const dx = ev.clientX - dragRef.current.startX;
+      const next = Math.min(RIGHT_W_MAX, Math.max(RIGHT_W_MIN, dragRef.current.startW - dx));
+      setWidth(next);
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      dragRef.current = null;
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
+  useEffect(() => { try { window.localStorage.setItem(RIGHT_W_KEY, String(width)); } catch (_) {} }, [width]);
   if (collapsed) {
     return (
       <aside className="studio-right" data-studio-v3-right data-collapsed="true">
@@ -1649,7 +1675,21 @@ function RightPanel({ collapsed, onToggle, activeWb, editMode, selection }) {
     );
   }
   return (
-    <aside className="studio-right" data-studio-v3-right data-collapsed="false">
+    <aside
+      className="studio-right"
+      data-studio-v3-right
+      data-collapsed="false"
+      style={{ width, flex: `0 0 ${width}px`, position: 'relative' }}
+    >
+      <div
+        data-studio-v3-right-resize
+        onMouseDown={onDragStart}
+        title="Drag to resize"
+        style={{
+          position: 'absolute', left: -3, top: 0, bottom: 0, width: 6,
+          cursor: 'ew-resize', zIndex: 5,
+        }}
+      />
       <div className="studio-right-tabs" data-studio-v3-right-tabs>
         {['inspector', 'outliner', 'layers'].map((t) => (
           <button
