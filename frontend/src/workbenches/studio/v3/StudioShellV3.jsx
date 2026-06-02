@@ -3242,6 +3242,11 @@ function LightingSection() {
     setKey(v);
     if (window.__studioSetKeyIntensity) window.__studioSetKeyIntensity(v);
   };
+  // Slice 540 — Sun direction (azimuth / elevation) sliders.
+  const [az, setAz] = useState(45);
+  const [el, setEl] = useState(45);
+  const onAz = (e) => { const v = Number(e.target.value); setAz(v); if (window.__studioSetSunAngle) window.__studioSetSunAngle(v, el); };
+  const onEl = (e) => { const v = Number(e.target.value); setEl(v); if (window.__studioSetSunAngle) window.__studioSetSunAngle(az, v); };
   return (
     <div className="studio-right-section" data-studio-v3-lighting-section>
       <div className="studio-right-section-title">Lighting</div>
@@ -3268,6 +3273,30 @@ function LightingSection() {
           style={{ flex: 1, marginLeft: 8 }}
         />
         <span style={{ width: 36, textAlign: 'right', fontFamily: 'var(--studio-mono, ui-monospace)', fontSize: 10, color: 'var(--studio-ink-mute, #9aa6b2)' }}>{key.toFixed(2)}</span>
+      </div>
+      <div className="studio-right-row" style={{ alignItems: 'center' }}>
+        <span>Azimuth</span>
+        <input
+          type="range"
+          min="-180" max="180" step="1"
+          value={az}
+          onChange={onAz}
+          data-studio-v3-light-azimuth
+          style={{ flex: 1, marginLeft: 8 }}
+        />
+        <span style={{ width: 36, textAlign: 'right', fontFamily: 'var(--studio-mono, ui-monospace)', fontSize: 10, color: 'var(--studio-ink-mute, #9aa6b2)' }}>{az}°</span>
+      </div>
+      <div className="studio-right-row" style={{ alignItems: 'center' }}>
+        <span>Elevation</span>
+        <input
+          type="range"
+          min="-90" max="90" step="1"
+          value={el}
+          onChange={onEl}
+          data-studio-v3-light-elevation
+          style={{ flex: 1, marginLeft: 8 }}
+        />
+        <span style={{ width: 36, textAlign: 'right', fontFamily: 'var(--studio-mono, ui-monospace)', fontSize: 10, color: 'var(--studio-ink-mute, #9aa6b2)' }}>{el}°</span>
       </div>
     </div>
   );
