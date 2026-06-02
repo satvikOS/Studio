@@ -1118,6 +1118,7 @@ const KEYMAP = [
     ['Cmd+O', 'Open scene file'],
     ['Cmd+E', 'Export GLTF'],
     ['Cmd+Shift+E', 'Export viewport PNG'],
+    ['Shift+H', 'Isolate selected (hide others)'],
     ['Cmd+,', 'Settings'],
     ['Cmd+K', 'Command palette'],
     ['Cmd+1/2/3', 'Right panel: Inspector / Outliner / Layers'],
@@ -3046,6 +3047,13 @@ export function StudioShellV3({ mode = 'dark' }) {
           const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
           if (sel) sel.visible = false;
         }
+        e.preventDefault();
+      } else if (!meta && e.shiftKey && (e.key === 'h' || e.key === 'H')) {
+        // Slice 489 — Shift+H hides everything except the selected primitive
+        // (isolate-selected). Re-press unhides via Alt+H or Reveal All.
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        if (window.__studioHideUnselected) window.__studioHideUnselected();
         e.preventDefault();
       } else if (!meta && !e.altKey && !e.shiftKey && (e.key === 'a' || e.key === 'A')) {
         // Slice 431 — A toggles select-all ↔ deselect-all (Blender A parity).

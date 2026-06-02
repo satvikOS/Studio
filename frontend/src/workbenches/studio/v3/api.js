@@ -212,6 +212,16 @@ export function registerV3Api() {
     });
     return { ok: true, revealed: n };
   };
+  window.__studioHideUnselected = () => {
+    const scene = window.__archdiscScene;
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!scene || !sel) return { ok: false, error: 'no selection' };
+    let n = 0;
+    scene.traverse((o) => {
+      if (o.userData && o.userData.archdiscStudioPrimitive && o !== sel && o.visible) { o.visible = false; n++; }
+    });
+    return { ok: true, hidden: n };
+  };
 
   // Undo stack.
   window.__studioPushUndo = () => pushUndo();
