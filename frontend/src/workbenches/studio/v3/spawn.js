@@ -63,6 +63,7 @@ const _jitter = () => {
 
 export function spawnPrimitive(kind, scene, opts = {}) {
   if (!scene) return null;
+  if (typeof window !== 'undefined' && window.__studioPushUndo) window.__studioPushUndo();
   const geom = buildGeometry(kind);
   const mat = opts.material || new THREE.MeshStandardMaterial({
     color: 0x9aa6b2,

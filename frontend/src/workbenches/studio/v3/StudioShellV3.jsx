@@ -2479,6 +2479,7 @@ function StatusBar({ wb, editMode }) {
       <span data-studio-v3-status="fps">{fps} fps</span>
       <span data-studio-v3-status="calls">{calls} calls</span>
       <span data-studio-v3-status="units">mm</span>
+      <UndoDepth />
       <DirtyDot />
       <span data-studio-v3-status="ready"><span className="studio-statusbar-dot" />ready</span>
     </div>
@@ -2519,6 +2520,29 @@ function ShadingModeIndicator() {
         textTransform: 'capitalize',
       }}
     >· {mode}</button>
+  );
+}
+
+function UndoDepth() {
+  const [depth, setDepth] = React.useState(0);
+  React.useEffect(() => {
+    const id = setInterval(() => {
+      const fn = window.__studioUndoStackLen;
+      if (typeof fn === 'function') setDepth(fn() | 0);
+    }, 500);
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <span
+      data-studio-v3-status="undo-depth"
+      data-studio-v3-undo-depth={String(depth)}
+      title={`Undo stack: ${depth} step(s) — Cmd+Z to undo`}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 4,
+        color: depth > 0 ? 'var(--studio-accent, #1de9b6)' : 'var(--studio-ink-mute, #9aa6b2)',
+        fontVariantNumeric: 'tabular-nums',
+      }}
+    >u:{depth}</span>
   );
 }
 
