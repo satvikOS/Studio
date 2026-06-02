@@ -3651,12 +3651,17 @@ function InspectorFilter() {
 // Slice 542 — Renderer / scene perf diagnostics. Polls renderer.info
 // every second so the panel stays cheap.
 function PerformanceSection() {
-  const [info, setInfo] = useState({ calls: 0, tris: 0, points: 0, lines: 0, geom: 0, tex: 0, programs: 0 });
+  const [info, setInfo] = useState({ calls: 0, tris: 0, points: 0, lines: 0, geom: 0, tex: 0, programs: 0, sceneKb: 0 });
   useEffect(() => {
     const read = () => {
       const vp = window.__archdiscViewport;
       if (!vp || !vp.renderer || !vp.renderer.info) return;
       const r = vp.renderer.info;
+      let sceneKb = 0;
+      try {
+        const json = window.__studioSaveScene && window.__studioSaveScene();
+        if (json) sceneKb = Math.round(json.length / 102.4) / 10;
+      } catch (_) {}
       setInfo({
         calls: r.render.calls,
         tris: r.render.triangles,
@@ -3665,9 +3670,10 @@ function PerformanceSection() {
         geom: r.memory.geometries,
         tex: r.memory.textures,
         programs: (r.programs && r.programs.length) || 0,
+        sceneKb,
       });
     };
-    const id = setInterval(read, 1000);
+    const id = setInterval(read, 1500);
     read();
     return () => clearInterval(id);
   }, []);
@@ -3687,6 +3693,7 @@ function PerformanceSection() {
       <Row k="geometries" v={info.geom} />
       <Row k="textures" v={info.tex} />
       <Row k="programs" v={info.programs} />
+      <Row k="scene KB" v={info.sceneKb} />
     </div>
   );
 }
