@@ -3737,6 +3737,17 @@ function LayersRows() {
   const [version, setVersion] = useState(0);
   const priorMask = React.useRef(null);
   const refresh = () => setVersion((v) => v + 1);
+  // Slice 544 — Layer rename persisted to localStorage so users can label
+  // their semantic groupings (e.g., "blockout", "ref", "lights").
+  const NAMES_KEY = 'studio.v3.layer-names';
+  const [names, setNames] = useState(() => {
+    try { return JSON.parse(window.localStorage.getItem(NAMES_KEY) || '{}'); } catch (_) { return {}; }
+  });
+  const rename = (i, val) => {
+    const next = { ...names, [i]: val };
+    setNames(next);
+    try { window.localStorage.setItem(NAMES_KEY, JSON.stringify(next)); } catch (_) {}
+  };
   const cam = () => {
     const vp = window.__archdiscViewport;
     return vp && vp.camera;
@@ -3786,7 +3797,22 @@ function LayersRows() {
             onChange={() => toggle(i)}
             title={`Toggle layer ${i}`}
           />
-          <span style={{ flex: 1 }}>Layer {i}</span>
+          <input
+            type="text"
+            data-studio-v3-layer-name={i}
+            defaultValue={names[i] || `Layer ${i}`}
+            onBlur={(e) => rename(i, e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { rename(i, e.currentTarget.value); e.currentTarget.blur(); } }}
+            style={{
+              flex: 1, padding: '1px 4px', fontSize: 11,
+              background: 'transparent',
+              border: '1px solid transparent',
+              color: 'var(--studio-ink, #e6edf3)', fontFamily: 'inherit',
+              minWidth: 0,
+            }}
+            onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--studio-ink-mute, #1f2733)'; }}
+            onMouseLeave={(e) => { if (document.activeElement !== e.currentTarget) e.currentTarget.style.borderColor = 'transparent'; }}
+          />
           <button
             type="button"
             data-studio-v3-layer-solo={i}
