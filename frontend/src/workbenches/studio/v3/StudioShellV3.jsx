@@ -1277,6 +1277,7 @@ const KEYMAP = [
     ['M', 'Measure distance between 2 selected'],
     ['Cmd+Alt+A', 'Add text annotation at selection'],
     ['Cmd+L', 'Toggle transform lock on selection'],
+    ['Cmd+R', 'Reset camera home'],
     ['Alt+1..9', 'Recall camera bookmark by index'],
     ['Numpad 1/3/7', 'Front / Right / Top camera (Blender parity)'],
     ['Numpad 5', 'Toggle perspective / ortho'],
@@ -5532,6 +5533,12 @@ export function StudioShellV3({ mode = 'dark' }) {
           const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
           if (sel) sel.visible = false;
         }
+        e.preventDefault();
+      } else if (meta && !e.shiftKey && !e.altKey && (e.key === 'r' || e.key === 'R')) {
+        // Slice 556 — Cmd+R resets the camera home.
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        if (window.__studioResetCamera) window.__studioResetCamera();
         e.preventDefault();
       } else if (meta && !e.shiftKey && !e.altKey && (e.key === 'l' || e.key === 'L')) {
         // Slice 529 — Cmd/Ctrl+L toggles transform lock on selection.

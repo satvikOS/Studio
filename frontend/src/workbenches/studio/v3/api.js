@@ -338,6 +338,21 @@ export function registerV3Api() {
     requestAnimationFrame(tick);
   }
 
+  // Slice 556 — Reset camera home.
+  window.__studioResetCamera = () => {
+    const vp = window.__archdiscViewport;
+    if (!vp || !vp.camera) return { ok: false, error: 'no viewport' };
+    vp.camera.position.set(0.15, 0.12, 0.18);
+    const ctrl = vp.orbitControls || vp.controls;
+    if (ctrl && ctrl.target) {
+      ctrl.target.set(0, 0, 0);
+      if (typeof ctrl.update === 'function') ctrl.update();
+    }
+    if (window.__studioFrameAll) window.__studioFrameAll();
+    if (window.__studioToast) window.__studioToast('Camera reset', 'info');
+    return { ok: true };
+  };
+
   // Slice 521 — Annotation op. Spawns a Sprite-style text overlay anchored
   // at a world point. Uses a CanvasTexture so we don't pull in extra deps.
   // Persists in userData.archdiscStudioAnnotation. window.__studioListAnnotations
