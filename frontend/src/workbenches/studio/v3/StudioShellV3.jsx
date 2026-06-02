@@ -2476,6 +2476,7 @@ function StatusBar({ wb, editMode }) {
       <span data-studio-v3-status="frame" data-studio-v3-frame={frame}>f {frame}</span>
       <ShadingModeIndicator />
       <span data-studio-v3-status="primitives">{primCount} prim</span>
+      <SceneTotals />
       {meshStats && (
         <span data-studio-v3-status="mesh" data-studio-v3-mesh-v={meshStats.v} data-studio-v3-mesh-t={meshStats.t}>
           v {meshStats.v} · t {meshStats.t}
@@ -2527,6 +2528,40 @@ function ShadingModeIndicator() {
         textTransform: 'capitalize',
       }}
     >· {mode}</button>
+  );
+}
+
+function SceneTotals() {
+  const [tot, setTot] = React.useState({ v: 0, t: 0 });
+  React.useEffect(() => {
+    const read = () => {
+      const s = window.__archdiscScene;
+      if (!s) return;
+      let v = 0, t = 0;
+      try {
+        s.traverse((o) => {
+          if (!(o.userData && o.userData.archdiscStudioPrimitive)) return;
+          const g = o.geometry;
+          if (!g || !g.attributes || !g.attributes.position) return;
+          v += g.attributes.position.count;
+          t += g.index ? Math.floor(g.index.array.length / 3) : Math.floor(g.attributes.position.count / 3);
+        });
+      } catch (_) {}
+      setTot({ v, t });
+    };
+    const id = setInterval(read, 1500);
+    read();
+    return () => clearInterval(id);
+  }, []);
+  const fmt = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
+  return (
+    <span
+      data-studio-v3-status="scene-totals"
+      data-studio-v3-scene-v={tot.v}
+      data-studio-v3-scene-t={tot.t}
+      title={`Scene totals: ${tot.v} vertices · ${tot.t} triangles`}
+      style={{ color: 'var(--studio-ink-mute, #9aa6b2)', fontVariantNumeric: 'tabular-nums' }}
+    >Σv {fmt(tot.v)} · Σt {fmt(tot.t)}</span>
   );
 }
 
