@@ -3102,6 +3102,8 @@ function RightPanel({ collapsed, onToggle, activeWb, editMode, selection }) {
             <AnnotationsSection />
             {/* Slice 538 — Reference image plate list. */}
             <ImagePlatesSection />
+            {/* Slice 559 — Tags. */}
+            <TagsSection />
             {/* Slice 533 — Render section: custom-size PNG. */}
             <RenderSection />
             <div className="studio-right-section">
@@ -3402,6 +3404,79 @@ function RenderSection() {
           fontWeight: 600, padding: '5px', borderRadius: 3, fontSize: 11, cursor: 'pointer',
         }}
       >Render → PNG</button>
+    </div>
+  );
+}
+
+// Slice 559 — Tags section. Input adds a tag to the selection; list
+// shows every tag in the scene with click-to-select.
+function TagsSection() {
+  const [draft, setDraft] = useState('');
+  const [all, setAll] = useState([]);
+  const [, force] = useState(0);
+  useEffect(() => {
+    const read = () => {
+      const list = (window.__studioListTags && window.__studioListTags()) || [];
+      setAll(list);
+    };
+    const id = setInterval(read, 800);
+    read();
+    return () => clearInterval(id);
+  }, []);
+  const add = () => {
+    const t = draft.trim();
+    if (!t) return;
+    if (window.__studioAddTag) window.__studioAddTag(t);
+    setDraft('');
+    force((v) => v + 1);
+  };
+  const pick = (t) => { if (window.__studioSelectByTag) window.__studioSelectByTag(t); };
+  return (
+    <div className="studio-right-section" data-studio-v3-tags-section>
+      <div className="studio-right-section-title">Tags · {all.length}</div>
+      <div className="studio-right-row" style={{ gap: 4 }}>
+        <input
+          type="text"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') add(); }}
+          placeholder="tag…"
+          data-studio-v3-tag-draft
+          style={{
+            flex: 1, padding: '2px 6px', fontSize: 11,
+            background: 'var(--studio-bg, #0d1117)',
+            border: '1px solid var(--studio-ink-mute, #1f2733)',
+            color: 'var(--studio-ink, #e6edf3)', borderRadius: 3,
+            fontFamily: 'inherit',
+          }}
+        />
+        <button
+          type="button"
+          onClick={add}
+          data-studio-v3-tag-add
+          style={{
+            background: 'var(--studio-accent, #1de9b6)', border: 0, color: '#0d1117',
+            fontWeight: 600, padding: '2px 10px', borderRadius: 3, fontSize: 11, cursor: 'pointer',
+          }}
+        >+</button>
+      </div>
+      <div className="studio-right-row" style={{ flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+        {all.map((t) => (
+          <button
+            key={t}
+            type="button"
+            data-studio-v3-tag={t}
+            onClick={() => pick(t)}
+            style={{
+              background: 'var(--studio-bg-elev, #161b22)',
+              color: 'var(--studio-accent, #1de9b6)',
+              border: '1px solid var(--studio-ink-mute, #1f2733)',
+              borderRadius: 3, padding: '1px 8px', fontSize: 10,
+              cursor: 'pointer', fontFamily: 'var(--studio-mono, ui-monospace)',
+            }}
+          >#{t}</button>
+        ))}
+      </div>
     </div>
   );
 }

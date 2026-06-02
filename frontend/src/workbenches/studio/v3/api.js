@@ -397,6 +397,54 @@ export function registerV3Api() {
     return out;
   };
 
+  // Slice 559 — Tag selected primitives. Tags persist in userData.tags
+  // (a string[]) so they roundtrip through save / load. __studioListTags
+  // dedupes across the scene for UIs.
+  window.__studioAddTag = (tag) => {
+    const set = Array.isArray(window.__studioSelectedMeshesSet) && window.__studioSelectedMeshesSet.length
+      ? window.__studioSelectedMeshesSet.slice()
+      : (window.__studioSelectedMesh && window.__studioSelectedMesh() ? [window.__studioSelectedMesh()] : []);
+    if (!set.length || !tag) return { ok: false, error: 'no selection or tag' };
+    const t = String(tag).trim().slice(0, 32);
+    if (!t) return { ok: false, error: 'empty tag' };
+    for (const m of set) {
+      m.userData = m.userData || {};
+      m.userData.tags = m.userData.tags || [];
+      if (!m.userData.tags.includes(t)) m.userData.tags.push(t);
+    }
+    if (window.__studioToast) window.__studioToast(`Tagged ${set.length} as #${t}`, 'ok');
+    return { ok: true, tag: t, count: set.length };
+  };
+  window.__studioRemoveTag = (tag) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel || !sel.userData || !sel.userData.tags) return { ok: false };
+    sel.userData.tags = sel.userData.tags.filter((x) => x !== tag);
+    return { ok: true };
+  };
+  window.__studioListTags = () => {
+    const s = window.__archdiscScene;
+    if (!s) return [];
+    const seen = new Set();
+    s.traverse((o) => {
+      if (o.userData && Array.isArray(o.userData.tags)) {
+        for (const t of o.userData.tags) seen.add(t);
+      }
+    });
+    return Array.from(seen).sort();
+  };
+  window.__studioSelectByTag = (tag) => {
+    const s = window.__archdiscScene;
+    if (!s) return { ok: false };
+    const set = [];
+    s.traverse((o) => {
+      if (o.userData && Array.isArray(o.userData.tags) && o.userData.tags.includes(tag)) set.push(o);
+    });
+    window.__studioSelectedMeshesSet = set;
+    if (set.length && window.__studioSelectMesh) window.__studioSelectMesh(set[set.length - 1]);
+    if (window.__studioToast) window.__studioToast(`Selected ${set.length} #${tag}`, 'info');
+    return { ok: true, count: set.length };
+  };
+
   window.__studioAddAnnotation = (text, position) => {
     const s = window.__archdiscScene;
     if (!s) return { ok: false, error: 'no scene' };
