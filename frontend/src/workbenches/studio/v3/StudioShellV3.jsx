@@ -2175,6 +2175,27 @@ function OutlinerRows() {
     s.traverse((o) => { if (o.uuid === uuid) m = o; });
     if (m && window.__studioSelectMesh) window.__studioSelectMesh(m);
   };
+  // Slice 477 — per-row delete + visibility helpers.
+  const deleteMesh = (uuid) => {
+    const s = window.__archdiscScene || (window.__archdiscViewport && window.__archdiscViewport.scene);
+    if (!s) return;
+    let m = null;
+    s.traverse((o) => { if (o.uuid === uuid) m = o; });
+    if (!m) return;
+    if (window.__studioPushUndo) window.__studioPushUndo();
+    if (m.geometry) m.geometry.dispose();
+    if (Array.isArray(m.material)) m.material.forEach((mat) => mat.dispose && mat.dispose());
+    else if (m.material && m.material.dispose) m.material.dispose();
+    s.remove(m);
+    if (window.__studioDeselect) window.__studioDeselect();
+  };
+  const toggleVis = (uuid) => {
+    const s = window.__archdiscScene || (window.__archdiscViewport && window.__archdiscViewport.scene);
+    if (!s) return;
+    let m = null;
+    s.traverse((o) => { if (o.uuid === uuid) m = o; });
+    if (m) m.visible = !m.visible;
+  };
   return (
     <div className="studio-right-section">
       <div className="studio-right-section-title">Scene · {items.length}{filter && ` · ${visible.length} match`}</div>
@@ -2203,15 +2224,36 @@ function OutlinerRows() {
             className="studio-right-row"
             data-studio-v3-outliner-item={it.uuid}
             data-studio-v3-outliner-active={active ? 'true' : 'false'}
-            onClick={() => onPick(it.uuid)}
+            onClick={(e) => { if (e.target.tagName !== 'BUTTON') onPick(it.uuid); }}
             style={{
-              cursor: 'pointer',
+              cursor: 'pointer', alignItems: 'center', gap: 4,
               borderLeft: '2px solid ' + (active ? 'var(--studio-accent, #1de9b6)' : 'transparent'),
               paddingLeft: 6,
             }}
           >
-            <span style={{ textTransform: 'capitalize' }}>{it.name}</span>
-            <strong style={{ fontFamily: 'var(--studio-mono)', fontSize: 10, color: 'var(--studio-ink-mute)' }}>{it.uuid.slice(0, 6)}</strong>
+            <span style={{ flex: 1, textTransform: 'capitalize' }}>{it.name}</span>
+            <button
+              type="button"
+              data-studio-v3-outliner-visibility={it.uuid}
+              title="Toggle visibility"
+              onClick={(e) => { e.stopPropagation(); toggleVis(it.uuid); }}
+              style={{
+                padding: '0 4px', fontSize: 10,
+                background: 'transparent', color: 'var(--studio-ink-mute)',
+                border: '1px solid var(--studio-ink-mute)', borderRadius: 2, cursor: 'pointer',
+              }}
+            >👁</button>
+            <button
+              type="button"
+              data-studio-v3-outliner-delete={it.uuid}
+              title="Delete"
+              onClick={(e) => { e.stopPropagation(); deleteMesh(it.uuid); }}
+              style={{
+                padding: '0 4px', fontSize: 10,
+                background: 'transparent', color: 'var(--studio-ink-mute)',
+                border: '1px solid var(--studio-ink-mute)', borderRadius: 2, cursor: 'pointer',
+              }}
+            >×</button>
           </div>
         );
       })}
