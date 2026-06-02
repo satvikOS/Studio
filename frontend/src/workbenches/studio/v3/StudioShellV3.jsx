@@ -1088,6 +1088,8 @@ const KEYMAP = [
     ['R', 'Rotate tool'],
     ['S', 'Scale tool'],
     ['E', 'Extrude selected face (face mode)'],
+    ['I', 'Inset selected face (face mode)'],
+    ['W', 'Subdivide selected face (face mode)'],
   ] },
   { section: 'Selection', rows: [
     ['A', 'Toggle select-all / deselect-all'],
@@ -2961,6 +2963,22 @@ export function StudioShellV3({ mode = 'dark' }) {
         const cur = window.__studioGetEditMode && window.__studioGetEditMode();
         if (cur !== 'face') return;
         if (window.__studioExtrudeSelectedFaces) window.__studioExtrudeSelectedFaces(0.005);
+        e.preventDefault();
+      } else if (!meta && !e.shiftKey && !e.altKey && (e.key === 'i' || e.key === 'I')) {
+        // Slice 482 — I insets selected faces (Blender I parity).
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        const cur = window.__studioGetEditMode && window.__studioGetEditMode();
+        if (cur !== 'face') return;
+        if (window.__studioInsetSelectedFaces) window.__studioInsetSelectedFaces(0.3);
+        e.preventDefault();
+      } else if (!meta && !e.shiftKey && !e.altKey && (e.key === 'w' || e.key === 'W')) {
+        // Slice 482 — W subdivides selected faces (Blender W > Subdivide).
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        const cur = window.__studioGetEditMode && window.__studioGetEditMode();
+        if (cur !== 'face') return;
+        if (window.__studioSubdivideSelectedFaces) window.__studioSubdivideSelectedFaces();
         e.preventDefault();
       } else if (!meta && !e.shiftKey && !e.altKey && (e.key === 'g' || e.key === 'r' || e.key === 's')) {
         // Slice 429 — G/R/S set active transform tool (Blender muscle memory).
