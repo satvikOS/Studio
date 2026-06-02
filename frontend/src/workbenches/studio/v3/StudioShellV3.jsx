@@ -3178,6 +3178,35 @@ function MaterialRows() {
           </div>
         </>
       )}
+      {/* Slice 530 — Emissive color + intensity. */}
+      {isStd && (
+        <>
+          <div className="studio-right-row" style={{ alignItems: 'center' }}>
+            <span>Emissive</span>
+            <input
+              type="color"
+              data-studio-v3-material-emissive
+              defaultValue={mat.emissive ? '#' + mat.emissive.getHexString() : '#000000'}
+              onChange={(e) => {
+                if (mat.emissive) mat.emissive.set(e.target.value);
+                else mat.emissive = new (window.__archdiscTHREE ? window.__archdiscTHREE.Color : Object)(e.target.value);
+                mat.needsUpdate = true;
+              }}
+              style={{ width: 40, height: 22, padding: 0, border: '1px solid var(--studio-ink-mute)', borderRadius: 2, background: 'transparent', cursor: 'pointer' }}
+            />
+          </div>
+          <div className="studio-right-row" style={{ alignItems: 'center' }}>
+            <span>Glow</span>
+            <input
+              type="range" min="0" max="3" step="0.05"
+              data-studio-v3-material-emissive-intensity
+              defaultValue={typeof mat.emissiveIntensity === 'number' ? mat.emissiveIntensity : 1}
+              onInput={(e) => { mat.emissiveIntensity = parseFloat(e.target.value); mat.needsUpdate = true; }}
+              style={{ width: 90 }}
+            />
+          </div>
+        </>
+      )}
       <div className="studio-right-row" style={{ alignItems: 'center' }}>
         <span>Opacity</span>
         <input
