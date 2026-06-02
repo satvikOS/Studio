@@ -241,6 +241,10 @@ function TopBar({ onCycleTheme, theme }) {
             type="button"
             className="studio-topbar-menu"
             data-studio-v3-menu={m.toLowerCase()}
+            onClick={() => {
+              // Slice 509 — Help opens the About modal.
+              if (m === 'Help') window.dispatchEvent(new CustomEvent('studio-about-open'));
+            }}
           >{m}</button>
         ))}
       </div>
@@ -993,6 +997,7 @@ const COMMAND_PALETTE_ITEMS = [
   { id: 'open',          label: 'Open scene file',        hint: 'Cmd+O',     call: () => window.__studioOpenSceneFile && window.__studioOpenSceneFile() },
   { id: 'export',        label: 'Export GLTF',            hint: 'Cmd+E',     call: () => window.__studioDownloadGLTF && window.__studioDownloadGLTF() },
   { id: 'export-png',    label: 'Export viewport PNG',    hint: 'Cmd+Shift+E', call: () => window.__studioExportViewportPNG && window.__studioExportViewportPNG() },
+  { id: 'about',         label: 'About ArchDisc Studio',                     call: () => window.dispatchEvent(new CustomEvent('studio-about-open')) },
   { id: 'undo',          label: 'Undo',                   hint: 'Cmd+Z',     call: () => window.__studioUndo && window.__studioUndo() },
   { id: 'redo',          label: 'Redo',                   hint: 'Cmd+Shift+Z', call: () => window.__studioRedo && window.__studioRedo() },
   { id: 'select-all',    label: 'Select all',             hint: 'A',         call: () => window.__studioSelectAll && window.__studioSelectAll() },
@@ -1746,6 +1751,76 @@ function MarqueeOverlay() {
           }}
         />
       )}
+    </div>
+  );
+}
+
+// Slice 509 — About modal. Branded splash with name, tagline, build
+// version and a list of headline features. Opens on Help menu click +
+// the "about" command in the palette.
+function AboutModal() {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const onOpen = () => setOpen(true);
+    const onKey = (e) => {
+      if (open && e.key === 'Escape') { setOpen(false); e.preventDefault(); }
+    };
+    window.addEventListener('studio-about-open', onOpen);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('studio-about-open', onOpen);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+  if (!open) return null;
+  return (
+    <div
+      data-studio-v3-about
+      onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 9998,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: 'rgba(13,17,23,0.7)',
+      }}
+    >
+      <div style={{
+        background: 'var(--studio-bg-elev, #161b22)',
+        border: '1px solid var(--studio-accent, #1de9b6)',
+        borderRadius: 8, padding: '28px 32px', minWidth: 420, maxWidth: 520,
+        boxShadow: '0 14px 40px rgba(0,0,0,0.6)',
+        color: 'var(--studio-ink, #e6edf3)',
+      }}>
+        <div style={{
+          fontSize: 18, fontWeight: 700, letterSpacing: '0.04em',
+          color: 'var(--studio-accent, #1de9b6)', marginBottom: 4,
+        }}>ArchDisc Studio</div>
+        <div style={{
+          fontSize: 11, opacity: 0.65, marginBottom: 18, letterSpacing: '0.03em',
+        }}>A native 3D content creation platform for engineering disciplines.</div>
+        <div style={{ fontSize: 12, lineHeight: 1.6, marginBottom: 18 }}>
+          <div><strong>Build:</strong> archdisc · slice 509</div>
+          <div><strong>Renderer:</strong> Three.js · WebGL 2</div>
+          <div><strong>Archie:</strong> local LLM fleet at localhost:8080</div>
+          <div><strong>Repo:</strong> github.com/satvikOS/archdisc-Studio</div>
+        </div>
+        <div style={{
+          fontSize: 11, opacity: 0.7, marginBottom: 18,
+          fontFamily: 'var(--studio-mono, ui-monospace)',
+        }}>
+          8 workbenches · 200+ ops · BVH raycast · OCCT-ready
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <button
+            type="button"
+            data-studio-v3-about-close
+            onClick={() => setOpen(false)}
+            style={{
+              background: 'var(--studio-accent, #1de9b6)', border: 0, color: '#0d1117',
+              fontWeight: 600, padding: '6px 18px', borderRadius: 4, fontSize: 11, cursor: 'pointer',
+            }}
+          >Close</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -4174,6 +4249,7 @@ export function StudioShellV3({ mode = 'dark' }) {
       <ToastBus />
       <MarqueeOverlay />
       <SaveAsModal />
+      <AboutModal />
       <DocTitle activeWb={activeWb} />
     </div>
   );
