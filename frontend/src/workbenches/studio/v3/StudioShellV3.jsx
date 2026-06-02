@@ -2063,6 +2063,45 @@ function ViewportMinimap() {
   );
 }
 
+// Slice 549 — Top-center floating chip displaying the latest measurement
+// result for 6 seconds. Subscribes to studio-measure-result.
+function MeasurementChip() {
+  const [info, setInfo] = useState(null);
+  useEffect(() => {
+    let timer = 0;
+    const onResult = (e) => {
+      const d = e && e.detail;
+      if (!d) return;
+      setInfo(d);
+      clearTimeout(timer);
+      timer = setTimeout(() => setInfo(null), 6000);
+    };
+    window.addEventListener('studio-measure-result', onResult);
+    return () => { window.removeEventListener('studio-measure-result', onResult); clearTimeout(timer); };
+  }, []);
+  if (!info) return null;
+  return (
+    <div
+      data-studio-v3-measure-chip
+      data-studio-v3-measure-mm={info.mm.toFixed(2)}
+      style={{
+        position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)',
+        background: 'var(--studio-bg-elev, #161b22)',
+        border: '1px solid var(--studio-accent, #1de9b6)',
+        color: 'var(--studio-ink, #e6edf3)',
+        padding: '6px 14px', borderRadius: 4, fontSize: 12, zIndex: 22,
+        pointerEvents: 'none', fontFamily: 'var(--studio-mono, ui-monospace)',
+        boxShadow: '0 6px 18px rgba(0, 0, 0, 0.45)',
+      }}
+    >
+      <span style={{ color: 'var(--studio-accent, #1de9b6)' }}>📏</span>
+      {' '}
+      {info.mm.toFixed(1)} mm
+      <span style={{ opacity: 0.6, marginLeft: 8 }}>({info.distance.toFixed(4)} m)</span>
+    </div>
+  );
+}
+
 // Slice 519 — Subtle viewport brand watermark. Mounted as the first
 // child of the <main> viewport so it floats over the canvas but stays
 // below all overlays (HUD, menus, marquee).
@@ -5436,6 +5475,7 @@ export function StudioShellV3({ mode = 'dark' }) {
       >
         <ViewportWatermark />
         <ViewportMinimap />
+        <MeasurementChip />
         {/* V3's own Viewport3D — owns the scene + camera + gizmo +
             raycaster. No V2 dependency. */}
         <Viewport3D
