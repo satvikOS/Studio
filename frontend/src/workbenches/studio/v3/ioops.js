@@ -137,7 +137,34 @@ function downloadScene(name) {
   document.body.appendChild(a);
   a.click();
   setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 0);
+  pushRecentFile(a.download, json);
   return a.download;
+}
+
+// Slice 503 — Recent files. After each download/open, push the filename
+// onto a capped 5-entry list in localStorage so the File menu can show
+// "Open recent" without needing a backend.
+const RECENT_KEY = 'archdisc.studio.recentFiles';
+const RECENT_MAX = 5;
+function listRecentFiles() {
+  try {
+    const raw = window.localStorage.getItem(RECENT_KEY);
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr.slice(0, RECENT_MAX) : [];
+  } catch (_) { return []; }
+}
+function pushRecentFile(name, json) {
+  if (!name) return;
+  const cur = listRecentFiles().filter((it) => it.name !== name);
+  cur.unshift({ name, ts: Date.now(), json: json || null });
+  try { window.localStorage.setItem(RECENT_KEY, JSON.stringify(cur.slice(0, RECENT_MAX))); } catch (_) {}
+  window.dispatchEvent(new CustomEvent('studio-recent-changed'));
+}
+function openRecentFile(name) {
+  const found = listRecentFiles().find((it) => it.name === name);
+  if (!found || !found.json) return { ok: false, error: 'no cached content' };
+  return window.__studioLoadScene ? window.__studioLoadScene(found.json) : { ok: false };
 }
 
 function openSceneFile() {
@@ -153,6 +180,7 @@ function openSceneFile() {
       const reader = new FileReader();
       reader.onload = () => {
         const r = window.__studioLoadScene && window.__studioLoadScene(reader.result);
+        if (r && r.ok) pushRecentFile(f.name, reader.result);
         document.body.removeChild(input);
         resolve(r || { ok: false, error: 'no loader' });
       };
@@ -206,6 +234,8 @@ export function registerIOOps() {
   window.__studioAutosaveAt       = autosaveAt;
   window.__studioRestoreAutosave  = restoreAutosave;
   window.__studioExportViewportPNG = exportViewportPNG;
+  window.__studioListRecentFiles  = listRecentFiles;
+  window.__studioOpenRecentFile   = openRecentFile;
 }
 
 export function unregisterIOOps() {
@@ -213,5 +243,6 @@ export function unregisterIOOps() {
     '__studioImportAsset', '__studioExportGltfString', '__studioDownloadGLTF',
     '__studioDownloadScene', '__studioOpenSceneFile',
     '__studioAutosaveAt', '__studioRestoreAutosave', '__studioExportViewportPNG',
+    '__studioListRecentFiles', '__studioOpenRecentFile',
   ]) { try { delete window[k]; } catch (_) {} }
 }
