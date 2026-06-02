@@ -2233,6 +2233,8 @@ function RightPanel({ collapsed, onToggle, activeWb, editMode, selection }) {
             <LightingSection />
             {/* Slice 516 — Per-workbench Notes textarea. */}
             <NotesSection activeWb={activeWb} />
+            {/* Slice 518 — Recent undo history list. */}
+            <HistorySection />
             <div className="studio-right-section">
               <div className="studio-right-section-title">Edit selection</div>
               <SelectionRows />
@@ -2462,6 +2464,43 @@ function CameraSection() {
           }}
         >{proj}</button>
       </div>
+    </div>
+  );
+}
+
+// Slice 518 — History section. Reads the labels side-array kept by
+// pushUndo and renders the most recent 8 entries.
+function HistorySection() {
+  const [entries, setEntries] = useState([]);
+  useEffect(() => {
+    const read = () => {
+      const list = (window.__studioListUndoHistory && window.__studioListUndoHistory()) || [];
+      setEntries(list.slice(-8).reverse());
+    };
+    const id = setInterval(read, 700);
+    read();
+    return () => clearInterval(id);
+  }, []);
+  if (!entries.length) return null;
+  return (
+    <div className="studio-right-section" data-studio-v3-history-section>
+      <div className="studio-right-section-title">History · {entries.length}</div>
+      {entries.map((e, i) => (
+        <div
+          key={i}
+          data-studio-v3-history-entry={i}
+          style={{
+            display: 'flex', justifyContent: 'space-between',
+            padding: '2px 6px', fontSize: 11, color: 'var(--studio-ink-mute, #9aa6b2)',
+            borderLeft: i === 0 ? '2px solid var(--studio-accent, #1de9b6)' : '2px solid transparent',
+          }}
+        >
+          <span style={{ color: i === 0 ? 'var(--studio-ink, #e6edf3)' : 'inherit' }}>{e.label || 'edit'}</span>
+          <span style={{ fontFamily: 'var(--studio-mono, ui-monospace)', fontSize: 10 }}>
+            {((Date.now() - e.ts) / 1000).toFixed(0)}s
+          </span>
+        </div>
+      ))}
     </div>
   );
 }

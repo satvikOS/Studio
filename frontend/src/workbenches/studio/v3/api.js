@@ -22,7 +22,7 @@ const validEditModes = new Set(['object', 'vertex', 'edge', 'face', 'sculpt']);
 // Snapshot-based. Each entry captures the scene's primitive transforms +
 // geometry positions so an undo restores them. Cheap enough for the
 // typical mesh count (< 200 primitives, each < 5 K verts).
-const _undo = { past: [], future: [] };
+const _undo = { past: [], future: [], labels: [] };
 function snapshotScene() {
   const scene = window.__archdiscScene;
   if (!scene) return null;
@@ -109,11 +109,12 @@ function restoreScene(snap) {
   }
   return { ok: true, count: snap.length };
 }
-function pushUndo() {
+function pushUndo(label) {
   const snap = snapshotScene();
   if (snap) {
     _undo.past.push(snap);
-    if (_undo.past.length > 64) _undo.past.shift();
+    _undo.labels.push({ label: label || 'edit', ts: Date.now() });
+    if (_undo.past.length > 64) { _undo.past.shift(); _undo.labels.shift(); }
     _undo.future.length = 0;
   }
   return { ok: !!snap, depth: _undo.past.length };
@@ -341,7 +342,7 @@ export function registerV3Api() {
   };
 
   // Undo stack.
-  window.__studioPushUndo = () => pushUndo();
+  // Slice 518 — see below for the label-aware override.
   window.__studioUndo = () => {
     if (!_undo.past.length) return { ok: false, error: 'nothing to undo' };
     const current = snapshotScene();
@@ -357,6 +358,10 @@ export function registerV3Api() {
     return restoreScene(next);
   };
   window.__studioUndoStackLen = () => _undo.past.length;
+  window.__studioListUndoHistory = () => _undo.labels.slice();
+  // Allow callers to attach a custom label without rewriting every site
+  // that used the original no-arg signature.
+  window.__studioPushUndo = (label) => pushUndo(label);
 
   // Anim placeholder.
   window.__studioToggleAnimating = () => { _animating = !_animating; return { ok: true, animating: _animating }; };
