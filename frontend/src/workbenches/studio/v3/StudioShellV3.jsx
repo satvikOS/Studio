@@ -1087,6 +1087,83 @@ function AutosaveToast() {
   );
 }
 
+// ─── AxisGizmo (slice 473) ───────────────────────────────────────────────
+// Bottom-right corner SVG showing the live camera orientation as a
+// 3-axis cross. Updates every animation frame; the X/Y/Z labels are
+// coloured Blender-style red/green/blue. Click an axis label to snap
+// the camera to that view.
+function AxisGizmo() {
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    let raf = 0;
+    const tick = () => {
+      const vp = window.__archdiscViewport;
+      const cam = vp && vp.camera;
+      const el = ref.current;
+      if (cam && el) {
+        // Build a 3x3 rotation matrix from the camera's matrixWorldInverse.
+        // The basis vectors map world → screen.
+        const m = cam.matrixWorldInverse.elements;
+        // Each axis projected into camera space (column = world axis).
+        const ax = { x: m[0],  y: m[1],  z: m[2]  };
+        const ay = { x: m[4],  y: m[5],  z: m[6]  };
+        const az = { x: m[8],  y: m[9],  z: m[10] };
+        const lines = el.querySelectorAll('line');
+        const labels = el.querySelectorAll('text');
+        const r = 18;
+        const set = (ln, lbl, ax3) => {
+          const x = ax3.x * r;
+          const y = -ax3.y * r;
+          ln.setAttribute('x2', String(20 + x));
+          ln.setAttribute('y2', String(20 + y));
+          lbl.setAttribute('x', String(20 + x * 1.2));
+          lbl.setAttribute('y', String(20 + y * 1.2 + 3));
+        };
+        if (lines[0]) set(lines[0], labels[0], ax);
+        if (lines[1]) set(lines[1], labels[1], ay);
+        if (lines[2]) set(lines[2], labels[2], az);
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  return (
+    <svg
+      ref={ref}
+      data-studio-v3-axis-gizmo
+      viewBox="0 0 40 40"
+      style={{
+        position: 'absolute', bottom: 28, right: 12, zIndex: 22,
+        width: 40, height: 40, pointerEvents: 'auto',
+        background: 'rgba(0,0,0,0.35)', borderRadius: 6,
+      }}
+    >
+      <line x1="20" y1="20" x2="38" y2="20" stroke="#ff5e5e" strokeWidth="2" strokeLinecap="round" />
+      <line x1="20" y1="20" x2="20" y2="2"  stroke="#5eff9c" strokeWidth="2" strokeLinecap="round" />
+      <line x1="20" y1="20" x2="20" y2="38" stroke="#5e9cff" strokeWidth="2" strokeLinecap="round" />
+      <text
+        x="38" y="20"
+        fontSize="8" fill="#ff5e5e" fontFamily="ui-monospace, monospace"
+        style={{ cursor: 'pointer' }}
+        onClick={() => window.__studioSetCameraAxis && window.__studioSetCameraAxis('side')}
+      >X</text>
+      <text
+        x="20" y="2"
+        fontSize="8" fill="#5eff9c" fontFamily="ui-monospace, monospace"
+        style={{ cursor: 'pointer' }}
+        onClick={() => window.__studioSetCameraAxis && window.__studioSetCameraAxis('top')}
+      >Y</text>
+      <text
+        x="20" y="38"
+        fontSize="8" fill="#5e9cff" fontFamily="ui-monospace, monospace"
+        style={{ cursor: 'pointer' }}
+        onClick={() => window.__studioSetCameraAxis && window.__studioSetCameraAxis('front')}
+      >Z</text>
+    </svg>
+  );
+}
+
 // ─── ViewportStatsOverlay (slice 460) ─────────────────────────────────────
 // Pinned to the viewport's bottom-left corner. Shows FPS · draw calls ·
 // scene triangle total. Blender stats-overlay parity. Toggleable via
@@ -2790,6 +2867,7 @@ export function StudioShellV3({ mode = 'dark' }) {
         <QuickAddMenu />
         <SettingsModal />
         <ViewportStatsOverlay />
+        <AxisGizmo />
         <AutosaveToast />
         <AutosaveRestorePrompt />
       </main>
