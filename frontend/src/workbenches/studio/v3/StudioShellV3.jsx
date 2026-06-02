@@ -991,7 +991,16 @@ function CommandPalette() {
   }, [open]);
   if (!open) return null;
   const f = filter.toLowerCase();
-  const items = COMMAND_PALETTE_ITEMS.filter((it) => !f || it.label.toLowerCase().includes(f) || it.id.includes(f));
+  // Slice 504 — Synthesise recent-file entries dynamically each open
+  // so palette mirrors the latest localStorage state.
+  const recent = (window.__studioListRecentFiles && window.__studioListRecentFiles()) || [];
+  const recentItems = recent.map((it) => ({
+    id: `open-recent-${it.name}`,
+    label: `Open recent · ${it.name}`,
+    hint: '',
+    call: () => window.__studioOpenRecentFile && window.__studioOpenRecentFile(it.name),
+  }));
+  const items = [...COMMAND_PALETTE_ITEMS, ...recentItems].filter((it) => !f || it.label.toLowerCase().includes(f) || it.id.includes(f));
   const onKeyInside = (e) => {
     if (e.key === 'ArrowDown') { setActive((i) => Math.min(items.length - 1, i + 1)); e.preventDefault(); }
     else if (e.key === 'ArrowUp') { setActive((i) => Math.max(0, i - 1)); e.preventDefault(); }
