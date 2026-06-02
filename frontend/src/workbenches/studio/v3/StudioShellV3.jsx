@@ -250,6 +250,8 @@ function TopBar({ onCycleTheme, theme }) {
               else if (m === 'Edit') window.dispatchEvent(new CustomEvent('studio-edit-menu-toggle'));
               // Slice 552 — Select menu.
               else if (m === 'Select') window.dispatchEvent(new CustomEvent('studio-select-menu-toggle'));
+              // Slice 553 — View menu.
+              else if (m === 'View') window.dispatchEvent(new CustomEvent('studio-view-menu-toggle'));
             }}
           >{m}</button>
         ))}
@@ -2419,6 +2421,76 @@ function SelectMenu() {
           key={a.id}
           type="button"
           data-studio-v3-select-action={a.id}
+          onClick={() => { try { a.call(); } catch (_) {} setOpen(false); }}
+          style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+            width: '100%', padding: '5px 14px', textAlign: 'left',
+            background: 'transparent', border: 0,
+            color: 'var(--studio-ink, #e6edf3)', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(29, 233, 182, 0.08)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+        >
+          <span>{a.label}</span>
+          <span style={{ opacity: 0.5, fontSize: 10, fontFamily: 'var(--studio-mono, ui-monospace)' }}>{a.hint || ''}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// Slice 553 — View menu: framing, axis presets, projection toggle,
+// presentation mode, cheatsheet.
+function ViewMenu() {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const onToggle = () => setOpen((v) => !v);
+    const onKey = (e) => { if (open && e.key === 'Escape') { setOpen(false); e.preventDefault(); } };
+    const onClickOutside = (e) => {
+      if (!open) return;
+      if (e.target && e.target.closest && e.target.closest('[data-studio-v3-view-menu], [data-studio-v3-menu="view"]')) return;
+      setOpen(false);
+    };
+    window.addEventListener('studio-view-menu-toggle', onToggle);
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('mousedown', onClickOutside);
+    return () => {
+      window.removeEventListener('studio-view-menu-toggle', onToggle);
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('mousedown', onClickOutside);
+    };
+  }, [open]);
+  if (!open) return null;
+  const actions = [
+    { id: 'frame-all',      label: 'Frame all',           call: () => window.__studioFrameAll && window.__studioFrameAll() },
+    { id: 'frame-selected', label: 'Frame selected',     hint: '.', call: () => window.__studioFitSelected && window.__studioFitSelected() },
+    { id: 'front',          label: 'Front (1)',          call: () => window.__studioSetCameraAxis && window.__studioSetCameraAxis('front') },
+    { id: 'right',          label: 'Right (3)',          call: () => window.__studioSetCameraAxis && window.__studioSetCameraAxis('side') },
+    { id: 'top',            label: 'Top (7)',            call: () => window.__studioSetCameraAxis && window.__studioSetCameraAxis('top') },
+    { id: 'persp-ortho',    label: 'Toggle projection',  hint: '5', call: () => window.__studioToggleViewProjection && window.__studioToggleViewProjection() },
+    { id: 'cheatsheet',     label: 'Cheatsheet',         hint: 'F1', call: () => window.dispatchEvent(new CustomEvent('studio-cheatsheet-toggle', { detail: { open: true } })) },
+    { id: 'presentation',   label: 'Presentation mode',  hint: 'Cmd+P', call: () => window.dispatchEvent(new CustomEvent('studio-presentation-toggle')) },
+  ];
+  return (
+    <div
+      data-studio-v3-view-menu
+      style={{
+        position: 'fixed', top: 36, left: 280, zIndex: 9300,
+        minWidth: 240,
+        background: 'var(--studio-bg-elev, #161b22)',
+        border: '1px solid var(--studio-ink-mute, #1f2733)',
+        borderRadius: 6,
+        boxShadow: '0 20px 50px rgba(0,0,0,0.55)',
+        color: 'var(--studio-ink, #e6edf3)',
+        fontFamily: 'inherit', fontSize: 12,
+        padding: '6px 0',
+      }}
+    >
+      {actions.map((a) => (
+        <button
+          key={a.id}
+          type="button"
+          data-studio-v3-view-action={a.id}
           onClick={() => { try { a.call(); } catch (_) {} setOpen(false); }}
           style={{
             display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
@@ -5778,6 +5850,7 @@ export function StudioShellV3({ mode = 'dark' }) {
       <FileMenu />
       <EditMenu />
       <SelectMenu />
+      <ViewMenu />
       <SplashScreen />
       <SectionCollapser />
       <DocTitle activeWb={activeWb} />
