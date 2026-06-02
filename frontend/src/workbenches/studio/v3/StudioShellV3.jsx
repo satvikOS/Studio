@@ -2747,16 +2747,26 @@ function OutlinerRows() {
   useEffect(() => { if (typeof window !== 'undefined') window.__studioV3OutlinerFilter = filter; }, [filter]);
   useEffect(() => {
     const read = () => {
+      // Slice 507 — Tree-aware traversal: depth is the number of archdisc-
+      // group ancestors. Groups appear with their children indented under
+      // them in scene-graph order.
       const out = [];
-      if (window.__archdiscScene) {
-        try {
-          window.__archdiscScene.traverse((o) => {
-            if (o.userData && o.userData.archdiscStudioPrimitive) {
-              out.push({ uuid: o.uuid, name: o.name || o.userData.archdiscStudioPrimitiveKind || 'mesh' });
-            }
+      const s = window.__archdiscScene;
+      if (!s) { setItems(out); return; }
+      const walk = (node, depth) => {
+        if (!node) return;
+        if (node.userData && node.userData.archdiscStudioPrimitive) {
+          out.push({
+            uuid: node.uuid,
+            name: node.name || (node.userData && node.userData.archdiscStudioPrimitiveKind) || 'mesh',
+            depth,
+            kind: (node.userData && node.userData.archdiscStudioPrimitiveKind) || 'mesh',
           });
-        } catch (_) {}
-      }
+        }
+        const childDepth = node.userData && node.userData.archdiscStudioPrimitiveKind === 'group' ? depth + 1 : depth;
+        if (node.children) for (const c of node.children) walk(c, childDepth);
+      };
+      try { for (const c of s.children) walk(c, 0); } catch (_) {}
       setItems(out);
     };
     const id = setInterval(read, 600);
@@ -2844,14 +2854,19 @@ function OutlinerRows() {
             className="studio-right-row"
             data-studio-v3-outliner-item={it.uuid}
             data-studio-v3-outliner-active={active ? 'true' : 'false'}
+            data-studio-v3-outliner-depth={it.depth || 0}
             onClick={(e) => { if (e.target.tagName !== 'BUTTON') onPick(it.uuid); }}
             style={{
               cursor: 'pointer', alignItems: 'center', gap: 4,
               borderLeft: '2px solid ' + (active ? 'var(--studio-accent, #1de9b6)' : 'transparent'),
-              paddingLeft: 6,
+              paddingLeft: 6 + (it.depth || 0) * 12,
             }}
           >
-            <span style={{ flex: 1, textTransform: 'capitalize' }}>{it.name}</span>
+            <span style={{
+              flex: 1, textTransform: 'capitalize',
+              color: it.kind === 'group' ? 'var(--studio-accent, #1de9b6)' : 'inherit',
+              fontWeight: it.kind === 'group' ? 600 : 400,
+            }}>{it.kind === 'group' ? '▸ ' : ''}{it.name}</span>
             <button
               type="button"
               data-studio-v3-outliner-visibility={it.uuid}
