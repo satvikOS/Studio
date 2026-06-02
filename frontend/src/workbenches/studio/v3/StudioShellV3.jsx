@@ -1914,6 +1914,8 @@ function RightPanel({ collapsed, onToggle, activeWb, editMode, selection }) {
             <MaterialRows />
             {/* Slice 498 — Camera FOV + projection. */}
             <CameraSection />
+            {/* Slice 499 — Snap step inputs (translate / rotate / scale). */}
+            <SnapSection />
             <div className="studio-right-section">
               <div className="studio-right-section-title">Edit selection</div>
               <SelectionRows />
@@ -2143,6 +2145,73 @@ function CameraSection() {
           }}
         >{proj}</button>
       </div>
+    </div>
+  );
+}
+
+// Slice 499 — Snap section. Live-bound step inputs for translate
+// (mm), rotate (deg), scale (×), plus an on/off toggle that mirrors
+// the status-bar SnapIndicator.
+function SnapSection() {
+  const [on, setOn] = useState(false);
+  const [t, setT] = useState(10);   // mm
+  const [r, setR] = useState(15);   // deg
+  const [s, setS] = useState(0.1);  // ×
+  useEffect(() => {
+    const read = () => {
+      const snap = window.__studioGetSnap && window.__studioGetSnap();
+      if (!snap) return;
+      setOn(!!snap.on);
+      setT(Math.round(snap.t * 1000));     // m → mm
+      setR(Math.round((snap.r * 180) / Math.PI));
+      setS(Number(snap.s.toFixed(3)));
+    };
+    const id = setInterval(read, 600);
+    read();
+    return () => clearInterval(id);
+  }, []);
+  const setTrans = (mm) => { setT(mm); if (window.__studioSetTranslationSnap) window.__studioSetTranslationSnap(mm / 1000); };
+  const setRot   = (deg) => { setR(deg); if (window.__studioSetRotationSnap) window.__studioSetRotationSnap((deg * Math.PI) / 180); };
+  const setScl   = (x) => { setS(x); if (window.__studioSetScaleSnap) window.__studioSetScaleSnap(x); };
+  const cell = (val, onChange, min, max, step, suffix, attr) => (
+    <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 3 }}>
+      <input
+        type="number"
+        min={min}
+        max={max}
+        step={step}
+        value={val}
+        onChange={(e) => onChange(Number(e.target.value))}
+        data-studio-v3-snap-step={attr}
+        style={{
+          width: 50, background: 'var(--studio-bg, #0d1117)', border: '1px solid var(--studio-ink-mute, #1f2733)',
+          color: 'var(--studio-ink, #e6edf3)', padding: '2px 5px', borderRadius: 3,
+          fontFamily: 'var(--studio-mono, ui-monospace)', fontSize: 11, textAlign: 'right',
+        }}
+      />
+      <span style={{ color: 'var(--studio-ink-mute, #9aa6b2)', fontSize: 10 }}>{suffix}</span>
+    </span>
+  );
+  return (
+    <div className="studio-right-section" data-studio-v3-snap-section>
+      <div className="studio-right-section-title">Snap</div>
+      <div className="studio-right-row">
+        <span>Enabled</span>
+        <button
+          type="button"
+          data-studio-v3-snap-enable
+          data-studio-v3-snap-on={on ? 'true' : 'false'}
+          onClick={() => window.__studioToggleSnap && window.__studioToggleSnap()}
+          style={{
+            background: 'transparent', border: '1px solid var(--studio-ink-mute, #1f2733)',
+            color: on ? 'var(--studio-accent, #1de9b6)' : 'var(--studio-ink, #e6edf3)',
+            padding: '2px 8px', borderRadius: 3, fontSize: 11, cursor: 'pointer',
+          }}
+        >{on ? 'on' : 'off'}</button>
+      </div>
+      <div className="studio-right-row"><span>Translate</span>{cell(t, setTrans, 1, 1000, 1, 'mm', 'translate')}</div>
+      <div className="studio-right-row"><span>Rotate</span>{cell(r, setRot, 1, 90, 1, '°', 'rotate')}</div>
+      <div className="studio-right-row"><span>Scale</span>{cell(s, setScl, 0.01, 1, 0.01, '×', 'scale')}</div>
     </div>
   );
 }
