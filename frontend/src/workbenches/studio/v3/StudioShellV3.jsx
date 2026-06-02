@@ -3057,6 +3057,9 @@ function RightPanel({ collapsed, onToggle, activeWb, editMode, selection }) {
               <div className="studio-right-row"><span>Discipline</span><strong style={{ textTransform: 'capitalize' }}>{activeWb}</strong></div>
               <div className="studio-right-row"><span>Mode</span><strong style={{ textTransform: 'capitalize' }}>{editMode}</strong></div>
             </div>
+            {/* Slice 566 — Rename row works whether the React selection
+                prop is set or not, polling __studioSelectedMesh directly. */}
+            <RenameSection />
             {selection && (
               <div className="studio-right-section" data-studio-v3-inspector-selection>
                 <div className="studio-right-section-title">Selected · {selection.type || 'object'}</div>
@@ -3275,6 +3278,56 @@ function GeometryTools() {
           }}
         >{a.label}</button>
       ))}
+    </div>
+  );
+}
+
+// Slice 566 — Rename section polls __studioSelectedMesh directly so the
+// input is always available when a mesh is selected. F2 focuses it.
+function RenameSection() {
+  const [val, setVal] = useState('');
+  const [uuid, setUuid] = useState(null);
+  useEffect(() => {
+    const read = () => {
+      const m = window.__studioSelectedMesh && window.__studioSelectedMesh();
+      const id = m ? m.uuid : null;
+      setUuid((cur) => {
+        if (cur !== id) {
+          setVal((m && m.name) || '');
+        }
+        return id;
+      });
+    };
+    const t = setInterval(read, 500);
+    read();
+    return () => clearInterval(t);
+  }, []);
+  if (!uuid) return null;
+  const commit = (next) => {
+    const m = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (m) { m.name = next || 'mesh'; }
+  };
+  return (
+    <div className="studio-right-section" data-studio-v3-rename-section>
+      <div className="studio-right-section-title">Rename</div>
+      <div className="studio-right-row" style={{ alignItems: 'center', gap: 4 }}>
+        <span>Name</span>
+        <input
+          type="text"
+          data-studio-v3-rename-input
+          value={val}
+          onChange={(e) => setVal(e.target.value)}
+          onBlur={(e) => commit(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') { commit(e.currentTarget.value); e.currentTarget.blur(); } }}
+          style={{
+            flex: 1, padding: '2px 6px', fontSize: 11,
+            background: 'var(--studio-bg, #0d1117)',
+            border: '1px solid var(--studio-ink-mute, #1f2733)',
+            color: 'var(--studio-ink, #e6edf3)', borderRadius: 3,
+            fontFamily: 'var(--studio-mono, ui-monospace)',
+          }}
+        />
+      </div>
     </div>
   );
 }
@@ -5815,6 +5868,13 @@ export function StudioShellV3({ mode = 'dark' }) {
           const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
           if (sel) sel.visible = false;
         }
+        e.preventDefault();
+      } else if (!meta && !e.shiftKey && !e.altKey && e.key === 'F2') {
+        // Slice 566 — F2 focuses the inspector rename input (Blender F2 parity).
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        const inp = document.querySelector('[data-studio-v3-rename-input]');
+        if (inp) { inp.focus(); if (inp.select) inp.select(); }
         e.preventDefault();
       } else if (!meta && !e.shiftKey && !e.altKey && (e.key === 't' || e.key === 'T')) {
         // Slice 557 — Bare T toggles camera turntable autorotate.
