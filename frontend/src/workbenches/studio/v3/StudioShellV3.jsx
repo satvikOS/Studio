@@ -1184,6 +1184,7 @@ const KEYMAP = [
     ['Shift+H', 'Isolate selected (hide others)'],
     ['B', 'Box marquee select (drag a rectangle)'],
     ['M', 'Measure distance between 2 selected'],
+    ['Cmd+Alt+A', 'Add text annotation at selection'],
     ['Alt+G/R/S', 'Reset translate/rotate/scale'],
     ['Shift+;', 'Toggle transform snap (1 cm / 15° / 0.1)'],
     ['Cmd+,', 'Settings'],
@@ -4218,6 +4219,16 @@ export function StudioShellV3({ mode = 'dark' }) {
         } else {
           const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
           if (sel) sel.visible = false;
+        }
+        e.preventDefault();
+      } else if (meta && e.altKey && (e.key === 'a' || e.key === 'A')) {
+        // Slice 521 — Cmd/Ctrl+Alt+A drops a text annotation at the
+        // active selection.
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        if (window.__studioAddAnnotation) {
+          const r = window.__studioAddAnnotation('note ' + ((window.__studioListAnnotations && window.__studioListAnnotations().length) + 1));
+          if (r && r.ok && window.__studioToast) window.__studioToast(`Annotation: ${r.text}`, 'info');
         }
         e.preventDefault();
       } else if (!meta && !e.shiftKey && !e.altKey && (e.key === 'm' || e.key === 'M')) {

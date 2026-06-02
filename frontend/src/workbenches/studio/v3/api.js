@@ -252,6 +252,57 @@ export function registerV3Api() {
     sel.updateMatrixWorld(true);
     return { ok: true, kind };
   };
+  // Slice 521 — Annotation op. Spawns a Sprite-style text overlay anchored
+  // at a world point. Uses a CanvasTexture so we don't pull in extra deps.
+  // Persists in userData.archdiscStudioAnnotation. window.__studioListAnnotations
+  // returns [{ uuid, text, position }].
+  window.__studioAddAnnotation = (text, position) => {
+    const s = window.__archdiscScene;
+    if (!s) return { ok: false, error: 'no scene' };
+    let pos = position;
+    if (!pos) {
+      const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+      if (!sel) return { ok: false, error: 'no selection' };
+      const wp = new THREE.Vector3();
+      sel.getWorldPosition(wp);
+      pos = [wp.x, wp.y + 0.03, wp.z];
+    }
+    const txt = (text || 'note').slice(0, 60);
+    const canvas = document.createElement('canvas');
+    canvas.width = 256; canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = 'rgba(13, 17, 23, 0.85)';
+    ctx.fillRect(0, 0, 256, 64);
+    ctx.strokeStyle = 'rgba(29, 233, 182, 0.9)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(1, 1, 254, 62);
+    ctx.fillStyle = '#e6edf3';
+    ctx.font = '20px ui-monospace, Menlo, monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(txt, 128, 32);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.needsUpdate = true;
+    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+    const sprite = new THREE.Sprite(mat);
+    sprite.position.set(pos[0], pos[1], pos[2]);
+    sprite.scale.set(0.16, 0.04, 1);
+    sprite.userData = { archdiscStudioAnnotation: true, text: txt };
+    sprite.renderOrder = 999;
+    s.add(sprite);
+    return { ok: true, uuid: sprite.uuid, text: txt, position: pos };
+  };
+  window.__studioListAnnotations = () => {
+    const s = window.__archdiscScene;
+    if (!s) return [];
+    const out = [];
+    s.traverse((o) => {
+      if (o.userData && o.userData.archdiscStudioAnnotation) {
+        out.push({ uuid: o.uuid, text: o.userData.text, position: [o.position.x, o.position.y, o.position.z] });
+      }
+    });
+    return out;
+  };
+
   // Slice 512 — Distance measurement op. Takes the last two members
   // of __studioSelectedMeshesSet (or any explicit pair via uuids) and
   // returns world-space distance + dispatches studio-measure-result.
