@@ -1264,6 +1264,7 @@ const KEYMAP = [
     ['B', 'Box marquee select (drag a rectangle)'],
     ['M', 'Measure distance between 2 selected'],
     ['Cmd+Alt+A', 'Add text annotation at selection'],
+    ['Cmd+L', 'Toggle transform lock on selection'],
     ['/', 'Solo: isolate selection + frame · press again to restore'],
     ['Alt+G/R/S', 'Reset translate/rotate/scale'],
     ['Shift+;', 'Toggle transform snap (1 cm / 15° / 0.1)'],
@@ -4485,6 +4486,12 @@ export function StudioShellV3({ mode = 'dark' }) {
           const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
           if (sel) sel.visible = false;
         }
+        e.preventDefault();
+      } else if (meta && !e.shiftKey && !e.altKey && (e.key === 'l' || e.key === 'L')) {
+        // Slice 529 — Cmd/Ctrl+L toggles transform lock on selection.
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        if (window.__studioToggleLockSelected) window.__studioToggleLockSelected();
         e.preventDefault();
       } else if (meta && e.altKey && (e.key === 'a' || e.key === 'A')) {
         // Slice 521 — Cmd/Ctrl+Alt+A drops a text annotation at the

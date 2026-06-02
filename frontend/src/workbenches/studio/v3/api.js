@@ -252,6 +252,56 @@ export function registerV3Api() {
     sel.updateMatrixWorld(true);
     return { ok: true, kind };
   };
+  // Slice 529 — Lock / unlock selected. Locked meshes resist transform
+  // by snapping back to their pre-gizmo state on each frame. Flag stored
+  // in userData.archdiscStudioLocked.
+  window.__studioToggleLockSelected = () => {
+    const set = Array.isArray(window.__studioSelectedMeshesSet) && window.__studioSelectedMeshesSet.length
+      ? window.__studioSelectedMeshesSet.slice()
+      : (window.__studioSelectedMesh && window.__studioSelectedMesh() ? [window.__studioSelectedMesh()] : []);
+    if (!set.length) return { ok: false, error: 'no selection' };
+    // Toggle based on the first member's current state.
+    const nextLocked = !(set[0].userData && set[0].userData.archdiscStudioLocked);
+    for (const m of set) {
+      m.userData = m.userData || {};
+      m.userData.archdiscStudioLocked = nextLocked;
+      if (nextLocked) {
+        m.userData.__lockedTransform = {
+          p: [m.position.x, m.position.y, m.position.z],
+          r: [m.rotation.x, m.rotation.y, m.rotation.z],
+          s: [m.scale.x, m.scale.y, m.scale.z],
+        };
+      } else {
+        delete m.userData.__lockedTransform;
+      }
+    }
+    if (window.__studioToast) window.__studioToast(`${nextLocked ? 'Locked' : 'Unlocked'} ${set.length}`, 'info');
+    return { ok: true, locked: nextLocked, count: set.length };
+  };
+
+  // Bind a per-frame guard the first time the op is registered; safe to
+  // call repeatedly because it's idempotent on the symbol.
+  if (!window.__studioLockedGuardAttached) {
+    window.__studioLockedGuardAttached = true;
+    const tick = () => {
+      const s = window.__archdiscScene;
+      if (s) {
+        try {
+          s.traverse((o) => {
+            if (o.userData && o.userData.archdiscStudioLocked && o.userData.__lockedTransform) {
+              const lt = o.userData.__lockedTransform;
+              o.position.set(lt.p[0], lt.p[1], lt.p[2]);
+              o.rotation.set(lt.r[0], lt.r[1], lt.r[2]);
+              o.scale.set(lt.s[0], lt.s[1], lt.s[2]);
+            }
+          });
+        } catch (_) {}
+      }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+
   // Slice 521 — Annotation op. Spawns a Sprite-style text overlay anchored
   // at a world point. Uses a CanvasTexture so we don't pull in extra deps.
   // Persists in userData.archdiscStudioAnnotation. window.__studioListAnnotations
