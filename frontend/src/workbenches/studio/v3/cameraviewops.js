@@ -16,24 +16,44 @@ function vp() {
   return window.__archdiscViewport || null;
 }
 
+// Slice 527 — Camera bookmarks persist to localStorage so they survive
+// reloads. Rehydrate on first access if window slot is empty.
+const BOOKMARK_KEY = 'studio.v3.cameraBookmarks';
+function loadBookmarksFromDisk() {
+  try {
+    const raw = window.localStorage.getItem(BOOKMARK_KEY);
+    if (!raw) return {};
+    const obj = JSON.parse(raw);
+    return obj && typeof obj === 'object' ? obj : {};
+  } catch (_) { return {}; }
+}
+function persistBookmarks() {
+  try { window.localStorage.setItem(BOOKMARK_KEY, JSON.stringify(window.__studioCameraBookmarks || {})); } catch (_) {}
+}
+function ensureBookmarks() {
+  if (!window.__studioCameraBookmarks) window.__studioCameraBookmarks = loadBookmarksFromDisk();
+  return window.__studioCameraBookmarks;
+}
+
 function bookmarkCamera(name) {
   const v = vp();
   if (!v || !v.camera) return { ok: false, error: 'no viewport' };
   const ctrl = v.orbitControls || v.controls;
-  if (!window.__studioCameraBookmarks) window.__studioCameraBookmarks = {};
+  ensureBookmarks();
   const rec = {
     position: [v.camera.position.x, v.camera.position.y, v.camera.position.z],
     target: ctrl && ctrl.target ? [ctrl.target.x, ctrl.target.y, ctrl.target.z] : [0, 0, 0],
     ts: Date.now(),
   };
   window.__studioCameraBookmarks[name] = rec;
+  persistBookmarks();
   return { ok: true, name, ...rec };
 }
 
 function restoreCameraBookmark(name) {
   const v = vp();
   if (!v || !v.camera) return { ok: false, error: 'no viewport' };
-  if (!window.__studioCameraBookmarks) window.__studioCameraBookmarks = {};
+  ensureBookmarks();
   const rec = window.__studioCameraBookmarks[name];
   if (!rec) return { ok: false, error: `no bookmark named ${name}` };
   v.camera.position.set(rec.position[0], rec.position[1], rec.position[2]);
@@ -45,8 +65,16 @@ function restoreCameraBookmark(name) {
   return { ok: true, name, ...rec };
 }
 
+function deleteCameraBookmark(name) {
+  ensureBookmarks();
+  if (!(name in window.__studioCameraBookmarks)) return { ok: false, error: 'no such bookmark' };
+  delete window.__studioCameraBookmarks[name];
+  persistBookmarks();
+  return { ok: true, name };
+}
+
 function listCameraBookmarks() {
-  if (!window.__studioCameraBookmarks) window.__studioCameraBookmarks = {};
+  ensureBookmarks();
   return Object.keys(window.__studioCameraBookmarks).slice();
 }
 
@@ -83,6 +111,7 @@ export function registerCameraViewOps() {
   window.__studioBookmarkCamera        = bookmarkCamera;
   window.__studioRestoreCameraBookmark = restoreCameraBookmark;
   window.__studioListCameraBookmarks   = listCameraBookmarks;
+  window.__studioDeleteCameraBookmark  = deleteCameraBookmark;
   window.__studioToggleTurntable       = toggleTurntable;
   window.__studioSetFov                = setFov;
   window.__studioToggleViewProjection  = toggleViewProjection;
@@ -91,7 +120,7 @@ export function registerCameraViewOps() {
 export function unregisterCameraViewOps() {
   for (const k of [
     '__studioBookmarkCamera', '__studioRestoreCameraBookmark',
-    '__studioListCameraBookmarks', '__studioToggleTurntable',
+    '__studioListCameraBookmarks', '__studioDeleteCameraBookmark', '__studioToggleTurntable',
     '__studioSetFov', '__studioToggleViewProjection',
   ]) { try { delete window[k]; } catch (_) {} }
 }

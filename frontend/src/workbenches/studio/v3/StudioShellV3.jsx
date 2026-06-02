@@ -2843,20 +2843,37 @@ function CameraBookmarksSection() {
         >+</button>
       </div>
       {names.map((n) => (
-        <button
+        <div
           key={n}
-          type="button"
-          data-studio-v3-camera-bookmark={n}
-          onClick={() => restore(n)}
-          style={{
-            display: 'block', width: '100%', marginTop: 3,
-            padding: '3px 8px', textAlign: 'left',
-            background: 'var(--studio-bg-elev, #161b22)',
-            color: 'var(--studio-ink, #e6edf3)',
-            border: '1px solid var(--studio-ink-mute, #1f2733)',
-            borderRadius: 3, cursor: 'pointer', fontSize: 11, fontFamily: 'inherit',
-          }}
-        >{n}</button>
+          style={{ display: 'flex', gap: 4, marginTop: 3 }}
+        >
+          <button
+            type="button"
+            data-studio-v3-camera-bookmark={n}
+            onClick={() => restore(n)}
+            style={{
+              flex: 1, padding: '3px 8px', textAlign: 'left',
+              background: 'var(--studio-bg-elev, #161b22)',
+              color: 'var(--studio-ink, #e6edf3)',
+              border: '1px solid var(--studio-ink-mute, #1f2733)',
+              borderRadius: 3, cursor: 'pointer', fontSize: 11, fontFamily: 'inherit',
+            }}
+          >{n}</button>
+          <button
+            type="button"
+            data-studio-v3-camera-bookmark-delete={n}
+            onClick={() => {
+              if (window.__studioDeleteCameraBookmark) window.__studioDeleteCameraBookmark(n);
+              force((v) => v + 1);
+            }}
+            title="Delete bookmark"
+            style={{
+              padding: '0 6px', fontSize: 10,
+              background: 'transparent', color: 'var(--studio-ink-mute)',
+              border: '1px solid var(--studio-ink-mute)', borderRadius: 2, cursor: 'pointer',
+            }}
+          >×</button>
+        </div>
       ))}
     </div>
   );
