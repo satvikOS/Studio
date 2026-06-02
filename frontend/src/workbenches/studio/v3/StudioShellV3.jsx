@@ -1974,6 +1974,77 @@ function SplashScreen() {
   );
 }
 
+// Slice 532 — Bottom-left top-down minimap. Plots every archdisc primitive
+// at its world X,Z scaled to a 120×120 canvas with the camera position +
+// look ray as a fan. Provides spatial context in cluttered scenes.
+function ViewportMinimap() {
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    let raf = 0;
+    let last = 0;
+    const tick = (t) => {
+      raf = requestAnimationFrame(tick);
+      if (t - last < 100) return;
+      last = t;
+      const canvas = ref.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const W = canvas.width, H = canvas.height;
+      ctx.clearRect(0, 0, W, H);
+      ctx.fillStyle = 'rgba(13,17,23,0.6)';
+      ctx.fillRect(0, 0, W, H);
+      // Scale: assume primitives within ±2 m for the default scene.
+      const SCALE = 18; // px per metre
+      const cx = W / 2, cy = H / 2;
+      // Grid crosshair.
+      ctx.strokeStyle = 'rgba(154,166,178,0.18)'; ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, cy); ctx.lineTo(W, cy);
+      ctx.moveTo(cx, 0); ctx.lineTo(cx, H);
+      ctx.stroke();
+      const s = window.__archdiscScene;
+      if (s) {
+        try {
+          s.traverse((o) => {
+            if (!(o.userData && o.userData.archdiscStudioPrimitive)) return;
+            const px = cx + o.position.x * SCALE;
+            const py = cy + o.position.z * SCALE;
+            ctx.fillStyle = (o.userData && o.userData.archdiscStudioLocked) ? '#ff7a59' : 'var(--studio-accent, #1de9b6)';
+            ctx.fillStyle = (o.userData && o.userData.archdiscStudioLocked) ? '#ff7a59' : '#1de9b6';
+            ctx.beginPath();
+            ctx.arc(px, py, 3, 0, Math.PI * 2);
+            ctx.fill();
+          });
+        } catch (_) {}
+      }
+      const vp = window.__archdiscViewport;
+      if (vp && vp.camera) {
+        const cp = vp.camera.position;
+        ctx.fillStyle = '#e6edf3';
+        ctx.beginPath();
+        ctx.arc(cx + cp.x * SCALE, cy + cp.z * SCALE, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  return (
+    <canvas
+      ref={ref}
+      width={120}
+      height={120}
+      data-studio-v3-minimap
+      style={{
+        position: 'absolute', left: 10, bottom: 10, zIndex: 1,
+        border: '1px solid rgba(154,166,178,0.25)',
+        borderRadius: 4,
+        pointerEvents: 'none',
+      }}
+    />
+  );
+}
+
 // Slice 519 — Subtle viewport brand watermark. Mounted as the first
 // child of the <main> viewport so it floats over the canvas but stays
 // below all overlays (HUD, menus, marquee).
@@ -4872,6 +4943,7 @@ export function StudioShellV3({ mode = 'dark' }) {
       />
       <main className="studio-viewport studio-viewport-canvas" data-studio-v3-viewport>
         <ViewportWatermark />
+        <ViewportMinimap />
         {/* V3's own Viewport3D — owns the scene + camera + gizmo +
             raycaster. No V2 dependency. */}
         <Viewport3D
