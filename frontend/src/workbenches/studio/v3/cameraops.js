@@ -238,19 +238,22 @@ function randomScatter(count = 12, radius = 0.2, seed = 1234) {
 
 // ─── Group / merge meshes ────────────────────────────────────────────────
 function groupSelected() {
-  const m = activeMesh(); if (!m) return { ok: false, error: 'no mesh' };
+  // Slice 506 — Use the multi-select set if present, else fall back to
+  // the active mesh.
+  const set = Array.isArray(window.__studioSelectedMeshesSet) && window.__studioSelectedMeshesSet.length
+    ? window.__studioSelectedMeshesSet.slice()
+    : (activeMesh() ? [activeMesh()] : []);
+  if (!set.length) return { ok: false, error: 'no mesh' };
   if (window.__studioPushUndo) window.__studioPushUndo();
   const group = new THREE.Group();
-  group.name = `${m.name}-group`;
+  group.name = `${set[0].name}-group`;
   group.userData = {
     archdiscStudioPrimitive: true,
     archdiscStudioPrimitiveKind: 'group',
   };
   const s = scene(); s.add(group);
-  // For minimal slice: attach the active mesh under the group. (Multi-
-  // select group folds in across multiple meshes; lands in a follow-up.)
-  group.attach(m);
-  return { ok: true, uuid: group.uuid };
+  for (const m of set) group.attach(m);
+  return { ok: true, uuid: group.uuid, members: set.length };
 }
 
 function ungroupSelected() {
