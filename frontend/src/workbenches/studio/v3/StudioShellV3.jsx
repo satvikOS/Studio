@@ -1926,6 +1926,67 @@ function ViewportWatermark() {
   );
 }
 
+// Slice 525 — Click any inspector section title to collapse the body.
+// Persisted by title text. Uses a single delegated mousedown listener +
+// CSS-display toggle so we don't need to wrap every section.
+function SectionCollapser() {
+  useEffect(() => {
+    const KEY = 'studio.v3.collapsed-sections';
+    const read = () => {
+      try { return JSON.parse(window.localStorage.getItem(KEY) || '{}'); } catch (_) { return {}; }
+    };
+    const write = (m) => { try { window.localStorage.setItem(KEY, JSON.stringify(m)); } catch (_) {} };
+    const titleOf = (el) => (el.textContent || '').replace(/^▾\s*/, '').replace(/\s*·.*$/, '').trim();
+    const apply = () => {
+      const state = read();
+      const titles = document.querySelectorAll('.studio-right-section-title');
+      for (const t of titles) {
+        const sec = t.parentElement;
+        if (!sec) continue;
+        const title = titleOf(t);
+        const collapsed = !!state[title];
+        sec.setAttribute('data-studio-v3-collapsed', collapsed ? 'true' : 'false');
+        // Hide all non-title children.
+        for (const c of sec.children) {
+          if (c === t) continue;
+          c.style.display = collapsed ? 'none' : '';
+        }
+        t.style.cursor = 'pointer';
+        t.setAttribute('data-studio-v3-section-collapsible', title);
+        // Add a chevron prefix once.
+        if (!t.dataset.chevroned) {
+          t.dataset.chevroned = '1';
+          const chev = document.createElement('span');
+          chev.dataset.studioV3SectionChevron = '1';
+          chev.style.display = 'inline-block';
+          chev.style.width = '10px';
+          chev.style.transition = 'transform 120ms';
+          chev.style.transform = collapsed ? 'rotate(-90deg)' : 'rotate(0deg)';
+          chev.textContent = '▾';
+          t.insertBefore(chev, t.firstChild);
+        } else {
+          const chev = t.querySelector('[data-studio-v3-section-chevron]');
+          if (chev) chev.style.transform = collapsed ? 'rotate(-90deg)' : 'rotate(0deg)';
+        }
+      }
+    };
+    const onClick = (e) => {
+      const t = e.target.closest && e.target.closest('.studio-right-section-title');
+      if (!t) return;
+      const title = titleOf(t);
+      const state = read();
+      state[title] = !state[title];
+      write(state);
+      apply();
+    };
+    document.addEventListener('mousedown', onClick);
+    const id = setInterval(apply, 800); // re-apply after re-renders
+    apply();
+    return () => { document.removeEventListener('mousedown', onClick); clearInterval(id); };
+  }, []);
+  return null;
+}
+
 function ToastBus() {
   const [items, setItems] = useState([]);
   useEffect(() => {
@@ -4712,6 +4773,7 @@ export function StudioShellV3({ mode = 'dark' }) {
       <SaveAsModal />
       <AboutModal />
       <SplashScreen />
+      <SectionCollapser />
       <DocTitle activeWb={activeWb} />
     </div>
   );
