@@ -2591,6 +2591,66 @@ function WindowMenu() {
   );
 }
 
+// Slice 558 — Keypress flash overlay. Renders the last chord for 1.2 s
+// at viewport bottom-center. Gated by Display toggle 'keypress' (off by
+// default — on demand for screencasts).
+function KeypressFlash() {
+  const KEY = 'studio.v3.display-toggles';
+  const [enabled, setEnabled] = useState(() => {
+    try {
+      const obj = JSON.parse(window.localStorage.getItem(KEY) || '{}');
+      return !!obj.keypress;
+    } catch (_) { return false; }
+  });
+  const [text, setText] = useState('');
+  useEffect(() => {
+    const sync = () => {
+      try {
+        const obj = JSON.parse(window.localStorage.getItem(KEY) || '{}');
+        setEnabled(!!obj.keypress);
+      } catch (_) {}
+    };
+    const id = setInterval(sync, 800);
+    return () => clearInterval(id);
+  }, []);
+  useEffect(() => {
+    if (!enabled) return;
+    let timer = 0;
+    const onKey = (e) => {
+      const parts = [];
+      if (e.metaKey || e.ctrlKey) parts.push('Cmd');
+      if (e.shiftKey) parts.push('Shift');
+      if (e.altKey) parts.push('Alt');
+      let k = e.key;
+      if (k === ' ') k = 'Space';
+      else if (k.length === 1) k = k.toUpperCase();
+      parts.push(k);
+      setText(parts.join('+'));
+      clearTimeout(timer);
+      timer = setTimeout(() => setText(''), 1200);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => { window.removeEventListener('keydown', onKey); clearTimeout(timer); };
+  }, [enabled]);
+  if (!enabled || !text) return null;
+  return (
+    <div
+      data-studio-v3-keypress
+      data-studio-v3-keypress-text={text}
+      style={{
+        position: 'fixed', bottom: 64, left: '50%', transform: 'translateX(-50%)',
+        zIndex: 9100, pointerEvents: 'none',
+        background: 'var(--studio-bg-elev, #161b22)',
+        border: '1px solid var(--studio-accent, #1de9b6)',
+        color: 'var(--studio-ink, #e6edf3)',
+        fontFamily: 'var(--studio-mono, ui-monospace)',
+        fontSize: 13, padding: '6px 14px', borderRadius: 4,
+        boxShadow: '0 6px 18px rgba(0, 0, 0, 0.5)',
+      }}
+    >{text}</div>
+  );
+}
+
 function ToastBus() {
   const [items, setItems] = useState([]);
   useEffect(() => {
@@ -3782,6 +3842,7 @@ function DisplaySection() {
     { id: 'minimap', label: 'Minimap', defaultOn: true, onChange: (v) => { const el = document.querySelector('[data-studio-v3-minimap]'); if (el) el.style.display = v ? '' : 'none'; } },
     { id: 'watermark', label: 'Watermark', defaultOn: true, onChange: (v) => { const el = document.querySelector('[data-studio-v3-watermark]'); if (el) el.style.display = v ? '' : 'none'; } },
     { id: 'archie-status', label: 'Archie dot', defaultOn: true, onChange: (v) => { const el = document.querySelector('[data-studio-v3-archie-status]'); if (el) el.style.display = v ? '' : 'none'; } },
+    { id: 'keypress', label: 'Keypress flash', defaultOn: false, onChange: () => {} },
   ];
   const [state, setState] = useState(() => {
     try {
@@ -5949,6 +6010,7 @@ export function StudioShellV3({ mode = 'dark' }) {
       <OnboardingTour />
       <ToastBus />
       <MarqueeOverlay />
+      <KeypressFlash />
       <SaveAsModal />
       <AboutModal />
       <FileMenu />
