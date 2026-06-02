@@ -397,6 +397,29 @@ export function registerV3Api() {
     return out;
   };
 
+  // Slice 565 — Geometry tools. Compute smooth normals; merge near-
+  // duplicate vertices (welding). Lazy-imports BufferGeometryUtils.
+  window.__studioComputeVertexNormals = () => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel || !sel.geometry) return { ok: false, error: 'no selection' };
+    sel.geometry.computeVertexNormals();
+    if (window.__studioToast) window.__studioToast('Vertex normals recomputed', 'ok');
+    return { ok: true };
+  };
+  window.__studioWeldVertices = async (tol) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel || !sel.geometry) return { ok: false, error: 'no selection' };
+    const mod = await import('three/examples/jsm/utils/BufferGeometryUtils.js');
+    const before = sel.geometry.attributes.position.count;
+    const merged = mod.mergeVertices(sel.geometry, tol || 1e-4);
+    if (!merged) return { ok: false, error: 'merge failed' };
+    sel.geometry.dispose();
+    sel.geometry = merged;
+    const after = sel.geometry.attributes.position.count;
+    if (window.__studioToast) window.__studioToast(`Welded ${before}→${after}`, 'ok');
+    return { ok: true, before, after };
+  };
+
   // Slice 559 — Tag selected primitives. Tags persist in userData.tags
   // (a string[]) so they roundtrip through save / load. __studioListTags
   // dedupes across the scene for UIs.

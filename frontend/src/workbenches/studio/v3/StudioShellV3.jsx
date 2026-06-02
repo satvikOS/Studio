@@ -3078,6 +3078,8 @@ function RightPanel({ collapsed, onToggle, activeWb, editMode, selection }) {
             <TransformRows />
             {/* Slice 472 — Origin / pivot quick actions. */}
             <PivotActions />
+            {/* Slice 565 — Geometry maintenance tools. */}
+            <GeometryTools />
             {/* Slice 461 — Material properties. */}
             <MaterialRows />
             {/* Slice 498 — Camera FOV + projection. */}
@@ -3242,6 +3244,37 @@ function TransformRows() {
         {numIn('scale', 'y', m.scale.y.toFixed(4))}
         {numIn('scale', 'z', m.scale.z.toFixed(4))}
       </div>
+    </div>
+  );
+}
+
+// Slice 565 — Per-mesh geometry maintenance helpers.
+function GeometryTools() {
+  const actions = [
+    { id: 'normals',     label: 'Compute vertex normals',  call: () => window.__studioComputeVertexNormals && window.__studioComputeVertexNormals() },
+    { id: 'weld-fine',   label: 'Weld vertices (1e-4)',    call: () => window.__studioWeldVertices && window.__studioWeldVertices(1e-4) },
+    { id: 'weld-coarse', label: 'Weld vertices (1e-3)',    call: () => window.__studioWeldVertices && window.__studioWeldVertices(1e-3) },
+  ];
+  return (
+    <div className="studio-right-section" data-studio-v3-geometry-tools>
+      <div className="studio-right-section-title">Geometry</div>
+      {actions.map((a) => (
+        <button
+          key={a.id}
+          type="button"
+          data-studio-v3-geom-action={a.id}
+          onClick={a.call}
+          style={{
+            display: 'block', width: '100%', marginBottom: 3,
+            padding: '3px 8px', textAlign: 'left',
+            background: 'var(--studio-bg-elev, #161b22)',
+            color: 'var(--studio-ink, #e6edf3)',
+            border: '1px solid var(--studio-ink-mute, #1f2733)',
+            borderRadius: 3, cursor: 'pointer',
+            fontSize: 11, fontFamily: 'inherit',
+          }}
+        >{a.label}</button>
+      ))}
     </div>
   );
 }
