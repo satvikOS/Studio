@@ -1238,6 +1238,7 @@ const KEYMAP = [
 ];
 function KeymapCheatsheet() {
   const [open, setOpen] = useState(false);
+  const [filter, setFilter] = useState('');
   useEffect(() => {
     const onToggle = (ev) => { if (ev && ev.detail) setOpen(!!ev.detail.open); };
     window.addEventListener('studio-cheatsheet-toggle', onToggle);
@@ -1288,20 +1289,42 @@ function KeymapCheatsheet() {
           <strong style={{ fontSize: 14, color: 'var(--studio-accent, #1de9b6)', letterSpacing: '0.04em' }}>Keymap</strong>
           <span style={{ opacity: 0.6, fontSize: 11, fontFamily: 'var(--studio-mono, ui-monospace)' }}>F1 · ? · Esc</span>
         </div>
-        {KEYMAP.map((sec) => (
-          <div key={sec.section} data-studio-v3-cheatsheet-section={sec.section} style={{ marginBottom: 12 }}>
-            <div style={{ opacity: 0.55, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>{sec.section}</div>
-            {sec.rows.map(([key, desc]) => (
-              <div key={key} style={{ display: 'flex', gap: 12, padding: '2px 0', alignItems: 'baseline' }}>
-                <code style={{
-                  minWidth: 70, fontFamily: 'var(--studio-mono, ui-monospace)',
-                  color: 'var(--studio-accent, #1de9b6)', fontSize: 11,
-                }}>{key}</code>
-                <span style={{ opacity: 0.85 }}>{desc}</span>
-              </div>
-            ))}
-          </div>
-        ))}
+        <input
+          type="text"
+          data-studio-v3-cheatsheet-filter
+          autoFocus
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          placeholder="Filter…  (e.g. ‘group’, ‘export’, ‘snap’)"
+          style={{
+            width: '100%', marginBottom: 14, padding: '6px 10px',
+            background: 'var(--studio-bg-elev, #161b22)',
+            border: '1px solid var(--studio-ink-mute, #1f2733)',
+            color: 'var(--studio-ink, #e6edf3)', borderRadius: 4,
+            fontFamily: 'inherit', fontSize: 12, outline: 'none',
+          }}
+        />
+        {KEYMAP.map((sec) => {
+          const f = filter.toLowerCase();
+          const rows = f
+            ? sec.rows.filter(([k, d]) => k.toLowerCase().includes(f) || d.toLowerCase().includes(f))
+            : sec.rows;
+          if (!rows.length) return null;
+          return (
+            <div key={sec.section} data-studio-v3-cheatsheet-section={sec.section} style={{ marginBottom: 12 }}>
+              <div style={{ opacity: 0.55, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>{sec.section}</div>
+              {rows.map(([key, desc]) => (
+                <div key={key} data-studio-v3-cheatsheet-row style={{ display: 'flex', gap: 12, padding: '2px 0', alignItems: 'baseline' }}>
+                  <code style={{
+                    minWidth: 70, fontFamily: 'var(--studio-mono, ui-monospace)',
+                    color: 'var(--studio-accent, #1de9b6)', fontSize: 11,
+                  }}>{key}</code>
+                  <span style={{ opacity: 0.85 }}>{desc}</span>
+                </div>
+              ))}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
