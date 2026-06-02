@@ -198,6 +198,48 @@ function autosaveAt() {
   return Number(window.localStorage.getItem(AUTOSAVE_TS) || 0);
 }
 
+// Slice 548 — OBJ / STL exporters scoped to the active selection (or
+// the whole scene if none). Lazy-imports so we don't penalize cold load.
+async function exportSelectedOBJ(name) {
+  const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+  const target = sel || window.__archdiscScene;
+  if (!target) return { ok: false, error: 'nothing to export' };
+  const mod = await import('three/examples/jsm/exporters/OBJExporter.js');
+  const exporter = new mod.OBJExporter();
+  const txt = exporter.parse(target);
+  const blob = new Blob([txt], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  a.download = `${name || 'studio'}-${ts}.obj`;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 0);
+  if (window.__studioToast) window.__studioToast(`Exported ${a.download}`, 'ok');
+  return { ok: true, file: a.download, bytes: txt.length };
+}
+
+async function exportSelectedSTL(name) {
+  const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+  const target = sel || window.__archdiscScene;
+  if (!target) return { ok: false, error: 'nothing to export' };
+  const mod = await import('three/examples/jsm/exporters/STLExporter.js');
+  const exporter = new mod.STLExporter();
+  const txt = exporter.parse(target);
+  const blob = new Blob([txt], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  a.download = `${name || 'studio'}-${ts}.stl`;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 0);
+  if (window.__studioToast) window.__studioToast(`Exported ${a.download}`, 'ok');
+  return { ok: true, file: a.download, bytes: txt.length };
+}
+
 function exportViewportPNG(name, width, height) {
   const vp = window.__archdiscViewport;
   const renderer = vp && vp.renderer;
@@ -255,6 +297,8 @@ export function registerIOOps() {
   window.__studioExportViewportPNG = exportViewportPNG;
   window.__studioListRecentFiles  = listRecentFiles;
   window.__studioOpenRecentFile   = openRecentFile;
+  window.__studioExportOBJ        = exportSelectedOBJ;
+  window.__studioExportSTL        = exportSelectedSTL;
 }
 
 export function unregisterIOOps() {
@@ -263,5 +307,6 @@ export function unregisterIOOps() {
     '__studioDownloadScene', '__studioOpenSceneFile',
     '__studioAutosaveAt', '__studioRestoreAutosave', '__studioExportViewportPNG',
     '__studioListRecentFiles', '__studioOpenRecentFile',
+    '__studioExportOBJ', '__studioExportSTL',
   ]) { try { delete window[k]; } catch (_) {} }
 }
