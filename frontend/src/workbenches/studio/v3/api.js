@@ -306,6 +306,46 @@ export function registerV3Api() {
   // at a world point. Uses a CanvasTexture so we don't pull in extra deps.
   // Persists in userData.archdiscStudioAnnotation. window.__studioListAnnotations
   // returns [{ uuid, text, position }].
+  // Slice 534 — Reference image plate. Adds a Plane geometry textured
+  // from a data-URL or any image URL. Useful for tracing references.
+  // Persists in userData.archdiscStudioImagePlate.
+  window.__studioAddImagePlate = (url, opts = {}) => {
+    const s = window.__archdiscScene;
+    if (!s || !url) return { ok: false, error: 'no scene or url' };
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        const aspect = img.width / img.height;
+        const h = opts.height || 1;
+        const w = h * aspect;
+        const geom = new THREE.PlaneGeometry(w, h);
+        const tex = new THREE.Texture(img);
+        tex.needsUpdate = true;
+        const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide });
+        const mesh = new THREE.Mesh(geom, mat);
+        mesh.position.set(opts.x || 0, opts.y || h / 2, opts.z || 0);
+        if (opts.rotation) mesh.rotation.set(opts.rotation[0], opts.rotation[1], opts.rotation[2]);
+        mesh.name = opts.name || 'image-plate';
+        mesh.userData = { archdiscStudioImagePlate: true, src: url.length > 80 ? '<inline>' : url };
+        s.add(mesh);
+        if (window.__studioToast) window.__studioToast(`Reference plate added (${img.width}×${img.height})`, 'ok');
+        resolve({ ok: true, uuid: mesh.uuid, width: img.width, height: img.height });
+      };
+      img.onerror = () => resolve({ ok: false, error: 'image load failed' });
+      img.src = url;
+    });
+  };
+  window.__studioListImagePlates = () => {
+    const s = window.__archdiscScene;
+    if (!s) return [];
+    const out = [];
+    s.traverse((o) => {
+      if (o.userData && o.userData.archdiscStudioImagePlate) out.push({ uuid: o.uuid, name: o.name, src: o.userData.src });
+    });
+    return out;
+  };
+
   window.__studioAddAnnotation = (text, position) => {
     const s = window.__archdiscScene;
     if (!s) return { ok: false, error: 'no scene' };
