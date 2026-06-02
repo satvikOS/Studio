@@ -2539,6 +2539,8 @@ function RightPanel({ collapsed, onToggle, activeWb, editMode, selection }) {
             <HistorySection />
             {/* Slice 522 — Annotation list + delete. */}
             <AnnotationsSection />
+            {/* Slice 538 — Reference image plate list. */}
+            <ImagePlatesSection />
             {/* Slice 533 — Render section: custom-size PNG. */}
             <RenderSection />
             <div className="studio-right-section">
@@ -2838,6 +2840,73 @@ function RenderSection() {
           fontWeight: 600, padding: '5px', borderRadius: 3, fontSize: 11, cursor: 'pointer',
         }}
       >Render → PNG</button>
+    </div>
+  );
+}
+
+// Slice 538 — Image plates section. Lists every archdiscStudioImagePlate
+// mesh with a delete chip and a click-to-select.
+function ImagePlatesSection() {
+  const [items, setItems] = useState([]);
+  useEffect(() => {
+    const read = () => {
+      const list = (window.__studioListImagePlates && window.__studioListImagePlates()) || [];
+      setItems(list);
+    };
+    const id = setInterval(read, 700);
+    read();
+    return () => clearInterval(id);
+  }, []);
+  const select = (uuid) => {
+    const s = window.__archdiscScene;
+    if (!s) return;
+    let m = null;
+    s.traverse((o) => { if (o.uuid === uuid) m = o; });
+    if (m && window.__studioSelectMesh) window.__studioSelectMesh(m);
+  };
+  const del = (uuid) => {
+    const s = window.__archdiscScene;
+    if (!s) return;
+    let m = null;
+    s.traverse((o) => { if (o.uuid === uuid) m = o; });
+    if (m) {
+      if (m.material && m.material.map && m.material.map.dispose) m.material.map.dispose();
+      if (m.material && m.material.dispose) m.material.dispose();
+      if (m.geometry && m.geometry.dispose) m.geometry.dispose();
+      s.remove(m);
+    }
+  };
+  if (!items.length) return null;
+  return (
+    <div className="studio-right-section" data-studio-v3-image-plates-section>
+      <div className="studio-right-section-title">Reference plates · {items.length}</div>
+      {items.map((it) => (
+        <div
+          key={it.uuid}
+          data-studio-v3-image-plate-row={it.uuid}
+          style={{
+            display: 'flex', justifyContent: 'space-between',
+            padding: '2px 6px', fontSize: 11, alignItems: 'center', gap: 6,
+            cursor: 'pointer',
+          }}
+          onClick={() => select(it.uuid)}
+        >
+          <span style={{ flex: 1, color: 'var(--studio-ink, #e6edf3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {it.name}
+          </span>
+          <button
+            type="button"
+            data-studio-v3-image-plate-delete={it.uuid}
+            onClick={(e) => { e.stopPropagation(); del(it.uuid); }}
+            title="Delete plate"
+            style={{
+              padding: '0 4px', fontSize: 10,
+              background: 'transparent', color: 'var(--studio-ink-mute)',
+              border: '1px solid var(--studio-ink-mute)', borderRadius: 2, cursor: 'pointer',
+            }}
+          >×</button>
+        </div>
+      ))}
     </div>
   );
 }
