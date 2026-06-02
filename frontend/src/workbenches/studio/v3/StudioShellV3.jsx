@@ -4039,6 +4039,42 @@ function LightingSection() {
         />
         <span style={{ width: 36, textAlign: 'right', fontFamily: 'var(--studio-mono, ui-monospace)', fontSize: 10, color: 'var(--studio-ink-mute, #9aa6b2)' }}>{el}°</span>
       </div>
+      <HDRIRow />
+    </div>
+  );
+}
+
+// Slice 561 — HDRI preset dropdown driving __studioSetHDRIEnvironment.
+function HDRIRow() {
+  const [presets, setPresets] = useState(['off', 'studio', 'sunset', 'neutral']);
+  const [cur, setCur] = useState('off');
+  useEffect(() => {
+    const r = window.__studioListHDRIPresets && window.__studioListHDRIPresets();
+    if (r && Array.isArray(r.presets)) setPresets(r.presets);
+  }, []);
+  const onChange = (e) => {
+    setCur(e.target.value);
+    if (window.__studioSetHDRIEnvironment) window.__studioSetHDRIEnvironment(e.target.value);
+  };
+  return (
+    <div className="studio-right-row" style={{ alignItems: 'center' }}>
+      <span>HDRI</span>
+      <select
+        value={cur}
+        onChange={onChange}
+        data-studio-v3-hdri-preset
+        style={{
+          flex: 1, marginLeft: 8, padding: '2px 6px',
+          background: 'var(--studio-bg, #0d1117)',
+          border: '1px solid var(--studio-ink-mute, #1f2733)',
+          color: 'var(--studio-ink, #e6edf3)', borderRadius: 3,
+          fontFamily: 'inherit', fontSize: 11,
+        }}
+      >
+        {presets.map((p) => (
+          <option key={p} value={p}>{p}</option>
+        ))}
+      </select>
     </div>
   );
 }
