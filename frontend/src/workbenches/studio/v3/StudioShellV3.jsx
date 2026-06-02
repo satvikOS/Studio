@@ -1278,6 +1278,8 @@ const KEYMAP = [
     ['Cmd+Alt+A', 'Add text annotation at selection'],
     ['Cmd+L', 'Toggle transform lock on selection'],
     ['Alt+1..9', 'Recall camera bookmark by index'],
+    ['Numpad 1/3/7', 'Front / Right / Top camera (Blender parity)'],
+    ['Numpad 5', 'Toggle perspective / ortho'],
     ['/', 'Solo: isolate selection + frame · press again to restore'],
     ['Alt+G/R/S', 'Reset translate/rotate/scale'],
     ['Shift+;', 'Toggle transform snap (1 cm / 15° / 0.1)'],
@@ -5428,6 +5430,16 @@ export function StudioShellV3({ mode = 'dark' }) {
         const cur = (window.__studioGetShadingMode && window.__studioGetShadingMode()) || 'solid';
         const next = cycle[(cycle.indexOf(cur) + 1) % cycle.length];
         if (window.__studioSetShadingMode) window.__studioSetShadingMode(next);
+        e.preventDefault();
+      } else if (!meta && !e.shiftKey && !e.altKey && (e.code === 'Numpad1' || e.code === 'Numpad3' || e.code === 'Numpad7' || e.code === 'Numpad5')) {
+        // Slice 555 — Numpad-1/3/7 = front/right/top (Blender parity);
+        // Numpad-5 toggles persp/ortho.
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        if (e.code === 'Numpad1' && window.__studioSetCameraAxis) window.__studioSetCameraAxis('front');
+        else if (e.code === 'Numpad3' && window.__studioSetCameraAxis) window.__studioSetCameraAxis('side');
+        else if (e.code === 'Numpad7' && window.__studioSetCameraAxis) window.__studioSetCameraAxis('top');
+        else if (e.code === 'Numpad5' && window.__studioToggleViewProjection) window.__studioToggleViewProjection();
         e.preventDefault();
       } else if (!meta && !e.shiftKey && e.altKey && e.key >= '1' && e.key <= '9') {
         // Slice 537 — Alt+1..9 recalls camera bookmark by index. Bookmark
