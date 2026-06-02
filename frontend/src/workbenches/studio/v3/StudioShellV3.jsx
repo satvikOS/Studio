@@ -1114,6 +1114,7 @@ const KEYMAP = [
     ['Cmd+,', 'Settings'],
     ['Cmd+K', 'Command palette'],
     ['Cmd+1/2/3', 'Right panel: Inspector / Outliner / Layers'],
+    ['Cmd+P', 'Presentation mode (hide overlays)'],
     ['Cmd+F', 'Focus outliner filter'],
     ['Cmd+T', 'Toggle theme'],
     ['Cmd+/', 'Focus command bar'],
@@ -1315,6 +1316,27 @@ function AutosaveToast() {
         letterSpacing: '0.03em',
       }}
     >{msg}</div>
+  );
+}
+
+// Slice 479 — Presentation-mode hint banner. Reminds the user how to
+// exit the clean viewport.
+function PresentationBanner() {
+  return (
+    <div
+      data-studio-v3-presentation-banner
+      style={{
+        position: 'absolute', top: 12, left: '50%',
+        transform: 'translateX(-50%)', zIndex: 22,
+        background: 'rgba(13, 17, 23, 0.85)',
+        color: 'var(--studio-ink-mute, #9aa6b2)',
+        border: '1px solid var(--studio-ink-mute, #1f2733)',
+        borderRadius: 3, padding: '4px 12px',
+        fontFamily: 'var(--studio-mono, ui-monospace)', fontSize: 10,
+        pointerEvents: 'none',
+        letterSpacing: '0.03em',
+      }}
+    >Presentation — Esc / Cmd+P to exit</div>
   );
 }
 
@@ -2626,6 +2648,18 @@ export function StudioShellV3({ mode = 'dark' }) {
   const [selection, setSelection] = useState(null);
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const [thread, setThread] = useState([]);
+  // Slice 479 — Presentation mode (clean viewport with overlays hidden).
+  const [present, setPresent] = useState(false);
+  useEffect(() => {
+    const onToggle = () => setPresent((v) => !v);
+    const onEsc = (e) => { if (e.key === 'Escape' && present) setPresent(false); };
+    window.addEventListener('studio-presentation-toggle', onToggle);
+    window.addEventListener('keydown', onEsc);
+    return () => {
+      window.removeEventListener('studio-presentation-toggle', onToggle);
+      window.removeEventListener('keydown', onEsc);
+    };
+  }, [present]);
   // Slice 407 — Archie's side dock removed; thread strip lives above the
   // cmdbar instead, only visible when there are messages. Cmd+/ now
   // focuses the cmdbar input (most useful alias of the old toggle).
@@ -2779,6 +2813,12 @@ export function StudioShellV3({ mode = 'dark' }) {
         // Slice 476 — Cmd/Ctrl+K opens the command palette.
         e.preventDefault();
         window.dispatchEvent(new CustomEvent('studio-command-palette-toggle'));
+      } else if (meta && e.key.toLowerCase() === 'p') {
+        // Slice 479 — Cmd/Ctrl+P toggles presentation mode (hide overlays).
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent('studio-presentation-toggle'));
       } else if (meta && !e.shiftKey && (e.key === '1' || e.key === '2' || e.key === '3')) {
         // Slice 478 — Cmd+1/2/3 switches right-panel tab to
         // inspector / outliner / layers.
@@ -3104,6 +3144,8 @@ export function StudioShellV3({ mode = 'dark' }) {
       className="studio-app"
       data-studio-v3-shell
       data-studio-v3-mode={theme}
+      data-studio-v3-presentation={present ? 'true' : 'false'}
+      style={present ? { '--present-hide': 'none' } : undefined}
     >
       <TopBar
         theme={theme}
@@ -3152,17 +3194,18 @@ export function StudioShellV3({ mode = 'dark' }) {
           axis={axis}
           setAxis={(a) => { setAxis(a); if (window.__studioSetCameraAxis) window.__studioSetCameraAxis(a); }}
         />
-        <WelcomeCard />
+        {!present && <WelcomeCard />}
         <KeymapCheatsheet />
         <ContextMenu />
         <MarkingMenu />
         <QuickAddMenu />
         <CommandPalette />
         <SettingsModal />
-        <ViewportStatsOverlay />
-        <AxisGizmo />
-        <AutosaveToast />
-        <AutosaveRestorePrompt />
+        {!present && <ViewportStatsOverlay />}
+        {!present && <AxisGizmo />}
+        {!present && <AutosaveToast />}
+        {!present && <AutosaveRestorePrompt />}
+        {present && <PresentationBanner />}
       </main>
       {/* Slice 407 — right side is always the RightPanel now. Archie no
           longer overlays this slot; it lives only at the bottom. */}
