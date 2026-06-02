@@ -3223,24 +3223,46 @@ function TransformRows() {
   return (
     <div className="studio-right-section" data-studio-v3-transform-rows key={version}>
       <div className="studio-right-section-title">Transform</div>
-      <div className="studio-right-row"><span>Position</span></div>
+      {/* Slice 564 — Each row gets a Reset chip that drives __studioResetTransform. */}
+      <TransformLabelRow label="Position" kind="g" />
       <div className="studio-right-row" style={{ gap: 4 }}>
         {numIn('position', 'x', m.position.x.toFixed(4))}
         {numIn('position', 'y', m.position.y.toFixed(4))}
         {numIn('position', 'z', m.position.z.toFixed(4))}
       </div>
-      <div className="studio-right-row"><span>Rotation°</span></div>
+      <TransformLabelRow label="Rotation°" kind="r" />
       <div className="studio-right-row" style={{ gap: 4 }}>
         {numIn('rotation', 'x', (m.rotation.x * 180 / Math.PI).toFixed(2))}
         {numIn('rotation', 'y', (m.rotation.y * 180 / Math.PI).toFixed(2))}
         {numIn('rotation', 'z', (m.rotation.z * 180 / Math.PI).toFixed(2))}
       </div>
-      <div className="studio-right-row"><span>Scale</span></div>
+      <TransformLabelRow label="Scale" kind="s" />
       <div className="studio-right-row" style={{ gap: 4 }}>
         {numIn('scale', 'x', m.scale.x.toFixed(4))}
         {numIn('scale', 'y', m.scale.y.toFixed(4))}
         {numIn('scale', 'z', m.scale.z.toFixed(4))}
       </div>
+    </div>
+  );
+}
+
+// Slice 564 — Transform component label + reset chip helper.
+function TransformLabelRow({ label, kind }) {
+  return (
+    <div className="studio-right-row" style={{ alignItems: 'center' }}>
+      <span>{label}</span>
+      <button
+        type="button"
+        data-studio-v3-transform-reset={kind}
+        onClick={() => window.__studioResetTransform && window.__studioResetTransform(kind)}
+        title={`Reset ${label.toLowerCase()}`}
+        style={{
+          padding: '0 6px', fontSize: 9, letterSpacing: '0.05em',
+          background: 'transparent', color: 'var(--studio-ink-mute, #9aa6b2)',
+          border: '1px solid var(--studio-ink-mute, #1f2733)', borderRadius: 2,
+          cursor: 'pointer', textTransform: 'uppercase',
+        }}
+      >reset</button>
     </div>
   );
 }
