@@ -3460,6 +3460,7 @@ function OutlinerRows() {
             name: node.name || (node.userData && node.userData.archdiscStudioPrimitiveKind) || 'mesh',
             depth,
             kind: (node.userData && node.userData.archdiscStudioPrimitiveKind) || 'mesh',
+            locked: !!node.userData.archdiscStudioLocked,
           });
         }
         const childDepth = node.userData && node.userData.archdiscStudioPrimitiveKind === 'group' ? depth + 1 : depth;
@@ -3566,6 +3567,30 @@ function OutlinerRows() {
               color: it.kind === 'group' ? 'var(--studio-accent, #1de9b6)' : 'inherit',
               fontWeight: it.kind === 'group' ? 600 : 400,
             }}>{it.kind === 'group' ? '▸ ' : ''}{it.name}</span>
+            <button
+              type="button"
+              data-studio-v3-outliner-lock={it.uuid}
+              data-studio-v3-outliner-locked={it.locked ? 'true' : 'false'}
+              title={it.locked ? 'Unlock transform' : 'Lock transform'}
+              onClick={(e) => {
+                e.stopPropagation();
+                const s = window.__archdiscScene;
+                let m = null;
+                s.traverse((o) => { if (o.uuid === it.uuid) m = o; });
+                if (!m) return;
+                const prev = window.__studioSelectedMeshesSet;
+                window.__studioSelectedMeshesSet = [m];
+                if (window.__studioToggleLockSelected) window.__studioToggleLockSelected();
+                window.__studioSelectedMeshesSet = prev;
+              }}
+              style={{
+                padding: '0 4px', fontSize: 10,
+                background: 'transparent',
+                color: it.locked ? 'var(--studio-accent, #1de9b6)' : 'var(--studio-ink-mute)',
+                border: '1px solid ' + (it.locked ? 'var(--studio-accent, #1de9b6)' : 'var(--studio-ink-mute)'),
+                borderRadius: 2, cursor: 'pointer',
+              }}
+            >{it.locked ? '🔒' : '🔓'}</button>
             <button
               type="button"
               data-studio-v3-outliner-visibility={it.uuid}
