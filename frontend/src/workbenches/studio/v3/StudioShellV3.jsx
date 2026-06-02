@@ -1087,6 +1087,7 @@ const KEYMAP = [
     ['G', 'Move tool'],
     ['R', 'Rotate tool'],
     ['S', 'Scale tool'],
+    ['E', 'Extrude selected face (face mode)'],
   ] },
   { section: 'Selection', rows: [
     ['A', 'Toggle select-all / deselect-all'],
@@ -2952,6 +2953,15 @@ export function StudioShellV3({ mode = 'dark' }) {
           setAxis(axisMap[e.key]);
           e.preventDefault();
         }
+      } else if (!meta && !e.shiftKey && !e.altKey && (e.key === 'e' || e.key === 'E')) {
+        // Slice 481 — E extrudes selected faces in edit mode (Blender E).
+        // No-op outside face mode so it doesn't clobber other actions.
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        const cur = window.__studioGetEditMode && window.__studioGetEditMode();
+        if (cur !== 'face') return;
+        if (window.__studioExtrudeSelectedFaces) window.__studioExtrudeSelectedFaces(0.005);
+        e.preventDefault();
       } else if (!meta && !e.shiftKey && !e.altKey && (e.key === 'g' || e.key === 'r' || e.key === 's')) {
         // Slice 429 — G/R/S set active transform tool (Blender muscle memory).
         // Honors text inputs.
