@@ -648,3 +648,10 @@
 .studio-app ::-webkit-scrollbar-track { background: transparent; }
 .studio-app ::-webkit-scrollbar-thumb { background: var(--studio-rail-edge); border-radius: 4px; }
 .studio-app ::-webkit-scrollbar-thumb:hover { background: var(--studio-ink-faint); }
+
+/* Slice 505 — Archie status dot pulse */
+@keyframes studio-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(1.25); }
+}
+

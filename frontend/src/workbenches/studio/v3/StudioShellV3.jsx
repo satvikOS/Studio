@@ -179,12 +179,60 @@ const AXES = [
 ];
 
 // ─── TopBar ───────────────────────────────────────────────────────────────
+// Slice 505 — Archie status dot. Pings localhost:8080 on mount + every
+// 20 s; pulses teal when reachable, dims when not. Distinct ArchDisc
+// brand signal — the Archie fleet is part of Studio's identity.
+function ArchieStatusDot() {
+  const [state, setState] = useState('unknown');
+  useEffect(() => {
+    let alive = true;
+    const ping = async () => {
+      try {
+        const ac = new AbortController();
+        const t = setTimeout(() => ac.abort(), 1500);
+        const r = await fetch('http://localhost:8080/v1/models', { signal: ac.signal });
+        clearTimeout(t);
+        if (alive) setState(r.ok ? 'online' : 'offline');
+      } catch (_) { if (alive) setState('offline'); }
+    };
+    ping();
+    const id = setInterval(ping, 20_000);
+    const onStream = () => setState('streaming');
+    window.addEventListener('archie-stream-start', onStream);
+    return () => { alive = false; clearInterval(id); window.removeEventListener('archie-stream-start', onStream); };
+  }, []);
+  const color = state === 'online' || state === 'streaming' ? 'var(--studio-accent, #1de9b6)' : '#3b424d';
+  return (
+    <span
+      data-studio-v3-archie-status
+      data-studio-v3-archie-state={state}
+      title={`Archie · ${state}`}
+      style={{
+        display: 'inline-flex', alignItems: 'center', marginLeft: 10, gap: 4,
+      }}
+    >
+      <span
+        style={{
+          width: 7, height: 7, borderRadius: '50%', background: color,
+          boxShadow: state === 'streaming' ? `0 0 8px ${color}` : 'none',
+          animation: state === 'streaming' ? 'studio-pulse 1.2s ease-in-out infinite' : 'none',
+        }}
+      />
+      <span style={{
+        fontSize: 10, color: 'var(--studio-ink-mute, #9aa6b2)',
+        letterSpacing: '0.05em', textTransform: 'uppercase',
+      }}>Archie</span>
+    </span>
+  );
+}
+
 function TopBar({ onCycleTheme, theme }) {
   return (
     <div className="studio-topbar" data-studio-v3-topbar>
       <div className="studio-topbar-brand">
         <StudioMark size={18} ink="var(--studio-ink)" />
         <StudioWordmark size={12} color="var(--studio-ink)" />
+        <ArchieStatusDot />
       </div>
       <div className="studio-topbar-menus">
         {['File', 'Edit', 'Select', 'View', 'Window', 'Help'].map((m) => (
