@@ -2462,6 +2462,7 @@ function StatusBar({ wb, editMode }) {
       <span data-studio-v3-status="wb" style={{ textTransform: 'capitalize' }}>{wb}</span>
       <span data-studio-v3-status="mode" style={{ textTransform: 'capitalize' }}>{editMode}</span>
       <span data-studio-v3-status="frame" data-studio-v3-frame={frame}>f {frame}</span>
+      <ShadingModeIndicator />
       <span data-studio-v3-status="primitives">{primCount} prim</span>
       {meshStats && (
         <span data-studio-v3-status="mesh" data-studio-v3-mesh-v={meshStats.v} data-studio-v3-mesh-t={meshStats.t}>
@@ -2482,6 +2483,39 @@ function StatusBar({ wb, editMode }) {
 // scene was just persisted) + a synthesised dirty signal from common
 // mutations. Implementation: poll the scene snapshot every 2s,
 // compare to the last persisted snapshot length; if mismatch, mark dirty.
+// Slice 480 — status bar shading-mode indicator (click to cycle, same
+// as bare Z hotkey). Reads __studioGetShadingMode every second.
+function ShadingModeIndicator() {
+  const [mode, setMode] = React.useState('solid');
+  React.useEffect(() => {
+    const read = () => {
+      if (window.__studioGetShadingMode) setMode(window.__studioGetShadingMode() || 'solid');
+    };
+    read();
+    const id = setInterval(read, 1000);
+    return () => clearInterval(id);
+  }, []);
+  const cycle = ['wire', 'solid', 'material', 'rendered'];
+  const next = cycle[(cycle.indexOf(mode) + 1) % cycle.length];
+  return (
+    <button
+      type="button"
+      data-studio-v3-status="shading"
+      data-studio-v3-shading-mode={mode}
+      onClick={() => {
+        if (window.__studioSetShadingMode) window.__studioSetShadingMode(next);
+        setMode(next);
+      }}
+      title={`Shading: ${mode} — click to cycle to ${next} (Z)`}
+      style={{
+        padding: '0 6px', background: 'transparent', color: 'inherit',
+        border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+        textTransform: 'capitalize',
+      }}
+    >· {mode}</button>
+  );
+}
+
 function DirtyDot() {
   const [dirty, setDirty] = React.useState(false);
   React.useEffect(() => {
