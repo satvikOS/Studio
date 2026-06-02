@@ -2539,6 +2539,7 @@ function RightPanel({ collapsed, onToggle, activeWb, editMode, selection }) {
         ><Icon name="close" size={11} /></button>
       </div>
       <div className="studio-right-body" data-studio-v3-right-body={tab}>
+        {tab === 'inspector' && <InspectorFilter />}
         {tab === 'inspector' && (
           <>
             <div className="studio-right-section">
@@ -3014,6 +3015,47 @@ function AnnotationsSection() {
           >×</button>
         </div>
       ))}
+    </div>
+  );
+}
+
+// Slice 546 — Inspector top filter. Hides sections whose title doesn't
+// match the typed query. Lives outside the conditional sections so its
+// state persists while typing.
+function InspectorFilter() {
+  const [q, setQ] = useState('');
+  useEffect(() => {
+    const f = q.toLowerCase().trim();
+    const sections = document.querySelectorAll('[data-studio-v3-right] .studio-right-section');
+    for (const sec of sections) {
+      if (sec.hasAttribute('data-studio-v3-filter-bar')) continue;
+      const titleEl = sec.querySelector('.studio-right-section-title');
+      const title = (titleEl ? titleEl.textContent : '').toLowerCase();
+      const match = !f || title.includes(f);
+      sec.style.display = match ? '' : 'none';
+    }
+  }, [q]);
+  return (
+    <div
+      className="studio-right-section"
+      data-studio-v3-filter-bar
+      style={{ padding: 6 }}
+    >
+      <input
+        type="text"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Escape') setQ(''); }}
+        placeholder="Filter sections… (e.g. ‘snap’, ‘lighting’)"
+        data-studio-v3-inspector-filter
+        style={{
+          width: '100%', padding: '4px 8px',
+          background: 'var(--studio-bg, #0d1117)',
+          border: '1px solid var(--studio-ink-mute, #1f2733)',
+          color: 'var(--studio-ink, #e6edf3)', borderRadius: 3,
+          fontFamily: 'inherit', fontSize: 11, outline: 'none',
+        }}
+      />
     </div>
   );
 }
