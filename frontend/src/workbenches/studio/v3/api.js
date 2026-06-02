@@ -212,6 +212,17 @@ export function registerV3Api() {
     });
     return { ok: true, revealed: n };
   };
+  window.__studioResetTransform = (kind) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel) return { ok: false, error: 'no selection' };
+    if (window.__studioPushUndo) window.__studioPushUndo();
+    if (kind === 'g') sel.position.set(0, 0, 0);
+    else if (kind === 'r') sel.rotation.set(0, 0, 0);
+    else if (kind === 's') sel.scale.set(1, 1, 1);
+    else return { ok: false, error: 'unknown kind' };
+    sel.updateMatrixWorld(true);
+    return { ok: true, kind };
+  };
   window.__studioHideUnselected = () => {
     const scene = window.__archdiscScene;
     const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();

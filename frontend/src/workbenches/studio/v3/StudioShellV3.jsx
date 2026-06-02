@@ -1119,6 +1119,7 @@ const KEYMAP = [
     ['Cmd+E', 'Export GLTF'],
     ['Cmd+Shift+E', 'Export viewport PNG'],
     ['Shift+H', 'Isolate selected (hide others)'],
+    ['Alt+G/R/S', 'Reset translate/rotate/scale'],
     ['Cmd+,', 'Settings'],
     ['Cmd+K', 'Command palette'],
     ['Cmd+1/2/3', 'Right panel: Inspector / Outliner / Layers'],
@@ -3036,6 +3037,13 @@ export function StudioShellV3({ mode = 'dark' }) {
         if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
         const map = { g: 'move', r: 'rotate', s: 'scale' };
         setActiveTool(map[e.key]);
+        e.preventDefault();
+      } else if (!meta && !e.shiftKey && e.altKey && (e.key === 'g' || e.key === 'r' || e.key === 's')) {
+        // Slice 490 — Alt+G / Alt+R / Alt+S clear translation / rotation /
+        // scale on the active selection (Blender parity).
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        if (window.__studioResetTransform) window.__studioResetTransform(e.key);
         e.preventDefault();
       } else if (!meta && !e.shiftKey && (e.key === 'h' || e.key === 'H')) {
         // Slice 430 — H hides selected, Alt+H reveals all (Blender H parity).
