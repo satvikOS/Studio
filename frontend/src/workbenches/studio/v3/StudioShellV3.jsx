@@ -2036,11 +2036,26 @@ function ViewportMinimap() {
       width={120}
       height={120}
       data-studio-v3-minimap
+      onClick={(e) => {
+        // Slice 543 — Click maps from canvas px back to world X / Z; pans
+        // the orbit target there + a Frame All so the new region fills.
+        const rect = e.currentTarget.getBoundingClientRect();
+        const cx = rect.width / 2, cy = rect.height / 2;
+        const SCALE = 18;
+        const wx = (e.clientX - rect.left - cx) / SCALE;
+        const wz = (e.clientY - rect.top - cy) / SCALE;
+        const vp = window.__archdiscViewport;
+        if (vp && vp.orbitControls && vp.orbitControls.target) {
+          vp.orbitControls.target.set(wx, 0, wz);
+          if (typeof vp.orbitControls.update === 'function') vp.orbitControls.update();
+        }
+        if (window.__studioToast) window.__studioToast(`Minimap pan → (${wx.toFixed(2)}, ${wz.toFixed(2)})`, 'info');
+      }}
       style={{
         position: 'absolute', left: 10, bottom: 10, zIndex: 1,
         border: '1px solid rgba(154,166,178,0.25)',
         borderRadius: 4,
-        pointerEvents: 'none',
+        cursor: 'crosshair',
       }}
     />
   );
