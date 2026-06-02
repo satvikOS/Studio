@@ -1113,6 +1113,7 @@ const KEYMAP = [
     ['Cmd+E', 'Export GLTF'],
     ['Cmd+,', 'Settings'],
     ['Cmd+K', 'Command palette'],
+    ['Cmd+1/2/3', 'Right panel: Inspector / Outliner / Layers'],
     ['Cmd+F', 'Focus outliner filter'],
     ['Cmd+T', 'Toggle theme'],
     ['Cmd+/', 'Focus command bar'],
@@ -1592,6 +1593,12 @@ function ViewportHUD({ editMode, setEditMode, axis, setAxis }) {
 // ─── RightPanel (Inspector / Outliner / Layers) ──────────────────────────
 function RightPanel({ collapsed, onToggle, activeWb, editMode, selection }) {
   const [tab, setTab] = useState('inspector');
+  // Slice 478 — react to studio-right-tab-set from the Cmd+1/2/3 hotkey.
+  useEffect(() => {
+    const onSet = (ev) => { if (ev && ev.detail && ev.detail.tab) setTab(ev.detail.tab); };
+    window.addEventListener('studio-right-tab-set', onSet);
+    return () => window.removeEventListener('studio-right-tab-set', onSet);
+  }, []);
   if (collapsed) {
     return (
       <aside className="studio-right" data-studio-v3-right data-collapsed="true">
@@ -2772,6 +2779,15 @@ export function StudioShellV3({ mode = 'dark' }) {
         // Slice 476 — Cmd/Ctrl+K opens the command palette.
         e.preventDefault();
         window.dispatchEvent(new CustomEvent('studio-command-palette-toggle'));
+      } else if (meta && !e.shiftKey && (e.key === '1' || e.key === '2' || e.key === '3')) {
+        // Slice 478 — Cmd+1/2/3 switches right-panel tab to
+        // inspector / outliner / layers.
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        const map = { '1': 'inspector', '2': 'outliner', '3': 'layers' };
+        setRightCollapsed(false);
+        window.dispatchEvent(new CustomEvent('studio-right-tab-set', { detail: { tab: map[e.key] } }));
+        e.preventDefault();
       } else if (meta && !e.shiftKey && e.key.toLowerCase() === 'f') {
         // Slice 464 — Cmd/Ctrl+F focuses the outliner filter (standard
         // search shortcut). Auto-expands the right panel + switches to
