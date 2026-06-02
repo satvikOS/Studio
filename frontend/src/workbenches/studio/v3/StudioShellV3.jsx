@@ -1120,6 +1120,7 @@ const KEYMAP = [
     ['Cmd+K', 'Command palette'],
     ['Cmd+1/2/3', 'Right panel: Inspector / Outliner / Layers'],
     ['Cmd+P', 'Presentation mode (hide overlays)'],
+    ['Cmd+G', 'Group selected primitives'],
     ['Cmd+F', 'Focus outliner filter'],
     ['Cmd+T', 'Toggle theme'],
     ['Cmd+/', 'Focus command bar'],
@@ -2858,6 +2859,12 @@ export function StudioShellV3({ mode = 'dark' }) {
         if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
         e.preventDefault();
         window.dispatchEvent(new CustomEvent('studio-presentation-toggle'));
+      } else if (meta && !e.shiftKey && e.key.toLowerCase() === 'g') {
+        // Slice 485 — Cmd/Ctrl+G groups the multi-select set.
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        e.preventDefault();
+        if (window.__studioGroupSelected) window.__studioGroupSelected('group');
       } else if (meta && !e.shiftKey && (e.key === '1' || e.key === '2' || e.key === '3')) {
         // Slice 478 — Cmd+1/2/3 switches right-panel tab to
         // inspector / outliner / layers.
