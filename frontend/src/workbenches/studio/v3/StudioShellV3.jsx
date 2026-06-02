@@ -2298,6 +2298,8 @@ function RightPanel({ collapsed, onToggle, activeWb, editMode, selection }) {
             <NotesSection activeWb={activeWb} />
             {/* Slice 518 — Recent undo history list. */}
             <HistorySection />
+            {/* Slice 522 — Annotation list + delete. */}
+            <AnnotationsSection />
             <div className="studio-right-section">
               <div className="studio-right-section-title">Edit selection</div>
               <SelectionRows />
@@ -2527,6 +2529,63 @@ function CameraSection() {
           }}
         >{proj}</button>
       </div>
+    </div>
+  );
+}
+
+// Slice 522 — Annotations section. Lists annotation sprites with their
+// text + delete action. Polls every 700 ms.
+function AnnotationsSection() {
+  const [items, setItems] = useState([]);
+  useEffect(() => {
+    const read = () => {
+      const list = (window.__studioListAnnotations && window.__studioListAnnotations()) || [];
+      setItems(list);
+    };
+    const id = setInterval(read, 700);
+    read();
+    return () => clearInterval(id);
+  }, []);
+  const del = (uuid) => {
+    const s = window.__archdiscScene;
+    if (!s) return;
+    let m = null;
+    s.traverse((o) => { if (o.uuid === uuid) m = o; });
+    if (m) {
+      if (m.material && m.material.map && m.material.map.dispose) m.material.map.dispose();
+      if (m.material && m.material.dispose) m.material.dispose();
+      s.remove(m);
+    }
+  };
+  if (!items.length) return null;
+  return (
+    <div className="studio-right-section" data-studio-v3-annotations-section>
+      <div className="studio-right-section-title">Annotations · {items.length}</div>
+      {items.map((it) => (
+        <div
+          key={it.uuid}
+          data-studio-v3-annotation-row={it.uuid}
+          style={{
+            display: 'flex', justifyContent: 'space-between',
+            padding: '2px 6px', fontSize: 11, alignItems: 'center', gap: 6,
+          }}
+        >
+          <span style={{ flex: 1, color: 'var(--studio-ink, #e6edf3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {it.text}
+          </span>
+          <button
+            type="button"
+            data-studio-v3-annotation-delete={it.uuid}
+            onClick={() => del(it.uuid)}
+            title="Delete annotation"
+            style={{
+              padding: '0 4px', fontSize: 10,
+              background: 'transparent', color: 'var(--studio-ink-mute)',
+              border: '1px solid var(--studio-ink-mute)', borderRadius: 2, cursor: 'pointer',
+            }}
+          >×</button>
+        </div>
+      ))}
     </div>
   );
 }
