@@ -252,6 +252,8 @@ function TopBar({ onCycleTheme, theme }) {
               else if (m === 'Select') window.dispatchEvent(new CustomEvent('studio-select-menu-toggle'));
               // Slice 553 — View menu.
               else if (m === 'View') window.dispatchEvent(new CustomEvent('studio-view-menu-toggle'));
+              // Slice 554 — Window menu.
+              else if (m === 'Window') window.dispatchEvent(new CustomEvent('studio-window-menu-toggle'));
             }}
           >{m}</button>
         ))}
@@ -2491,6 +2493,82 @@ function ViewMenu() {
           key={a.id}
           type="button"
           data-studio-v3-view-action={a.id}
+          onClick={() => { try { a.call(); } catch (_) {} setOpen(false); }}
+          style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+            width: '100%', padding: '5px 14px', textAlign: 'left',
+            background: 'transparent', border: 0,
+            color: 'var(--studio-ink, #e6edf3)', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(29, 233, 182, 0.08)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+        >
+          <span>{a.label}</span>
+          <span style={{ opacity: 0.5, fontSize: 10, fontFamily: 'var(--studio-mono, ui-monospace)' }}>{a.hint || ''}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// Slice 554 — Window menu: panel/overlay toggles + layout reset.
+function WindowMenu() {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const onToggle = () => setOpen((v) => !v);
+    const onKey = (e) => { if (open && e.key === 'Escape') { setOpen(false); e.preventDefault(); } };
+    const onClickOutside = (e) => {
+      if (!open) return;
+      if (e.target && e.target.closest && e.target.closest('[data-studio-v3-window-menu], [data-studio-v3-menu="window"]')) return;
+      setOpen(false);
+    };
+    window.addEventListener('studio-window-menu-toggle', onToggle);
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('mousedown', onClickOutside);
+    return () => {
+      window.removeEventListener('studio-window-menu-toggle', onToggle);
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('mousedown', onClickOutside);
+    };
+  }, [open]);
+  if (!open) return null;
+  const resetLayout = () => {
+    try {
+      window.localStorage.removeItem('studio.v3.rightWidth');
+      window.localStorage.removeItem('studio.v3.display-toggles');
+      window.localStorage.removeItem('studio.v3.collapsed-sections');
+    } catch (_) {}
+    if (window.__studioToast) window.__studioToast('Layout reset — reload to apply', 'info');
+  };
+  const actions = [
+    { id: 'panel-inspector', label: 'Right panel: Inspector', hint: 'Cmd+1', call: () => window.dispatchEvent(new CustomEvent('studio-right-tab-set', { detail: { tab: 'inspector' } })) },
+    { id: 'panel-outliner',  label: 'Right panel: Outliner',  hint: 'Cmd+2', call: () => window.dispatchEvent(new CustomEvent('studio-right-tab-set', { detail: { tab: 'outliner' } })) },
+    { id: 'panel-layers',    label: 'Right panel: Layers',    hint: 'Cmd+3', call: () => window.dispatchEvent(new CustomEvent('studio-right-tab-set', { detail: { tab: 'layers' } })) },
+    { id: 'panel-toggle',    label: 'Toggle right panel',     hint: 'N',     call: () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n' })) },
+    { id: 'cmd-palette',     label: 'Command palette',        hint: 'Cmd+K', call: () => window.dispatchEvent(new CustomEvent('studio-command-palette-toggle')) },
+    { id: 'settings',        label: 'Settings',               hint: 'Cmd+,', call: () => window.dispatchEvent(new CustomEvent('studio-settings-toggle')) },
+    { id: 'reset-layout',    label: 'Reset layout',                          call: resetLayout },
+  ];
+  return (
+    <div
+      data-studio-v3-window-menu
+      style={{
+        position: 'fixed', top: 36, left: 332, zIndex: 9300,
+        minWidth: 260,
+        background: 'var(--studio-bg-elev, #161b22)',
+        border: '1px solid var(--studio-ink-mute, #1f2733)',
+        borderRadius: 6,
+        boxShadow: '0 20px 50px rgba(0,0,0,0.55)',
+        color: 'var(--studio-ink, #e6edf3)',
+        fontFamily: 'inherit', fontSize: 12,
+        padding: '6px 0',
+      }}
+    >
+      {actions.map((a) => (
+        <button
+          key={a.id}
+          type="button"
+          data-studio-v3-window-action={a.id}
           onClick={() => { try { a.call(); } catch (_) {} setOpen(false); }}
           style={{
             display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
@@ -5851,6 +5929,7 @@ export function StudioShellV3({ mode = 'dark' }) {
       <EditMenu />
       <SelectMenu />
       <ViewMenu />
+      <WindowMenu />
       <SplashScreen />
       <SectionCollapser />
       <DocTitle activeWb={activeWb} />
