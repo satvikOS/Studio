@@ -1183,6 +1183,7 @@ const KEYMAP = [
     ['Cmd+Shift+E', 'Export viewport PNG'],
     ['Shift+H', 'Isolate selected (hide others)'],
     ['B', 'Box marquee select (drag a rectangle)'],
+    ['M', 'Measure distance between 2 selected'],
     ['Alt+G/R/S', 'Reset translate/rotate/scale'],
     ['Shift+;', 'Toggle transform snap (1 cm / 15° / 0.1)'],
     ['Cmd+,', 'Settings'],
@@ -3973,6 +3974,13 @@ export function StudioShellV3({ mode = 'dark' }) {
           const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
           if (sel) sel.visible = false;
         }
+        e.preventDefault();
+      } else if (!meta && !e.shiftKey && !e.altKey && (e.key === 'm' || e.key === 'M')) {
+        // Slice 512 — M measures distance between the 2 most recently
+        // selected primitives.
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        if (window.__studioMeasureSelected) window.__studioMeasureSelected();
         e.preventDefault();
       } else if (!meta && !e.shiftKey && !e.altKey && (e.key === 'b' || e.key === 'B')) {
         // Slice 502 — B arms the drag-rectangle marquee select (Blender B parity).

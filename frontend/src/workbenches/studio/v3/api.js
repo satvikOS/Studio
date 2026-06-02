@@ -251,6 +251,30 @@ export function registerV3Api() {
     sel.updateMatrixWorld(true);
     return { ok: true, kind };
   };
+  // Slice 512 — Distance measurement op. Takes the last two members
+  // of __studioSelectedMeshesSet (or any explicit pair via uuids) and
+  // returns world-space distance + dispatches studio-measure-result.
+  window.__studioMeasureSelected = (uuid1, uuid2) => {
+    const s = window.__archdiscScene;
+    if (!s) return { ok: false, error: 'no scene' };
+    const findByUuid = (u) => { let m = null; s.traverse((o) => { if (o.uuid === u) m = o; }); return m; };
+    let a, b;
+    if (uuid1 && uuid2) { a = findByUuid(uuid1); b = findByUuid(uuid2); }
+    else {
+      const set = Array.isArray(window.__studioSelectedMeshesSet) ? window.__studioSelectedMeshesSet : [];
+      if (set.length < 2) return { ok: false, error: 'need 2 selected' };
+      a = set[set.length - 2]; b = set[set.length - 1];
+    }
+    if (!a || !b) return { ok: false, error: 'missing meshes' };
+    const pa = new THREE.Vector3(), pb = new THREE.Vector3();
+    a.getWorldPosition(pa); b.getWorldPosition(pb);
+    const d = pa.distanceTo(pb);
+    const detail = { a: a.uuid, b: b.uuid, distance: d, mm: d * 1000 };
+    window.dispatchEvent(new CustomEvent('studio-measure-result', { detail }));
+    if (window.__studioToast) window.__studioToast(`Distance: ${(d * 1000).toFixed(1)} mm`, 'info');
+    return { ok: true, ...detail };
+  };
+
   // Slice 501 — Box marquee select op. Takes pixel rect (x1,y1,x2,y2) in
   // canvas-relative coords and returns matched primitive UUIDs (those whose
   // world-space center projects into the rect). Selects the last hit so
