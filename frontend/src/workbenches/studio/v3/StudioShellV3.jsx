@@ -1497,6 +1497,60 @@ function ViewportStatsOverlay() {
 // Slice 427 — Centered card in the viewport while the scene has no
 // Studio primitives. Studio teal title + brief muscle-memory hints.
 // Fades out the moment the user spawns the first mesh.
+// Slice 496 — Unified toast bus. Any op can dispatch a 'studio-toast'
+// CustomEvent with { msg, kind } (kind: 'info' | 'ok' | 'warn').
+// ToastBus stacks up to 4, auto-dismisses after 2.6 s.
+function ToastBus() {
+  const [items, setItems] = useState([]);
+  useEffect(() => {
+    let nextId = 1;
+    const onToast = (ev) => {
+      const d = ev && ev.detail;
+      if (!d || !d.msg) return;
+      const id = nextId++;
+      setItems((cur) => [...cur.slice(-3), { id, msg: d.msg, kind: d.kind || 'info' }]);
+      setTimeout(() => setItems((cur) => cur.filter((it) => it.id !== id)), 2600);
+    };
+    window.addEventListener('studio-toast', onToast);
+    window.__studioToast = (msg, kind = 'info') => {
+      window.dispatchEvent(new CustomEvent('studio-toast', { detail: { msg, kind } }));
+    };
+    return () => {
+      window.removeEventListener('studio-toast', onToast);
+      try { delete window.__studioToast; } catch (_) {}
+    };
+  }, []);
+  if (!items.length) return null;
+  return (
+    <div
+      data-studio-v3-toast-bus
+      data-studio-v3-toast-count={items.length}
+      style={{
+        position: 'fixed', top: 64, right: 16, zIndex: 9998,
+        display: 'flex', flexDirection: 'column', gap: 6, pointerEvents: 'none',
+      }}
+    >
+      {items.map((it) => (
+        <div
+          key={it.id}
+          data-studio-v3-toast
+          data-studio-v3-toast-kind={it.kind}
+          style={{
+            background: 'var(--studio-bg-elev, #161b22)',
+            borderLeft: `3px solid ${it.kind === 'warn' ? '#f1c40f' : 'var(--studio-accent, #1de9b6)'}`,
+            color: 'var(--studio-ink, #e6edf3)',
+            fontSize: 11.5,
+            padding: '6px 12px',
+            borderRadius: 4,
+            boxShadow: '0 6px 18px rgba(0,0,0,0.45)',
+            minWidth: 180,
+          }}
+        >{it.msg}</div>
+      ))}
+    </div>
+  );
+}
+
 // Slice 494 — First-launch onboarding tour. 4 numbered cards positioned
 // near the relevant UI region. Skippable; persisted in localStorage.
 const TOUR_KEY = 'studio.v3.tour-seen';
@@ -3631,6 +3685,7 @@ export function StudioShellV3({ mode = 'dark' }) {
       <ArchieThread thread={thread} onClear={() => setThread([])} />
       <CommandBar onSubmit={onCmdSubmit} />
       <OnboardingTour />
+      <ToastBus />
     </div>
   );
 }

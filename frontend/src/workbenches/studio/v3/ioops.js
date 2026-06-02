@@ -187,6 +187,7 @@ function exportViewportPNG(name) {
   document.body.appendChild(a);
   a.click();
   setTimeout(() => { document.body.removeChild(a); }, 0);
+  if (window.__studioToast) window.__studioToast(`Exported ${a.download}`, 'ok');
   return { ok: true, file: a.download, bytes: data.length };
 }
 

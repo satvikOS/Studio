@@ -233,7 +233,10 @@ export function registerV3Api() {
   window.__studioToggleSnap = () => {
     _snapOn = !_snapOn;
     const ok = applySnap();
-    if (ok) window.dispatchEvent(new CustomEvent('studio-snap-toggle', { detail: { snap: _snapOn } }));
+    if (ok) {
+      window.dispatchEvent(new CustomEvent('studio-snap-toggle', { detail: { snap: _snapOn } }));
+      if (window.__studioToast) window.__studioToast(`Snap ${_snapOn ? 'on' : 'off'}`, 'info');
+    }
     return { ok, snap: _snapOn };
   };
   window.__studioGetSnap = () => ({ on: _snapOn, t: _tStep, r: _rStep, s: _sStep });
