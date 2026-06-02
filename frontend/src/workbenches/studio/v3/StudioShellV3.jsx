@@ -1115,6 +1115,7 @@ const KEYMAP = [
     ['Cmd+Z', 'Undo'],
     ['Cmd+Shift+Z', 'Redo'],
     ['Cmd+S', 'Save scene (download .studio.json)'],
+    ['Cmd+Shift+S', 'Save scene as… (pick a name)'],
     ['Cmd+O', 'Open scene file'],
     ['Cmd+E', 'Export GLTF'],
     ['Cmd+Shift+E', 'Export viewport PNG'],
@@ -1515,6 +1516,93 @@ function DocTitle({ activeWb }) {
     document.title = `${dirty ? '• ' : ''}${wb} — ArchDisc Studio`;
   }, [activeWb, dirty]);
   return null;
+}
+
+// Slice 500 — Save-As modal. Cmd/Ctrl+Shift+S fires studio-save-as-open;
+// modal captures a name input + commits via __studioDownloadScene(name).
+function SaveAsModal() {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState('studio-scene');
+  const inputRef = React.useRef(null);
+  useEffect(() => {
+    const onOpen = () => { setName('studio-scene'); setOpen(true); };
+    window.addEventListener('studio-save-as-open', onOpen);
+    return () => window.removeEventListener('studio-save-as-open', onOpen);
+  }, []);
+  useEffect(() => {
+    if (open && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [open]);
+  if (!open) return null;
+  const commit = () => {
+    if (window.__studioDownloadScene) {
+      const r = window.__studioDownloadScene(name || 'studio-scene');
+      if (window.__studioToast) window.__studioToast(`Saved ${r || name}`, 'ok');
+    }
+    setOpen(false);
+  };
+  return (
+    <div
+      data-studio-v3-save-as
+      style={{
+        position: 'fixed', inset: 0, zIndex: 9999,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: 'rgba(13, 17, 23, 0.55)',
+      }}
+      onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}
+    >
+      <div style={{
+        background: 'var(--studio-bg-elev, #161b22)',
+        border: '1px solid var(--studio-accent, #1de9b6)',
+        borderRadius: 8, padding: '18px 22px', minWidth: 340,
+        boxShadow: '0 14px 40px rgba(0,0,0,0.6)',
+      }}>
+        <div style={{
+          color: 'var(--studio-accent, #1de9b6)', fontWeight: 600, marginBottom: 10, fontSize: 13,
+        }}>Save scene as…</div>
+        <input
+          ref={inputRef}
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); commit(); }
+            else if (e.key === 'Escape') { e.preventDefault(); setOpen(false); }
+          }}
+          data-studio-v3-save-as-input
+          style={{
+            width: '100%', background: 'var(--studio-bg, #0d1117)',
+            border: '1px solid var(--studio-ink-mute, #1f2733)',
+            color: 'var(--studio-ink, #e6edf3)', padding: '7px 10px',
+            borderRadius: 4, fontFamily: 'var(--studio-mono, ui-monospace)',
+            fontSize: 12, marginBottom: 12,
+          }}
+        />
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            style={{
+              background: 'transparent', border: '1px solid var(--studio-ink-mute, #1f2733)',
+              color: 'var(--studio-ink, #e6edf3)', padding: '5px 14px', borderRadius: 4,
+              fontSize: 11, cursor: 'pointer',
+            }}
+          >Cancel</button>
+          <button
+            type="button"
+            data-studio-v3-save-as-commit
+            onClick={commit}
+            style={{
+              background: 'var(--studio-accent, #1de9b6)', border: 0, color: '#0d1117',
+              fontWeight: 600, padding: '5px 14px', borderRadius: 4, fontSize: 11, cursor: 'pointer',
+            }}
+          >Save</button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function ToastBus() {
@@ -3309,6 +3397,12 @@ export function StudioShellV3({ mode = 'dark' }) {
         if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
         if (window.__studioDownloadScene) window.__studioDownloadScene();
         e.preventDefault();
+      } else if (meta && e.shiftKey && e.key.toLowerCase() === 's') {
+        // Slice 500 — Cmd/Ctrl+Shift+S prompts for a name then downloads.
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent('studio-save-as-open'));
       } else if (meta && !e.shiftKey && e.key.toLowerCase() === 'o') {
         // Slice 439 — Cmd/Ctrl+O opens a .studio.json file picker.
         const ae = document.activeElement;
@@ -3838,6 +3932,7 @@ export function StudioShellV3({ mode = 'dark' }) {
       <CommandBar onSubmit={onCmdSubmit} />
       <OnboardingTour />
       <ToastBus />
+      <SaveAsModal />
       <DocTitle activeWb={activeWb} />
     </div>
   );
