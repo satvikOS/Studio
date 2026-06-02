@@ -731,6 +731,8 @@ function SettingsModal() {
         <SunAngleRow />
         {/* Render quality — slice 474. */}
         <RenderQualityRow />
+        {/* Restore autosave — slice 475. */}
+        <RestoreAutosaveRow />
         {/* Background color */}
         <div data-studio-v3-settings-section="bg" style={{ marginBottom: 16 }}>
           <div style={{ opacity: 0.55, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Background color</div>
@@ -759,6 +761,44 @@ function SettingsModal() {
             borderRadius: 3, cursor: 'pointer', fontSize: 11,
           }}
         >Done</button>
+      </div>
+    </div>
+  );
+}
+
+// Slice 475 — Restore-last-autosave row for the Settings modal.
+function RestoreAutosaveRow() {
+  const [ts, setTs] = React.useState(0);
+  React.useEffect(() => {
+    const read = () => setTs(Number(window.localStorage.getItem('archdisc.studio.autosave.ts') || 0));
+    read();
+    const id = setInterval(read, 1000);
+    return () => clearInterval(id);
+  }, []);
+  if (!ts) return null;
+  const age = Math.round((Date.now() - ts) / 1000);
+  return (
+    <div data-studio-v3-settings-section="restore" style={{ marginBottom: 12 }}>
+      <div style={{ opacity: 0.55, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Autosave</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ flex: 1, fontSize: 11, opacity: 0.75 }}>Last save: {age}s ago</span>
+        <button
+          type="button"
+          data-studio-v3-settings-restore
+          onClick={() => {
+            if (window.__studioRestoreAutosave) {
+              const r = window.__studioRestoreAutosave();
+              if (r && r.ok) window.dispatchEvent(new CustomEvent('studio-autosaved', { detail: { ts: Date.now(), bytes: 0, primitives: 0 } }));
+            }
+          }}
+          style={{
+            padding: '4px 12px', fontSize: 11,
+            background: 'var(--studio-accent, #1de9b6)',
+            color: 'var(--studio-bg, #0d1117)',
+            border: 'none', borderRadius: 3, cursor: 'pointer',
+            fontFamily: 'inherit', fontWeight: 600,
+          }}
+        >Restore</button>
       </div>
     </div>
   );
