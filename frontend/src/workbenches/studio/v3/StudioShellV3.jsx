@@ -2528,6 +2528,8 @@ function RightPanel({ collapsed, onToggle, activeWb, editMode, selection }) {
             <SnapSection />
             {/* Slice 508 — World grid + background. */}
             <WorldSection />
+            {/* Slice 536 — Display toggles for overlays. */}
+            <DisplaySection />
             {/* Slice 510 — Ambient + key intensity sliders. */}
             <LightingSection />
             {/* Slice 516 — Per-workbench Notes textarea. */}
@@ -3058,6 +3060,53 @@ function CameraBookmarksSection() {
               border: '1px solid var(--studio-ink-mute)', borderRadius: 2, cursor: 'pointer',
             }}
           >×</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Slice 536 — Display toggles. Checkbox each for grid, axes, minimap,
+// watermark; persisted to localStorage. Sets data-attrs on the viewport
+// so CSS can hide overlays declaratively.
+function DisplaySection() {
+  const items = [
+    { id: 'grid', label: 'Grid', defaultOn: true, onChange: (v) => { if (window.__studioSetGridVisible) window.__studioSetGridVisible(v); } },
+    { id: 'minimap', label: 'Minimap', defaultOn: true, onChange: (v) => { const el = document.querySelector('[data-studio-v3-minimap]'); if (el) el.style.display = v ? '' : 'none'; } },
+    { id: 'watermark', label: 'Watermark', defaultOn: true, onChange: (v) => { const el = document.querySelector('[data-studio-v3-watermark]'); if (el) el.style.display = v ? '' : 'none'; } },
+    { id: 'archie-status', label: 'Archie dot', defaultOn: true, onChange: (v) => { const el = document.querySelector('[data-studio-v3-archie-status]'); if (el) el.style.display = v ? '' : 'none'; } },
+  ];
+  const [state, setState] = useState(() => {
+    try {
+      const raw = window.localStorage.getItem('studio.v3.display-toggles');
+      const parsed = raw ? JSON.parse(raw) : null;
+      const init = {};
+      for (const it of items) init[it.id] = parsed && it.id in parsed ? !!parsed[it.id] : it.defaultOn;
+      return init;
+    } catch (_) {
+      const init = {};
+      for (const it of items) init[it.id] = it.defaultOn;
+      return init;
+    }
+  });
+  useEffect(() => {
+    try { window.localStorage.setItem('studio.v3.display-toggles', JSON.stringify(state)); } catch (_) {}
+    for (const it of items) {
+      try { it.onChange(state[it.id]); } catch (_) {}
+    }
+  }, [state]);
+  return (
+    <div className="studio-right-section" data-studio-v3-display-section>
+      <div className="studio-right-section-title">Display</div>
+      {items.map((it) => (
+        <div key={it.id} className="studio-right-row" style={{ alignItems: 'center' }}>
+          <span>{it.label}</span>
+          <input
+            type="checkbox"
+            data-studio-v3-display-toggle={it.id}
+            checked={!!state[it.id]}
+            onChange={(e) => setState((s) => ({ ...s, [it.id]: e.target.checked }))}
+          />
         </div>
       ))}
     </div>
