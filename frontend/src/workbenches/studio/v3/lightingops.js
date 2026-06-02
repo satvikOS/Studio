@@ -15,6 +15,30 @@ function activeMesh() {
 
 // ─── Sun angle (V2 slice 207) ────────────────────────────────────────────
 // Drive the viewport keyLight by azimuth + elevation (degrees).
+// Slice 510 — Ambient + key intensities exposed so the inspector can
+// drive them with sliders.
+function setAmbientIntensity(v) {
+  const ctx = vp(); if (!ctx) return { ok: false, error: 'no viewport' };
+  const amb = ctx.ambient || ctx.ambientLight;
+  if (!amb) return { ok: false, error: 'no ambient' };
+  amb.intensity = Math.max(0, Math.min(5, Number(v) || 0));
+  return { ok: true, intensity: amb.intensity };
+}
+function getAmbientIntensity() {
+  const ctx = vp(); if (!ctx) return 0;
+  const amb = ctx.ambient || ctx.ambientLight;
+  return amb ? amb.intensity : 0;
+}
+function setKeyIntensity(v) {
+  const ctx = vp(); if (!ctx || !ctx.keyLight) return { ok: false, error: 'no key light' };
+  ctx.keyLight.intensity = Math.max(0, Math.min(8, Number(v) || 0));
+  return { ok: true, intensity: ctx.keyLight.intensity };
+}
+function getKeyIntensity() {
+  const ctx = vp(); if (!ctx || !ctx.keyLight) return 0;
+  return ctx.keyLight.intensity;
+}
+
 function setSunAngle(azDeg, elDeg) {
   const v = vp(); if (!v) return { ok: false, error: 'no viewport' };
   const key = v.keyLight; if (!key) return { ok: false, error: 'no key light' };
@@ -169,6 +193,10 @@ function applyMaterialGraph(graph, outputId) {
 // ─── Registration ────────────────────────────────────────────────────────
 export function registerLightingOps() {
   window.__studioSetSunAngle         = setSunAngle;
+  window.__studioSetAmbientIntensity = setAmbientIntensity;
+  window.__studioGetAmbientIntensity = getAmbientIntensity;
+  window.__studioSetKeyIntensity     = setKeyIntensity;
+  window.__studioGetKeyIntensity     = getKeyIntensity;
   window.__studioSetHDRIEnvironment  = setHDRIEnvironment;
   window.__studioListHDRIPresets     = listHDRIPresets;
   window.__studioSetShadingMode      = setShadingMode;
@@ -181,6 +209,8 @@ export function registerLightingOps() {
 export function unregisterLightingOps() {
   for (const k of [
     '__studioSetSunAngle', '__studioSetHDRIEnvironment', '__studioListHDRIPresets',
+    '__studioSetAmbientIntensity', '__studioGetAmbientIntensity',
+    '__studioSetKeyIntensity', '__studioGetKeyIntensity',
     '__studioSetShadingMode', '__studioGetShadingMode',
     '__studioApplySmartMaterial', '__studioListSmartMaterials',
     '__studioEvalNodeGraph', '__studioApplyMaterialGraph',

@@ -2226,6 +2226,8 @@ function RightPanel({ collapsed, onToggle, activeWb, editMode, selection }) {
             <SnapSection />
             {/* Slice 508 — World grid + background. */}
             <WorldSection />
+            {/* Slice 510 — Ambient + key intensity sliders. */}
+            <LightingSection />
             <div className="studio-right-section">
               <div className="studio-right-section-title">Edit selection</div>
               <SelectionRows />
@@ -2454,6 +2456,63 @@ function CameraSection() {
             padding: '2px 8px', borderRadius: 3, fontSize: 11, cursor: 'pointer', textTransform: 'capitalize',
           }}
         >{proj}</button>
+      </div>
+    </div>
+  );
+}
+
+// Slice 510 — Lighting section. Live ambient + key (sun) intensity
+// sliders feeding the lightingops setters.
+function LightingSection() {
+  const [amb, setAmb] = useState(0.5);
+  const [key, setKey] = useState(1.0);
+  useEffect(() => {
+    const read = () => {
+      const a = window.__studioGetAmbientIntensity && window.__studioGetAmbientIntensity();
+      const k = window.__studioGetKeyIntensity && window.__studioGetKeyIntensity();
+      if (typeof a === 'number') setAmb(Number(a.toFixed(2)));
+      if (typeof k === 'number') setKey(Number(k.toFixed(2)));
+    };
+    const id = setInterval(read, 800);
+    read();
+    return () => clearInterval(id);
+  }, []);
+  const onAmb = (e) => {
+    const v = Number(e.target.value);
+    setAmb(v);
+    if (window.__studioSetAmbientIntensity) window.__studioSetAmbientIntensity(v);
+  };
+  const onKey = (e) => {
+    const v = Number(e.target.value);
+    setKey(v);
+    if (window.__studioSetKeyIntensity) window.__studioSetKeyIntensity(v);
+  };
+  return (
+    <div className="studio-right-section" data-studio-v3-lighting-section>
+      <div className="studio-right-section-title">Lighting</div>
+      <div className="studio-right-row" style={{ alignItems: 'center' }}>
+        <span>Ambient</span>
+        <input
+          type="range"
+          min="0" max="3" step="0.05"
+          value={amb}
+          onChange={onAmb}
+          data-studio-v3-light-ambient
+          style={{ flex: 1, marginLeft: 8 }}
+        />
+        <span style={{ width: 36, textAlign: 'right', fontFamily: 'var(--studio-mono, ui-monospace)', fontSize: 10, color: 'var(--studio-ink-mute, #9aa6b2)' }}>{amb.toFixed(2)}</span>
+      </div>
+      <div className="studio-right-row" style={{ alignItems: 'center' }}>
+        <span>Key</span>
+        <input
+          type="range"
+          min="0" max="5" step="0.05"
+          value={key}
+          onChange={onKey}
+          data-studio-v3-light-key
+          style={{ flex: 1, marginLeft: 8 }}
+        />
+        <span style={{ width: 36, textAlign: 'right', fontFamily: 'var(--studio-mono, ui-monospace)', fontSize: 10, color: 'var(--studio-ink-mute, #9aa6b2)' }}>{key.toFixed(2)}</span>
       </div>
     </div>
   );

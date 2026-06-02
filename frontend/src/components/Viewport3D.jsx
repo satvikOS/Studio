@@ -351,7 +351,7 @@ function Viewport3D({ canvasId = 'render-canvas', domain = 'mechanical', onReady
           // with REAL mouse clicks / drag-orbits (motionCapture.js helpers).
           // Read-only from the spec side — never mutated by e2e.
           window.__archdiscViewport = {
-            scene, camera, renderer, orbitControls, keyLight: key,
+            scene, camera, renderer, orbitControls, keyLight: key, ambient,
             // Slice 396 — expose transform gizmo + a getter for the
             // currently-selected mesh so V3 (and any other UI shell)
             // can drive the gizmo + react to selection without owning
