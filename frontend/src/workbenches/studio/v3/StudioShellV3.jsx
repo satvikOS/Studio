@@ -2823,6 +2823,7 @@ function CameraSection() {
           }}
         >{proj}</button>
       </div>
+      <CameraSpeedRows />
     </div>
   );
 }
@@ -3175,6 +3176,57 @@ function NotesSection({ activeWb }) {
         }}
       />
     </div>
+  );
+}
+
+// Slice 547 — Orbit + zoom speed sliders driving OrbitControls.
+function CameraSpeedRows() {
+  const [rotate, setRotate] = useState(0.8);
+  const [zoom, setZoom] = useState(1.2);
+  useEffect(() => {
+    const c = window.__archdiscViewport && window.__archdiscViewport.orbitControls;
+    if (c) {
+      setRotate(c.rotateSpeed);
+      setZoom(c.zoomSpeed);
+    }
+  }, []);
+  const onRot = (e) => {
+    const v = Number(e.target.value);
+    setRotate(v);
+    const c = window.__archdiscViewport && window.__archdiscViewport.orbitControls;
+    if (c) c.rotateSpeed = v;
+  };
+  const onZoom = (e) => {
+    const v = Number(e.target.value);
+    setZoom(v);
+    const c = window.__archdiscViewport && window.__archdiscViewport.orbitControls;
+    if (c) c.zoomSpeed = v;
+  };
+  return (
+    <>
+      <div className="studio-right-row" style={{ alignItems: 'center' }}>
+        <span>Orbit speed</span>
+        <input
+          type="range" min="0.1" max="3" step="0.1"
+          value={rotate}
+          onChange={onRot}
+          data-studio-v3-camera-rotate-speed
+          style={{ flex: 1, marginLeft: 8 }}
+        />
+        <span style={{ width: 30, textAlign: 'right', fontFamily: 'var(--studio-mono, ui-monospace)', fontSize: 10, color: 'var(--studio-ink-mute, #9aa6b2)' }}>{rotate.toFixed(1)}</span>
+      </div>
+      <div className="studio-right-row" style={{ alignItems: 'center' }}>
+        <span>Zoom speed</span>
+        <input
+          type="range" min="0.1" max="3" step="0.1"
+          value={zoom}
+          onChange={onZoom}
+          data-studio-v3-camera-zoom-speed
+          style={{ flex: 1, marginLeft: 8 }}
+        />
+        <span style={{ width: 30, textAlign: 'right', fontFamily: 'var(--studio-mono, ui-monospace)', fontSize: 10, color: 'var(--studio-ink-mute, #9aa6b2)' }}>{zoom.toFixed(1)}</span>
+      </div>
+    </>
   );
 }
 
