@@ -1281,6 +1281,7 @@ const KEYMAP = [
     ['Alt+1..9', 'Recall camera bookmark by index'],
     ['Numpad 1/3/7', 'Front / Right / Top camera (Blender parity)'],
     ['Numpad 5', 'Toggle perspective / ortho'],
+    ['T', 'Toggle camera turntable autorotate'],
     ['/', 'Solo: isolate selection + frame · press again to restore'],
     ['Alt+G/R/S', 'Reset translate/rotate/scale'],
     ['Shift+;', 'Toggle transform snap (1 cm / 15° / 0.1)'],
@@ -5533,6 +5534,12 @@ export function StudioShellV3({ mode = 'dark' }) {
           const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
           if (sel) sel.visible = false;
         }
+        e.preventDefault();
+      } else if (!meta && !e.shiftKey && !e.altKey && (e.key === 't' || e.key === 'T')) {
+        // Slice 557 — Bare T toggles camera turntable autorotate.
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        if (window.__studioToggleTurntable) window.__studioToggleTurntable();
         e.preventDefault();
       } else if (meta && !e.shiftKey && !e.altKey && (e.key === 'r' || e.key === 'R')) {
         // Slice 556 — Cmd+R resets the camera home.
