@@ -1497,6 +1497,106 @@ function ViewportStatsOverlay() {
 // Slice 427 — Centered card in the viewport while the scene has no
 // Studio primitives. Studio teal title + brief muscle-memory hints.
 // Fades out the moment the user spawns the first mesh.
+// Slice 494 — First-launch onboarding tour. 4 numbered cards positioned
+// near the relevant UI region. Skippable; persisted in localStorage.
+const TOUR_KEY = 'studio.v3.tour-seen';
+const TOUR_STEPS = [
+  {
+    title: 'Toolbar',
+    text: 'Add primitives (cube, sphere, plane…) and pick a workbench from the left.',
+    anchor: { top: 56, left: 18 },
+    arrow: 'left',
+  },
+  {
+    title: 'Viewport',
+    text: 'Click to select · Drag to orbit · Scroll to zoom · G/R/S to move/rotate/scale.',
+    anchor: { top: '40%', left: '50%' },
+    arrow: 'top',
+  },
+  {
+    title: 'Inspector',
+    text: 'Edit transform, materials, layers. Cmd+1/2/3 cycles tabs · drag the left edge to resize.',
+    anchor: { top: 56, right: 18 },
+    arrow: 'right',
+  },
+  {
+    title: 'Command bar',
+    text: 'Cmd+/ to focus · Cmd+K for the palette · Shift+? for the full cheatsheet.',
+    anchor: { bottom: 56, left: '50%' },
+    arrow: 'bottom',
+  },
+];
+
+function OnboardingTour() {
+  const [seen, setSeen] = useState(() => {
+    try { return Boolean(window.localStorage.getItem(TOUR_KEY)); } catch (_) { return true; }
+  });
+  const [step, setStep] = useState(0);
+  if (seen) return null;
+  const cur = TOUR_STEPS[step];
+  const done = () => {
+    try { window.localStorage.setItem(TOUR_KEY, '1'); } catch (_) {}
+    setSeen(true);
+  };
+  const next = () => {
+    if (step < TOUR_STEPS.length - 1) setStep(step + 1);
+    else done();
+  };
+  const pos = { position: 'fixed', zIndex: 9999, maxWidth: 320 };
+  if (cur.anchor.top != null) pos.top = cur.anchor.top;
+  if (cur.anchor.left != null) pos.left = cur.anchor.left;
+  if (cur.anchor.right != null) pos.right = cur.anchor.right;
+  if (cur.anchor.bottom != null) pos.bottom = cur.anchor.bottom;
+  if (typeof pos.left === 'string' && pos.left.endsWith('%')) pos.transform = 'translateX(-50%)';
+  return (
+    <div
+      data-studio-v3-tour
+      data-studio-v3-tour-step={step}
+      style={{
+        ...pos,
+        background: 'var(--studio-bg-elev, #161b22)',
+        border: '1px solid var(--studio-accent, #1de9b6)',
+        borderRadius: 8,
+        padding: '14px 16px',
+        color: 'var(--studio-ink, #e6edf3)',
+        fontSize: 12,
+        boxShadow: '0 10px 30px rgba(0,0,0,0.55)',
+      }}
+    >
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        marginBottom: 8,
+      }}>
+        <span style={{ color: 'var(--studio-accent, #1de9b6)', fontWeight: 600, letterSpacing: '0.04em' }}>
+          {step + 1}/{TOUR_STEPS.length} · {cur.title}
+        </span>
+        <button
+          type="button"
+          data-studio-v3-tour-skip
+          onClick={done}
+          style={{
+            background: 'transparent', border: 0, color: 'var(--studio-ink-mute, #9aa6b2)',
+            fontSize: 11, cursor: 'pointer', padding: 0,
+          }}
+        >skip</button>
+      </div>
+      <div style={{ marginBottom: 12, lineHeight: 1.45 }}>{cur.text}</div>
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+        <button
+          type="button"
+          data-studio-v3-tour-next
+          onClick={next}
+          style={{
+            background: 'var(--studio-accent, #1de9b6)',
+            border: 0, color: '#0d1117', fontSize: 11, fontWeight: 600,
+            padding: '6px 14px', borderRadius: 4, cursor: 'pointer',
+          }}
+        >{step < TOUR_STEPS.length - 1 ? 'Next →' : 'Got it'}</button>
+      </div>
+    </div>
+  );
+}
+
 function WelcomeCard() {
   const [empty, setEmpty] = useState(true);
   useEffect(() => {
@@ -3490,6 +3590,7 @@ export function StudioShellV3({ mode = 'dark' }) {
       <StatusBar wb={activeWb} editMode={editMode} />
       <ArchieThread thread={thread} onClear={() => setThread([])} />
       <CommandBar onSubmit={onCmdSubmit} />
+      <OnboardingTour />
     </div>
   );
 }
