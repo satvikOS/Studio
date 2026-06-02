@@ -157,6 +157,23 @@ function Viewport3D({ canvasId = 'render-canvas', domain = 'mechanical', onReady
         // Industry CAD apps used to skip a ground plane, but every DCC
         // tool (Blender, Maya, 3ds Max, Cinema 4D, Houdini, ZBrush)
         // ships one because it conveys scale + horizon orientation.
+        // Slice 560 — Shadow catcher: a large invisible plane below the
+        // origin that only receives shadows. Toggle via __studioSetGroundVisible.
+        {
+          const ground = new THREE.Mesh(
+            new THREE.PlaneGeometry(50, 50),
+            new THREE.ShadowMaterial({ opacity: 0.28 }),
+          );
+          ground.rotation.x = -Math.PI / 2;
+          ground.position.y = -0.001;
+          ground.receiveShadow = true;
+          ground.userData.isHelper = true;
+          ground.userData.archdiscStudioGround = true;
+          scene.add(ground);
+          window.__studioGround = ground;
+          window.__studioSetGroundVisible = (v) => { ground.visible = !!v; };
+        }
+
         // Subtle grey GridHelper at world origin, sized to the same
         // scale as the axes (1m extent, 20 divisions = 5cm cells).
         // Toggle with window.__studioGridVisible = false to hide.
