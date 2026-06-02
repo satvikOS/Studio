@@ -933,6 +933,146 @@ function HDRIPickerRow() {
   );
 }
 
+// ─── CommandPalette (slice 476) ───────────────────────────────────────────
+// Cmd+K opens a fuzzy-filterable list of registered actions. Each item
+// has a label + optional shortcut + handler. Arrow keys to navigate,
+// Enter to fire, Esc to close. Studio teal accent on the focused row.
+const COMMAND_PALETTE_ITEMS = [
+  { id: 'spawn-cube',    label: 'Add cube',               hint: 'Shift+A',   call: () => window.__spawnPrimitive && window.__spawnPrimitive('cube', window.__archdiscScene) },
+  { id: 'spawn-sphere',  label: 'Add sphere',                                call: () => window.__spawnPrimitive && window.__spawnPrimitive('sphere', window.__archdiscScene) },
+  { id: 'spawn-plane',   label: 'Add plane',                                 call: () => window.__spawnPrimitive && window.__spawnPrimitive('plane', window.__archdiscScene) },
+  { id: 'save',          label: 'Save scene',             hint: 'Cmd+S',     call: () => window.__studioDownloadScene && window.__studioDownloadScene() },
+  { id: 'open',          label: 'Open scene file',        hint: 'Cmd+O',     call: () => window.__studioOpenSceneFile && window.__studioOpenSceneFile() },
+  { id: 'export',        label: 'Export GLTF',            hint: 'Cmd+E',     call: () => window.__studioDownloadGLTF && window.__studioDownloadGLTF() },
+  { id: 'undo',          label: 'Undo',                   hint: 'Cmd+Z',     call: () => window.__studioUndo && window.__studioUndo() },
+  { id: 'redo',          label: 'Redo',                   hint: 'Cmd+Shift+Z', call: () => window.__studioRedo && window.__studioRedo() },
+  { id: 'select-all',    label: 'Select all',             hint: 'A',         call: () => window.__studioSelectAll && window.__studioSelectAll() },
+  { id: 'deselect',      label: 'Deselect all',                              call: () => window.__studioDeselect && window.__studioDeselect() },
+  { id: 'frame-selected', label: 'Frame selected',         hint: '.',         call: () => window.__studioFitSelected && window.__studioFitSelected() },
+  { id: 'frame-all',     label: 'Frame all',                                 call: () => window.__studioFrameAll && window.__studioFrameAll() },
+  { id: 'mode-object',   label: 'Mode: Object',           hint: 'Tab',       call: () => window.__studioSetEditMode && window.__studioSetEditMode('object') },
+  { id: 'mode-vertex',   label: 'Mode: Vertex edit',      hint: '1',         call: () => window.__studioSetEditMode && window.__studioSetEditMode('vertex') },
+  { id: 'mode-edge',     label: 'Mode: Edge edit',        hint: '2',         call: () => window.__studioSetEditMode && window.__studioSetEditMode('edge') },
+  { id: 'mode-face',     label: 'Mode: Face edit',        hint: '3',         call: () => window.__studioSetEditMode && window.__studioSetEditMode('face') },
+  { id: 'shade-wire',    label: 'Shading: wire',                             call: () => window.__studioSetShadingMode && window.__studioSetShadingMode('wire') },
+  { id: 'shade-solid',   label: 'Shading: solid',                            call: () => window.__studioSetShadingMode && window.__studioSetShadingMode('solid') },
+  { id: 'shade-mat',     label: 'Shading: material',      hint: 'Z',         call: () => window.__studioSetShadingMode && window.__studioSetShadingMode('material') },
+  { id: 'shade-rend',    label: 'Shading: rendered',                         call: () => window.__studioSetShadingMode && window.__studioSetShadingMode('rendered') },
+  { id: 'settings',      label: 'Open Settings',          hint: 'Cmd+,',     call: () => window.dispatchEvent(new CustomEvent('studio-settings-toggle')) },
+  { id: 'cheatsheet',    label: 'Show keymap cheatsheet', hint: 'F1',        call: () => window.dispatchEvent(new CustomEvent('studio-cheatsheet-toggle')) },
+];
+function CommandPalette() {
+  const [open, setOpen] = useState(false);
+  const [filter, setFilter] = useState('');
+  const [active, setActive] = useState(0);
+  const inputRef = React.useRef(null);
+  useEffect(() => {
+    const onToggle = () => {
+      setOpen((v) => {
+        const next = !v;
+        if (next) { setFilter(''); setActive(0); }
+        return next;
+      });
+    };
+    const onKey = (e) => {
+      if (!open) return;
+      if (e.key === 'Escape') { setOpen(false); e.preventDefault(); }
+    };
+    window.addEventListener('studio-command-palette-toggle', onToggle);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('studio-command-palette-toggle', onToggle);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+  useEffect(() => {
+    if (open && inputRef.current) inputRef.current.focus();
+  }, [open]);
+  if (!open) return null;
+  const f = filter.toLowerCase();
+  const items = COMMAND_PALETTE_ITEMS.filter((it) => !f || it.label.toLowerCase().includes(f) || it.id.includes(f));
+  const onKeyInside = (e) => {
+    if (e.key === 'ArrowDown') { setActive((i) => Math.min(items.length - 1, i + 1)); e.preventDefault(); }
+    else if (e.key === 'ArrowUp') { setActive((i) => Math.max(0, i - 1)); e.preventDefault(); }
+    else if (e.key === 'Enter') {
+      const it = items[active];
+      if (it) { try { it.call(); } catch (_) {} }
+      setOpen(false);
+      e.preventDefault();
+    }
+  };
+  return (
+    <div
+      data-studio-v3-command-palette
+      onClick={() => setOpen(false)}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 9200,
+        background: 'rgba(0,0,0,0.55)',
+        display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+        paddingTop: '12vh',
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: '60vw', maxWidth: 560,
+          background: 'var(--studio-bg, #0d1117)',
+          border: '1px solid var(--studio-ink-mute, #1f2733)',
+          borderRadius: 6,
+          boxShadow: '0 20px 60px rgba(0,0,0,0.55)',
+          fontFamily: 'inherit',
+          color: 'var(--studio-ink, #e6edf3)',
+          overflow: 'hidden',
+        }}
+      >
+        <input
+          ref={inputRef}
+          type="text"
+          data-studio-v3-command-palette-input
+          value={filter}
+          placeholder="Type a command…"
+          onChange={(e) => { setFilter(e.target.value); setActive(0); }}
+          onKeyDown={onKeyInside}
+          style={{
+            width: '100%', padding: '12px 14px',
+            background: 'transparent', color: 'inherit',
+            border: 'none', borderBottom: '1px solid var(--studio-ink-mute, #1f2733)',
+            fontFamily: 'inherit', fontSize: 13, outline: 'none',
+          }}
+        />
+        <div style={{ maxHeight: '50vh', overflowY: 'auto', padding: '4px 0' }}>
+          {items.length === 0 && (
+            <div style={{ padding: '12px 16px', opacity: 0.5, fontSize: 11 }}>No matching commands</div>
+          )}
+          {items.map((it, i) => (
+            <button
+              key={it.id}
+              type="button"
+              data-studio-v3-command-palette-item={it.id}
+              data-active={i === active ? 'true' : 'false'}
+              onMouseEnter={() => setActive(i)}
+              onClick={() => { try { it.call(); } catch (_) {} setOpen(false); }}
+              style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+                width: '100%', padding: '6px 16px', textAlign: 'left',
+                background: i === active ? 'var(--studio-bg-elev, #161b22)' : 'transparent',
+                color: i === active ? 'var(--studio-accent, #1de9b6)' : 'var(--studio-ink, #e6edf3)',
+                border: 'none', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit',
+                borderLeft: '3px solid ' + (i === active ? 'var(--studio-accent, #1de9b6)' : 'transparent'),
+              }}
+            >
+              <span>{it.label}</span>
+              {it.hint && (
+                <code style={{ opacity: 0.55, fontSize: 10, fontFamily: 'var(--studio-mono, ui-monospace)' }}>{it.hint}</code>
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── KeymapCheatsheet ────────────────────────────────────────────────────
 // Slice 432 — F1 / ? overlay listing the V3 hotkeys. Listens to
 // __studioToggleCheatSheet's event so other UI / the cmdbar can also
@@ -972,6 +1112,7 @@ const KEYMAP = [
     ['Cmd+O', 'Open scene file'],
     ['Cmd+E', 'Export GLTF'],
     ['Cmd+,', 'Settings'],
+    ['Cmd+K', 'Command palette'],
     ['Cmd+F', 'Focus outliner filter'],
     ['Cmd+T', 'Toggle theme'],
     ['Cmd+/', 'Focus command bar'],
@@ -2585,6 +2726,10 @@ export function StudioShellV3({ mode = 'dark' }) {
         if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
         window.dispatchEvent(new CustomEvent('studio-settings-toggle'));
         e.preventDefault();
+      } else if (meta && e.key.toLowerCase() === 'k') {
+        // Slice 476 — Cmd/Ctrl+K opens the command palette.
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent('studio-command-palette-toggle'));
       } else if (meta && !e.shiftKey && e.key.toLowerCase() === 'f') {
         // Slice 464 — Cmd/Ctrl+F focuses the outliner filter (standard
         // search shortcut). Auto-expands the right panel + switches to
@@ -2954,6 +3099,7 @@ export function StudioShellV3({ mode = 'dark' }) {
         <ContextMenu />
         <MarkingMenu />
         <QuickAddMenu />
+        <CommandPalette />
         <SettingsModal />
         <ViewportStatsOverlay />
         <AxisGizmo />
