@@ -1826,6 +1826,25 @@ function AboutModal() {
   );
 }
 
+// Slice 519 — Subtle viewport brand watermark. Mounted as the first
+// child of the <main> viewport so it floats over the canvas but stays
+// below all overlays (HUD, menus, marquee).
+function ViewportWatermark() {
+  return (
+    <div
+      data-studio-v3-watermark
+      style={{
+        position: 'absolute', right: 10, bottom: 10, zIndex: 1,
+        pointerEvents: 'none', userSelect: 'none',
+        fontSize: 10, letterSpacing: '0.12em',
+        textTransform: 'uppercase',
+        color: 'var(--studio-ink-mute, #9aa6b2)', opacity: 0.42,
+        fontFamily: 'var(--studio-mono, ui-monospace)',
+      }}
+    >ArchDisc · Studio</div>
+  );
+}
+
 function ToastBus() {
   const [items, setItems] = useState([]);
   useEffect(() => {
@@ -4472,6 +4491,7 @@ export function StudioShellV3({ mode = 'dark' }) {
         }}
       />
       <main className="studio-viewport studio-viewport-canvas" data-studio-v3-viewport>
+        <ViewportWatermark />
         {/* V3's own Viewport3D — owns the scene + camera + gizmo +
             raycaster. No V2 dependency. */}
         <Viewport3D
