@@ -302,6 +302,42 @@ export function registerV3Api() {
     requestAnimationFrame(tick);
   }
 
+  // Slice 541 — Selected mesh outline highlight. Attaches a teal
+  // LineSegments child built from EdgesGeometry; auto-removes from any
+  // previous selection. Driven by a rAF loop watching the active mesh.
+  let _outlineFor = null;
+  const removeOutline = (m) => {
+    if (!m) return;
+    const child = m.children && m.children.find((c) => c.userData && c.userData.__studioOutline);
+    if (child) {
+      if (child.geometry && child.geometry.dispose) child.geometry.dispose();
+      if (child.material && child.material.dispose) child.material.dispose();
+      m.remove(child);
+    }
+  };
+  const addOutline = (m) => {
+    if (!m || !m.geometry || !m.geometry.attributes || !m.geometry.attributes.position) return;
+    const edges = new THREE.EdgesGeometry(m.geometry, 30);
+    const mat = new THREE.LineBasicMaterial({ color: 0x1de9b6, depthTest: false, transparent: true, opacity: 0.85 });
+    const lines = new THREE.LineSegments(edges, mat);
+    lines.userData = { __studioOutline: true, isHelper: true };
+    lines.renderOrder = 998;
+    m.add(lines);
+  };
+  if (!window.__studioOutlineGuardAttached) {
+    window.__studioOutlineGuardAttached = true;
+    const tick = () => {
+      const m = window.__studioSelectedMesh && window.__studioSelectedMesh();
+      if (m !== _outlineFor) {
+        removeOutline(_outlineFor);
+        _outlineFor = m;
+        if (m && m.geometry) addOutline(m);
+      }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+
   // Slice 521 — Annotation op. Spawns a Sprite-style text overlay anchored
   // at a world point. Uses a CanvasTexture so we don't pull in extra deps.
   // Persists in userData.archdiscStudioAnnotation. window.__studioListAnnotations
