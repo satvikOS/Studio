@@ -1265,6 +1265,7 @@ const KEYMAP = [
     ['M', 'Measure distance between 2 selected'],
     ['Cmd+Alt+A', 'Add text annotation at selection'],
     ['Cmd+L', 'Toggle transform lock on selection'],
+    ['Alt+1..9', 'Recall camera bookmark by index'],
     ['/', 'Solo: isolate selection + frame · press again to restore'],
     ['Alt+G/R/S', 'Reset translate/rotate/scale'],
     ['Shift+;', 'Toggle transform snap (1 cm / 15° / 0.1)'],
@@ -4651,6 +4652,19 @@ export function StudioShellV3({ mode = 'dark' }) {
         const cur = (window.__studioGetShadingMode && window.__studioGetShadingMode()) || 'solid';
         const next = cycle[(cycle.indexOf(cur) + 1) % cycle.length];
         if (window.__studioSetShadingMode) window.__studioSetShadingMode(next);
+        e.preventDefault();
+      } else if (!meta && !e.shiftKey && e.altKey && e.key >= '1' && e.key <= '9') {
+        // Slice 537 — Alt+1..9 recalls camera bookmark by index. Bookmark
+        // names are arbitrary; we sort then pick the Nth.
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        const names = (window.__studioListCameraBookmarks && window.__studioListCameraBookmarks()) || [];
+        const sorted = names.slice().sort();
+        const idx = Number(e.key) - 1;
+        if (sorted[idx] && window.__studioRestoreCameraBookmark) {
+          window.__studioRestoreCameraBookmark(sorted[idx]);
+          if (window.__studioToast) window.__studioToast(`Camera: ${sorted[idx]}`, 'info');
+        }
         e.preventDefault();
       } else if (!meta && !e.shiftKey && !e.altKey && (e.key === '1' || e.key === '2' || e.key === '3' || e.key === '7')) {
         // 1/2/3 flip vert/edge/face — ONLY when already in a sub-object
