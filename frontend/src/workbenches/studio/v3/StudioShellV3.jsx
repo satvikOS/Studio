@@ -1107,6 +1107,7 @@ const KEYMAP = [
     ['+ / -', 'Dolly camera in / out'],
     ['Space', 'Play / pause animation'],
     ['← / →', 'Step animation frame ±1'],
+    ['J / L', 'Jump to prev / next keyframe'],
     ['K', 'Insert keyframe at current frame'],
     ['.', 'Frame selected (fallback: frame all)'],
     ['Cmd+Z', 'Undo'],
@@ -3050,6 +3051,30 @@ export function StudioShellV3({ mode = 'dark' }) {
         if (window.__studioInsertKeyframeAt && window.__studioGetFrame) {
           window.__studioInsertKeyframeAt(window.__studioGetFrame());
         }
+        e.preventDefault();
+      } else if (!meta && !e.shiftKey && !e.altKey && (e.key === 'j' || e.key === 'J' || e.key === 'l' || e.key === 'L')) {
+        // Slice 483 — J / L jump to previous / next keyframe of the
+        // active mesh.
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        const mesh = window.__studioSelectedMesh && window.__studioSelectedMesh();
+        if (!mesh || !window.__studioGetKeyframes || !window.__studioSetFrame) return;
+        const r = window.__studioGetKeyframes(mesh.uuid);
+        const kfs = (r && r.keyframes) || [];
+        if (!kfs.length) return;
+        const cur = (window.__studioGetFrame && window.__studioGetFrame()) || 0;
+        const sorted = kfs.map((k) => k.frame).sort((a, b) => a - b);
+        let next = cur;
+        if (e.key === 'j' || e.key === 'J') {
+          // Previous keyframe (strictly less than current).
+          const prevs = sorted.filter((f) => f < cur);
+          if (prevs.length) next = prevs[prevs.length - 1];
+        } else {
+          // Next keyframe.
+          const nexts = sorted.filter((f) => f > cur);
+          if (nexts.length) next = nexts[0];
+        }
+        window.__studioSetFrame(next);
         e.preventDefault();
       } else if (!meta && !e.shiftKey && !e.altKey && (e.key === 'n' || e.key === 'N')) {
         // Slice 448 — N toggles the right panel (Blender N sidebar).
