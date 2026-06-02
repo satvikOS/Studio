@@ -296,6 +296,44 @@ function QuickAccessBar({ onAction }) {
   );
 }
 
+// Slice 528 — Live primitive-count badge per Add-group tool button.
+// Polls the scene every 700 ms so manual adds, undo + Archie spawns all
+// reflect.
+function ToolKindBadge({ kind }) {
+  const [n, setN] = React.useState(0);
+  React.useEffect(() => {
+    const read = () => {
+      const s = window.__archdiscScene;
+      if (!s) return;
+      let c = 0;
+      try {
+        s.traverse((o) => {
+          if (o.userData && o.userData.archdiscStudioPrimitive
+              && o.userData.archdiscStudioPrimitiveKind === kind) c++;
+        });
+      } catch (_) {}
+      setN(c);
+    };
+    const id = setInterval(read, 700);
+    read();
+    return () => clearInterval(id);
+  }, [kind]);
+  if (!n) return null;
+  return (
+    <span
+      data-studio-v3-tool-badge={kind}
+      data-studio-v3-tool-badge-count={n}
+      style={{
+        position: 'absolute', top: -3, right: -3,
+        background: 'var(--studio-accent, #1de9b6)', color: '#0d1117',
+        borderRadius: 8, padding: '0 4px', fontSize: 9, lineHeight: '13px',
+        fontFamily: 'var(--studio-mono, ui-monospace)', minWidth: 13, textAlign: 'center',
+        boxShadow: '0 0 0 1px var(--studio-bg, #0d1117)',
+      }}
+    >{n > 99 ? '99+' : n}</span>
+  );
+}
+
 // ─── WorkbenchRail (left, 15 disciplines) ────────────────────────────────
 function WorkbenchRail({ activeId, onSwitch }) {
   return (
@@ -340,6 +378,7 @@ function Toolbar({ wbId, activeTool, setTool, onInvoke }) {
           {g.tools.map((t) => {
             const isTransform = g.label === 'Transform' || TRANSFORM_TOOLS.has(t);
             const active = isTransform && t === activeTool;
+            const isAddTool = g.label === 'Add';
             return (
               <button
                 key={t}
@@ -353,7 +392,11 @@ function Toolbar({ wbId, activeTool, setTool, onInvoke }) {
                   if (isTransform) setTool(t);
                   else onInvoke && onInvoke(t, g.label.toLowerCase());
                 }}
-              ><Icon name={t} size={16} /></button>
+                style={{ position: 'relative' }}
+              >
+                <Icon name={t} size={16} />
+                {isAddTool && <ToolKindBadge kind={t} />}
+              </button>
             );
           })}
         </div>
