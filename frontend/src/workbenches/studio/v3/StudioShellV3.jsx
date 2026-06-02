@@ -2229,6 +2229,8 @@ function RightPanel({ collapsed, onToggle, activeWb, editMode, selection }) {
             <WorldSection />
             {/* Slice 510 — Ambient + key intensity sliders. */}
             <LightingSection />
+            {/* Slice 516 — Per-workbench Notes textarea. */}
+            <NotesSection activeWb={activeWb} />
             <div className="studio-right-section">
               <div className="studio-right-section-title">Edit selection</div>
               <SelectionRows />
@@ -2458,6 +2460,44 @@ function CameraSection() {
           }}
         >{proj}</button>
       </div>
+    </div>
+  );
+}
+
+// Slice 516 — Per-workbench Notes textarea. Saves debounced 300 ms after
+// the user stops typing; restored on workbench switch.
+function NotesSection({ activeWb }) {
+  const key = `studio.v3.notes.${activeWb || 'general'}`;
+  const [text, setText] = useState(() => {
+    try { return window.localStorage.getItem(key) || ''; } catch (_) { return ''; }
+  });
+  // Reset when workbench changes.
+  useEffect(() => {
+    try { setText(window.localStorage.getItem(key) || ''); } catch (_) {}
+  }, [key]);
+  useEffect(() => {
+    const t = setTimeout(() => {
+      try { window.localStorage.setItem(key, text); } catch (_) {}
+    }, 300);
+    return () => clearTimeout(t);
+  }, [key, text]);
+  return (
+    <div className="studio-right-section" data-studio-v3-notes-section data-studio-v3-notes-wb={activeWb || ''}>
+      <div className="studio-right-section-title">Notes · {activeWb || 'general'}</div>
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder="Sketch ideas, todos, intents — saved per workbench."
+        data-studio-v3-notes-input
+        style={{
+          width: '100%', minHeight: 70, padding: '6px 8px',
+          background: 'var(--studio-bg-elev, #161b22)',
+          border: '1px solid var(--studio-ink-mute, #1f2733)',
+          color: 'var(--studio-ink, #e6edf3)', borderRadius: 3,
+          fontFamily: 'inherit', fontSize: 11, resize: 'vertical',
+          outline: 'none',
+        }}
+      />
     </div>
   );
 }
