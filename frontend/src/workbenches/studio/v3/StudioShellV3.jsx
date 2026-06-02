@@ -676,6 +676,14 @@ function SettingsModal() {
   const [theme, setTheme] = useState('dark');
   const [bg, setBg] = useState('#000000');
   const [shading, setShading] = useState('solid');
+  const [accent, setAccent] = useState(() => {
+    try { return window.localStorage.getItem('studio.v3.accent') || '#1de9b6'; } catch (_) { return '#1de9b6'; }
+  });
+  // Slice 523 — apply accent to :root --studio-accent on mount + change.
+  useEffect(() => {
+    document.documentElement.style.setProperty('--studio-accent', accent);
+    try { window.localStorage.setItem('studio.v3.accent', accent); } catch (_) {}
+  }, [accent]);
   useEffect(() => {
     const onToggle = () => setOpen((v) => !v);
     const onKey = (e) => {
@@ -723,6 +731,34 @@ function SettingsModal() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 16 }}>
           <strong style={{ fontSize: 14, color: 'var(--studio-accent, #1de9b6)', letterSpacing: '0.04em' }}>Settings</strong>
           <span style={{ opacity: 0.5, fontSize: 10, fontFamily: 'var(--studio-mono, ui-monospace)' }}>Esc to close</span>
+        </div>
+        {/* Slice 523 — accent color */}
+        <div data-studio-v3-settings-section="accent" style={{ marginBottom: 12 }}>
+          <div style={{ opacity: 0.55, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Accent</div>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <input
+              type="color"
+              data-studio-v3-settings-accent
+              value={accent}
+              onChange={(e) => setAccent(e.target.value)}
+              style={{
+                width: 38, height: 24, padding: 0,
+                background: 'transparent',
+                border: '1px solid var(--studio-ink-mute, #1f2733)',
+                borderRadius: 3, cursor: 'pointer',
+              }}
+            />
+            <span style={{ fontFamily: 'var(--studio-mono, ui-monospace)', fontSize: 11, opacity: 0.75 }}>{accent}</span>
+            <button
+              type="button"
+              onClick={() => setAccent('#1de9b6')}
+              style={{
+                marginLeft: 'auto', padding: '2px 8px', fontSize: 10,
+                background: 'transparent', border: '1px solid var(--studio-ink-mute, #1f2733)',
+                color: 'var(--studio-ink, #e6edf3)', borderRadius: 3, cursor: 'pointer',
+              }}
+            >Reset</button>
+          </div>
         </div>
         {/* Theme */}
         <div data-studio-v3-settings-section="theme" style={{ marginBottom: 12 }}>
@@ -3914,6 +3950,14 @@ export function StudioShellV3({ mode = 'dark' }) {
   const [activeWb, setActiveWb] = useState(() => lstor.get('wb', 'model'));
   const [activeTool, setActiveTool] = useState('select');
   const [editMode, setEditMode] = useState('object');
+  // Slice 523 — Apply the user's accent color on root mount so it's
+  // not gated on opening SettingsModal.
+  useEffect(() => {
+    try {
+      const a = window.localStorage.getItem('studio.v3.accent');
+      if (a) document.documentElement.style.setProperty('--studio-accent', a);
+    } catch (_) {}
+  }, []);
   // Slice 426 — Keep React editMode in sync with window.__studioEditModeRef.
   // Without this, programmatic window.__studioSetEditMode() doesn't update
   // the HUD chip / counts badge until the user clicks a chip.
