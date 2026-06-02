@@ -251,6 +251,35 @@ export function registerV3Api() {
     sel.updateMatrixWorld(true);
     return { ok: true, kind };
   };
+  // Slice 501 — Box marquee select op. Takes pixel rect (x1,y1,x2,y2) in
+  // canvas-relative coords and returns matched primitive UUIDs (those whose
+  // world-space center projects into the rect). Selects the last hit so
+  // the inspector reflects the result.
+  window.__studioBoxSelect = (x1, y1, x2, y2) => {
+    const vp = window.__archdiscViewport;
+    const scene = window.__archdiscScene;
+    if (!vp || !vp.camera || !vp.renderer || !scene) return { ok: false, error: 'no viewport' };
+    const dom = vp.renderer.domElement;
+    const W = dom.clientWidth, H = dom.clientHeight;
+    const minX = Math.min(x1, x2), maxX = Math.max(x1, x2);
+    const minY = Math.min(y1, y2), maxY = Math.max(y1, y2);
+    const hits = [];
+    let last = null;
+    const target = new THREE.Vector3();
+    scene.traverse((o) => {
+      if (!(o.userData && o.userData.archdiscStudioPrimitive)) return;
+      o.getWorldPosition(target);
+      target.project(vp.camera); // NDC
+      const sx = (target.x * 0.5 + 0.5) * W;
+      const sy = (1 - (target.y * 0.5 + 0.5)) * H;
+      if (sx >= minX && sx <= maxX && sy >= minY && sy <= maxY) {
+        hits.push(o.uuid);
+        last = o;
+      }
+    });
+    if (last && window.__studioSelectMesh) window.__studioSelectMesh(last);
+    return { ok: true, hits, count: hits.length };
+  };
   window.__studioHideUnselected = () => {
     const scene = window.__archdiscScene;
     const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
