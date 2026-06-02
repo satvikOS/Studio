@@ -3092,6 +3092,8 @@ function RightPanel({ collapsed, onToggle, activeWb, editMode, selection }) {
             <DisplaySection />
             {/* Slice 510 — Ambient + key intensity sliders. */}
             <LightingSection />
+            {/* Slice 562 — Stage mood presets. */}
+            <StagePresets />
             {/* Slice 516 — Per-workbench Notes textarea. */}
             <NotesSection activeWb={activeWb} />
             {/* Slice 518 — Recent undo history list. */}
@@ -4040,6 +4042,50 @@ function LightingSection() {
         <span style={{ width: 36, textAlign: 'right', fontFamily: 'var(--studio-mono, ui-monospace)', fontSize: 10, color: 'var(--studio-ink-mute, #9aa6b2)' }}>{el}°</span>
       </div>
       <HDRIRow />
+    </div>
+  );
+}
+
+// Slice 562 — Stage mood presets. One click applies HDRI + bg + sun angle
+// + ambient/key intensities matching the mood.
+function StagePresets() {
+  const apply = (preset) => {
+    if (window.__studioSetHDRIEnvironment) window.__studioSetHDRIEnvironment(preset.hdri);
+    const vp = window.__archdiscViewport;
+    if (vp && vp.scene && vp.scene.background && vp.scene.background.set) vp.scene.background.set(preset.bg);
+    if (window.__studioSetAmbientIntensity) window.__studioSetAmbientIntensity(preset.amb);
+    if (window.__studioSetKeyIntensity) window.__studioSetKeyIntensity(preset.key);
+    if (window.__studioSetSunAngle) window.__studioSetSunAngle(preset.az, preset.el);
+    if (window.__studioToast) window.__studioToast(`Stage: ${preset.id}`, 'ok');
+  };
+  const presets = [
+    { id: 'workshop',  hdri: 'studio',  bg: '#1a1d22', amb: 0.6, key: 1.2, az: 35,  el: 50 },
+    { id: 'showroom',  hdri: 'neutral', bg: '#0d1117', amb: 0.8, key: 1.8, az: 25,  el: 70 },
+    { id: 'sunset',    hdri: 'sunset',  bg: '#241010', amb: 0.4, key: 2.6, az: -50, el: 12 },
+    { id: 'night',     hdri: 'off',     bg: '#04060a', amb: 0.15, key: 0.8, az: 90, el: 30 },
+  ];
+  return (
+    <div className="studio-right-section" data-studio-v3-stage-presets>
+      <div className="studio-right-section-title">Stage presets</div>
+      <div className="studio-right-row" style={{ flexWrap: 'wrap', gap: 4 }}>
+        {presets.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            data-studio-v3-stage-preset={p.id}
+            onClick={() => apply(p)}
+            style={{
+              flex: '1 1 calc(50% - 4px)', minWidth: 80,
+              padding: '4px 6px', fontSize: 11,
+              background: 'var(--studio-bg-elev, #161b22)',
+              color: 'var(--studio-ink, #e6edf3)',
+              border: '1px solid var(--studio-ink-mute, #1f2733)',
+              borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit',
+              textTransform: 'capitalize',
+            }}
+          >{p.id}</button>
+        ))}
+      </div>
     </div>
   );
 }
