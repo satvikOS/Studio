@@ -1349,6 +1349,8 @@ function RightPanel({ collapsed, onToggle, activeWb, editMode, selection }) {
             <MeshStatsRows />
             {/* Slice 459 — Editable transform XYZ inputs. */}
             <TransformRows />
+            {/* Slice 472 — Origin / pivot quick actions. */}
+            <PivotActions />
             {/* Slice 461 — Material properties. */}
             <MaterialRows />
             <div className="studio-right-section">
@@ -1484,6 +1486,38 @@ function TransformRows() {
         {numIn('scale', 'y', m.scale.y.toFixed(4))}
         {numIn('scale', 'z', m.scale.z.toFixed(4))}
       </div>
+    </div>
+  );
+}
+
+// Slice 472 — Origin / pivot / transform-bake quick actions.
+function PivotActions() {
+  const actions = [
+    { id: 'center',     label: 'Center at origin',  call: () => window.__studioCenterAtOrigin && window.__studioCenterAtOrigin() },
+    { id: 'ground',     label: 'Align to ground',   call: () => window.__studioAlignToGround && window.__studioAlignToGround() },
+    { id: 'recenter',   label: 'Recenter pivot',    call: () => window.__studioRecenterPivot && window.__studioRecenterPivot() },
+    { id: 'apply',      label: 'Apply transforms',  call: () => window.__studioApplyTransforms && window.__studioApplyTransforms() },
+  ];
+  return (
+    <div className="studio-right-section" data-studio-v3-pivot-actions>
+      <div className="studio-right-section-title">Origin · pivot</div>
+      {actions.map((a) => (
+        <button
+          key={a.id}
+          type="button"
+          data-studio-v3-pivot-action={a.id}
+          onClick={a.call}
+          style={{
+            display: 'block', width: '100%', marginBottom: 3,
+            padding: '3px 8px', textAlign: 'left',
+            background: 'var(--studio-bg-elev, #161b22)',
+            color: 'var(--studio-ink, #e6edf3)',
+            border: '1px solid var(--studio-ink-mute, #1f2733)',
+            borderRadius: 3, cursor: 'pointer',
+            fontSize: 11, fontFamily: 'inherit',
+          }}
+        >{a.label}</button>
+      ))}
     </div>
   );
 }
