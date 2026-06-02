@@ -1120,6 +1120,7 @@ const KEYMAP = [
     ['Cmd+E', 'Export GLTF'],
     ['Cmd+Shift+E', 'Export viewport PNG'],
     ['Shift+H', 'Isolate selected (hide others)'],
+    ['B', 'Box marquee select (drag a rectangle)'],
     ['Alt+G/R/S', 'Reset translate/rotate/scale'],
     ['Shift+;', 'Toggle transform snap (1 cm / 15° / 0.1)'],
     ['Cmd+,', 'Settings'],
@@ -1601,6 +1602,93 @@ function SaveAsModal() {
           >Save</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// Slice 502 — Drag-rectangle marquee. B key arms the mode; mousedown
+// on the viewport starts the drag; the overlay div renders a rectangle
+// following the mouse; mouseup commits via __studioBoxSelect.
+function MarqueeOverlay() {
+  const [armed, setArmed] = useState(false);
+  const [rect, setRect] = useState(null);
+  useEffect(() => {
+    const onArm = () => setArmed(true);
+    window.addEventListener('studio-marquee-arm', onArm);
+    return () => window.removeEventListener('studio-marquee-arm', onArm);
+  }, []);
+  useEffect(() => {
+    if (!armed) return;
+    let start = null;
+    const onDown = (e) => {
+      const main = document.querySelector('[data-studio-v3-viewport]');
+      if (!main) return;
+      const r = main.getBoundingClientRect();
+      if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) return;
+      start = { x: e.clientX - r.left, y: e.clientY - r.top, mainRect: r };
+      setRect({ x: start.x, y: start.y, w: 0, h: 0 });
+      e.preventDefault();
+      e.stopPropagation();
+      const ctl = window.__archdiscViewport && window.__archdiscViewport.orbitControls;
+      if (ctl) ctl.enabled = false;
+    };
+    const onMove = (e) => {
+      if (!start) return;
+      const x = e.clientX - start.mainRect.left;
+      const y = e.clientY - start.mainRect.top;
+      setRect({ x: Math.min(start.x, x), y: Math.min(start.y, y), w: Math.abs(x - start.x), h: Math.abs(y - start.y) });
+    };
+    const onUp = (e) => {
+      if (!start) return;
+      const x2 = e.clientX - start.mainRect.left;
+      const y2 = e.clientY - start.mainRect.top;
+      if (window.__studioBoxSelect) {
+        const r = window.__studioBoxSelect(start.x, start.y, x2, y2);
+        if (window.__studioToast && r && r.count != null) window.__studioToast(`Box select: ${r.count} hit${r.count === 1 ? '' : 's'}`, 'info');
+      }
+      start = null;
+      setRect(null);
+      setArmed(false);
+      const ctl = window.__archdiscViewport && window.__archdiscViewport.orbitControls;
+      if (ctl) ctl.enabled = true;
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') { start = null; setRect(null); setArmed(false); const ctl = window.__archdiscViewport && window.__archdiscViewport.orbitControls; if (ctl) ctl.enabled = true; }
+    };
+    window.addEventListener('mousedown', onDown, true);
+    window.addEventListener('mousemove', onMove, true);
+    window.addEventListener('mouseup', onUp, true);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', onDown, true);
+      window.removeEventListener('mousemove', onMove, true);
+      window.removeEventListener('mouseup', onUp, true);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [armed]);
+  if (!armed) return null;
+  return (
+    <div
+      data-studio-v3-marquee-overlay
+      data-studio-v3-marquee-armed="true"
+      style={{
+        position: 'fixed', inset: 0, zIndex: 60,
+        cursor: 'crosshair', pointerEvents: 'none',
+        background: 'rgba(29, 233, 182, 0.04)',
+      }}
+    >
+      {rect && (
+        <div
+          data-studio-v3-marquee-rect
+          style={{
+            position: 'absolute', left: (rect.x), top: (rect.y),
+            width: rect.w, height: rect.h,
+            border: '1px dashed var(--studio-accent, #1de9b6)',
+            background: 'rgba(29, 233, 182, 0.08)',
+            pointerEvents: 'none',
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -3606,6 +3694,12 @@ export function StudioShellV3({ mode = 'dark' }) {
           if (sel) sel.visible = false;
         }
         e.preventDefault();
+      } else if (!meta && !e.shiftKey && !e.altKey && (e.key === 'b' || e.key === 'B')) {
+        // Slice 502 — B arms the drag-rectangle marquee select (Blender B parity).
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        window.dispatchEvent(new CustomEvent('studio-marquee-arm'));
+        e.preventDefault();
       } else if (!meta && e.shiftKey && (e.key === 'h' || e.key === 'H')) {
         // Slice 489 — Shift+H hides everything except the selected primitive
         // (isolate-selected). Re-press unhides via Alt+H or Reveal All.
@@ -3932,6 +4026,7 @@ export function StudioShellV3({ mode = 'dark' }) {
       <CommandBar onSubmit={onCmdSubmit} />
       <OnboardingTour />
       <ToastBus />
+      <MarqueeOverlay />
       <SaveAsModal />
       <DocTitle activeWb={activeWb} />
     </div>
