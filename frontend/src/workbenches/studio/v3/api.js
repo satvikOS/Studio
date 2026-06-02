@@ -269,10 +269,35 @@ export function registerV3Api() {
     const pa = new THREE.Vector3(), pb = new THREE.Vector3();
     a.getWorldPosition(pa); b.getWorldPosition(pb);
     const d = pa.distanceTo(pb);
+
+    // Slice 513 — Visual line. Reuse a single LineSegments + replace
+    // each measure. Tag userData so it's distinguishable in the outliner.
+    let line = s.getObjectByName('__studio_measure_line');
+    if (line) {
+      if (line.geometry) line.geometry.dispose();
+      s.remove(line);
+    }
+    const geo = new THREE.BufferGeometry().setFromPoints([pa, pb]);
+    const mat = new THREE.LineBasicMaterial({ color: 0x1de9b6, depthTest: false, transparent: true, opacity: 0.95 });
+    line = new THREE.LineSegments(geo, mat);
+    line.name = '__studio_measure_line';
+    line.userData = { isHelper: true, archdiscStudioMeasure: true };
+    line.renderOrder = 999;
+    s.add(line);
+
     const detail = { a: a.uuid, b: b.uuid, distance: d, mm: d * 1000 };
     window.dispatchEvent(new CustomEvent('studio-measure-result', { detail }));
     if (window.__studioToast) window.__studioToast(`Distance: ${(d * 1000).toFixed(1)} mm`, 'info');
     return { ok: true, ...detail };
+  };
+
+  // Slice 513 — Clear measurement helper.
+  window.__studioClearMeasure = () => {
+    const s = window.__archdiscScene;
+    if (!s) return { ok: false };
+    const line = s.getObjectByName('__studio_measure_line');
+    if (line) { if (line.geometry) line.geometry.dispose(); if (line.material) line.material.dispose(); s.remove(line); }
+    return { ok: true };
   };
 
   // Slice 501 — Box marquee select op. Takes pixel rect (x1,y1,x2,y2) in
