@@ -3702,8 +3702,19 @@ function MeshStatsRows() {
           bboxVolume = (bb.max.x - bb.min.x) * (bb.max.y - bb.min.y) * (bb.max.z - bb.min.z);
         }
       }
+      // Slice 545 — AABB dimensions (world-space, with mesh scale).
+      let dims = null;
+      if (g.boundingBox) {
+        const bb = g.boundingBox;
+        const sx = m.scale.x, sy = m.scale.y, sz = m.scale.z;
+        dims = {
+          w: (bb.max.x - bb.min.x) * sx,
+          h: (bb.max.y - bb.min.y) * sy,
+          d: (bb.max.z - bb.min.z) * sz,
+        };
+      }
       setStats({
-        v, t, area, bboxVolume,
+        v, t, area, bboxVolume, dims,
         kind: m.userData && m.userData.archdiscStudioPrimitiveKind || 'mesh',
       });
     };
@@ -3723,6 +3734,14 @@ function MeshStatsRows() {
       )}
       {stats.bboxVolume > 0 && (
         <div className="studio-right-row"><span>AABB volume</span><strong style={{ fontFamily: 'var(--studio-mono)' }}>{stats.bboxVolume.toFixed(6)}</strong></div>
+      )}
+      {stats.dims && (
+        <div className="studio-right-row" data-studio-v3-mesh-dims>
+          <span>Dimensions (m)</span>
+          <strong style={{ fontFamily: 'var(--studio-mono)' }}>
+            {stats.dims.w.toFixed(3)} × {stats.dims.h.toFixed(3)} × {stats.dims.d.toFixed(3)}
+          </strong>
+        </div>
       )}
     </div>
   );
