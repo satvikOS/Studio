@@ -1500,6 +1500,23 @@ function ViewportStatsOverlay() {
 // Slice 496 — Unified toast bus. Any op can dispatch a 'studio-toast'
 // CustomEvent with { msg, kind } (kind: 'info' | 'ok' | 'warn').
 // ToastBus stacks up to 4, auto-dismisses after 2.6 s.
+// Slice 497 — Dynamic document.title shows active wb + dirty marker.
+// Listens to studio-autosaved + polls __studioV3Dirty.
+function DocTitle({ activeWb }) {
+  const [dirty, setDirty] = useState(false);
+  useEffect(() => {
+    const tick = () => setDirty(!!window.__studioV3Dirty);
+    const id = setInterval(tick, 600);
+    tick();
+    return () => clearInterval(id);
+  }, []);
+  useEffect(() => {
+    const wb = activeWb ? activeWb[0].toUpperCase() + activeWb.slice(1) : 'Studio';
+    document.title = `${dirty ? '• ' : ''}${wb} — ArchDisc Studio`;
+  }, [activeWb, dirty]);
+  return null;
+}
+
 function ToastBus() {
   const [items, setItems] = useState([]);
   useEffect(() => {
@@ -3686,6 +3703,7 @@ export function StudioShellV3({ mode = 'dark' }) {
       <CommandBar onSubmit={onCmdSubmit} />
       <OnboardingTour />
       <ToastBus />
+      <DocTitle activeWb={activeWb} />
     </div>
   );
 }
