@@ -5011,7 +5011,34 @@ export function StudioShellV3({ mode = 'dark' }) {
           // Other groups — placeholder; surfaced in slice 396+.
         }}
       />
-      <main className="studio-viewport studio-viewport-canvas" data-studio-v3-viewport>
+      <main
+        className="studio-viewport studio-viewport-canvas"
+        data-studio-v3-viewport
+        onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }}
+        onDrop={(e) => {
+          e.preventDefault();
+          const files = Array.from(e.dataTransfer.files || []);
+          for (const f of files) {
+            const reader = new FileReader();
+            if (f.type.startsWith('image/')) {
+              reader.onload = () => {
+                if (window.__studioAddImagePlate) window.__studioAddImagePlate(reader.result);
+              };
+              reader.readAsDataURL(f);
+            } else if (f.name.endsWith('.studio.json') || f.name.endsWith('.json')) {
+              reader.onload = () => {
+                if (window.__studioLoadScene) {
+                  const r = window.__studioLoadScene(reader.result);
+                  if (window.__studioToast) window.__studioToast(r && r.ok ? `Loaded ${f.name}` : `Failed: ${(r && r.error) || 'unknown'}`, r && r.ok ? 'ok' : 'warn');
+                }
+              };
+              reader.readAsText(f);
+            } else if (window.__studioToast) {
+              window.__studioToast(`Skipped ${f.name} (unsupported)`, 'warn');
+            }
+          }
+        }}
+      >
         <ViewportWatermark />
         <ViewportMinimap />
         {/* V3's own Viewport3D — owns the scene + camera + gizmo +
