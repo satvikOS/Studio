@@ -244,6 +244,8 @@ function TopBar({ onCycleTheme, theme }) {
             onClick={() => {
               // Slice 509 — Help opens the About modal.
               if (m === 'Help') window.dispatchEvent(new CustomEvent('studio-about-open'));
+              // Slice 550 — File menu opens a floating actions panel.
+              else if (m === 'File') window.dispatchEvent(new CustomEvent('studio-file-menu-toggle'));
             }}
           >{m}</button>
         ))}
@@ -2180,6 +2182,105 @@ function SectionCollapser() {
     return () => { document.removeEventListener('mousedown', onClick); clearInterval(id); };
   }, []);
   return null;
+}
+
+// Slice 550 — File menu as a floating panel docked under the File chip.
+// Lists Save / Save As / Open / Export PNG / Export GLTF / OBJ / STL /
+// Recent files (top 5). Esc dismisses.
+function FileMenu() {
+  const [open, setOpen] = useState(false);
+  const [recent, setRecent] = useState([]);
+  useEffect(() => {
+    const onToggle = () => {
+      setOpen((v) => !v);
+      setRecent((window.__studioListRecentFiles && window.__studioListRecentFiles()) || []);
+    };
+    const onKey = (e) => { if (open && e.key === 'Escape') { setOpen(false); e.preventDefault(); } };
+    const onClickOutside = (e) => {
+      if (!open) return;
+      if (e.target && e.target.closest && e.target.closest('[data-studio-v3-file-menu], [data-studio-v3-menu="file"]')) return;
+      setOpen(false);
+    };
+    window.addEventListener('studio-file-menu-toggle', onToggle);
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('mousedown', onClickOutside);
+    return () => {
+      window.removeEventListener('studio-file-menu-toggle', onToggle);
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('mousedown', onClickOutside);
+    };
+  }, [open]);
+  if (!open) return null;
+  const actions = [
+    { id: 'save',     label: 'Save scene',          hint: 'Cmd+S',       call: () => window.__studioDownloadScene && window.__studioDownloadScene() },
+    { id: 'save-as',  label: 'Save scene as…',      hint: 'Cmd+Shift+S', call: () => window.dispatchEvent(new CustomEvent('studio-save-as-open')) },
+    { id: 'open',     label: 'Open scene…',         hint: 'Cmd+O',       call: () => window.__studioOpenSceneFile && window.__studioOpenSceneFile() },
+    { id: 'export-png',  label: 'Export viewport PNG', hint: 'Cmd+Shift+E', call: () => window.__studioExportViewportPNG && window.__studioExportViewportPNG() },
+    { id: 'export-gltf', label: 'Export GLTF',         hint: 'Cmd+E',       call: () => window.__studioDownloadGLTF && window.__studioDownloadGLTF() },
+    { id: 'export-obj',  label: 'Export OBJ',                              call: () => window.__studioExportOBJ && window.__studioExportOBJ() },
+    { id: 'export-stl',  label: 'Export STL',                              call: () => window.__studioExportSTL && window.__studioExportSTL() },
+  ];
+  return (
+    <div
+      data-studio-v3-file-menu
+      style={{
+        position: 'fixed', top: 36, left: 96, zIndex: 9300,
+        minWidth: 260,
+        background: 'var(--studio-bg-elev, #161b22)',
+        border: '1px solid var(--studio-ink-mute, #1f2733)',
+        borderRadius: 6,
+        boxShadow: '0 20px 50px rgba(0,0,0,0.55)',
+        color: 'var(--studio-ink, #e6edf3)',
+        fontFamily: 'inherit', fontSize: 12,
+        padding: '6px 0',
+      }}
+    >
+      {actions.map((a) => (
+        <button
+          key={a.id}
+          type="button"
+          data-studio-v3-file-action={a.id}
+          onClick={() => { try { a.call(); } catch (_) {} setOpen(false); }}
+          style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+            width: '100%', padding: '5px 14px', textAlign: 'left',
+            background: 'transparent', border: 0,
+            color: 'var(--studio-ink, #e6edf3)', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(29, 233, 182, 0.08)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+        >
+          <span>{a.label}</span>
+          <span style={{ opacity: 0.5, fontSize: 10, fontFamily: 'var(--studio-mono, ui-monospace)' }}>{a.hint || ''}</span>
+        </button>
+      ))}
+      {recent.length > 0 && (
+        <>
+          <div style={{ borderTop: '1px solid var(--studio-ink-mute, #1f2733)', margin: '4px 0' }} />
+          <div style={{
+            padding: '4px 14px 2px', fontSize: 10, opacity: 0.55,
+            textTransform: 'uppercase', letterSpacing: '0.05em',
+          }}>Recent</div>
+          {recent.slice(0, 5).map((it) => (
+            <button
+              key={it.name}
+              type="button"
+              data-studio-v3-file-recent={it.name}
+              onClick={() => { if (window.__studioOpenRecentFile) window.__studioOpenRecentFile(it.name); setOpen(false); }}
+              style={{
+                display: 'block', width: '100%', padding: '4px 14px', textAlign: 'left',
+                background: 'transparent', border: 0,
+                color: 'var(--studio-ink, #e6edf3)', cursor: 'pointer', fontSize: 11, fontFamily: 'var(--studio-mono, ui-monospace)',
+                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(29, 233, 182, 0.08)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+            >{it.name}</button>
+          ))}
+        </>
+      )}
+    </div>
+  );
 }
 
 function ToastBus() {
@@ -5520,6 +5621,7 @@ export function StudioShellV3({ mode = 'dark' }) {
       <MarqueeOverlay />
       <SaveAsModal />
       <AboutModal />
+      <FileMenu />
       <SplashScreen />
       <SectionCollapser />
       <DocTitle activeWb={activeWb} />
