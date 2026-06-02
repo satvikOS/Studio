@@ -944,6 +944,7 @@ const COMMAND_PALETTE_ITEMS = [
   { id: 'save',          label: 'Save scene',             hint: 'Cmd+S',     call: () => window.__studioDownloadScene && window.__studioDownloadScene() },
   { id: 'open',          label: 'Open scene file',        hint: 'Cmd+O',     call: () => window.__studioOpenSceneFile && window.__studioOpenSceneFile() },
   { id: 'export',        label: 'Export GLTF',            hint: 'Cmd+E',     call: () => window.__studioDownloadGLTF && window.__studioDownloadGLTF() },
+  { id: 'export-png',    label: 'Export viewport PNG',    hint: 'Cmd+Shift+E', call: () => window.__studioExportViewportPNG && window.__studioExportViewportPNG() },
   { id: 'undo',          label: 'Undo',                   hint: 'Cmd+Z',     call: () => window.__studioUndo && window.__studioUndo() },
   { id: 'redo',          label: 'Redo',                   hint: 'Cmd+Shift+Z', call: () => window.__studioRedo && window.__studioRedo() },
   { id: 'select-all',    label: 'Select all',             hint: 'A',         call: () => window.__studioSelectAll && window.__studioSelectAll() },
@@ -1116,6 +1117,7 @@ const KEYMAP = [
     ['Cmd+S', 'Save scene (download .studio.json)'],
     ['Cmd+O', 'Open scene file'],
     ['Cmd+E', 'Export GLTF'],
+    ['Cmd+Shift+E', 'Export viewport PNG'],
     ['Cmd+,', 'Settings'],
     ['Cmd+K', 'Command palette'],
     ['Cmd+1/2/3', 'Right panel: Inspector / Outliner / Layers'],
@@ -2867,6 +2869,12 @@ export function StudioShellV3({ mode = 'dark' }) {
         const ae = document.activeElement;
         if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
         if (window.__studioDownloadGLTF) window.__studioDownloadGLTF();
+        e.preventDefault();
+      } else if (meta && e.shiftKey && e.key.toLowerCase() === 'e') {
+        // Slice 488 — Cmd/Ctrl+Shift+E exports the viewport as PNG (download).
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        if (window.__studioExportViewportPNG) window.__studioExportViewportPNG();
         e.preventDefault();
       } else if (meta && e.key === ',') {
         // Slice 455 — Cmd/Ctrl+, opens Settings (macOS standard).

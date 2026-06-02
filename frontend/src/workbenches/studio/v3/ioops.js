@@ -170,6 +170,26 @@ function autosaveAt() {
   return Number(window.localStorage.getItem(AUTOSAVE_TS) || 0);
 }
 
+function exportViewportPNG(name) {
+  const vp = window.__archdiscViewport;
+  const renderer = vp && vp.renderer;
+  const camera = vp && vp.camera;
+  const scene = vp && vp.scene;
+  if (!renderer || !camera || !scene) return { ok: false, error: 'no viewport' };
+  // Force one fresh render so toDataURL reflects current state regardless
+  // of preserveDrawingBuffer.
+  renderer.render(scene, camera);
+  const data = renderer.domElement.toDataURL('image/png');
+  const a = document.createElement('a');
+  a.href = data;
+  const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  a.download = `${name || 'studio-viewport'}-${ts}.png`;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { document.body.removeChild(a); }, 0);
+  return { ok: true, file: a.download, bytes: data.length };
+}
+
 function restoreAutosave() {
   const j = window.localStorage.getItem(AUTOSAVE_KEY);
   if (!j) return { ok: false, error: 'no autosave' };
@@ -184,12 +204,13 @@ export function registerIOOps() {
   window.__studioOpenSceneFile    = openSceneFile;
   window.__studioAutosaveAt       = autosaveAt;
   window.__studioRestoreAutosave  = restoreAutosave;
+  window.__studioExportViewportPNG = exportViewportPNG;
 }
 
 export function unregisterIOOps() {
   for (const k of [
     '__studioImportAsset', '__studioExportGltfString', '__studioDownloadGLTF',
     '__studioDownloadScene', '__studioOpenSceneFile',
-    '__studioAutosaveAt', '__studioRestoreAutosave',
+    '__studioAutosaveAt', '__studioRestoreAutosave', '__studioExportViewportPNG',
   ]) { try { delete window[k]; } catch (_) {} }
 }
