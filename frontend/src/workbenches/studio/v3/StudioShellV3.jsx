@@ -1826,6 +1826,49 @@ function AboutModal() {
   );
 }
 
+// Slice 520 — Splash screen. Shows once per session (uses sessionStorage
+// so reloads in the same Electron window don't re-show; close the window
+// to see it again). Fades after 1.6 s.
+function SplashScreen() {
+  const [show, setShow] = useState(() => {
+    try { return !window.sessionStorage.getItem('studio.v3.splash-shown'); } catch (_) { return false; }
+  });
+  useEffect(() => {
+    if (!show) return;
+    try { window.sessionStorage.setItem('studio.v3.splash-shown', '1'); } catch (_) {}
+    const t = setTimeout(() => setShow(false), 1600);
+    return () => clearTimeout(t);
+  }, [show]);
+  if (!show) return null;
+  return (
+    <div
+      data-studio-v3-splash
+      style={{
+        position: 'fixed', inset: 0, zIndex: 99999,
+        background: 'var(--studio-bg, #0d1117)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        flexDirection: 'column',
+        animation: 'studio-splash-fade 1.6s ease-in forwards',
+      }}
+    >
+      <div style={{
+        fontSize: 32, fontWeight: 700, letterSpacing: '0.06em',
+        color: 'var(--studio-accent, #1de9b6)',
+        textShadow: '0 0 24px rgba(29, 233, 182, 0.4)',
+      }}>ArchDisc</div>
+      <div style={{
+        fontSize: 14, marginTop: 4, color: 'var(--studio-ink, #e6edf3)',
+        letterSpacing: '0.18em', textTransform: 'uppercase',
+      }}>Studio</div>
+      <div style={{
+        fontSize: 10, marginTop: 18,
+        color: 'var(--studio-ink-mute, #9aa6b2)',
+        fontFamily: 'var(--studio-mono, ui-monospace)',
+      }}>3D content for engineering disciplines</div>
+    </div>
+  );
+}
+
 // Slice 519 — Subtle viewport brand watermark. Mounted as the first
 // child of the <main> viewport so it floats over the canvas but stays
 // below all overlays (HUD, menus, marquee).
@@ -4536,6 +4579,7 @@ export function StudioShellV3({ mode = 'dark' }) {
       <MarqueeOverlay />
       <SaveAsModal />
       <AboutModal />
+      <SplashScreen />
       <DocTitle activeWb={activeWb} />
     </div>
   );

@@ -655,3 +655,11 @@
   50% { opacity: 0.55; transform: scale(1.25); }
 }
 
+
+/* Slice 520 — Splash fade */
+@keyframes studio-splash-fade {
+  0% { opacity: 1; }
+  60% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
