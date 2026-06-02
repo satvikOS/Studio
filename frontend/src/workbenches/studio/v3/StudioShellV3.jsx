@@ -4114,18 +4114,24 @@ export function StudioShellV3({ mode = 'dark' }) {
       else if (!meta && !e.shiftKey && !e.altKey && (e.key === 'x' || e.key === 'X' || e.key === 'Delete' || e.key === 'Backspace')) {
         const ae = document.activeElement;
         if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
-        const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
         const s = window.__archdiscScene || (window.__archdiscViewport && window.__archdiscViewport.scene);
-        if (sel && s) {
+        // Slice 514 — Delete the whole multi-select set; fall back to active.
+        const set = Array.isArray(window.__studioSelectedMeshesSet) && window.__studioSelectedMeshesSet.length
+          ? window.__studioSelectedMeshesSet.slice()
+          : (window.__studioSelectedMesh && window.__studioSelectedMesh() ? [window.__studioSelectedMesh()] : []);
+        if (s && set.length) {
           if (window.__studioPushUndo) window.__studioPushUndo();
-          if (sel.geometry) sel.geometry.dispose();
-          if (Array.isArray(sel.material)) sel.material.forEach((m) => m.dispose && m.dispose());
-          else if (sel.material && sel.material.dispose) sel.material.dispose();
-          s.remove(sel);
-          // Detach gizmo + clear active selection.
           const vp = window.__archdiscViewport;
-          if (vp && vp.transformControls && vp.transformControls.object === sel) vp.transformControls.detach();
+          for (const sel of set) {
+            if (sel.geometry) sel.geometry.dispose();
+            if (Array.isArray(sel.material)) sel.material.forEach((m) => m.dispose && m.dispose());
+            else if (sel.material && sel.material.dispose) sel.material.dispose();
+            (sel.parent || s).remove(sel);
+            if (vp && vp.transformControls && vp.transformControls.object === sel) vp.transformControls.detach();
+          }
+          window.__studioSelectedMeshesSet = [];
           if (window.__studioDeselect) window.__studioDeselect();
+          if (window.__studioToast) window.__studioToast(`Deleted ${set.length}`, 'ok');
         }
         e.preventDefault();
       }
