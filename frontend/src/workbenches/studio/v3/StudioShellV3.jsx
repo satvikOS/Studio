@@ -2223,6 +2223,8 @@ function RightPanel({ collapsed, onToggle, activeWb, editMode, selection }) {
             <MaterialRows />
             {/* Slice 498 — Camera FOV + projection. */}
             <CameraSection />
+            {/* Slice 517 — Camera bookmarks. */}
+            <CameraBookmarksSection />
             {/* Slice 499 — Snap step inputs (translate / rotate / scale). */}
             <SnapSection />
             {/* Slice 508 — World grid + background. */}
@@ -2498,6 +2500,82 @@ function NotesSection({ activeWb }) {
           outline: 'none',
         }}
       />
+    </div>
+  );
+}
+
+// Slice 517 — Camera bookmarks UI. Lists existing bookmarks, lets the
+// user save the current camera under a typed name, and click any row
+// to restore.
+function CameraBookmarksSection() {
+  const [names, setNames] = useState([]);
+  const [draft, setDraft] = useState('');
+  const [, force] = useState(0);
+  useEffect(() => {
+    const read = () => {
+      const list = (window.__studioListCameraBookmarks && window.__studioListCameraBookmarks()) || [];
+      setNames(list);
+    };
+    const id = setInterval(read, 800);
+    read();
+    return () => clearInterval(id);
+  }, []);
+  const save = () => {
+    const n = (draft || `cam-${names.length + 1}`).trim();
+    if (!n) return;
+    if (window.__studioBookmarkCamera) window.__studioBookmarkCamera(n);
+    if (window.__studioToast) window.__studioToast(`Bookmarked camera "${n}"`, 'ok');
+    setDraft('');
+    force((v) => v + 1);
+  };
+  const restore = (n) => {
+    if (window.__studioRestoreCameraBookmark) window.__studioRestoreCameraBookmark(n);
+  };
+  return (
+    <div className="studio-right-section" data-studio-v3-camera-bookmarks>
+      <div className="studio-right-section-title">Cameras · {names.length}</div>
+      <div className="studio-right-row" style={{ gap: 4 }}>
+        <input
+          type="text"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') save(); }}
+          placeholder={`cam-${names.length + 1}`}
+          data-studio-v3-camera-bookmark-draft
+          style={{
+            flex: 1, padding: '2px 6px', fontSize: 11,
+            background: 'var(--studio-bg, #0d1117)',
+            border: '1px solid var(--studio-ink-mute, #1f2733)',
+            color: 'var(--studio-ink, #e6edf3)', borderRadius: 3,
+            fontFamily: 'inherit',
+          }}
+        />
+        <button
+          type="button"
+          onClick={save}
+          data-studio-v3-camera-bookmark-save
+          style={{
+            background: 'var(--studio-accent, #1de9b6)', border: 0, color: '#0d1117',
+            fontWeight: 600, padding: '2px 10px', borderRadius: 3, fontSize: 11, cursor: 'pointer',
+          }}
+        >+</button>
+      </div>
+      {names.map((n) => (
+        <button
+          key={n}
+          type="button"
+          data-studio-v3-camera-bookmark={n}
+          onClick={() => restore(n)}
+          style={{
+            display: 'block', width: '100%', marginTop: 3,
+            padding: '3px 8px', textAlign: 'left',
+            background: 'var(--studio-bg-elev, #161b22)',
+            color: 'var(--studio-ink, #e6edf3)',
+            border: '1px solid var(--studio-ink-mute, #1f2733)',
+            borderRadius: 3, cursor: 'pointer', fontSize: 11, fontFamily: 'inherit',
+          }}
+        >{n}</button>
+      ))}
     </div>
   );
 }
