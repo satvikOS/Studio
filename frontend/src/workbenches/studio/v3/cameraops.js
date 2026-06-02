@@ -253,6 +253,20 @@ function groupSelected() {
   return { ok: true, uuid: group.uuid };
 }
 
+function ungroupSelected() {
+  const m = activeMesh(); if (!m) return { ok: false, error: 'no mesh' };
+  // Walk up to the nearest archdisc group.
+  let g = m;
+  while (g && !(g.userData && g.userData.archdiscStudioPrimitiveKind === 'group')) g = g.parent;
+  if (!g) return { ok: false, error: 'no parent group' };
+  if (window.__studioPushUndo) window.__studioPushUndo();
+  const s = scene();
+  const kids = g.children.slice();
+  for (const c of kids) s.attach(c);
+  g.parent && g.parent.remove(g);
+  return { ok: true, freed: kids.length };
+}
+
 // ─── Registration ────────────────────────────────────────────────────────
 export function registerCameraOps() {
   window.__studioFrameAll        = frameAll;
@@ -267,6 +281,7 @@ export function registerCameraOps() {
   window.__studioCloneAlongAxis  = cloneAlongAxis;
   window.__studioRandomScatter   = randomScatter;
   window.__studioGroupSelected   = groupSelected;
+  window.__studioUngroupSelected = ungroupSelected;
 }
 export function unregisterCameraOps() {
   for (const k of [
@@ -274,5 +289,6 @@ export function unregisterCameraOps() {
     '__studioLookAt', '__studioCenterAtOrigin', '__studioAlignToGround',
     '__studioApplyTransforms', '__studioRecenterPivot', '__studioMirrorAcrossAxis',
     '__studioCloneAlongAxis', '__studioRandomScatter', '__studioGroupSelected',
+    '__studioUngroupSelected',
   ]) { try { delete window[k]; } catch (_) {} }
 }
