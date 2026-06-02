@@ -397,6 +397,29 @@ export function registerV3Api() {
     return out;
   };
 
+  // Slice 567 — Toggle a Box3Helper on the active mesh's world AABB.
+  // Useful for engineering reviews. Helper auto-attaches to whatever
+  // mesh is selected at toggle time.
+  window.__studioToggleAABB = () => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel) return { ok: false, error: 'no selection' };
+    if (window.__studioAABBHelper && window.__studioAABBHelper.parent) {
+      window.__studioAABBHelper.parent.remove(window.__studioAABBHelper);
+      window.__studioAABBHelper.geometry.dispose();
+      window.__studioAABBHelper.material.dispose();
+      window.__studioAABBHelper = null;
+      return { ok: true, on: false };
+    }
+    const box = new THREE.Box3().setFromObject(sel);
+    const helper = new THREE.Box3Helper(box, 0x1de9b6);
+    helper.userData = { isHelper: true, archdiscStudioAABB: true };
+    helper.renderOrder = 998;
+    sel.parent ? sel.parent.add(helper) : window.__archdiscScene.add(helper);
+    window.__studioAABBHelper = helper;
+    if (window.__studioToast) window.__studioToast('AABB on', 'info');
+    return { ok: true, on: true };
+  };
+
   // Slice 565 — Geometry tools. Compute smooth normals; merge near-
   // duplicate vertices (welding). Lazy-imports BufferGeometryUtils.
   window.__studioComputeVertexNormals = () => {

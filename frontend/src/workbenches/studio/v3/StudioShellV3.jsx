@@ -3257,6 +3257,7 @@ function GeometryTools() {
     { id: 'normals',     label: 'Compute vertex normals',  call: () => window.__studioComputeVertexNormals && window.__studioComputeVertexNormals() },
     { id: 'weld-fine',   label: 'Weld vertices (1e-4)',    call: () => window.__studioWeldVertices && window.__studioWeldVertices(1e-4) },
     { id: 'weld-coarse', label: 'Weld vertices (1e-3)',    call: () => window.__studioWeldVertices && window.__studioWeldVertices(1e-3) },
+    { id: 'aabb',        label: 'Toggle AABB box',         call: () => window.__studioToggleAABB && window.__studioToggleAABB() },
   ];
   return (
     <div className="studio-right-section" data-studio-v3-geometry-tools>
