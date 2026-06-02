@@ -1221,6 +1221,7 @@ const KEYMAP = [
     ['B', 'Box marquee select (drag a rectangle)'],
     ['M', 'Measure distance between 2 selected'],
     ['Cmd+Alt+A', 'Add text annotation at selection'],
+    ['/', 'Solo: isolate selection + frame · press again to restore'],
     ['Alt+G/R/S', 'Reset translate/rotate/scale'],
     ['Shift+;', 'Toggle transform snap (1 cm / 15° / 0.1)'],
     ['Cmd+,', 'Settings'],
@@ -4200,6 +4201,23 @@ export function StudioShellV3({ mode = 'dark' }) {
         // No dock in V3 — focus the cmdbar input as the most useful alias.
         const inp = document.querySelector('[data-studio-v3-cmdbar-input]');
         if (inp) inp.focus();
+      } else if (!meta && !e.shiftKey && !e.altKey && e.key === '/') {
+        // Slice 524 — bare / toggles solo: isolate selection + fit.
+        // Press again to reveal all and frame everything.
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        e.preventDefault();
+        if (!window.__studioV3Solo) {
+          if (window.__studioHideUnselected) window.__studioHideUnselected();
+          if (window.__studioFitSelected) window.__studioFitSelected();
+          window.__studioV3Solo = true;
+          if (window.__studioToast) window.__studioToast('Solo on', 'info');
+        } else {
+          if (window.__studioRevealAll) window.__studioRevealAll();
+          if (window.__studioFrameAll) window.__studioFrameAll();
+          window.__studioV3Solo = false;
+          if (window.__studioToast) window.__studioToast('Solo off', 'info');
+        }
       } else if (!meta && e.key === 'Escape') {
         setActiveTool('select');
       } else if (!meta && !e.shiftKey && !e.altKey && e.key === 'Tab') {
