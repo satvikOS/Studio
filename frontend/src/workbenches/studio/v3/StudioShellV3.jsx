@@ -2624,6 +2624,7 @@ function StatusBar({ wb, editMode }) {
       )}
       <span className="studio-statusbar-spacer" />
       <span data-studio-v3-status="fps">{fps} fps</span>
+      <FpsSparkline fps={fps} />
       <span data-studio-v3-status="calls">{calls} calls</span>
       <span data-studio-v3-status="units">mm</span>
       <SnapIndicator />
@@ -2702,6 +2703,45 @@ function SceneTotals() {
       title={`Scene totals: ${tot.v} vertices · ${tot.t} triangles`}
       style={{ color: 'var(--studio-ink-mute, #9aa6b2)', fontVariantNumeric: 'tabular-nums' }}
     >Σv {fmt(tot.v)} · Σt {fmt(tot.t)}</span>
+  );
+}
+
+// Slice 495 — Rolling 60-sample FPS sparkline. Re-uses the StatusBar's
+// existing fps state so we don't add another rAF loop; we just buffer.
+function FpsSparkline({ fps }) {
+  const W = 80, H = 14;
+  const N = 60;
+  const ref = React.useRef([]);
+  const [, force] = React.useState(0);
+  React.useEffect(() => {
+    if (fps == null) return;
+    const arr = ref.current;
+    arr.push(fps);
+    if (arr.length > N) arr.splice(0, arr.length - N);
+    force((n) => n + 1);
+  }, [fps]);
+  const arr = ref.current;
+  let path = '';
+  if (arr.length > 1) {
+    const max = Math.max(60, ...arr); // cap baseline at 60 fps for shape
+    const step = W / (N - 1);
+    for (let i = 0; i < arr.length; i++) {
+      const x = i * step;
+      const y = H - (arr[i] / max) * H;
+      path += (i === 0 ? 'M' : 'L') + x.toFixed(1) + ' ' + y.toFixed(1) + ' ';
+    }
+  }
+  return (
+    <span
+      data-studio-v3-status="fps-spark"
+      data-studio-v3-spark-samples={arr.length}
+      title={`FPS samples: ${arr.length} · last ${fps}`}
+      style={{ display: 'inline-flex', alignItems: 'center' }}
+    >
+      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} aria-hidden="true">
+        <path d={path} fill="none" stroke="var(--studio-accent, #1de9b6)" strokeWidth="1" strokeLinejoin="round" />
+      </svg>
+    </span>
   );
 }
 
