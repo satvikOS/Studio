@@ -198,16 +198,35 @@ function autosaveAt() {
   return Number(window.localStorage.getItem(AUTOSAVE_TS) || 0);
 }
 
-function exportViewportPNG(name) {
+function exportViewportPNG(name, width, height) {
   const vp = window.__archdiscViewport;
   const renderer = vp && vp.renderer;
   const camera = vp && vp.camera;
   const scene = vp && vp.scene;
   if (!renderer || !camera || !scene) return { ok: false, error: 'no viewport' };
-  // Force one fresh render so toDataURL reflects current state regardless
-  // of preserveDrawingBuffer.
+  // Slice 533 — optional custom dimensions. Restore on the way out.
+  let prevW = 0, prevH = 0, prevAspect = 0;
+  const resized = Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0;
+  if (resized) {
+    prevW = renderer.domElement.width;
+    prevH = renderer.domElement.height;
+    prevAspect = camera.aspect || 1;
+    renderer.setSize(width, height, false);
+    if ('aspect' in camera) {
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+    }
+  }
   renderer.render(scene, camera);
   const data = renderer.domElement.toDataURL('image/png');
+  if (resized) {
+    renderer.setSize(prevW, prevH, false);
+    if ('aspect' in camera) {
+      camera.aspect = prevAspect;
+      camera.updateProjectionMatrix();
+    }
+    renderer.render(scene, camera);
+  }
   const a = document.createElement('a');
   a.href = data;
   const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
@@ -216,7 +235,7 @@ function exportViewportPNG(name) {
   a.click();
   setTimeout(() => { document.body.removeChild(a); }, 0);
   if (window.__studioToast) window.__studioToast(`Exported ${a.download}`, 'ok');
-  return { ok: true, file: a.download, bytes: data.length };
+  return { ok: true, file: a.download, bytes: data.length, width: resized ? width : (prevW || renderer.domElement.width), height: resized ? height : (prevH || renderer.domElement.height) };
 }
 
 function restoreAutosave() {

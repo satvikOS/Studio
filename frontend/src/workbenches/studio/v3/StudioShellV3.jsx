@@ -2536,6 +2536,8 @@ function RightPanel({ collapsed, onToggle, activeWb, editMode, selection }) {
             <HistorySection />
             {/* Slice 522 — Annotation list + delete. */}
             <AnnotationsSection />
+            {/* Slice 533 — Render section: custom-size PNG. */}
+            <RenderSection />
             <div className="studio-right-section">
               <div className="studio-right-section-title">Edit selection</div>
               <SelectionRows />
@@ -2765,6 +2767,74 @@ function CameraSection() {
           }}
         >{proj}</button>
       </div>
+    </div>
+  );
+}
+
+// Slice 533 — Render section. Width / height inputs + a render button
+// that calls __studioExportViewportPNG with explicit dimensions.
+function RenderSection() {
+  const [w, setW] = useState(1920);
+  const [h, setH] = useState(1080);
+  const render = () => {
+    if (window.__studioExportViewportPNG) window.__studioExportViewportPNG('render', w, h);
+  };
+  return (
+    <div className="studio-right-section" data-studio-v3-render-section>
+      <div className="studio-right-section-title">Render</div>
+      <div className="studio-right-row" style={{ gap: 4 }}>
+        <span>Size</span>
+        <input
+          type="number" min="64" max="8192" step="1"
+          value={w}
+          onChange={(e) => setW(Number(e.target.value))}
+          data-studio-v3-render-w
+          style={{
+            width: 64, background: 'var(--studio-bg, #0d1117)',
+            border: '1px solid var(--studio-ink-mute, #1f2733)',
+            color: 'var(--studio-ink, #e6edf3)', padding: '2px 6px', borderRadius: 3,
+            fontFamily: 'var(--studio-mono, ui-monospace)', fontSize: 11, textAlign: 'right',
+          }}
+        />
+        <span style={{ color: 'var(--studio-ink-mute, #9aa6b2)' }}>×</span>
+        <input
+          type="number" min="64" max="8192" step="1"
+          value={h}
+          onChange={(e) => setH(Number(e.target.value))}
+          data-studio-v3-render-h
+          style={{
+            width: 64, background: 'var(--studio-bg, #0d1117)',
+            border: '1px solid var(--studio-ink-mute, #1f2733)',
+            color: 'var(--studio-ink, #e6edf3)', padding: '2px 6px', borderRadius: 3,
+            fontFamily: 'var(--studio-mono, ui-monospace)', fontSize: 11, textAlign: 'right',
+          }}
+        />
+      </div>
+      <div className="studio-right-row" style={{ gap: 4, marginTop: 4 }}>
+        {[[1280,720,'720p'],[1920,1080,'1080p'],[3840,2160,'4K']].map(([pw,ph,lbl]) => (
+          <button
+            key={lbl}
+            type="button"
+            data-studio-v3-render-preset={lbl}
+            onClick={() => { setW(pw); setH(ph); }}
+            style={{
+              flex: 1, padding: '2px 4px', fontSize: 10,
+              background: 'transparent', color: 'var(--studio-ink, #e6edf3)',
+              border: '1px solid var(--studio-ink-mute, #1f2733)', borderRadius: 3, cursor: 'pointer',
+            }}
+          >{lbl}</button>
+        ))}
+      </div>
+      <button
+        type="button"
+        onClick={render}
+        data-studio-v3-render-go
+        style={{
+          width: '100%', marginTop: 6,
+          background: 'var(--studio-accent, #1de9b6)', border: 0, color: '#0d1117',
+          fontWeight: 600, padding: '5px', borderRadius: 3, fontSize: 11, cursor: 'pointer',
+        }}
+      >Render → PNG</button>
     </div>
   );
 }
