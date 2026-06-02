@@ -2570,6 +2570,8 @@ function RightPanel({ collapsed, onToggle, activeWb, editMode, selection }) {
             <NotesSection activeWb={activeWb} />
             {/* Slice 518 — Recent undo history list. */}
             <HistorySection />
+            {/* Slice 542 — Renderer perf diagnostics. */}
+            <PerformanceSection />
             {/* Slice 522 — Annotation list + delete. */}
             <AnnotationsSection />
             {/* Slice 538 — Reference image plate list. */}
@@ -2997,6 +2999,49 @@ function AnnotationsSection() {
           >×</button>
         </div>
       ))}
+    </div>
+  );
+}
+
+// Slice 542 — Renderer / scene perf diagnostics. Polls renderer.info
+// every second so the panel stays cheap.
+function PerformanceSection() {
+  const [info, setInfo] = useState({ calls: 0, tris: 0, points: 0, lines: 0, geom: 0, tex: 0, programs: 0 });
+  useEffect(() => {
+    const read = () => {
+      const vp = window.__archdiscViewport;
+      if (!vp || !vp.renderer || !vp.renderer.info) return;
+      const r = vp.renderer.info;
+      setInfo({
+        calls: r.render.calls,
+        tris: r.render.triangles,
+        points: r.render.points,
+        lines: r.render.lines,
+        geom: r.memory.geometries,
+        tex: r.memory.textures,
+        programs: (r.programs && r.programs.length) || 0,
+      });
+    };
+    const id = setInterval(read, 1000);
+    read();
+    return () => clearInterval(id);
+  }, []);
+  const Row = ({ k, v }) => (
+    <div className="studio-right-row" style={{ fontSize: 11 }}>
+      <span>{k}</span>
+      <strong style={{ fontFamily: 'var(--studio-mono, ui-monospace)' }} data-studio-v3-perf-row={k}>{v}</strong>
+    </div>
+  );
+  return (
+    <div className="studio-right-section" data-studio-v3-performance-section>
+      <div className="studio-right-section-title">Performance</div>
+      <Row k="calls" v={info.calls} />
+      <Row k="triangles" v={info.tris} />
+      <Row k="lines" v={info.lines} />
+      <Row k="points" v={info.points} />
+      <Row k="geometries" v={info.geom} />
+      <Row k="textures" v={info.tex} />
+      <Row k="programs" v={info.programs} />
     </div>
   );
 }
