@@ -1120,6 +1120,7 @@ const KEYMAP = [
     ['Cmd+Shift+E', 'Export viewport PNG'],
     ['Shift+H', 'Isolate selected (hide others)'],
     ['Alt+G/R/S', 'Reset translate/rotate/scale'],
+    ['Shift+;', 'Toggle transform snap (1 cm / 15° / 0.1)'],
     ['Cmd+,', 'Settings'],
     ['Cmd+K', 'Command palette'],
     ['Cmd+1/2/3', 'Right panel: Inspector / Outliner / Layers'],
@@ -2484,6 +2485,7 @@ function StatusBar({ wb, editMode }) {
       <span data-studio-v3-status="fps">{fps} fps</span>
       <span data-studio-v3-status="calls">{calls} calls</span>
       <span data-studio-v3-status="units">mm</span>
+      <SnapIndicator />
       <UndoDepth />
       <DirtyDot />
       <span data-studio-v3-status="ready"><span className="studio-statusbar-dot" />ready</span>
@@ -2525,6 +2527,32 @@ function ShadingModeIndicator() {
         textTransform: 'capitalize',
       }}
     >· {mode}</button>
+  );
+}
+
+function SnapIndicator() {
+  const [on, setOn] = React.useState(false);
+  React.useEffect(() => {
+    const read = () => {
+      const fn = window.__studioGetSnap;
+      if (typeof fn === 'function') setOn(!!fn().on);
+    };
+    const ev = (e) => { if (e && e.detail) setOn(!!e.detail.snap); };
+    window.addEventListener('studio-snap-toggle', ev);
+    const id = setInterval(read, 500);
+    read();
+    return () => { window.removeEventListener('studio-snap-toggle', ev); clearInterval(id); };
+  }, []);
+  return (
+    <span
+      data-studio-v3-status="snap"
+      data-studio-v3-snap-on={on ? 'true' : 'false'}
+      title={`Transform snap ${on ? 'ON' : 'OFF'} — Shift+; to toggle`}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 4,
+        color: on ? 'var(--studio-accent, #1de9b6)' : 'var(--studio-ink-mute, #9aa6b2)',
+      }}
+    >snap:{on ? 'on' : 'off'}</span>
   );
 }
 
@@ -3037,6 +3065,13 @@ export function StudioShellV3({ mode = 'dark' }) {
         if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
         const map = { g: 'move', r: 'rotate', s: 'scale' };
         setActiveTool(map[e.key]);
+        e.preventDefault();
+      } else if (!meta && e.shiftKey && (e.key === ';' || e.key === ':')) {
+        // Slice 491 — Shift+; toggles transform snap (translation 1 cm,
+        // rotation 15°, scale 0.1). Status badge tracks the state.
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        if (window.__studioToggleSnap) window.__studioToggleSnap();
         e.preventDefault();
       } else if (!meta && !e.shiftKey && e.altKey && (e.key === 'g' || e.key === 'r' || e.key === 's')) {
         // Slice 490 — Alt+G / Alt+R / Alt+S clear translation / rotation /

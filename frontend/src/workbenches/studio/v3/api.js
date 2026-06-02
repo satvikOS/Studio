@@ -212,6 +212,31 @@ export function registerV3Api() {
     });
     return { ok: true, revealed: n };
   };
+  // Slice 491 — Transform snap. Forwards to TransformControls; remembers
+  // last step values so toggle-on restores prior snap (1 cm / 15° / 0.1).
+  let _snapOn = false;
+  let _tStep = 0.01;
+  let _rStep = Math.PI / 12; // 15°
+  let _sStep = 0.1;
+  const applySnap = () => {
+    const vp = window.__archdiscViewport;
+    const tc = vp && vp.transformControls;
+    if (!tc) return false;
+    tc.setTranslationSnap(_snapOn ? _tStep : null);
+    tc.setRotationSnap(_snapOn ? _rStep : null);
+    tc.setScaleSnap(_snapOn ? _sStep : null);
+    return true;
+  };
+  window.__studioSetTranslationSnap = (n) => { _tStep = Number(n) || 0; if (_snapOn) applySnap(); return { ok: true, step: _tStep }; };
+  window.__studioSetRotationSnap    = (rad) => { _rStep = Number(rad) || 0; if (_snapOn) applySnap(); return { ok: true, step: _rStep }; };
+  window.__studioSetScaleSnap       = (n) => { _sStep = Number(n) || 0; if (_snapOn) applySnap(); return { ok: true, step: _sStep }; };
+  window.__studioToggleSnap = () => {
+    _snapOn = !_snapOn;
+    const ok = applySnap();
+    if (ok) window.dispatchEvent(new CustomEvent('studio-snap-toggle', { detail: { snap: _snapOn } }));
+    return { ok, snap: _snapOn };
+  };
+  window.__studioGetSnap = () => ({ on: _snapOn, t: _tStep, r: _rStep, s: _sStep });
   window.__studioResetTransform = (kind) => {
     const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
     if (!sel) return { ok: false, error: 'no selection' };
