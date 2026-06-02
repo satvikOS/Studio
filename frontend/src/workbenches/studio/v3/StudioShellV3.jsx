@@ -3280,6 +3280,7 @@ function StatusBar({ wb, editMode }) {
       <ShadingModeIndicator />
       <span data-studio-v3-status="primitives">{primCount} prim</span>
       <SceneTotals />
+      <SelectedCount />
       {meshStats && (
         <span data-studio-v3-status="mesh" data-studio-v3-mesh-v={meshStats.v} data-studio-v3-mesh-t={meshStats.t}>
           v {meshStats.v} · t {meshStats.t}
@@ -3332,6 +3333,31 @@ function ShadingModeIndicator() {
         textTransform: 'capitalize',
       }}
     >· {mode}</button>
+  );
+}
+
+function SelectedCount() {
+  const [n, setN] = React.useState(0);
+  React.useEffect(() => {
+    const read = () => {
+      const set = Array.isArray(window.__studioSelectedMeshesSet) ? window.__studioSelectedMeshesSet : [];
+      if (set.length > 0) setN(set.length);
+      else setN(window.__studioSelectedMesh && window.__studioSelectedMesh() ? 1 : 0);
+    };
+    const id = setInterval(read, 400);
+    read();
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <span
+      data-studio-v3-status="selected-count"
+      data-studio-v3-selected-count={n}
+      title={`${n} selected`}
+      style={{
+        color: n > 0 ? 'var(--studio-accent, #1de9b6)' : 'var(--studio-ink-mute, #9aa6b2)',
+        fontVariantNumeric: 'tabular-nums',
+      }}
+    >sel:{n}</span>
   );
 }
 
