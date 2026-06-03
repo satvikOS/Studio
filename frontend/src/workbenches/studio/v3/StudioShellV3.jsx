@@ -4272,6 +4272,8 @@ function GeometryTools() {
     { id: 'noise-med',   label: 'Noise · 5 mm',            call: () => window.__studioDisplaceNoise && window.__studioDisplaceNoise(0.005) },
     { id: 'twist-30',    label: 'Twist 30°',               call: () => window.__studioTwistY && window.__studioTwistY(30) },
     { id: 'twist-60',    label: 'Twist 60°',               call: () => window.__studioTwistY && window.__studioTwistY(60) },
+    { id: 'bend-30',     label: 'Bend 30°',                call: () => window.__studioBendYZ && window.__studioBendYZ(30) },
+    { id: 'bend-60',     label: 'Bend 60°',                call: () => window.__studioBendYZ && window.__studioBendYZ(60) },
     { id: 'array-x',     label: 'Array ×5 along X',        call: () => window.__studioCloneAlongAxis && window.__studioCloneAlongAxis('x', 5, 0.05) },
     { id: 'array-y',     label: 'Array ×5 along Y',        call: () => window.__studioCloneAlongAxis && window.__studioCloneAlongAxis('y', 5, 0.05) },
     { id: 'array-z',     label: 'Array ×5 along Z',        call: () => window.__studioCloneAlongAxis && window.__studioCloneAlongAxis('z', 5, 0.05) },

@@ -742,6 +742,34 @@ export function registerV3Api() {
     return { ok: true, target: targetUuid };
   };
 
+  // Slice 598 — Bend deformer in the YZ plane. Vertices warp around a
+  // hinge axis (X) so the mesh curves like a beam under load.
+  window.__studioBendYZ = (degrees) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel || !sel.geometry) return { ok: false, error: 'no selection' };
+    const g = sel.geometry;
+    if (!g.boundingBox) g.computeBoundingBox();
+    const bb = g.boundingBox;
+    const yMid = (bb.min.y + bb.max.y) / 2;
+    const ext = Math.max(1e-6, bb.max.y - bb.min.y);
+    const rad = (Number(degrees) || 0) * Math.PI / 180;
+    if (window.__studioPushUndo) window.__studioPushUndo('bend-yz');
+    const pos = g.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+      const t = (y - yMid) / ext;
+      const a = t * rad;
+      const cy = Math.cos(a), sy = Math.sin(a);
+      pos.setXYZ(i, x, y * cy - z * sy, y * sy + z * cy);
+    }
+    pos.needsUpdate = true;
+    g.computeVertexNormals();
+    g.computeBoundingBox(); g.computeBoundingSphere();
+    if (window.__studioToast) window.__studioToast(`Bent ${degrees}° in YZ`, 'ok');
+    if (window.__studioPushModifier) window.__studioPushModifier('bend-yz', { degrees });
+    return { ok: true, vertices: pos.count };
+  };
+
   // Slice 597 — Twist deformer along the Y axis. Rotates each vertex
   // around Y by (y - yMin) / extent * angle radians.
   window.__studioTwistY = (degrees) => {
