@@ -2652,6 +2652,127 @@ function KeypressFlash() {
   );
 }
 
+// Slice 572 — Animation curve editor. Plots the active mesh's keyframed
+// position values vs frame on a SVG; click empty grid to insert a key
+// at the picked frame at the mesh's current position. Open with
+// Cmd+Shift+C or studio-curve-editor-toggle event.
+function CurveEditor() {
+  const [open, setOpen] = useState(false);
+  const [kfs, setKfs] = useState([]);
+  const W = 520, H = 220, PAD = 28;
+  const F_MAX = 60;
+  useEffect(() => {
+    const onToggle = () => setOpen((v) => !v);
+    const onKey = (e) => {
+      const ae = document.activeElement;
+      if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'c') {
+        e.preventDefault();
+        setOpen((v) => !v);
+      } else if (open && e.key === 'Escape') { setOpen(false); e.preventDefault(); }
+    };
+    window.addEventListener('studio-curve-editor-toggle', onToggle);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('studio-curve-editor-toggle', onToggle);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    const read = () => {
+      const m = window.__studioSelectedMesh && window.__studioSelectedMesh();
+      if (!m || !window.__studioGetKeyframes) { setKfs([]); return; }
+      const r = window.__studioGetKeyframes(m.uuid);
+      setKfs((r && r.keyframes) || []);
+    };
+    const id = setInterval(read, 400);
+    read();
+    return () => clearInterval(id);
+  }, [open]);
+  if (!open) return null;
+  // Y-range: position.x bounds across keyframes; fall back to ±0.1.
+  let yMin = -0.1, yMax = 0.1;
+  if (kfs.length) {
+    yMin = Math.min(...kfs.map((k) => k.position[0]));
+    yMax = Math.max(...kfs.map((k) => k.position[0]));
+    if (yMin === yMax) { yMin -= 0.05; yMax += 0.05; }
+  }
+  const fxToPx = (f) => PAD + (f / F_MAX) * (W - PAD * 2);
+  const yToPx  = (y) => PAD + (1 - (y - yMin) / (yMax - yMin)) * (H - PAD * 2);
+  const pxToF = (px) => Math.round(((px - PAD) / (W - PAD * 2)) * F_MAX);
+  const pts = kfs.map((k) => ({ f: k.frame, y: k.position[0] }));
+  const path = pts.length ? pts.map((p, i) => (i === 0 ? 'M' : 'L') + fxToPx(p.f) + ' ' + yToPx(p.y)).join(' ') : '';
+  const insertAt = (f) => {
+    if (window.__studioSetFrame) window.__studioSetFrame(Math.max(0, Math.min(F_MAX, f)));
+    if (window.__studioInsertKeyframeAt) window.__studioInsertKeyframeAt(Math.max(0, Math.min(F_MAX, f)));
+    if (window.__studioToast) window.__studioToast(`Key @ frame ${f}`, 'info');
+  };
+  return (
+    <div
+      data-studio-v3-curve-editor
+      onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 9200,
+        background: 'rgba(13,17,23,0.6)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: 'var(--studio-bg-elev, #161b22)',
+          border: '1px solid var(--studio-accent, #1de9b6)',
+          borderRadius: 8, padding: '18px 22px',
+          color: 'var(--studio-ink, #e6edf3)',
+          fontFamily: 'inherit',
+          boxShadow: '0 14px 40px rgba(0,0,0,0.55)',
+        }}
+      >
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+          marginBottom: 10,
+        }}>
+          <strong style={{ color: 'var(--studio-accent, #1de9b6)', fontSize: 13, letterSpacing: '0.04em' }}>Curve editor · position.x</strong>
+          <span style={{ opacity: 0.55, fontSize: 11, fontFamily: 'var(--studio-mono, ui-monospace)' }}>{kfs.length} keys · Esc</span>
+        </div>
+        <svg
+          width={W} height={H} viewBox={`0 0 ${W} ${H}`}
+          data-studio-v3-curve-svg
+          onClick={(e) => {
+            const rect = e.currentTarget.getBoundingClientRect();
+            const f = pxToF(e.clientX - rect.left);
+            insertAt(f);
+          }}
+          style={{ background: 'rgba(13,17,23,0.5)', borderRadius: 4, cursor: 'crosshair' }}
+        >
+          {/* Axes */}
+          <line x1={PAD} y1={H - PAD} x2={W - PAD} y2={H - PAD} stroke="rgba(154,166,178,0.25)" />
+          <line x1={PAD} y1={PAD} x2={PAD} y2={H - PAD} stroke="rgba(154,166,178,0.25)" />
+          {/* Frame ticks */}
+          {[0, 15, 30, 45, 60].map((f) => (
+            <g key={f}>
+              <line x1={fxToPx(f)} y1={H - PAD} x2={fxToPx(f)} y2={H - PAD + 4} stroke="rgba(154,166,178,0.5)" />
+              <text x={fxToPx(f)} y={H - PAD + 14} fontSize="9" fill="rgba(154,166,178,0.8)" textAnchor="middle" fontFamily="ui-monospace, monospace">{f}</text>
+            </g>
+          ))}
+          {/* Curve */}
+          {path && <path d={path} stroke="var(--studio-accent, #1de9b6)" strokeWidth="1.5" fill="none" />}
+          {/* Keyframe dots */}
+          {pts.map((p, i) => (
+            <circle
+              key={i}
+              data-studio-v3-curve-key={p.f}
+              cx={fxToPx(p.f)} cy={yToPx(p.y)} r="4"
+              fill="var(--studio-accent, #1de9b6)" stroke="#0d1117" strokeWidth="1"
+            />
+          ))}
+        </svg>
+      </div>
+    </div>
+  );
+}
+
 function ToastBus() {
   const [items, setItems] = useState([]);
   useEffect(() => {
@@ -6310,6 +6431,7 @@ export function StudioShellV3({ mode = 'dark' }) {
       <KeypressFlash />
       <SaveAsModal />
       <AboutModal />
+      <CurveEditor />
       <FileMenu />
       <EditMenu />
       <SelectMenu />
