@@ -550,6 +550,100 @@ export function registerV3Api() {
     return { ok: true };
   };
 
+  // Slice 579 — CSG boolean modifier. Wraps manifold-3d for real
+  // Union / Subtract / Intersect on the two most recently selected
+  // meshes; falls back to a plain mergeGeometries when WASM init fails.
+  let _manifold = null;
+  const ensureManifold = async () => {
+    if (_manifold) return _manifold;
+    try {
+      const mod = await import('manifold-3d');
+      const Module = mod.default || mod;
+      const m = await Module();
+      m.setup();
+      _manifold = m;
+      return _manifold;
+    } catch (e) {
+      return null;
+    }
+  };
+  const toManifoldMesh = (mesh) => {
+    const g = mesh.geometry.clone();
+    mesh.updateMatrixWorld(true);
+    g.applyMatrix4(mesh.matrixWorld);
+    if (!g.index) {
+      const idx = new Uint32Array(g.attributes.position.count);
+      for (let i = 0; i < idx.length; i++) idx[i] = i;
+      g.setIndex(new THREE.BufferAttribute(idx, 1));
+    }
+    const vertProperties = new Float32Array(g.attributes.position.array);
+    const triVerts = new Uint32Array(g.index.array);
+    return { vertProperties, triVerts, numProp: 3 };
+  };
+  const fromManifoldMesh = (man, name) => {
+    const mesh = man.getMesh();
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(mesh.vertProperties), 3));
+    geo.setIndex(new THREE.BufferAttribute(new Uint32Array(mesh.triVerts), 1));
+    geo.computeVertexNormals();
+    geo.computeBoundingBox();
+    geo.computeBoundingSphere();
+    const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0xb7c4cf }));
+    m.castShadow = true; m.receiveShadow = true;
+    m.name = name;
+    m.userData = { archdiscStudioPrimitive: true, archdiscStudioPrimitiveKind: 'csg' };
+    return m;
+  };
+  window.__studioBoolean = async (op) => {
+    const set = Array.isArray(window.__studioSelectedMeshesSet) && window.__studioSelectedMeshesSet.length >= 2
+      ? window.__studioSelectedMeshesSet.slice(-2)
+      : [];
+    if (set.length !== 2) return { ok: false, error: 'need 2 selected' };
+    if (window.__studioPushUndo) window.__studioPushUndo(`csg-${op}`);
+    const lib = await ensureManifold();
+    let result = null;
+    let fallback = false;
+    if (lib) {
+      try {
+        const M = lib.Manifold;
+        const a = new M(toManifoldMesh(set[0]));
+        const b = new M(toManifoldMesh(set[1]));
+        if (op === 'union') result = a.add(b);
+        else if (op === 'subtract') result = a.subtract(b);
+        else if (op === 'intersect') result = a.intersect(b);
+        else return { ok: false, error: 'bad op' };
+      } catch (e) {
+        fallback = true;
+      }
+    } else {
+      fallback = true;
+    }
+    let outMesh;
+    if (!fallback && result) {
+      outMesh = fromManifoldMesh(result, `csg-${op}`);
+    } else {
+      const mod = await import('three/examples/jsm/utils/BufferGeometryUtils.js');
+      const geos = set.map((m) => { const g = m.geometry.clone(); m.updateMatrixWorld(true); g.applyMatrix4(m.matrixWorld); return g; });
+      const merged = mod.mergeGeometries(geos, false) || geos[0];
+      outMesh = new THREE.Mesh(merged, new THREE.MeshStandardMaterial({ color: 0xb7c4cf }));
+      outMesh.castShadow = true; outMesh.receiveShadow = true;
+      outMesh.name = `csg-${op}-fallback`;
+      outMesh.userData = { archdiscStudioPrimitive: true, archdiscStudioPrimitiveKind: 'csg', archdiscStudioCsgFallback: true };
+    }
+    const s = window.__archdiscScene;
+    s.add(outMesh);
+    for (const m of set) {
+      if (m.geometry) m.geometry.dispose();
+      if (Array.isArray(m.material)) m.material.forEach((x) => x.dispose && x.dispose());
+      else if (m.material && m.material.dispose) m.material.dispose();
+      (m.parent || s).remove(m);
+    }
+    window.__studioSelectedMeshesSet = [outMesh];
+    if (window.__studioSelectMesh) window.__studioSelectMesh(outMesh);
+    if (window.__studioToast) window.__studioToast(`CSG ${op}${fallback ? ' (fallback)' : ''}`, 'ok');
+    return { ok: true, op, fallback };
+  };
+
   // Slice 569 — Join multi-selected meshes into a single archdisc
   // primitive. Each member is baked to world space, then their
   // geometries are merged.

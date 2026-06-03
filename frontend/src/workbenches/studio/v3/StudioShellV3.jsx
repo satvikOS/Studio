@@ -3985,6 +3985,9 @@ function GeometryTools() {
     { id: 'mirror-x',    label: 'Mirror X',                call: () => window.__studioMirrorAcrossAxis && window.__studioMirrorAcrossAxis('x') },
     { id: 'mirror-y',    label: 'Mirror Y',                call: () => window.__studioMirrorAcrossAxis && window.__studioMirrorAcrossAxis('y') },
     { id: 'mirror-z',    label: 'Mirror Z',                call: () => window.__studioMirrorAcrossAxis && window.__studioMirrorAcrossAxis('z') },
+    { id: 'csg-union',   label: 'CSG: union',              call: () => window.__studioBoolean && window.__studioBoolean('union') },
+    { id: 'csg-sub',     label: 'CSG: subtract',           call: () => window.__studioBoolean && window.__studioBoolean('subtract') },
+    { id: 'csg-int',     label: 'CSG: intersect',          call: () => window.__studioBoolean && window.__studioBoolean('intersect') },
   ];
   return (
     <div className="studio-right-section" data-studio-v3-geometry-tools>
