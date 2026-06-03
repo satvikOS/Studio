@@ -4212,6 +4212,10 @@ function GeometryTools() {
     { id: 'simplify-50', label: 'Simplify · keep 50%',     call: () => window.__studioSimplifyMesh && window.__studioSimplifyMesh(0.5) },
     { id: 'simplify-25', label: 'Simplify · keep 25%',     call: () => window.__studioSimplifyMesh && window.__studioSimplifyMesh(0.25) },
     { id: 'tessellate',  label: 'Tessellate ×1',           call: () => window.__studioTessellate && window.__studioTessellate(1) },
+    { id: 'array-x',     label: 'Array ×5 along X',        call: () => window.__studioCloneAlongAxis && window.__studioCloneAlongAxis('x', 5, 0.05) },
+    { id: 'array-y',     label: 'Array ×5 along Y',        call: () => window.__studioCloneAlongAxis && window.__studioCloneAlongAxis('y', 5, 0.05) },
+    { id: 'array-z',     label: 'Array ×5 along Z',        call: () => window.__studioCloneAlongAxis && window.__studioCloneAlongAxis('z', 5, 0.05) },
+    { id: 'scatter',     label: 'Random scatter ×10',      call: () => window.__studioRandomScatter && window.__studioRandomScatter(10, 0.1) },
   ];
   return (
     <div className="studio-right-section" data-studio-v3-geometry-tools>
