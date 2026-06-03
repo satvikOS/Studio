@@ -550,6 +550,38 @@ export function registerV3Api() {
     return { ok: true };
   };
 
+  // Slice 581 — Particle system. Adds a child Three.Points around the
+  // selected mesh's world center with `count` random offsets within
+  // `radius`. Coloured by accent. Persists with the scene.
+  window.__studioAddParticles = (count, radius) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel) return { ok: false, error: 'no selection' };
+    const n = Math.max(1, Math.min(20000, Math.floor(count || 1000)));
+    const r = Math.max(0.001, Number(radius) || 0.06);
+    const positions = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      const u = Math.random(), v = Math.random();
+      const theta = 2 * Math.PI * u;
+      const phi = Math.acos(2 * v - 1);
+      const rr = r * Math.cbrt(Math.random());
+      positions[i * 3]     = rr * Math.sin(phi) * Math.cos(theta);
+      positions[i * 3 + 1] = rr * Math.sin(phi) * Math.sin(theta);
+      positions[i * 3 + 2] = rr * Math.cos(phi);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const mat = new THREE.PointsMaterial({
+      color: 0x1de9b6, size: Math.max(0.001, r * 0.04), sizeAttenuation: true,
+      transparent: true, opacity: 0.85,
+    });
+    const points = new THREE.Points(geo, mat);
+    points.name = (sel.name || 'mesh') + '-particles';
+    points.userData = { archdiscStudioPrimitive: true, archdiscStudioPrimitiveKind: 'particles', count: n, radius: r };
+    sel.add(points);
+    if (window.__studioToast) window.__studioToast(`Added ${n} particles`, 'ok');
+    return { ok: true, uuid: points.uuid, count: n };
+  };
+
   // Slice 580 — Render queue. Each entry is { name, position, target, w, h }.
   // Running pops the head, sets the camera, calls exportViewportPNG, then
   // restores the original camera between entries.

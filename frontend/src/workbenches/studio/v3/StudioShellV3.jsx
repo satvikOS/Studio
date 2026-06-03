@@ -4089,6 +4089,8 @@ function GeometryTools() {
     { id: 'csg-union',   label: 'CSG: union',              call: () => window.__studioBoolean && window.__studioBoolean('union') },
     { id: 'csg-sub',     label: 'CSG: subtract',           call: () => window.__studioBoolean && window.__studioBoolean('subtract') },
     { id: 'csg-int',     label: 'CSG: intersect',          call: () => window.__studioBoolean && window.__studioBoolean('intersect') },
+    { id: 'particles-1k', label: 'Particles · 1000',       call: () => window.__studioAddParticles && window.__studioAddParticles(1000, 0.06) },
+    { id: 'particles-5k', label: 'Particles · 5000',       call: () => window.__studioAddParticles && window.__studioAddParticles(5000, 0.06) },
   ];
   return (
     <div className="studio-right-section" data-studio-v3-geometry-tools>
