@@ -742,6 +742,33 @@ export function registerV3Api() {
     return { ok: true, target: targetUuid };
   };
 
+  // Slice 597 — Twist deformer along the Y axis. Rotates each vertex
+  // around Y by (y - yMin) / extent * angle radians.
+  window.__studioTwistY = (degrees) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel || !sel.geometry) return { ok: false, error: 'no selection' };
+    const g = sel.geometry;
+    if (!g.boundingBox) g.computeBoundingBox();
+    const bb = g.boundingBox;
+    const ext = Math.max(1e-6, bb.max.y - bb.min.y);
+    const rad = (Number(degrees) || 0) * Math.PI / 180;
+    if (window.__studioPushUndo) window.__studioPushUndo('twist-y');
+    const pos = g.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+      const t = (y - bb.min.y) / ext;
+      const a = t * rad;
+      const cx = Math.cos(a), sx = Math.sin(a);
+      pos.setXYZ(i, x * cx - z * sx, y, x * sx + z * cx);
+    }
+    pos.needsUpdate = true;
+    g.computeVertexNormals();
+    g.computeBoundingBox(); g.computeBoundingSphere();
+    if (window.__studioToast) window.__studioToast(`Twisted ${degrees}° along Y`, 'ok');
+    if (window.__studioPushModifier) window.__studioPushModifier('twist-y', { degrees });
+    return { ok: true, vertices: pos.count };
+  };
+
   // Slice 596 — Noise displacement. For each vertex, offsets along its
   // normal by `strength * pseudo-noise(position)`. Deterministic per
   // position so re-applying with the same seed re-creates the bumps.
