@@ -550,6 +550,27 @@ export function registerV3Api() {
     return { ok: true };
   };
 
+  // Slice 587 — Polyline drawing tool. Activate via __studioStartPolyline()
+  // (or programmatically via __studioAddPolyline(points)) to create a Line
+  // primitive from an explicit array of [x,y,z] points.
+  window.__studioAddPolyline = (points, color) => {
+    const s = window.__archdiscScene;
+    if (!s || !Array.isArray(points) || points.length < 2) return { ok: false, error: 'need >=2 points' };
+    const arr = new Float32Array(points.length * 3);
+    for (let i = 0; i < points.length; i++) {
+      arr[i * 3] = points[i][0]; arr[i * 3 + 1] = points[i][1]; arr[i * 3 + 2] = points[i][2];
+    }
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute('position', new THREE.BufferAttribute(arr, 3));
+    const mat = new THREE.LineBasicMaterial({ color: color || 0x1de9b6 });
+    const line = new THREE.Line(geom, mat);
+    line.name = 'polyline';
+    line.userData = { archdiscStudioPrimitive: true, archdiscStudioPrimitiveKind: 'polyline', vertexCount: points.length };
+    s.add(line);
+    if (window.__studioToast) window.__studioToast(`Polyline · ${points.length} pts`, 'ok');
+    return { ok: true, uuid: line.uuid, count: points.length };
+  };
+
   // Slice 585 — Look-at constraint. Persists target uuid on selected
   // mesh's userData; a per-frame guard rotates the source to face the
   // target each tick.
