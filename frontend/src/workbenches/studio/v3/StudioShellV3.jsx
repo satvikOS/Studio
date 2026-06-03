@@ -3892,6 +3892,8 @@ function RightPanel({ collapsed, onToggle, activeWb, editMode, selection }) {
             <PivotActions />
             {/* Slice 565 — Geometry maintenance tools. */}
             <GeometryTools />
+            {/* Slice 594 — Modifier history. */}
+            <ModifierStackSection />
             {/* Slice 461 — Material properties. */}
             <MaterialRows />
             {/* Slice 498 — Camera FOV + projection. */}
@@ -4193,6 +4195,56 @@ function SculptBrushPanel() {
         />
         <span style={{ width: 34, textAlign: 'right', fontFamily: 'var(--studio-mono, ui-monospace)', fontSize: 10, color: 'var(--studio-ink-mute, #9aa6b2)' }}>{brush.falloff.toFixed(2)}</span>
       </div>
+    </div>
+  );
+}
+
+// Slice 594 — Modifier history viewer (read-only). Reads userData.modifiers
+// from the active selection. Each row shows label + params. Clear button.
+function ModifierStackSection() {
+  const [items, setItems] = useState([]);
+  useEffect(() => {
+    const read = () => {
+      const list = (window.__studioListModifiers && window.__studioListModifiers()) || [];
+      setItems(list.slice().reverse());
+    };
+    const id = setInterval(read, 500);
+    read();
+    return () => clearInterval(id);
+  }, []);
+  if (!items.length) return null;
+  return (
+    <div className="studio-right-section" data-studio-v3-modifier-stack>
+      <div className="studio-right-section-title">Modifiers · {items.length}</div>
+      {items.map((m, i) => (
+        <div
+          key={i}
+          data-studio-v3-modifier-row={i}
+          style={{
+            display: 'flex', justifyContent: 'space-between',
+            padding: '3px 6px', fontSize: 11,
+            borderLeft: '2px solid var(--studio-accent, #1de9b6)',
+          }}
+        >
+          <span style={{ color: 'var(--studio-ink, #e6edf3)' }}>{m.label}</span>
+          {m.params && (
+            <span style={{ opacity: 0.55, fontFamily: 'var(--studio-mono, ui-monospace)', fontSize: 10 }}>
+              {Object.entries(m.params).map(([k, v]) => `${k}=${v}`).join(' · ')}
+            </span>
+          )}
+        </div>
+      ))}
+      <button
+        type="button"
+        data-studio-v3-modifier-clear
+        onClick={() => window.__studioClearModifiers && window.__studioClearModifiers()}
+        style={{
+          width: '100%', marginTop: 6, padding: '3px 8px',
+          background: 'transparent', color: 'var(--studio-ink-mute, #9aa6b2)',
+          border: '1px solid var(--studio-ink-mute, #1f2733)', borderRadius: 3,
+          fontSize: 10, cursor: 'pointer', fontFamily: 'inherit',
+        }}
+      >Clear history</button>
     </div>
   );
 }

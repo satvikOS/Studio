@@ -550,6 +550,29 @@ export function registerV3Api() {
     return { ok: true };
   };
 
+  // Slice 594 — Modifier history. Each geometry op should call
+  // __studioPushModifier(label, params) to record on the active mesh.
+  window.__studioPushModifier = (label, params) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel) return { ok: false };
+    sel.userData = sel.userData || {};
+    sel.userData.modifiers = sel.userData.modifiers || [];
+    sel.userData.modifiers.push({ label, params: params || null, ts: Date.now() });
+    return { ok: true, count: sel.userData.modifiers.length };
+  };
+  window.__studioListModifiers = () => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel) return [];
+    return (sel.userData && sel.userData.modifiers) || [];
+  };
+  window.__studioClearModifiers = () => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel) return { ok: false };
+    sel.userData = sel.userData || {};
+    sel.userData.modifiers = [];
+    return { ok: true };
+  };
+
   // Slice 592 — Selection sets. Save the current multi-select under a
   // name; recall to restore. Stored on window so they survive across
   // single-session edits (but not across reloads).
@@ -736,6 +759,7 @@ export function registerV3Api() {
     sel.geometry = reduced;
     const after = sel.geometry.attributes.position.count;
     if (window.__studioToast) window.__studioToast(`Simplified ${before} → ${after} verts`, 'ok');
+    window.__studioPushModifier && window.__studioPushModifier('simplify', { ratio: target });
     return { ok: true, before, after };
   };
   window.__studioTessellate = async (passes) => {
@@ -748,6 +772,7 @@ export function registerV3Api() {
     sel.geometry = t.modify(sel.geometry);
     const after = sel.geometry.attributes.position.count;
     if (window.__studioToast) window.__studioToast(`Tessellated ${before} → ${after} verts`, 'ok');
+    window.__studioPushModifier && window.__studioPushModifier('tessellate', { passes });
     return { ok: true, before, after };
   };
 
@@ -997,6 +1022,7 @@ export function registerV3Api() {
     if (!sel || !sel.geometry) return { ok: false, error: 'no selection' };
     sel.geometry.computeVertexNormals();
     if (window.__studioToast) window.__studioToast('Vertex normals recomputed', 'ok');
+    window.__studioPushModifier && window.__studioPushModifier('vertex-normals');
     return { ok: true };
   };
   window.__studioWeldVertices = async (tol) => {
@@ -1010,6 +1036,7 @@ export function registerV3Api() {
     sel.geometry = merged;
     const after = sel.geometry.attributes.position.count;
     if (window.__studioToast) window.__studioToast(`Welded ${before}→${after}`, 'ok');
+    window.__studioPushModifier && window.__studioPushModifier('weld', { tol });
     return { ok: true, before, after };
   };
 
