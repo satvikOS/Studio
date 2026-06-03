@@ -438,6 +438,18 @@ export function registerV3Api() {
     return { ok: true, on: true };
   };
 
+  // Slice 573 — Sculpt brush settings live on window so the inspector
+  // panel + future viewport input handler share the same state.
+  if (!window.__studioSculptBrush) {
+    window.__studioSculptBrush = { kind: 'draw', size: 0.04, strength: 0.3, falloff: 0.6 };
+  }
+  window.__studioGetSculptBrush = () => Object.assign({}, window.__studioSculptBrush);
+  window.__studioSetSculptBrush = (patch) => {
+    window.__studioSculptBrush = Object.assign({}, window.__studioSculptBrush, patch || {});
+    window.dispatchEvent(new CustomEvent('studio-sculpt-brush-changed', { detail: window.__studioSculptBrush }));
+    return { ok: true, brush: window.__studioSculptBrush };
+  };
+
   // Slice 570 — Bake the selected mesh's world matrix into its geometry,
   // then reset position/rotation/scale to identity. Useful for snapshotting
   // a transformed mesh into a fresh primitive.

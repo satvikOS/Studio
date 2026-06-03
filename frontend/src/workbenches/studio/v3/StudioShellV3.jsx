@@ -3239,6 +3239,7 @@ function RightPanel({ collapsed, onToggle, activeWb, editMode, selection }) {
               <div className="studio-right-section-title">Edit selection</div>
               <SelectionRows />
             </div>
+            {editMode === 'sculpt' && <SculptBrushPanel />}
             {/* Slice 433 — Edit Tools buttons surface the slice 388/389/390/
                 386/387 edit-mode ops as one-click actions in V3 inspector.
                 Only shown in a sub-object mode. */}
@@ -3368,6 +3369,79 @@ function TransformRows() {
         {numIn('scale', 'x', m.scale.x.toFixed(4))}
         {numIn('scale', 'y', m.scale.y.toFixed(4))}
         {numIn('scale', 'z', m.scale.z.toFixed(4))}
+      </div>
+    </div>
+  );
+}
+
+// Slice 573 — Sculpt brush panel. Shown only in sculpt edit mode.
+function SculptBrushPanel() {
+  const [brush, setBrush] = useState(() => (window.__studioGetSculptBrush && window.__studioGetSculptBrush()) || { kind: 'draw', size: 0.04, strength: 0.3, falloff: 0.6 });
+  useEffect(() => {
+    const onChange = (e) => { if (e && e.detail) setBrush(e.detail); };
+    window.addEventListener('studio-sculpt-brush-changed', onChange);
+    return () => window.removeEventListener('studio-sculpt-brush-changed', onChange);
+  }, []);
+  const update = (patch) => {
+    if (window.__studioSetSculptBrush) window.__studioSetSculptBrush(patch);
+    setBrush((b) => ({ ...b, ...patch }));
+  };
+  const kinds = ['draw', 'inflate', 'pinch', 'smooth', 'crease', 'flatten'];
+  return (
+    <div className="studio-right-section" data-studio-v3-sculpt-brush>
+      <div className="studio-right-section-title">Sculpt brush</div>
+      <div className="studio-right-row" style={{ flexWrap: 'wrap', gap: 4 }}>
+        {kinds.map((k) => (
+          <button
+            key={k}
+            type="button"
+            data-studio-v3-sculpt-brush-kind={k}
+            data-active={brush.kind === k ? 'true' : 'false'}
+            onClick={() => update({ kind: k })}
+            style={{
+              flex: '1 1 calc(33% - 4px)', minWidth: 56,
+              padding: '3px 4px', fontSize: 10,
+              background: brush.kind === k ? 'var(--studio-accent, #1de9b6)' : 'var(--studio-bg-elev, #161b22)',
+              color: brush.kind === k ? '#0d1117' : 'var(--studio-ink, #e6edf3)',
+              border: '1px solid var(--studio-ink-mute, #1f2733)',
+              borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit',
+              textTransform: 'capitalize', fontWeight: brush.kind === k ? 600 : 400,
+            }}
+          >{k}</button>
+        ))}
+      </div>
+      <div className="studio-right-row" style={{ alignItems: 'center' }}>
+        <span>Size (m)</span>
+        <input
+          type="range" min="0.005" max="0.5" step="0.005"
+          value={brush.size}
+          onChange={(e) => update({ size: Number(e.target.value) })}
+          data-studio-v3-sculpt-brush-size
+          style={{ flex: 1, marginLeft: 8 }}
+        />
+        <span style={{ width: 38, textAlign: 'right', fontFamily: 'var(--studio-mono, ui-monospace)', fontSize: 10, color: 'var(--studio-ink-mute, #9aa6b2)' }}>{brush.size.toFixed(3)}</span>
+      </div>
+      <div className="studio-right-row" style={{ alignItems: 'center' }}>
+        <span>Strength</span>
+        <input
+          type="range" min="0" max="1" step="0.01"
+          value={brush.strength}
+          onChange={(e) => update({ strength: Number(e.target.value) })}
+          data-studio-v3-sculpt-brush-strength
+          style={{ flex: 1, marginLeft: 8 }}
+        />
+        <span style={{ width: 34, textAlign: 'right', fontFamily: 'var(--studio-mono, ui-monospace)', fontSize: 10, color: 'var(--studio-ink-mute, #9aa6b2)' }}>{brush.strength.toFixed(2)}</span>
+      </div>
+      <div className="studio-right-row" style={{ alignItems: 'center' }}>
+        <span>Falloff</span>
+        <input
+          type="range" min="0" max="1" step="0.01"
+          value={brush.falloff}
+          onChange={(e) => update({ falloff: Number(e.target.value) })}
+          data-studio-v3-sculpt-brush-falloff
+          style={{ flex: 1, marginLeft: 8 }}
+        />
+        <span style={{ width: 34, textAlign: 'right', fontFamily: 'var(--studio-mono, ui-monospace)', fontSize: 10, color: 'var(--studio-ink-mute, #9aa6b2)' }}>{brush.falloff.toFixed(2)}</span>
       </div>
     </div>
   );
