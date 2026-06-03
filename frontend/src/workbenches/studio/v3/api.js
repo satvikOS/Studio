@@ -478,6 +478,47 @@ export function registerV3Api() {
   // Auto-run on mount.
   for (const p of loadPlugins()) runPlugin(p);
 
+  // Slice 576 — Vertex paint helpers. Initialises a per-vertex color
+  // attribute on the active geometry and supports flood-fill colouring.
+  // The material is switched to vertexColors mode so the paint shows.
+  window.__studioVertexPaintInit = (hex) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel || !sel.geometry || !sel.geometry.attributes || !sel.geometry.attributes.position) return { ok: false, error: 'no selection' };
+    const g = sel.geometry;
+    const n = g.attributes.position.count;
+    const colors = new Float32Array(n * 3);
+    const c = new THREE.Color(hex || '#ffffff');
+    for (let i = 0; i < n; i++) { colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b; }
+    g.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    const mat = Array.isArray(sel.material) ? sel.material[0] : sel.material;
+    if (mat) { mat.vertexColors = true; mat.needsUpdate = true; }
+    return { ok: true, vertices: n };
+  };
+  window.__studioVertexPaintFloodFill = (hex) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel || !sel.geometry || !sel.geometry.attributes || !sel.geometry.attributes.color) {
+      return window.__studioVertexPaintInit(hex);
+    }
+    const col = sel.geometry.attributes.color;
+    const c = new THREE.Color(hex || '#ffffff');
+    for (let i = 0; i < col.count; i++) col.setXYZ(i, c.r, c.g, c.b);
+    col.needsUpdate = true;
+    return { ok: true, vertices: col.count };
+  };
+  window.__studioVertexPaintRandom = () => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel || !sel.geometry) return { ok: false, error: 'no selection' };
+    if (!sel.geometry.attributes.color) window.__studioVertexPaintInit('#ffffff');
+    const col = sel.geometry.attributes.color;
+    const c = new THREE.Color();
+    for (let i = 0; i < col.count; i++) {
+      c.setHSL(Math.random(), 0.6, 0.55);
+      col.setXYZ(i, c.r, c.g, c.b);
+    }
+    col.needsUpdate = true;
+    return { ok: true, vertices: col.count };
+  };
+
   // Slice 573 — Sculpt brush settings live on window so the inspector
   // panel + future viewport input handler share the same state.
   if (!window.__studioSculptBrush) {

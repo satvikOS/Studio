@@ -3484,6 +3484,7 @@ function RightPanel({ collapsed, onToggle, activeWb, editMode, selection }) {
               <SelectionRows />
             </div>
             {editMode === 'sculpt' && <SculptBrushPanel />}
+            <VertexPaintPanel />
             {/* Slice 433 — Edit Tools buttons surface the slice 388/389/390/
                 386/387 edit-mode ops as one-click actions in V3 inspector.
                 Only shown in a sub-object mode. */}
@@ -3614,6 +3615,64 @@ function TransformRows() {
         {numIn('scale', 'y', m.scale.y.toFixed(4))}
         {numIn('scale', 'z', m.scale.z.toFixed(4))}
       </div>
+    </div>
+  );
+}
+
+// Slice 576 — Vertex paint inspector panel. Color picker + flood-fill +
+// rainbow + init. Renders only when a selection exists.
+function VertexPaintPanel() {
+  const [hex, setHex] = useState('#ff7a59');
+  const [uuid, setUuid] = useState(null);
+  useEffect(() => {
+    const t = setInterval(() => {
+      const m = window.__studioSelectedMesh && window.__studioSelectedMesh();
+      setUuid(m ? m.uuid : null);
+    }, 500);
+    return () => clearInterval(t);
+  }, []);
+  if (!uuid) return null;
+  return (
+    <div className="studio-right-section" data-studio-v3-vertex-paint>
+      <div className="studio-right-section-title">Vertex paint</div>
+      <div className="studio-right-row" style={{ alignItems: 'center' }}>
+        <span>Color</span>
+        <input
+          type="color"
+          value={hex}
+          onChange={(e) => setHex(e.target.value)}
+          data-studio-v3-vpaint-color
+          style={{ width: 40, height: 22, padding: 0, border: '1px solid var(--studio-ink-mute)', borderRadius: 2, background: 'transparent', cursor: 'pointer' }}
+        />
+      </div>
+      <button
+        type="button"
+        data-studio-v3-vpaint-flood
+        onClick={() => window.__studioVertexPaintFloodFill && window.__studioVertexPaintFloodFill(hex)}
+        style={{
+          display: 'block', width: '100%', marginBottom: 3,
+          padding: '3px 8px', textAlign: 'left',
+          background: 'var(--studio-bg-elev, #161b22)',
+          color: 'var(--studio-ink, #e6edf3)',
+          border: '1px solid var(--studio-ink-mute, #1f2733)',
+          borderRadius: 3, cursor: 'pointer',
+          fontSize: 11, fontFamily: 'inherit',
+        }}
+      >Flood fill</button>
+      <button
+        type="button"
+        data-studio-v3-vpaint-rainbow
+        onClick={() => window.__studioVertexPaintRandom && window.__studioVertexPaintRandom()}
+        style={{
+          display: 'block', width: '100%',
+          padding: '3px 8px', textAlign: 'left',
+          background: 'var(--studio-bg-elev, #161b22)',
+          color: 'var(--studio-ink, #e6edf3)',
+          border: '1px solid var(--studio-ink-mute, #1f2733)',
+          borderRadius: 3, cursor: 'pointer',
+          fontSize: 11, fontFamily: 'inherit',
+        }}
+      >Rainbow vertices</button>
     </div>
   );
 }
