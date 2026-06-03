@@ -550,6 +550,21 @@ export function registerV3Api() {
     return { ok: true };
   };
 
+  // Slice 588 — Programmatic GLTF/GLB importer. Pairs with the viewport
+  // drag-drop handler so palette + scripts share the same import path.
+  window.__studioImportGLTF = (arrayBuffer, name) => new Promise(async (resolve) => {
+    try {
+      const mod = await import('three/examples/jsm/loaders/GLTFLoader.js');
+      const loader = new mod.GLTFLoader();
+      loader.parse(arrayBuffer, '', (gltf) => {
+        if (!gltf.scene || !window.__archdiscScene) { resolve({ ok: false, error: 'no scene' }); return; }
+        gltf.scene.userData = { ...gltf.scene.userData, archdiscStudioPrimitive: true, archdiscStudioPrimitiveKind: 'gltf', archdiscStudioGltfSource: name || 'gltf' };
+        window.__archdiscScene.add(gltf.scene);
+        resolve({ ok: true, uuid: gltf.scene.uuid });
+      }, (err) => resolve({ ok: false, error: err && err.message || String(err) }));
+    } catch (e) { resolve({ ok: false, error: e.message }); }
+  });
+
   // Slice 587 — Polyline drawing tool. Activate via __studioStartPolyline()
   // (or programmatically via __studioAddPolyline(points)) to create a Line
   // primitive from an explicit array of [x,y,z] points.

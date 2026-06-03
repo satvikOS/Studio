@@ -7313,6 +7313,27 @@ export function StudioShellV3({ mode = 'dark' }) {
                 }
               };
               reader.readAsText(f);
+            } else if (f.name.endsWith('.glb') || f.name.endsWith('.gltf')) {
+              // Slice 588 — Lazy-import three's GLTFLoader and add the
+              // parsed scene under window.__archdiscScene.
+              reader.onload = async () => {
+                try {
+                  const mod = await import('three/examples/jsm/loaders/GLTFLoader.js');
+                  const loader = new mod.GLTFLoader();
+                  loader.parse(reader.result, '', (gltf) => {
+                    if (gltf.scene && window.__archdiscScene) {
+                      gltf.scene.userData = { ...gltf.scene.userData, archdiscStudioPrimitive: true, archdiscStudioPrimitiveKind: 'gltf', archdiscStudioGltfSource: f.name };
+                      window.__archdiscScene.add(gltf.scene);
+                      if (window.__studioToast) window.__studioToast(`Imported ${f.name}`, 'ok');
+                    }
+                  }, (err) => {
+                    if (window.__studioToast) window.__studioToast(`GLTF parse failed: ${err.message || err}`, 'warn');
+                  });
+                } catch (err) {
+                  if (window.__studioToast) window.__studioToast(`GLTF import error: ${err.message}`, 'warn');
+                }
+              };
+              reader.readAsArrayBuffer(f);
             } else if (window.__studioToast) {
               window.__studioToast(`Skipped ${f.name} (unsupported)`, 'warn');
             }
