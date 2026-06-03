@@ -742,6 +742,145 @@ export function registerV3Api() {
     return { ok: true, target: targetUuid };
   };
 
+  // Slice 600 — WASD fly camera. Each call dollies / strafes the camera
+  // (and orbit target) along its forward / right axis by `step` metres.
+  window.__studioFly = (dir, step) => {
+    const vp = window.__archdiscViewport;
+    if (!vp || !vp.camera || !vp.orbitControls) return { ok: false };
+    const cam = vp.camera, ctrl = vp.orbitControls;
+    const s = Math.max(0.005, Number(step) || 0.05);
+    const fwd = new THREE.Vector3();
+    cam.getWorldDirection(fwd); // unit vector camera→target
+    const right = new THREE.Vector3().crossVectors(fwd, cam.up).normalize();
+    let dx = 0, dy = 0;
+    if (dir === 'w') dx = +s;
+    else if (dir === 's') dx = -s;
+    else if (dir === 'a') dy = -s;
+    else if (dir === 'd') dy = +s;
+    cam.position.addScaledVector(fwd, dx);
+    cam.position.addScaledVector(right, dy);
+    ctrl.target.addScaledVector(fwd, dx);
+    ctrl.target.addScaledVector(right, dy);
+    if (typeof ctrl.update === 'function') ctrl.update();
+    return { ok: true, dir, step: s };
+  };
+
+  // Slice 600 — Modal transform mode (Blender G / R / S parity).
+  // Captures pointer movement after the hotkey fires; X / Y / Z lock to
+  // an axis; Enter commits; Esc reverts. State on window so the
+  // top-center HUD chip can render the current mode + delta.
+  if (!window.__studioModalState) window.__studioModalState = null;
+  let _modalListeners = null;
+  const detachModal = () => {
+    if (!_modalListeners) return;
+    window.removeEventListener('mousemove', _modalListeners.move);
+    window.removeEventListener('keydown', _modalListeners.key, true);
+    _modalListeners = null;
+  };
+  const revertModal = () => {
+    const st = window.__studioModalState;
+    if (!st || !st.mesh) return;
+    const m = st.mesh;
+    m.position.copy(st.initPos);
+    m.rotation.copy(st.initRot);
+    m.scale.copy(st.initScale);
+    m.updateMatrixWorld(true);
+  };
+  const commitModal = () => {
+    const st = window.__studioModalState;
+    if (!st) return;
+    if (window.__studioPushUndo) window.__studioPushUndo(`modal-${st.kind}`);
+  };
+  window.__studioStartModalTransform = (kind) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel) return { ok: false, error: 'no selection' };
+    detachModal();
+    const init = {
+      kind, // 'move' | 'rotate' | 'scale'
+      mesh: sel,
+      axis: null, // 'x' | 'y' | 'z' | null (free)
+      startX: null, startY: null,
+      initPos: sel.position.clone(),
+      initRot: sel.rotation.clone(),
+      initScale: sel.scale.clone(),
+      delta: 0,
+    };
+    window.__studioModalState = init;
+    window.dispatchEvent(new CustomEvent('studio-modal-transform', { detail: { active: true, kind } }));
+    const apply = (m, dx, dy, axis) => {
+      const k = window.__studioModalState && window.__studioModalState.kind;
+      if (!k) return;
+      const tunit = 0.001; // 1 mm / px
+      const runit = 0.005; // 0.005 rad / px
+      const sunit = 0.005; // multiplier / px
+      const ax = axis || (Math.abs(dx) > Math.abs(dy) ? 'x' : 'y');
+      const d = (axis === 'y' ? -dy : dx); // for y-axis use vertical motion
+      window.__studioModalState.delta = d;
+      if (k === 'move') {
+        const off = d * tunit;
+        m.position.copy(init.initPos);
+        if (axis) m.position[axis] += off;
+        else { m.position.x += dx * tunit; m.position.y += -dy * tunit; }
+      } else if (k === 'rotate') {
+        m.rotation.copy(init.initRot);
+        const off = d * runit;
+        if (axis) m.rotation[axis] += off;
+        else m.rotation.z += off;
+      } else if (k === 'scale') {
+        const s = Math.max(0.01, 1 + d * sunit);
+        m.scale.copy(init.initScale);
+        if (axis) m.scale[axis] = init.initScale[axis] * s;
+        else m.scale.multiplyScalar(s);
+      }
+      m.updateMatrixWorld(true);
+    };
+    _modalListeners = {
+      move: (e) => {
+        const st = window.__studioModalState;
+        if (!st) return;
+        if (st.startX == null) { st.startX = e.clientX; st.startY = e.clientY; return; }
+        const dx = e.clientX - st.startX, dy = e.clientY - st.startY;
+        apply(st.mesh, dx, dy, st.axis);
+      },
+      key: (e) => {
+        const st = window.__studioModalState;
+        if (!st) return;
+        const k = e.key.toLowerCase();
+        if (k === 'escape') {
+          revertModal();
+          window.__studioModalState = null;
+          detachModal();
+          window.dispatchEvent(new CustomEvent('studio-modal-transform', { detail: { active: false } }));
+          e.preventDefault();
+          e.stopPropagation();
+        } else if (k === 'enter') {
+          commitModal();
+          window.__studioModalState = null;
+          detachModal();
+          window.dispatchEvent(new CustomEvent('studio-modal-transform', { detail: { active: false } }));
+          e.preventDefault();
+          e.stopPropagation();
+        } else if (k === 'x' || k === 'y' || k === 'z') {
+          st.axis = k;
+          window.dispatchEvent(new CustomEvent('studio-modal-transform', { detail: { active: true, kind: st.kind, axis: k } }));
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      },
+    };
+    window.addEventListener('mousemove', _modalListeners.move);
+    window.addEventListener('keydown', _modalListeners.key, true);
+    return { ok: true, kind };
+  };
+  window.__studioCancelModalTransform = () => {
+    if (!window.__studioModalState) return { ok: false };
+    revertModal();
+    window.__studioModalState = null;
+    detachModal();
+    window.dispatchEvent(new CustomEvent('studio-modal-transform', { detail: { active: false } }));
+    return { ok: true };
+  };
+
   // Slice 599 — Taper deformer along Y. ratio < 1 narrows the top, > 1
   // widens it; X and Z are scaled proportionally to height.
   window.__studioTaperY = (topRatio) => {

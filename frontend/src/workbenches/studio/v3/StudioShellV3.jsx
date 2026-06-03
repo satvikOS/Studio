@@ -1283,6 +1283,7 @@ const KEYMAP = [
     ['Numpad 1/3/7', 'Front / Right / Top camera (Blender parity)'],
     ['Numpad 5', 'Toggle perspective / ortho'],
     ['T', 'Toggle camera turntable autorotate'],
+    ['Shift+W/A/S/D', 'Fly camera forward / strafe'],
     ['/', 'Solo: isolate selection + frame · press again to restore'],
     ['Alt+G/R/S', 'Reset translate/rotate/scale'],
     ['Shift+;', 'Toggle transform snap (1 cm / 15° / 0.1)'],
@@ -7128,12 +7129,14 @@ export function StudioShellV3({ mode = 'dark' }) {
         if (window.__studioSubdivideSelectedFaces) window.__studioSubdivideSelectedFaces();
         e.preventDefault();
       } else if (!meta && !e.shiftKey && !e.altKey && (e.key === 'g' || e.key === 'r' || e.key === 's')) {
-        // Slice 429 — G/R/S set active transform tool (Blender muscle memory).
-        // Honors text inputs.
+        // Slice 429 / 600 — G / R / S set the active transform tool and
+        // arm Blender-style modal mode: subsequent mousemove drives the
+        // transform, X/Y/Z lock to an axis, Enter commits, Esc reverts.
         const ae = document.activeElement;
         if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
         const map = { g: 'move', r: 'rotate', s: 'scale' };
         setActiveTool(map[e.key]);
+        if (window.__studioStartModalTransform) window.__studioStartModalTransform(map[e.key]);
         e.preventDefault();
       } else if (!meta && e.shiftKey && (e.key === ';' || e.key === ':')) {
         // Slice 491 — Shift+; toggles transform snap (translation 1 cm,
@@ -7166,6 +7169,12 @@ export function StudioShellV3({ mode = 'dark' }) {
         if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
         const inp = document.querySelector('[data-studio-v3-rename-input]');
         if (inp) { inp.focus(); if (inp.select) inp.select(); }
+        e.preventDefault();
+      } else if (!meta && e.shiftKey && !e.altKey && (e.key === 'W' || e.key === 'w' || e.key === 'A' || e.key === 'a' || e.key === 'S' || e.key === 's' || e.key === 'D' || e.key === 'd')) {
+        // Slice 600 — Shift+WASD flies the camera in forward / strafe.
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        if (window.__studioFly) window.__studioFly(e.key.toLowerCase(), 0.05);
         e.preventDefault();
       } else if (!meta && !e.shiftKey && !e.altKey && (e.key === 't' || e.key === 'T')) {
         // Slice 557 — Bare T toggles camera turntable autorotate.
