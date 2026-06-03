@@ -3868,6 +3868,7 @@ function RightPanel({ collapsed, onToggle, activeWb, editMode, selection }) {
                 prop is set or not, polling __studioSelectedMesh directly. */}
             <RenameSection />
             <ObjectPropsSection />
+            <ConstraintsSection />
             {selection && (
               <div className="studio-right-section" data-studio-v3-inspector-selection>
                 <div className="studio-right-section-title">Selected · {selection.type || 'object'}</div>
@@ -4232,6 +4233,66 @@ function GeometryTools() {
           }}
         >{a.label}</button>
       ))}
+    </div>
+  );
+}
+
+// Slice 585 — Constraints section. Lists possible targets in the scene
+// and lets the user wire / unwire a look-at constraint on the active
+// selection.
+function ConstraintsSection() {
+  const [items, setItems] = useState([]);
+  const [active, setActive] = useState(null);
+  const [target, setTarget] = useState('');
+  useEffect(() => {
+    const read = () => {
+      const s = window.__archdiscScene;
+      const arr = [];
+      if (s) {
+        s.traverse((o) => {
+          if (o.userData && o.userData.archdiscStudioPrimitive) {
+            arr.push({ uuid: o.uuid, name: o.name || o.userData.archdiscStudioPrimitiveKind || 'mesh' });
+          }
+        });
+      }
+      setItems(arr);
+      const m = window.__studioSelectedMesh && window.__studioSelectedMesh();
+      setActive(m);
+      setTarget((m && m.userData && m.userData.archdiscStudioLookAtUuid) || '');
+    };
+    const id = setInterval(read, 500);
+    read();
+    return () => clearInterval(id);
+  }, []);
+  if (!active) return null;
+  const others = items.filter((it) => it.uuid !== active.uuid);
+  const set = (val) => {
+    setTarget(val);
+    if (window.__studioSetLookAt) window.__studioSetLookAt(active.uuid, val || null);
+  };
+  return (
+    <div className="studio-right-section" data-studio-v3-constraints>
+      <div className="studio-right-section-title">Constraints</div>
+      <div className="studio-right-row" style={{ alignItems: 'center' }}>
+        <span>Look at</span>
+        <select
+          value={target}
+          onChange={(e) => set(e.target.value)}
+          data-studio-v3-lookat-target
+          style={{
+            flex: 1, marginLeft: 8, padding: '2px 6px',
+            background: 'var(--studio-bg, #0d1117)',
+            border: '1px solid var(--studio-ink-mute, #1f2733)',
+            color: 'var(--studio-ink, #e6edf3)', borderRadius: 3,
+            fontFamily: 'inherit', fontSize: 11,
+          }}
+        >
+          <option value="">(none)</option>
+          {others.map((o) => (
+            <option key={o.uuid} value={o.uuid}>{o.name}</option>
+          ))}
+        </select>
+      </div>
     </div>
   );
 }

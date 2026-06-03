@@ -550,6 +550,41 @@ export function registerV3Api() {
     return { ok: true };
   };
 
+  // Slice 585 — Look-at constraint. Persists target uuid on selected
+  // mesh's userData; a per-frame guard rotates the source to face the
+  // target each tick.
+  if (!window.__studioLookAtGuardAttached) {
+    window.__studioLookAtGuardAttached = true;
+    const target = new THREE.Vector3();
+    const tick = () => {
+      const s = window.__archdiscScene;
+      if (s) {
+        try {
+          s.traverse((o) => {
+            if (o.userData && o.userData.archdiscStudioLookAtUuid) {
+              let t = null;
+              s.traverse((q) => { if (q.uuid === o.userData.archdiscStudioLookAtUuid) t = q; });
+              if (t) { t.getWorldPosition(target); o.lookAt(target); }
+            }
+          });
+        } catch (_) {}
+      }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+  window.__studioSetLookAt = (sourceUuid, targetUuid) => {
+    const s = window.__archdiscScene;
+    if (!s) return { ok: false };
+    let src = null;
+    s.traverse((o) => { if (o.uuid === sourceUuid) src = o; });
+    if (!src) return { ok: false, error: 'no source' };
+    src.userData = src.userData || {};
+    if (!targetUuid) { delete src.userData.archdiscStudioLookAtUuid; return { ok: true, cleared: true }; }
+    src.userData.archdiscStudioLookAtUuid = targetUuid;
+    return { ok: true, target: targetUuid };
+  };
+
   // Slice 582 — Decimate / simplify the selected geometry. Wraps the
   // three SimplifyModifier (quadric edge collapse). Tessellate doubles
   // tri density for higher subdivision.
