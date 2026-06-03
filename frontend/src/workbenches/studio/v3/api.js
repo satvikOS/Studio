@@ -765,6 +765,28 @@ export function registerV3Api() {
     return { ok: true, dir, step: s };
   };
 
+  // Slice 602 — Apply an image data-URL as the active material's
+  // normalMap. PBR rendering uses it to perturb shading normals.
+  window.__studioApplyNormalMap = (dataUrl, name) => new Promise((resolve) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel) { resolve({ ok: false, error: 'no selection' }); return; }
+    const mat = Array.isArray(sel.material) ? sel.material[0] : sel.material;
+    if (!mat) { resolve({ ok: false, error: 'no material' }); return; }
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const tex = new THREE.Texture(img);
+      tex.needsUpdate = true;
+      tex.name = name || 'normal';
+      mat.normalMap = tex;
+      mat.needsUpdate = true;
+      if (window.__studioToast) window.__studioToast(`Normal map applied (${img.width}×${img.height})`, 'ok');
+      resolve({ ok: true, width: img.width, height: img.height });
+    };
+    img.onerror = () => resolve({ ok: false, error: 'image load failed' });
+    img.src = dataUrl;
+  });
+
   // Slice 601 — Apply an image data-URL as the active material's base
   // colour map. Switches material to vertexColors off + map on.
   window.__studioApplyTextureMap = (dataUrl, name) => new Promise((resolve) => {
