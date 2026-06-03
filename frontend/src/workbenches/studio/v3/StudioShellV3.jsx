@@ -2554,6 +2554,7 @@ function WindowMenu() {
     { id: 'settings',        label: 'Settings',               hint: 'Cmd+,', call: () => window.dispatchEvent(new CustomEvent('studio-settings-toggle')) },
     { id: 'plugin-manager',  label: 'Plugin manager',                        call: () => window.dispatchEvent(new CustomEvent('studio-plugin-manager-toggle')) },
     { id: 'curve-editor',    label: 'Animation curves',     hint: 'Cmd+Shift+C', call: () => window.dispatchEvent(new CustomEvent('studio-curve-editor-toggle')) },
+    { id: 'uv-editor',       label: 'UV editor',            hint: 'Cmd+Shift+U', call: () => window.dispatchEvent(new CustomEvent('studio-uv-editor-toggle')) },
     { id: 'reset-layout',    label: 'Reset layout',                          call: resetLayout },
   ];
   return (
@@ -2900,6 +2901,117 @@ function PluginManager() {
             </div>
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// Slice 575 — UV editor modal. Plots the active mesh's geometry.uv
+// attribute as vertices + edges in the unit square. Open via
+// studio-uv-editor-toggle or Cmd+Shift+U.
+function UVEditor() {
+  const [open, setOpen] = useState(false);
+  const [data, setData] = useState({ verts: [], edges: [] });
+  const S = 380;
+  useEffect(() => {
+    const onToggle = () => setOpen((v) => !v);
+    const onKey = (e) => {
+      const ae = document.activeElement;
+      if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'u') {
+        e.preventDefault();
+        setOpen((v) => !v);
+      } else if (open && e.key === 'Escape') { setOpen(false); e.preventDefault(); }
+    };
+    window.addEventListener('studio-uv-editor-toggle', onToggle);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('studio-uv-editor-toggle', onToggle);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    const read = () => {
+      const m = window.__studioSelectedMesh && window.__studioSelectedMesh();
+      if (!m || !m.geometry || !m.geometry.attributes || !m.geometry.attributes.uv) {
+        setData({ verts: [], edges: [] });
+        return;
+      }
+      const uv = m.geometry.attributes.uv;
+      const verts = [];
+      for (let i = 0; i < uv.count; i++) verts.push({ u: uv.getX(i), v: uv.getY(i) });
+      const idx = m.geometry.index ? m.geometry.index.array : null;
+      const edges = [];
+      const t = idx ? Math.floor(idx.length / 3) : Math.floor(uv.count / 3);
+      const cap = Math.min(t, 800);
+      for (let i = 0; i < cap; i++) {
+        const i0 = idx ? idx[i * 3]     : i * 3;
+        const i1 = idx ? idx[i * 3 + 1] : i * 3 + 1;
+        const i2 = idx ? idx[i * 3 + 2] : i * 3 + 2;
+        edges.push([i0, i1], [i1, i2], [i2, i0]);
+      }
+      setData({ verts, edges });
+    };
+    const id = setInterval(read, 600);
+    read();
+    return () => clearInterval(id);
+  }, [open]);
+  if (!open) return null;
+  const px = (u) => Math.round(u * S);
+  const py = (v) => Math.round((1 - v) * S);
+  return (
+    <div
+      data-studio-v3-uv-editor
+      onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 9200,
+        background: 'rgba(13,17,23,0.6)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: 'var(--studio-bg-elev, #161b22)',
+          border: '1px solid var(--studio-accent, #1de9b6)',
+          borderRadius: 8, padding: '18px 22px',
+          color: 'var(--studio-ink, #e6edf3)', fontFamily: 'inherit',
+        }}
+      >
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+          marginBottom: 10,
+        }}>
+          <strong style={{ color: 'var(--studio-accent, #1de9b6)', fontSize: 13, letterSpacing: '0.04em' }}>UV editor</strong>
+          <span style={{ opacity: 0.55, fontSize: 11, fontFamily: 'var(--studio-mono, ui-monospace)' }}>{data.verts.length} verts · Esc</span>
+        </div>
+        <svg
+          width={S} height={S} viewBox={`0 0 ${S} ${S}`}
+          data-studio-v3-uv-svg
+          style={{ background: 'rgba(13,17,23,0.55)', borderRadius: 4 }}
+        >
+          {/* Frame */}
+          <rect x="0" y="0" width={S} height={S} fill="none" stroke="rgba(154,166,178,0.3)" />
+          {/* Triangle edges */}
+          {data.edges.map(([a, b], i) => (
+            <line
+              key={i}
+              x1={px(data.verts[a].u)} y1={py(data.verts[a].v)}
+              x2={px(data.verts[b].u)} y2={py(data.verts[b].v)}
+              stroke="rgba(29, 233, 182, 0.45)" strokeWidth="0.7"
+            />
+          ))}
+          {/* UV vertices */}
+          {data.verts.map((p, i) => (
+            <circle
+              key={i}
+              data-studio-v3-uv-vert={i}
+              cx={px(p.u)} cy={py(p.v)} r="2"
+              fill="var(--studio-accent, #1de9b6)"
+            />
+          ))}
+        </svg>
       </div>
     </div>
   );
@@ -6639,6 +6751,7 @@ export function StudioShellV3({ mode = 'dark' }) {
       <AboutModal />
       <CurveEditor />
       <PluginManager />
+      <UVEditor />
       <FileMenu />
       <EditMenu />
       <SelectMenu />
