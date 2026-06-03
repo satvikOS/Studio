@@ -438,6 +438,25 @@ export function registerV3Api() {
     return { ok: true, on: true };
   };
 
+  // Slice 570 — Bake the selected mesh's world matrix into its geometry,
+  // then reset position/rotation/scale to identity. Useful for snapshotting
+  // a transformed mesh into a fresh primitive.
+  window.__studioApplyMatrix = () => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel || !sel.geometry) return { ok: false, error: 'no selection' };
+    if (window.__studioPushUndo) window.__studioPushUndo('apply-matrix');
+    sel.updateMatrixWorld(true);
+    sel.geometry.applyMatrix4(sel.matrix);
+    sel.position.set(0, 0, 0);
+    sel.rotation.set(0, 0, 0);
+    sel.scale.set(1, 1, 1);
+    sel.updateMatrixWorld(true);
+    sel.geometry.computeBoundingBox();
+    sel.geometry.computeBoundingSphere();
+    if (window.__studioToast) window.__studioToast('Matrix applied', 'ok');
+    return { ok: true };
+  };
+
   // Slice 569 — Join multi-selected meshes into a single archdisc
   // primitive. Each member is baked to world space, then their
   // geometries are merged.

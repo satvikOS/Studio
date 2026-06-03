@@ -3259,6 +3259,7 @@ function GeometryTools() {
     { id: 'weld-fine',   label: 'Weld vertices (1e-4)',    call: () => window.__studioWeldVertices && window.__studioWeldVertices(1e-4) },
     { id: 'weld-coarse', label: 'Weld vertices (1e-3)',    call: () => window.__studioWeldVertices && window.__studioWeldVertices(1e-3) },
     { id: 'aabb',        label: 'Toggle AABB box',         call: () => window.__studioToggleAABB && window.__studioToggleAABB() },
+    { id: 'apply-matrix',label: 'Apply matrix (bake xf)',  call: () => window.__studioApplyMatrix && window.__studioApplyMatrix() },
   ];
   return (
     <div className="studio-right-section" data-studio-v3-geometry-tools>
