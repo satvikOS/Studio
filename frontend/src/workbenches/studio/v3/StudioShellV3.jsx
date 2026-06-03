@@ -3260,6 +3260,9 @@ function GeometryTools() {
     { id: 'weld-coarse', label: 'Weld vertices (1e-3)',    call: () => window.__studioWeldVertices && window.__studioWeldVertices(1e-3) },
     { id: 'aabb',        label: 'Toggle AABB box',         call: () => window.__studioToggleAABB && window.__studioToggleAABB() },
     { id: 'apply-matrix',label: 'Apply matrix (bake xf)',  call: () => window.__studioApplyMatrix && window.__studioApplyMatrix() },
+    { id: 'mirror-x',    label: 'Mirror X',                call: () => window.__studioMirrorAcrossAxis && window.__studioMirrorAcrossAxis('x') },
+    { id: 'mirror-y',    label: 'Mirror Y',                call: () => window.__studioMirrorAcrossAxis && window.__studioMirrorAcrossAxis('y') },
+    { id: 'mirror-z',    label: 'Mirror Z',                call: () => window.__studioMirrorAcrossAxis && window.__studioMirrorAcrossAxis('z') },
   ];
   return (
     <div className="studio-right-section" data-studio-v3-geometry-tools>
