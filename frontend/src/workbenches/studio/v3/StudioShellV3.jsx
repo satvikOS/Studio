@@ -3914,6 +3914,8 @@ function RightPanel({ collapsed, onToggle, activeWb, editMode, selection }) {
             <HistorySection />
             {/* Slice 542 — Renderer perf diagnostics. */}
             <PerformanceSection />
+            {/* Slice 593 — Animation summary + actions. */}
+            <AnimationSection />
             {/* Slice 522 — Annotation list + delete. */}
             <AnnotationsSection />
             {/* Slice 538 — Reference image plate list. */}
@@ -4889,6 +4891,54 @@ function InspectorFilter() {
     </div>
   );
 }
+
+// Slice 593 — Animation panel: current frame, keyframe count for the
+// selection, +/- step buttons, insert keyframe.
+function AnimationSection() {
+  const [info, setInfo] = useState({ frame: 0, keyframes: 0 });
+  useEffect(() => {
+    const read = () => {
+      const m = window.__studioSelectedMesh && window.__studioSelectedMesh();
+      let kfs = 0;
+      if (m && window.__studioGetKeyframes) {
+        const r = window.__studioGetKeyframes(m.uuid);
+        kfs = (r && r.keyframes && r.keyframes.length) || 0;
+      }
+      const f = (window.__studioGetFrame && window.__studioGetFrame()) || 0;
+      setInfo({ frame: f, keyframes: kfs });
+    };
+    const id = setInterval(read, 400);
+    read();
+    return () => clearInterval(id);
+  }, []);
+  const step = (d) => { if (window.__studioSetFrame) window.__studioSetFrame(Math.max(0, info.frame + d)); };
+  const insert = () => { if (window.__studioInsertKeyframeAt) window.__studioInsertKeyframeAt(info.frame); };
+  return (
+    <div className="studio-right-section" data-studio-v3-animation-section>
+      <div className="studio-right-section-title">Animation</div>
+      <div className="studio-right-row" style={{ fontSize: 11 }}>
+        <span>Frame</span>
+        <strong data-studio-v3-anim-frame style={{ fontFamily: 'var(--studio-mono, ui-monospace)' }}>{info.frame}</strong>
+      </div>
+      <div className="studio-right-row" style={{ fontSize: 11 }}>
+        <span>Keyframes</span>
+        <strong data-studio-v3-anim-keyframes style={{ fontFamily: 'var(--studio-mono, ui-monospace)' }}>{info.keyframes}</strong>
+      </div>
+      <div className="studio-right-row" style={{ gap: 4, marginTop: 4 }}>
+        <button type="button" data-studio-v3-anim-step-back onClick={() => step(-1)} style={animBtn}>−</button>
+        <button type="button" data-studio-v3-anim-step-fwd  onClick={() => step(1)}  style={animBtn}>+</button>
+        <button type="button" data-studio-v3-anim-insert     onClick={insert}        style={{ ...animBtn, flex: 2, background: 'var(--studio-accent, #1de9b6)', color: '#0d1117', fontWeight: 600 }}>Insert key</button>
+      </div>
+    </div>
+  );
+}
+const animBtn = {
+  flex: 1, padding: '3px 6px', fontSize: 11,
+  background: 'var(--studio-bg-elev, #161b22)',
+  color: 'var(--studio-ink, #e6edf3)',
+  border: '1px solid var(--studio-ink-mute, #1f2733)',
+  borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit',
+};
 
 // Slice 542 — Renderer / scene perf diagnostics. Polls renderer.info
 // every second so the panel stays cheap.
