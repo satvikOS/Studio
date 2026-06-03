@@ -7313,6 +7313,24 @@ export function StudioShellV3({ mode = 'dark' }) {
                 }
               };
               reader.readAsText(f);
+            } else if (f.name.endsWith('.stl')) {
+              // Slice 589 — STL import.
+              reader.onload = async () => {
+                if (window.__studioImportSTL) {
+                  const r = await window.__studioImportSTL(reader.result, f.name);
+                  if (window.__studioToast) window.__studioToast(r && r.ok ? `Imported ${f.name}` : `STL failed: ${r && r.error}`, r && r.ok ? 'ok' : 'warn');
+                }
+              };
+              reader.readAsArrayBuffer(f);
+            } else if (f.name.endsWith('.obj')) {
+              // Slice 589 — OBJ import.
+              reader.onload = async () => {
+                if (window.__studioImportOBJ) {
+                  const r = await window.__studioImportOBJ(reader.result, f.name);
+                  if (window.__studioToast) window.__studioToast(r && r.ok ? `Imported ${f.name}` : `OBJ failed: ${r && r.error}`, r && r.ok ? 'ok' : 'warn');
+                }
+              };
+              reader.readAsText(f);
             } else if (f.name.endsWith('.glb') || f.name.endsWith('.gltf')) {
               // Slice 588 — Lazy-import three's GLTFLoader and add the
               // parsed scene under window.__archdiscScene.

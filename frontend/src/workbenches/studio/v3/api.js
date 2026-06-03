@@ -550,6 +550,35 @@ export function registerV3Api() {
     return { ok: true };
   };
 
+  // Slice 589 — STL + OBJ importers. STL takes ArrayBuffer; OBJ takes
+  // a string. Both wrap their lazy loader in __studioImport*.
+  window.__studioImportSTL = (arrayBuffer, name) => new Promise(async (resolve) => {
+    try {
+      const mod = await import('three/examples/jsm/loaders/STLLoader.js');
+      const loader = new mod.STLLoader();
+      const geo = loader.parse(arrayBuffer);
+      const mat = new THREE.MeshStandardMaterial({ color: 0xc0c8d0 });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.castShadow = true; mesh.receiveShadow = true;
+      mesh.name = name || 'stl';
+      mesh.userData = { archdiscStudioPrimitive: true, archdiscStudioPrimitiveKind: 'stl', archdiscStudioStlSource: name };
+      window.__archdiscScene && window.__archdiscScene.add(mesh);
+      resolve({ ok: true, uuid: mesh.uuid });
+    } catch (e) { resolve({ ok: false, error: e.message }); }
+  });
+  window.__studioImportOBJ = (text, name) => new Promise(async (resolve) => {
+    try {
+      const mod = await import('three/examples/jsm/loaders/OBJLoader.js');
+      const loader = new mod.OBJLoader();
+      const obj = loader.parse(text);
+      obj.name = name || 'obj';
+      obj.userData = { archdiscStudioPrimitive: true, archdiscStudioPrimitiveKind: 'obj', archdiscStudioObjSource: name };
+      obj.traverse((c) => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
+      window.__archdiscScene && window.__archdiscScene.add(obj);
+      resolve({ ok: true, uuid: obj.uuid });
+    } catch (e) { resolve({ ok: false, error: e.message }); }
+  });
+
   // Slice 588 — Programmatic GLTF/GLB importer. Pairs with the viewport
   // drag-drop handler so palette + scripts share the same import path.
   window.__studioImportGLTF = (arrayBuffer, name) => new Promise(async (resolve) => {
