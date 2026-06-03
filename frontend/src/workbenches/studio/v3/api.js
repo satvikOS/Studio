@@ -550,6 +550,38 @@ export function registerV3Api() {
     return { ok: true };
   };
 
+  // Slice 582 — Decimate / simplify the selected geometry. Wraps the
+  // three SimplifyModifier (quadric edge collapse). Tessellate doubles
+  // tri density for higher subdivision.
+  window.__studioSimplifyMesh = async (ratio) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel || !sel.geometry) return { ok: false, error: 'no selection' };
+    const target = Math.max(0.05, Math.min(0.95, Number(ratio) || 0.5));
+    const before = sel.geometry.attributes.position.count;
+    const mod = await import('three/examples/jsm/modifiers/SimplifyModifier.js');
+    const sm = new mod.SimplifyModifier();
+    const drop = Math.floor(before * (1 - target));
+    if (window.__studioPushUndo) window.__studioPushUndo('simplify');
+    const reduced = sm.modify(sel.geometry, drop);
+    if (sel.geometry.dispose) sel.geometry.dispose();
+    sel.geometry = reduced;
+    const after = sel.geometry.attributes.position.count;
+    if (window.__studioToast) window.__studioToast(`Simplified ${before} → ${after} verts`, 'ok');
+    return { ok: true, before, after };
+  };
+  window.__studioTessellate = async (passes) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel || !sel.geometry) return { ok: false, error: 'no selection' };
+    const mod = await import('three/examples/jsm/modifiers/TessellateModifier.js');
+    const t = new mod.TessellateModifier(0.05, Math.max(1, Math.min(6, Number(passes) || 1)));
+    if (window.__studioPushUndo) window.__studioPushUndo('tessellate');
+    const before = sel.geometry.attributes.position.count;
+    sel.geometry = t.modify(sel.geometry);
+    const after = sel.geometry.attributes.position.count;
+    if (window.__studioToast) window.__studioToast(`Tessellated ${before} → ${after} verts`, 'ok');
+    return { ok: true, before, after };
+  };
+
   // Slice 581 — Particle system. Adds a child Three.Points around the
   // selected mesh's world center with `count` random offsets within
   // `radius`. Coloured by accent. Persists with the scene.

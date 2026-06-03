@@ -4091,6 +4091,9 @@ function GeometryTools() {
     { id: 'csg-int',     label: 'CSG: intersect',          call: () => window.__studioBoolean && window.__studioBoolean('intersect') },
     { id: 'particles-1k', label: 'Particles · 1000',       call: () => window.__studioAddParticles && window.__studioAddParticles(1000, 0.06) },
     { id: 'particles-5k', label: 'Particles · 5000',       call: () => window.__studioAddParticles && window.__studioAddParticles(5000, 0.06) },
+    { id: 'simplify-50', label: 'Simplify · keep 50%',     call: () => window.__studioSimplifyMesh && window.__studioSimplifyMesh(0.5) },
+    { id: 'simplify-25', label: 'Simplify · keep 25%',     call: () => window.__studioSimplifyMesh && window.__studioSimplifyMesh(0.25) },
+    { id: 'tessellate',  label: 'Tessellate ×1',           call: () => window.__studioTessellate && window.__studioTessellate(1) },
   ];
   return (
     <div className="studio-right-section" data-studio-v3-geometry-tools>
