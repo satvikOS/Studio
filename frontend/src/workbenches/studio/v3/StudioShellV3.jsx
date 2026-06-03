@@ -5689,6 +5689,23 @@ function MaterialRows() {
           style={{ width: 40, height: 22, padding: 0, border: '1px solid var(--studio-ink-mute)', borderRadius: 2, background: 'transparent', cursor: 'pointer' }}
         />
       </div>
+      {/* Slice 601 — Texture map upload. */}
+      <div className="studio-right-row" style={{ alignItems: 'center' }}>
+        <span>Texture map</span>
+        <input
+          type="file"
+          accept="image/*"
+          data-studio-v3-material-texture
+          onChange={(e) => {
+            const f = e.target.files && e.target.files[0];
+            if (!f) return;
+            const r = new FileReader();
+            r.onload = () => { if (window.__studioApplyTextureMap) window.__studioApplyTextureMap(r.result, f.name); };
+            r.readAsDataURL(f);
+          }}
+          style={{ flex: 1, fontSize: 10, color: 'var(--studio-ink-mute)' }}
+        />
+      </div>
       {isStd && (
         <>
           <div className="studio-right-row" style={{ alignItems: 'center' }}>
