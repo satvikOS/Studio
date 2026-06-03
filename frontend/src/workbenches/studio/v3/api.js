@@ -742,6 +742,32 @@ export function registerV3Api() {
     return { ok: true, target: targetUuid };
   };
 
+  // Slice 599 — Taper deformer along Y. ratio < 1 narrows the top, > 1
+  // widens it; X and Z are scaled proportionally to height.
+  window.__studioTaperY = (topRatio) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel || !sel.geometry) return { ok: false, error: 'no selection' };
+    const g = sel.geometry;
+    if (!g.boundingBox) g.computeBoundingBox();
+    const bb = g.boundingBox;
+    const ext = Math.max(1e-6, bb.max.y - bb.min.y);
+    const r = Math.max(0.01, Number(topRatio) || 1);
+    if (window.__studioPushUndo) window.__studioPushUndo('taper-y');
+    const pos = g.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+      const t = (y - bb.min.y) / ext;
+      const sc = 1 + (r - 1) * t;
+      pos.setXYZ(i, x * sc, y, z * sc);
+    }
+    pos.needsUpdate = true;
+    g.computeVertexNormals();
+    g.computeBoundingBox(); g.computeBoundingSphere();
+    if (window.__studioToast) window.__studioToast(`Tapered to ${r}`, 'ok');
+    if (window.__studioPushModifier) window.__studioPushModifier('taper-y', { topRatio: r });
+    return { ok: true, vertices: pos.count };
+  };
+
   // Slice 598 — Bend deformer in the YZ plane. Vertices warp around a
   // hinge axis (X) so the mesh curves like a beam under load.
   window.__studioBendYZ = (degrees) => {
