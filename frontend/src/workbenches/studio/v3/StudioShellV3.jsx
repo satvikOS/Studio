@@ -2117,6 +2117,105 @@ function MeasurementChip() {
   );
 }
 
+// Slice 578 — Quad-view split. Toggleable 2x2 overlay that refreshes
+// 3 thumbnails (top, front, right) every 700 ms by temporarily moving
+// the main camera, rendering, and restoring. The persp cell shows the
+// live main canvas.
+function QuadViewOverlay() {
+  const [on, setOn] = useState(false);
+  const refs = { top: React.useRef(null), front: React.useRef(null), right: React.useRef(null) };
+  useEffect(() => {
+    const onToggle = () => setOn((v) => !v);
+    window.addEventListener('studio-quad-view-toggle', onToggle);
+    return () => window.removeEventListener('studio-quad-view-toggle', onToggle);
+  }, []);
+  useEffect(() => {
+    if (!on) return;
+    let raf = 0;
+    const render = () => {
+      const vp = window.__archdiscViewport;
+      if (!vp || !vp.renderer || !vp.camera || !vp.scene) return;
+      const cam = vp.camera, scene = vp.scene;
+      const saved = { pos: cam.position.clone(), tgt: vp.orbitControls && vp.orbitControls.target ? vp.orbitControls.target.clone() : null };
+      const angles = {
+        top:   { p: [0, 0.4, 0.0001], t: [0, 0, 0] },
+        front: { p: [0, 0, 0.4],      t: [0, 0, 0] },
+        right: { p: [0.4, 0, 0],      t: [0, 0, 0] },
+      };
+      for (const k of Object.keys(angles)) {
+        cam.position.set(angles[k].p[0], angles[k].p[1], angles[k].p[2]);
+        if (vp.orbitControls && vp.orbitControls.target) vp.orbitControls.target.set(angles[k].t[0], angles[k].t[1], angles[k].t[2]);
+        cam.lookAt(angles[k].t[0], angles[k].t[1], angles[k].t[2]);
+        vp.renderer.render(scene, cam);
+        const data = vp.renderer.domElement.toDataURL('image/jpeg', 0.7);
+        const img = refs[k].current;
+        if (img) img.src = data;
+      }
+      // Restore.
+      cam.position.copy(saved.pos);
+      if (saved.tgt && vp.orbitControls && vp.orbitControls.target) {
+        vp.orbitControls.target.copy(saved.tgt);
+        if (typeof vp.orbitControls.update === 'function') vp.orbitControls.update();
+      }
+      cam.lookAt(saved.tgt || { x: 0, y: 0, z: 0 });
+      vp.renderer.render(scene, cam);
+    };
+    render();
+    const id = setInterval(render, 700);
+    return () => { clearInterval(id); cancelAnimationFrame(raf); };
+  }, [on]);
+  if (!on) return null;
+  const cell = (label, key) => (
+    <div
+      data-studio-v3-quad-cell={key}
+      style={{
+        background: 'var(--studio-bg, #0d1117)',
+        border: '1px solid var(--studio-accent, #1de9b6)',
+        position: 'relative', overflow: 'hidden',
+      }}
+    >
+      <img
+        ref={refs[key]}
+        alt={label}
+        data-studio-v3-quad-img={key}
+        style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
+      />
+      <span style={{
+        position: 'absolute', top: 4, left: 6, fontSize: 9, letterSpacing: '0.06em',
+        color: 'var(--studio-accent, #1de9b6)', textTransform: 'uppercase',
+        fontFamily: 'var(--studio-mono, ui-monospace)',
+      }}>{label}</span>
+    </div>
+  );
+  return (
+    <div
+      data-studio-v3-quad-view
+      style={{
+        position: 'absolute', inset: 0, zIndex: 4, pointerEvents: 'none',
+        display: 'grid', gridTemplate: '1fr 1fr / 1fr 1fr', gap: 2,
+      }}
+    >
+      {cell('Top', 'top')}
+      {cell('Front', 'front')}
+      {cell('Right', 'right')}
+      <div
+        data-studio-v3-quad-cell="persp"
+        style={{
+          background: 'transparent',
+          border: '1px solid var(--studio-accent, #1de9b6)',
+          position: 'relative', overflow: 'hidden',
+        }}
+      >
+        <span style={{
+          position: 'absolute', top: 4, left: 6, fontSize: 9, letterSpacing: '0.06em',
+          color: 'var(--studio-accent, #1de9b6)', textTransform: 'uppercase',
+          fontFamily: 'var(--studio-mono, ui-monospace)',
+        }}>Persp · live</span>
+      </div>
+    </div>
+  );
+}
+
 // Slice 519 — Subtle viewport brand watermark. Mounted as the first
 // child of the <main> viewport so it floats over the canvas but stays
 // below all overlays (HUD, menus, marquee).
@@ -2556,6 +2655,7 @@ function WindowMenu() {
     { id: 'curve-editor',    label: 'Animation curves',     hint: 'Cmd+Shift+C', call: () => window.dispatchEvent(new CustomEvent('studio-curve-editor-toggle')) },
     { id: 'uv-editor',       label: 'UV editor',            hint: 'Cmd+Shift+U', call: () => window.dispatchEvent(new CustomEvent('studio-uv-editor-toggle')) },
     { id: 'asset-browser',   label: 'Asset browser',        hint: 'Cmd+Shift+A', call: () => window.dispatchEvent(new CustomEvent('studio-asset-browser-toggle')) },
+    { id: 'quad-view',       label: 'Quad view',                                call: () => window.dispatchEvent(new CustomEvent('studio-quad-view-toggle')) },
     { id: 'reset-layout',    label: 'Reset layout',                          call: resetLayout },
   ];
   return (
@@ -6887,6 +6987,7 @@ export function StudioShellV3({ mode = 'dark' }) {
         <ViewportWatermark />
         <ViewportMinimap />
         <MeasurementChip />
+        <QuadViewOverlay />
         {/* V3's own Viewport3D — owns the scene + camera + gizmo +
             raycaster. No V2 dependency. */}
         <Viewport3D
