@@ -765,6 +765,37 @@ export function registerV3Api() {
     return { ok: true, dir, step: s };
   };
 
+  // Slice 603 — Renderer tone mapping + exposure. Surfaces three's
+  // ACESFilmic / Linear / Reinhard / Cineon / Neutral modes and an
+  // exposure multiplier. Drives composition-style colour grading.
+  const TONE_MAPS = {
+    none:    THREE.NoToneMapping,
+    linear:  THREE.LinearToneMapping,
+    reinhard: THREE.ReinhardToneMapping,
+    cineon:  THREE.CineonToneMapping,
+    aces:    THREE.ACESFilmicToneMapping,
+    neutral: THREE.NeutralToneMapping || THREE.AgXToneMapping || THREE.ACESFilmicToneMapping,
+  };
+  window.__studioListToneMappings = () => Object.keys(TONE_MAPS);
+  window.__studioSetToneMapping = (name) => {
+    const vp = window.__archdiscViewport;
+    if (!vp || !vp.renderer) return { ok: false };
+    const t = TONE_MAPS[name];
+    if (t == null) return { ok: false, error: 'bad name' };
+    vp.renderer.toneMapping = t;
+    return { ok: true, name };
+  };
+  window.__studioSetExposure = (v) => {
+    const vp = window.__archdiscViewport;
+    if (!vp || !vp.renderer) return { ok: false };
+    vp.renderer.toneMappingExposure = Math.max(0, Math.min(8, Number(v) || 1));
+    return { ok: true, exposure: vp.renderer.toneMappingExposure };
+  };
+  window.__studioGetExposure = () => {
+    const vp = window.__archdiscViewport;
+    return vp && vp.renderer ? vp.renderer.toneMappingExposure : 1;
+  };
+
   // Slice 602 — Apply an image data-URL as the active material's
   // normalMap. PBR rendering uses it to perturb shading normals.
   window.__studioApplyNormalMap = (dataUrl, name) => new Promise((resolve) => {

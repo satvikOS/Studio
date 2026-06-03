@@ -5432,6 +5432,7 @@ function LightingSection() {
         <span style={{ width: 36, textAlign: 'right', fontFamily: 'var(--studio-mono, ui-monospace)', fontSize: 10, color: 'var(--studio-ink-mute, #9aa6b2)' }}>{el}°</span>
       </div>
       <HDRIRow />
+      <ToneMappingRows />
     </div>
   );
 }
@@ -5477,6 +5478,57 @@ function StagePresets() {
         ))}
       </div>
     </div>
+  );
+}
+
+// Slice 603 — Tone mapping + exposure controls.
+function ToneMappingRows() {
+  const [name, setName] = useState('aces');
+  const [exp, setExp] = useState(1);
+  const presets = ['none', 'linear', 'reinhard', 'cineon', 'aces', 'neutral'];
+  useEffect(() => {
+    if (window.__studioGetExposure) setExp(window.__studioGetExposure());
+  }, []);
+  const onName = (e) => {
+    setName(e.target.value);
+    if (window.__studioSetToneMapping) window.__studioSetToneMapping(e.target.value);
+  };
+  const onExp = (e) => {
+    const v = Number(e.target.value);
+    setExp(v);
+    if (window.__studioSetExposure) window.__studioSetExposure(v);
+  };
+  return (
+    <>
+      <div className="studio-right-row" style={{ alignItems: 'center' }}>
+        <span>Tone</span>
+        <select
+          value={name}
+          onChange={onName}
+          data-studio-v3-tone-mapping
+          style={{
+            flex: 1, marginLeft: 8, padding: '2px 6px',
+            background: 'var(--studio-bg, #0d1117)',
+            border: '1px solid var(--studio-ink-mute, #1f2733)',
+            color: 'var(--studio-ink, #e6edf3)', borderRadius: 3,
+            fontFamily: 'inherit', fontSize: 11,
+          }}
+        >
+          {presets.map((p) => <option key={p} value={p}>{p}</option>)}
+        </select>
+      </div>
+      <div className="studio-right-row" style={{ alignItems: 'center' }}>
+        <span>Exposure</span>
+        <input
+          type="range" min="0" max="4" step="0.05"
+          value={exp}
+          onChange={onExp}
+          data-studio-v3-exposure
+          style={{ flex: 1, marginLeft: 8 }}
+        />
+        <span style={{ width: 30, textAlign: 'right', fontFamily: 'var(--studio-mono, ui-monospace)', fontSize: 10, color: 'var(--studio-ink-mute, #9aa6b2)' }}>{exp.toFixed(2)}</span>
+      </div>
+    </>
   );
 }
 
