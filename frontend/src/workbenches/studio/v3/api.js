@@ -765,6 +765,38 @@ export function registerV3Api() {
     return { ok: true, dir, step: s };
   };
 
+  // Slice 605 — Sky gradient background. Builds a 1×64 DataTexture from
+  // a linear lerp between top + bottom hex colours and mounts it as the
+  // scene.background. EquirectangularReflectionMapping makes it tile
+  // around the dome instead of acting as a plane.
+  window.__studioSetSkyGradient = (topHex, bottomHex) => {
+    const vp = window.__archdiscViewport;
+    if (!vp || !vp.scene) return { ok: false };
+    const top = new THREE.Color(topHex || '#1a2438');
+    const bot = new THREE.Color(bottomHex || '#0d1117');
+    const H = 64;
+    const data = new Uint8Array(H * 4);
+    for (let i = 0; i < H; i++) {
+      const t = 1 - i / (H - 1);
+      data[i * 4    ] = Math.round((top.r * t + bot.r * (1 - t)) * 255);
+      data[i * 4 + 1] = Math.round((top.g * t + bot.g * (1 - t)) * 255);
+      data[i * 4 + 2] = Math.round((top.b * t + bot.b * (1 - t)) * 255);
+      data[i * 4 + 3] = 255;
+    }
+    const tex = new THREE.DataTexture(data, 1, H, THREE.RGBAFormat);
+    tex.mapping = THREE.EquirectangularReflectionMapping;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.needsUpdate = true;
+    vp.scene.background = tex;
+    return { ok: true, top: '#' + top.getHexString(), bottom: '#' + bot.getHexString() };
+  };
+  window.__studioClearSkyGradient = (color) => {
+    const vp = window.__archdiscViewport;
+    if (!vp || !vp.scene) return { ok: false };
+    vp.scene.background = new THREE.Color(color || '#0d1117');
+    return { ok: true };
+  };
+
   // Slice 604 — Fog control. Linear fog for now (Three.Fog); exponential
   // fog could land in a follow-up.
   window.__studioSetFog = (color, near, far) => {

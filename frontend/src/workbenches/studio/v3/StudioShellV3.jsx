@@ -3907,6 +3907,8 @@ function RightPanel({ collapsed, onToggle, activeWb, editMode, selection }) {
             <WorldSection />
             {/* Slice 604 — Fog. */}
             <FogSection />
+            {/* Slice 605 — Sky gradient. */}
+            <SkyGradientSection />
             {/* Slice 536 — Display toggles for overlays. */}
             <DisplaySection />
             {/* Slice 510 — Ambient + key intensity sliders. */}
@@ -5565,6 +5567,62 @@ function HDRIRow() {
           <option key={p} value={p}>{p}</option>
         ))}
       </select>
+    </div>
+  );
+}
+
+// Slice 605 — Sky gradient: top + bottom colours, single apply button.
+function SkyGradientSection() {
+  const [top, setTop] = useState('#1a2438');
+  const [bot, setBot] = useState('#0d1117');
+  const apply = () => { if (window.__studioSetSkyGradient) window.__studioSetSkyGradient(top, bot); };
+  const clear = () => { if (window.__studioClearSkyGradient) window.__studioClearSkyGradient('#0d1117'); };
+  return (
+    <div className="studio-right-section" data-studio-v3-sky-gradient>
+      <div className="studio-right-section-title">Sky gradient</div>
+      <div className="studio-right-row" style={{ alignItems: 'center' }}>
+        <span>Top</span>
+        <input
+          type="color"
+          value={top}
+          onChange={(e) => setTop(e.target.value)}
+          data-studio-v3-sky-top
+          style={{ width: 40, height: 22, padding: 0, border: '1px solid var(--studio-ink-mute)', borderRadius: 2, background: 'transparent', cursor: 'pointer' }}
+        />
+      </div>
+      <div className="studio-right-row" style={{ alignItems: 'center' }}>
+        <span>Bottom</span>
+        <input
+          type="color"
+          value={bot}
+          onChange={(e) => setBot(e.target.value)}
+          data-studio-v3-sky-bottom
+          style={{ width: 40, height: 22, padding: 0, border: '1px solid var(--studio-ink-mute)', borderRadius: 2, background: 'transparent', cursor: 'pointer' }}
+        />
+      </div>
+      <div className="studio-right-row" style={{ gap: 4, marginTop: 4 }}>
+        <button
+          type="button"
+          onClick={apply}
+          data-studio-v3-sky-apply
+          style={{
+            flex: 1, padding: '3px', background: 'var(--studio-accent, #1de9b6)',
+            color: '#0d1117', fontWeight: 600, border: 0, borderRadius: 3,
+            fontSize: 11, cursor: 'pointer',
+          }}
+        >Apply</button>
+        <button
+          type="button"
+          onClick={clear}
+          data-studio-v3-sky-clear
+          style={{
+            flex: 1, padding: '3px', background: 'transparent',
+            color: 'var(--studio-ink, #e6edf3)',
+            border: '1px solid var(--studio-ink-mute, #1f2733)',
+            borderRadius: 3, fontSize: 11, cursor: 'pointer',
+          }}
+        >Solid</button>
+      </div>
     </div>
   );
 }
