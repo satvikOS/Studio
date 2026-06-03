@@ -550,6 +550,33 @@ export function registerV3Api() {
     return { ok: true };
   };
 
+  // Slice 592 — Selection sets. Save the current multi-select under a
+  // name; recall to restore. Stored on window so they survive across
+  // single-session edits (but not across reloads).
+  if (!window.__studioSelectionSets) window.__studioSelectionSets = {};
+  window.__studioSaveSelectionSet = (name) => {
+    const set = Array.isArray(window.__studioSelectedMeshesSet) && window.__studioSelectedMeshesSet.length
+      ? window.__studioSelectedMeshesSet.slice()
+      : (window.__studioSelectedMesh && window.__studioSelectedMesh() ? [window.__studioSelectedMesh()] : []);
+    if (!name || !set.length) return { ok: false, error: 'need name + selection' };
+    window.__studioSelectionSets[name] = set.map((m) => m.uuid);
+    if (window.__studioToast) window.__studioToast(`Saved set "${name}" (${set.length})`, 'ok');
+    return { ok: true, count: set.length };
+  };
+  window.__studioRecallSelectionSet = (name) => {
+    const uuids = window.__studioSelectionSets[name];
+    if (!uuids) return { ok: false, error: 'no such set' };
+    const s = window.__archdiscScene;
+    if (!s) return { ok: false, error: 'no scene' };
+    const meshes = [];
+    s.traverse((o) => { if (uuids.includes(o.uuid)) meshes.push(o); });
+    window.__studioSelectedMeshesSet = meshes;
+    if (meshes.length && window.__studioSelectMesh) window.__studioSelectMesh(meshes[meshes.length - 1]);
+    if (window.__studioToast) window.__studioToast(`Recalled "${name}" (${meshes.length})`, 'info');
+    return { ok: true, count: meshes.length };
+  };
+  window.__studioListSelectionSets = () => Object.keys(window.__studioSelectionSets || {});
+
   // Slice 591 — PLY importer for point clouds + low-poly meshes.
   window.__studioImportPLY = (data, name) => new Promise(async (resolve) => {
     try {

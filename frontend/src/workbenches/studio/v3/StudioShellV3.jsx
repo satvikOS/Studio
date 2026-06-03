@@ -3920,6 +3920,8 @@ function RightPanel({ collapsed, onToggle, activeWb, editMode, selection }) {
             <ImagePlatesSection />
             {/* Slice 559 — Tags. */}
             <TagsSection />
+            {/* Slice 592 — Selection sets. */}
+            <SelectionSetsSection />
             {/* Slice 533 — Render section: custom-size PNG. */}
             <RenderSection />
             <div className="studio-right-section">
@@ -4578,6 +4580,74 @@ function RenderSection() {
           fontWeight: 600, padding: '5px', borderRadius: 3, fontSize: 11, cursor: 'pointer',
         }}
       >Render → PNG</button>
+    </div>
+  );
+}
+
+// Slice 592 — Selection sets section. Save the active multi-select
+// under a name; recall later. Stored on window.__studioSelectionSets.
+function SelectionSetsSection() {
+  const [draft, setDraft] = useState('');
+  const [all, setAll] = useState([]);
+  useEffect(() => {
+    const read = () => {
+      const list = (window.__studioListSelectionSets && window.__studioListSelectionSets()) || [];
+      setAll(list);
+    };
+    const id = setInterval(read, 600);
+    read();
+    return () => clearInterval(id);
+  }, []);
+  const save = () => {
+    const n = draft.trim() || `set-${all.length + 1}`;
+    if (window.__studioSaveSelectionSet) window.__studioSaveSelectionSet(n);
+    setDraft('');
+  };
+  const recall = (n) => { if (window.__studioRecallSelectionSet) window.__studioRecallSelectionSet(n); };
+  return (
+    <div className="studio-right-section" data-studio-v3-selection-sets>
+      <div className="studio-right-section-title">Selection sets · {all.length}</div>
+      <div className="studio-right-row" style={{ gap: 4 }}>
+        <input
+          type="text"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') save(); }}
+          placeholder={`set-${all.length + 1}`}
+          data-studio-v3-selection-set-draft
+          style={{
+            flex: 1, padding: '2px 6px', fontSize: 11,
+            background: 'var(--studio-bg, #0d1117)',
+            border: '1px solid var(--studio-ink-mute, #1f2733)',
+            color: 'var(--studio-ink, #e6edf3)', borderRadius: 3, fontFamily: 'inherit',
+          }}
+        />
+        <button
+          type="button"
+          onClick={save}
+          data-studio-v3-selection-set-save
+          style={{
+            background: 'var(--studio-accent, #1de9b6)', border: 0, color: '#0d1117',
+            fontWeight: 600, padding: '2px 10px', borderRadius: 3, fontSize: 11, cursor: 'pointer',
+          }}
+        >+</button>
+      </div>
+      {all.map((n) => (
+        <button
+          key={n}
+          type="button"
+          data-studio-v3-selection-set={n}
+          onClick={() => recall(n)}
+          style={{
+            display: 'block', width: '100%', marginTop: 3,
+            padding: '3px 8px', textAlign: 'left',
+            background: 'var(--studio-bg-elev, #161b22)',
+            color: 'var(--studio-ink, #e6edf3)',
+            border: '1px solid var(--studio-ink-mute, #1f2733)',
+            borderRadius: 3, cursor: 'pointer', fontSize: 11, fontFamily: 'inherit',
+          }}
+        >{n}</button>
+      ))}
     </div>
   );
 }
