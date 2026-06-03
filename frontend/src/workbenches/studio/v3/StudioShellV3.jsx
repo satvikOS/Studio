@@ -7339,6 +7339,15 @@ export function StudioShellV3({ mode = 'dark' }) {
                 }
               };
               reader.readAsText(f);
+            } else if (f.name.endsWith('.ply')) {
+              // Slice 591 — PLY import.
+              reader.onload = async () => {
+                if (window.__studioImportPLY) {
+                  const r = await window.__studioImportPLY(reader.result, f.name);
+                  if (window.__studioToast) window.__studioToast(r && r.ok ? `Imported ${f.name}` : `PLY failed: ${r && r.error}`, r && r.ok ? 'ok' : 'warn');
+                }
+              };
+              reader.readAsArrayBuffer(f);
             } else if (f.name.endsWith('.stl')) {
               // Slice 589 — STL import.
               reader.onload = async () => {

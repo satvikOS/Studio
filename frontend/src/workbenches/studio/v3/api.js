@@ -550,6 +550,22 @@ export function registerV3Api() {
     return { ok: true };
   };
 
+  // Slice 591 — PLY importer for point clouds + low-poly meshes.
+  window.__studioImportPLY = (data, name) => new Promise(async (resolve) => {
+    try {
+      const mod = await import('three/examples/jsm/loaders/PLYLoader.js');
+      const loader = new mod.PLYLoader();
+      const geo = loader.parse(data);
+      const mat = new THREE.MeshStandardMaterial({ color: 0xa0c4ff });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.name = name || 'ply';
+      mesh.castShadow = true; mesh.receiveShadow = true;
+      mesh.userData = { archdiscStudioPrimitive: true, archdiscStudioPrimitiveKind: 'ply', archdiscStudioPlySource: name };
+      window.__archdiscScene && window.__archdiscScene.add(mesh);
+      resolve({ ok: true, uuid: mesh.uuid });
+    } catch (e) { resolve({ ok: false, error: e.message }); }
+  });
+
   // Slice 590 — Camera follow. When enabled, the orbit target tracks
   // the selected mesh's world position each frame. Toggle via
   // __studioToggleCameraFollow(); state persists per session.
