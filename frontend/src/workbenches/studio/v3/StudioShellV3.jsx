@@ -2657,6 +2657,7 @@ function WindowMenu() {
     { id: 'asset-browser',   label: 'Asset browser',        hint: 'Cmd+Shift+A', call: () => window.dispatchEvent(new CustomEvent('studio-asset-browser-toggle')) },
     { id: 'quad-view',       label: 'Quad view',                                call: () => window.dispatchEvent(new CustomEvent('studio-quad-view-toggle')) },
     { id: 'render-queue',    label: 'Render queue',                             call: () => window.dispatchEvent(new CustomEvent('studio-render-queue-toggle')) },
+    { id: 'script-editor',   label: 'Script editor',         hint: 'Cmd+Shift+J', call: () => window.dispatchEvent(new CustomEvent('studio-script-editor-toggle')) },
     { id: 'reset-layout',    label: 'Reset layout',                          call: resetLayout },
   ];
   return (
@@ -3341,6 +3342,121 @@ const btnStyle = {
   border: '1px solid var(--studio-ink-mute, #1f2733)',
   borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit',
 };
+
+// Slice 584 — One-shot script editor. Different from PluginManager
+// because nothing persists. Run via Cmd+Shift+J or
+// studio-script-editor-toggle. Output is shown below the textarea
+// (last 6 results).
+function ScriptEditor() {
+  const [open, setOpen] = useState(false);
+  const [code, setCode] = useState('return window.__studioListPlugins ? window.__studioListPlugins().length : 0;');
+  const [log, setLog] = useState([]);
+  useEffect(() => {
+    const onToggle = () => setOpen((v) => !v);
+    const onKey = (e) => {
+      const ae = document.activeElement;
+      if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'j') {
+        e.preventDefault();
+        setOpen((v) => !v);
+      } else if (open && e.key === 'Escape') { setOpen(false); e.preventDefault(); }
+    };
+    window.addEventListener('studio-script-editor-toggle', onToggle);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('studio-script-editor-toggle', onToggle);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+  if (!open) return null;
+  const run = () => {
+    let result;
+    try {
+      // eslint-disable-next-line no-new-func
+      result = new Function('THREE', 'scene', 'viewport', code)(
+        window.__archdiscTHREE,
+        window.__archdiscScene,
+        window.__archdiscViewport,
+      );
+    } catch (e) {
+      result = `Error: ${e.message}`;
+    }
+    setLog((cur) => [{ ts: Date.now(), result: String(result) }, ...cur].slice(0, 6));
+  };
+  return (
+    <div
+      data-studio-v3-script-editor
+      onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 9200,
+        background: 'rgba(13,17,23,0.6)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: 'var(--studio-bg-elev, #161b22)',
+          border: '1px solid var(--studio-accent, #1de9b6)',
+          borderRadius: 8, padding: '18px 22px', minWidth: 560, maxWidth: 720,
+          color: 'var(--studio-ink, #e6edf3)', fontFamily: 'inherit',
+        }}
+      >
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+          marginBottom: 10,
+        }}>
+          <strong style={{ color: 'var(--studio-accent, #1de9b6)', fontSize: 13, letterSpacing: '0.04em' }}>Script editor</strong>
+          <span style={{ opacity: 0.55, fontSize: 11, fontFamily: 'var(--studio-mono, ui-monospace)' }}>Cmd+Shift+J · Esc</span>
+        </div>
+        <textarea
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+          data-studio-v3-script-code
+          rows={8}
+          spellCheck={false}
+          style={{
+            width: '100%', marginBottom: 10,
+            padding: '6px 10px', background: 'var(--studio-bg, #0d1117)',
+            border: '1px solid var(--studio-ink-mute, #1f2733)',
+            color: 'var(--studio-ink, #e6edf3)', borderRadius: 3,
+            fontFamily: 'var(--studio-mono, ui-monospace)', fontSize: 12, resize: 'vertical',
+          }}
+        />
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+          <button
+            type="button"
+            data-studio-v3-script-run
+            onClick={run}
+            style={{
+              background: 'var(--studio-accent, #1de9b6)', border: 0, color: '#0d1117',
+              fontWeight: 600, padding: '6px 18px', borderRadius: 4, fontSize: 11, cursor: 'pointer',
+            }}
+          >Run</button>
+        </div>
+        <div data-studio-v3-script-output style={{
+          fontFamily: 'var(--studio-mono, ui-monospace)', fontSize: 11,
+          background: 'var(--studio-bg, #0d1117)',
+          border: '1px solid var(--studio-ink-mute, #1f2733)',
+          borderRadius: 3, padding: '6px 10px',
+          maxHeight: 160, overflowY: 'auto',
+        }}>
+          {log.length === 0 && <div style={{ opacity: 0.4 }}>No output yet — Run to evaluate.</div>}
+          {log.map((l, i) => (
+            <div
+              key={i}
+              data-studio-v3-script-result={i}
+              style={{
+                padding: '3px 0',
+                borderBottom: i < log.length - 1 ? '1px dotted var(--studio-ink-mute, #1f2733)' : 'none',
+              }}
+            >{l.result}</div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function ToastBus() {
   const [items, setItems] = useState([]);
@@ -7191,6 +7307,7 @@ export function StudioShellV3({ mode = 'dark' }) {
       <UVEditor />
       <AssetBrowser />
       <RenderQueueModal />
+      <ScriptEditor />
       <FileMenu />
       <EditMenu />
       <SelectMenu />
