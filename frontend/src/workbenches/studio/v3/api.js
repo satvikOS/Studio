@@ -397,6 +397,24 @@ export function registerV3Api() {
     return out;
   };
 
+  // Slice 568 — Toggle a 0.2 m AxesHelper at world origin.
+  window.__studioToggleWorldAxes = () => {
+    const s = window.__archdiscScene;
+    if (!s) return { ok: false };
+    if (window.__studioWorldAxesHelper) {
+      s.remove(window.__studioWorldAxesHelper);
+      window.__studioWorldAxesHelper.geometry && window.__studioWorldAxesHelper.geometry.dispose && window.__studioWorldAxesHelper.geometry.dispose();
+      window.__studioWorldAxesHelper = null;
+      return { ok: true, on: false };
+    }
+    const h = new THREE.AxesHelper(0.2);
+    h.userData = { isHelper: true, archdiscStudioWorldAxes: true };
+    h.renderOrder = 997;
+    s.add(h);
+    window.__studioWorldAxesHelper = h;
+    return { ok: true, on: true };
+  };
+
   // Slice 567 — Toggle a Box3Helper on the active mesh's world AABB.
   // Useful for engineering reviews. Helper auto-attaches to whatever
   // mesh is selected at toggle time.

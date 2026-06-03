@@ -4037,6 +4037,11 @@ function DisplaySection() {
     { id: 'archie-status', label: 'Archie dot', defaultOn: true, onChange: (v) => { const el = document.querySelector('[data-studio-v3-archie-status]'); if (el) el.style.display = v ? '' : 'none'; } },
     { id: 'keypress', label: 'Keypress flash', defaultOn: false, onChange: () => {} },
     { id: 'ground', label: 'Shadow ground', defaultOn: true, onChange: (v) => { if (window.__studioSetGroundVisible) window.__studioSetGroundVisible(v); } },
+    { id: 'world-axes', label: 'World axes', defaultOn: false, onChange: (v) => {
+      const already = !!window.__studioWorldAxesHelper;
+      if (v && !already) window.__studioToggleWorldAxes && window.__studioToggleWorldAxes();
+      else if (!v && already) window.__studioToggleWorldAxes && window.__studioToggleWorldAxes();
+    } },
   ];
   const [state, setState] = useState(() => {
     try {
