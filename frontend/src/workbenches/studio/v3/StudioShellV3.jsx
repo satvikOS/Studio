@@ -5887,6 +5887,23 @@ function MeshStatsRows() {
           </strong>
         </div>
       )}
+      {stats.bboxVolume > 0 && (
+        <>
+          {/* Slice 595 — Estimated mass at common densities (kg). */}
+          {[['Steel', 7850], ['Aluminum', 2700], ['Plastic', 1100]].map(([name, dens]) => (
+            <div
+              key={name}
+              className="studio-right-row"
+              data-studio-v3-mesh-mass={name.toLowerCase()}
+            >
+              <span>Mass · {name}</span>
+              <strong style={{ fontFamily: 'var(--studio-mono)' }}>
+                {(stats.bboxVolume * dens).toFixed(3)} kg
+              </strong>
+            </div>
+          ))}
+        </>
+      )}
     </div>
   );
 }
