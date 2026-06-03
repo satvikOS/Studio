@@ -3905,6 +3905,8 @@ function RightPanel({ collapsed, onToggle, activeWb, editMode, selection }) {
             <SnapSection />
             {/* Slice 508 — World grid + background. */}
             <WorldSection />
+            {/* Slice 604 — Fog. */}
+            <FogSection />
             {/* Slice 536 — Display toggles for overlays. */}
             <DisplaySection />
             {/* Slice 510 — Ambient + key intensity sliders. */}
@@ -5563,6 +5565,79 @@ function HDRIRow() {
           <option key={p} value={p}>{p}</option>
         ))}
       </select>
+    </div>
+  );
+}
+
+// Slice 604 — Fog section: color picker + near/far sliders + on/off button.
+function FogSection() {
+  const [on, setOn] = useState(false);
+  const [hex, setHex] = useState('#0d1117');
+  const [near, setNear] = useState(0.5);
+  const [far, setFar] = useState(5);
+  useEffect(() => {
+    const f = window.__studioGetFog && window.__studioGetFog();
+    if (f) { setOn(true); setHex(f.color); setNear(f.near); setFar(f.far); }
+  }, []);
+  const toggle = () => {
+    if (on) {
+      if (window.__studioSetFog) window.__studioSetFog(null);
+      setOn(false);
+    } else {
+      if (window.__studioSetFog) window.__studioSetFog(hex, near, far);
+      setOn(true);
+    }
+  };
+  const sync = (h, n, f) => { if (on && window.__studioSetFog) window.__studioSetFog(h, n, f); };
+  return (
+    <div className="studio-right-section" data-studio-v3-fog-section>
+      <div className="studio-right-section-title">Fog</div>
+      <div className="studio-right-row" style={{ alignItems: 'center' }}>
+        <span>Enabled</span>
+        <button
+          type="button"
+          data-studio-v3-fog-enable
+          data-studio-v3-fog-on={on ? 'true' : 'false'}
+          onClick={toggle}
+          style={{
+            background: 'transparent', border: '1px solid var(--studio-ink-mute, #1f2733)',
+            color: on ? 'var(--studio-accent, #1de9b6)' : 'var(--studio-ink, #e6edf3)',
+            padding: '2px 8px', borderRadius: 3, fontSize: 11, cursor: 'pointer',
+          }}
+        >{on ? 'on' : 'off'}</button>
+      </div>
+      <div className="studio-right-row" style={{ alignItems: 'center' }}>
+        <span>Color</span>
+        <input
+          type="color"
+          value={hex}
+          onChange={(e) => { setHex(e.target.value); sync(e.target.value, near, far); }}
+          data-studio-v3-fog-color
+          style={{ width: 40, height: 22, padding: 0, border: '1px solid var(--studio-ink-mute)', borderRadius: 2, background: 'transparent', cursor: 'pointer' }}
+        />
+      </div>
+      <div className="studio-right-row" style={{ alignItems: 'center' }}>
+        <span>Near</span>
+        <input
+          type="range" min="0.05" max="5" step="0.05"
+          value={near}
+          onChange={(e) => { const v = Number(e.target.value); setNear(v); sync(hex, v, far); }}
+          data-studio-v3-fog-near
+          style={{ flex: 1, marginLeft: 8 }}
+        />
+        <span style={{ width: 30, textAlign: 'right', fontFamily: 'var(--studio-mono, ui-monospace)', fontSize: 10, color: 'var(--studio-ink-mute, #9aa6b2)' }}>{near.toFixed(2)}</span>
+      </div>
+      <div className="studio-right-row" style={{ alignItems: 'center' }}>
+        <span>Far</span>
+        <input
+          type="range" min="0.5" max="50" step="0.5"
+          value={far}
+          onChange={(e) => { const v = Number(e.target.value); setFar(v); sync(hex, near, v); }}
+          data-studio-v3-fog-far
+          style={{ flex: 1, marginLeft: 8 }}
+        />
+        <span style={{ width: 30, textAlign: 'right', fontFamily: 'var(--studio-mono, ui-monospace)', fontSize: 10, color: 'var(--studio-ink-mute, #9aa6b2)' }}>{far.toFixed(1)}</span>
+      </div>
     </div>
   );
 }

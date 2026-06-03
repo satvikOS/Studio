@@ -765,6 +765,25 @@ export function registerV3Api() {
     return { ok: true, dir, step: s };
   };
 
+  // Slice 604 — Fog control. Linear fog for now (Three.Fog); exponential
+  // fog could land in a follow-up.
+  window.__studioSetFog = (color, near, far) => {
+    const vp = window.__archdiscViewport;
+    if (!vp || !vp.scene) return { ok: false };
+    if (near == null && far == null && color == null) {
+      vp.scene.fog = null;
+      return { ok: true, on: false };
+    }
+    vp.scene.fog = new THREE.Fog(color || 0x0d1117, near || 0.5, far || 5);
+    return { ok: true, on: true, color: '#' + vp.scene.fog.color.getHexString(), near: vp.scene.fog.near, far: vp.scene.fog.far };
+  };
+  window.__studioGetFog = () => {
+    const vp = window.__archdiscViewport;
+    const f = vp && vp.scene && vp.scene.fog;
+    if (!f) return null;
+    return { color: '#' + f.color.getHexString(), near: f.near, far: f.far };
+  };
+
   // Slice 603 — Renderer tone mapping + exposure. Surfaces three's
   // ACESFilmic / Linear / Reinhard / Cineon / Neutral modes and an
   // exposure multiplier. Drives composition-style colour grading.
