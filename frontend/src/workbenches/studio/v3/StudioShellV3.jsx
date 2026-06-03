@@ -2656,6 +2656,7 @@ function WindowMenu() {
     { id: 'uv-editor',       label: 'UV editor',            hint: 'Cmd+Shift+U', call: () => window.dispatchEvent(new CustomEvent('studio-uv-editor-toggle')) },
     { id: 'asset-browser',   label: 'Asset browser',        hint: 'Cmd+Shift+A', call: () => window.dispatchEvent(new CustomEvent('studio-asset-browser-toggle')) },
     { id: 'quad-view',       label: 'Quad view',                                call: () => window.dispatchEvent(new CustomEvent('studio-quad-view-toggle')) },
+    { id: 'render-queue',    label: 'Render queue',                             call: () => window.dispatchEvent(new CustomEvent('studio-render-queue-toggle')) },
     { id: 'reset-layout',    label: 'Reset layout',                          call: resetLayout },
   ];
   return (
@@ -3240,6 +3241,106 @@ function AssetBrowser() {
     </div>
   );
 }
+
+// Slice 580 — Render queue modal. Add current camera; add all camera
+// bookmarks; clear; render all. Toggle via studio-render-queue-toggle.
+function RenderQueueModal() {
+  const [open, setOpen] = useState(false);
+  const [jobs, setJobs] = useState([]);
+  useEffect(() => {
+    const onToggle = () => setOpen((v) => !v);
+    const onChange = () => setJobs((window.__studioListRenderQueue && window.__studioListRenderQueue()) || []);
+    const onKey = (e) => {
+      const ae = document.activeElement;
+      if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+      if (open && e.key === 'Escape') { setOpen(false); e.preventDefault(); }
+    };
+    window.addEventListener('studio-render-queue-toggle', onToggle);
+    window.addEventListener('studio-render-queue-changed', onChange);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('studio-render-queue-toggle', onToggle);
+      window.removeEventListener('studio-render-queue-changed', onChange);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+  useEffect(() => { if (open) setJobs((window.__studioListRenderQueue && window.__studioListRenderQueue()) || []); }, [open]);
+  if (!open) return null;
+  const addCurrent = () => {
+    const vp = window.__archdiscViewport;
+    if (!vp || !vp.camera) return;
+    const p = [vp.camera.position.x, vp.camera.position.y, vp.camera.position.z];
+    const t = vp.orbitControls && vp.orbitControls.target ? [vp.orbitControls.target.x, vp.orbitControls.target.y, vp.orbitControls.target.z] : [0, 0, 0];
+    if (window.__studioEnqueueRender) window.__studioEnqueueRender({ name: `current-${jobs.length + 1}`, position: p, target: t });
+  };
+  return (
+    <div
+      data-studio-v3-render-queue
+      onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 9200,
+        background: 'rgba(13,17,23,0.6)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: 'var(--studio-bg-elev, #161b22)',
+          border: '1px solid var(--studio-accent, #1de9b6)',
+          borderRadius: 8, padding: '18px 22px', minWidth: 480, maxWidth: 600,
+          color: 'var(--studio-ink, #e6edf3)', fontFamily: 'inherit',
+        }}
+      >
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+          marginBottom: 12,
+        }}>
+          <strong style={{ color: 'var(--studio-accent, #1de9b6)', fontSize: 13, letterSpacing: '0.04em' }}>Render queue · {jobs.length}</strong>
+          <span style={{ opacity: 0.55, fontSize: 11, fontFamily: 'var(--studio-mono, ui-monospace)' }}>Esc</span>
+        </div>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+          <button type="button" data-studio-v3-render-queue-add-current onClick={addCurrent}
+            style={btnStyle}
+          >+ Current camera</button>
+          <button type="button" data-studio-v3-render-queue-add-bookmarks onClick={() => window.__studioEnqueueCameraBookmarks && window.__studioEnqueueCameraBookmarks()}
+            style={btnStyle}
+          >+ All bookmarks</button>
+          <button type="button" data-studio-v3-render-queue-clear onClick={() => window.__studioClearRenderQueue && window.__studioClearRenderQueue()}
+            style={btnStyle}
+          >Clear</button>
+          <button type="button" data-studio-v3-render-queue-run onClick={() => window.__studioRunRenderQueue && window.__studioRunRenderQueue()}
+            style={{ ...btnStyle, background: 'var(--studio-accent, #1de9b6)', color: '#0d1117', fontWeight: 600 }}
+          >Render all</button>
+        </div>
+        <div style={{ borderTop: '1px solid var(--studio-ink-mute, #1f2733)', paddingTop: 8 }}>
+          {jobs.length === 0 && <div style={{ opacity: 0.5, fontSize: 11 }}>Queue empty.</div>}
+          {jobs.map((j, i) => (
+            <div
+              key={i}
+              data-studio-v3-render-queue-row={i}
+              style={{
+                display: 'flex', justifyContent: 'space-between',
+                padding: '4px 0', fontSize: 11,
+                borderBottom: '1px dotted var(--studio-ink-mute, #1f2733)',
+              }}
+            >
+              <span style={{ fontFamily: 'var(--studio-mono, ui-monospace)' }}>{j.name}</span>
+              <span style={{ opacity: 0.6, fontFamily: 'var(--studio-mono, ui-monospace)' }}>{j.w}×{j.h}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+const btnStyle = {
+  padding: '4px 12px', fontSize: 11,
+  background: 'var(--studio-bg, #0d1117)',
+  color: 'var(--studio-ink, #e6edf3)',
+  border: '1px solid var(--studio-ink-mute, #1f2733)',
+  borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit',
+};
 
 function ToastBus() {
   const [items, setItems] = useState([]);
@@ -7040,6 +7141,7 @@ export function StudioShellV3({ mode = 'dark' }) {
       <PluginManager />
       <UVEditor />
       <AssetBrowser />
+      <RenderQueueModal />
       <FileMenu />
       <EditMenu />
       <SelectMenu />

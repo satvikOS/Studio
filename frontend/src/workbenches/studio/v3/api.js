@@ -550,6 +550,68 @@ export function registerV3Api() {
     return { ok: true };
   };
 
+  // Slice 580 — Render queue. Each entry is { name, position, target, w, h }.
+  // Running pops the head, sets the camera, calls exportViewportPNG, then
+  // restores the original camera between entries.
+  if (!window.__studioRenderQueueState) window.__studioRenderQueueState = { jobs: [], running: false };
+  window.__studioListRenderQueue = () => window.__studioRenderQueueState.jobs.slice();
+  window.__studioEnqueueRender = (rec) => {
+    if (!rec || !rec.position) return { ok: false, error: 'need position' };
+    window.__studioRenderQueueState.jobs.push({
+      name: rec.name || `render-${window.__studioRenderQueueState.jobs.length + 1}`,
+      position: rec.position,
+      target: rec.target || [0, 0, 0],
+      w: rec.w || 1280, h: rec.h || 720,
+    });
+    window.dispatchEvent(new CustomEvent('studio-render-queue-changed'));
+    return { ok: true, depth: window.__studioRenderQueueState.jobs.length };
+  };
+  window.__studioClearRenderQueue = () => {
+    window.__studioRenderQueueState.jobs.length = 0;
+    window.dispatchEvent(new CustomEvent('studio-render-queue-changed'));
+    return { ok: true };
+  };
+  window.__studioEnqueueCameraBookmarks = () => {
+    const bm = window.__studioCameraBookmarks || {};
+    let n = 0;
+    for (const name of Object.keys(bm)) {
+      const r = bm[name];
+      window.__studioEnqueueRender({ name: `bookmark-${name}`, position: r.position, target: r.target });
+      n++;
+    }
+    return { ok: true, queued: n };
+  };
+  window.__studioRunRenderQueue = async () => {
+    const st = window.__studioRenderQueueState;
+    if (st.running) return { ok: false, error: 'already running' };
+    st.running = true;
+    const vp = window.__archdiscViewport;
+    if (!vp || !vp.camera) { st.running = false; return { ok: false, error: 'no viewport' }; }
+    const savedP = vp.camera.position.clone();
+    const savedT = vp.orbitControls && vp.orbitControls.target ? vp.orbitControls.target.clone() : null;
+    const done = [];
+    while (st.jobs.length) {
+      const job = st.jobs.shift();
+      vp.camera.position.set(job.position[0], job.position[1], job.position[2]);
+      if (vp.orbitControls && vp.orbitControls.target) {
+        vp.orbitControls.target.set(job.target[0], job.target[1], job.target[2]);
+        if (typeof vp.orbitControls.update === 'function') vp.orbitControls.update();
+      }
+      vp.camera.lookAt(job.target[0], job.target[1], job.target[2]);
+      const r = window.__studioExportViewportPNG && window.__studioExportViewportPNG(job.name, job.w, job.h);
+      done.push({ job, result: r });
+      window.dispatchEvent(new CustomEvent('studio-render-queue-changed'));
+      await new Promise((res) => setTimeout(res, 30));
+    }
+    vp.camera.position.copy(savedP);
+    if (savedT && vp.orbitControls && vp.orbitControls.target) {
+      vp.orbitControls.target.copy(savedT);
+      if (typeof vp.orbitControls.update === 'function') vp.orbitControls.update();
+    }
+    st.running = false;
+    return { ok: true, rendered: done.length };
+  };
+
   // Slice 579 — CSG boolean modifier. Wraps manifold-3d for real
   // Union / Subtract / Intersect on the two most recently selected
   // meshes; falls back to a plain mergeGeometries when WASM init fails.
