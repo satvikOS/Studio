@@ -765,6 +765,36 @@ export function registerV3Api() {
     return { ok: true, dir, step: s };
   };
 
+  // Slice 607 — SSAO post-effect pass; lazy-loads SSAOPass and appends it
+  // to the EffectComposer (creating it if needed). Toggleable.
+  let _ssaoPass = null;
+  window.__studioToggleSSAO = async () => {
+    const vp = window.__archdiscViewport;
+    if (!vp || !vp.renderer || !vp.scene || !vp.camera) return { ok: false };
+    if (_ssaoPass && vp.__studioComposer) {
+      vp.__studioComposer.removePass(_ssaoPass);
+      _ssaoPass.dispose && _ssaoPass.dispose();
+      _ssaoPass = null;
+      if (window.__studioToast) window.__studioToast('SSAO off', 'info');
+      return { ok: true, on: false };
+    }
+    if (!vp.__studioComposer && window.__studioToggleOutlinePass) {
+      // Need an EffectComposer; outline-pass init builds one.
+      await window.__studioToggleOutlinePass();
+    }
+    if (!vp.__studioComposer) return { ok: false, error: 'no composer' };
+    const mod = await import('three/examples/jsm/postprocessing/SSAOPass.js');
+    const dom = vp.renderer.domElement;
+    _ssaoPass = new mod.SSAOPass(vp.scene, vp.camera, dom.clientWidth, dom.clientHeight);
+    _ssaoPass.kernelRadius = 0.02;
+    _ssaoPass.minDistance = 0.001;
+    _ssaoPass.maxDistance = 0.1;
+    const passes = vp.__studioComposer.passes;
+    vp.__studioComposer.insertPass(_ssaoPass, Math.max(0, passes.length - 1));
+    if (window.__studioToast) window.__studioToast('SSAO on', 'ok');
+    return { ok: true, on: true };
+  };
+
   // Slice 606 — Outline post-process via three's OutlinePass. Toggleable
   // EffectComposer hooked into the existing renderer; selected mesh gets
   // a true screen-space outline (parity with Blender's selection halo).
