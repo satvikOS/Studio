@@ -4268,6 +4268,8 @@ function GeometryTools() {
     { id: 'simplify-50', label: 'Simplify · keep 50%',     call: () => window.__studioSimplifyMesh && window.__studioSimplifyMesh(0.5) },
     { id: 'simplify-25', label: 'Simplify · keep 25%',     call: () => window.__studioSimplifyMesh && window.__studioSimplifyMesh(0.25) },
     { id: 'tessellate',  label: 'Tessellate ×1',           call: () => window.__studioTessellate && window.__studioTessellate(1) },
+    { id: 'noise-low',   label: 'Noise · 1 mm',            call: () => window.__studioDisplaceNoise && window.__studioDisplaceNoise(0.001) },
+    { id: 'noise-med',   label: 'Noise · 5 mm',            call: () => window.__studioDisplaceNoise && window.__studioDisplaceNoise(0.005) },
     { id: 'array-x',     label: 'Array ×5 along X',        call: () => window.__studioCloneAlongAxis && window.__studioCloneAlongAxis('x', 5, 0.05) },
     { id: 'array-y',     label: 'Array ×5 along Y',        call: () => window.__studioCloneAlongAxis && window.__studioCloneAlongAxis('y', 5, 0.05) },
     { id: 'array-z',     label: 'Array ×5 along Z',        call: () => window.__studioCloneAlongAxis && window.__studioCloneAlongAxis('z', 5, 0.05) },

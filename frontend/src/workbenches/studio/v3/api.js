@@ -742,6 +742,40 @@ export function registerV3Api() {
     return { ok: true, target: targetUuid };
   };
 
+  // Slice 596 — Noise displacement. For each vertex, offsets along its
+  // normal by `strength * pseudo-noise(position)`. Deterministic per
+  // position so re-applying with the same seed re-creates the bumps.
+  window.__studioDisplaceNoise = (strength) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel || !sel.geometry) return { ok: false, error: 'no selection' };
+    const g = sel.geometry;
+    if (!g.attributes.normal) g.computeVertexNormals();
+    const pos = g.attributes.position, nor = g.attributes.normal;
+    const s = Math.max(0.0001, Number(strength) || 0.01);
+    // Cheap value-noise: sin-based hash on the integer-bucketed coord.
+    const noise = (x, y, z) => {
+      const h = Math.sin(x * 12.9898 + y * 78.233 + z * 37.719) * 43758.5453;
+      return (h - Math.floor(h)) * 2 - 1;
+    };
+    if (window.__studioPushUndo) window.__studioPushUndo('displace-noise');
+    for (let i = 0; i < pos.count; i++) {
+      const ox = pos.getX(i), oy = pos.getY(i), oz = pos.getZ(i);
+      const n = noise(ox * 50, oy * 50, oz * 50);
+      pos.setXYZ(
+        i,
+        ox + nor.getX(i) * n * s,
+        oy + nor.getY(i) * n * s,
+        oz + nor.getZ(i) * n * s,
+      );
+    }
+    pos.needsUpdate = true;
+    g.computeVertexNormals();
+    g.computeBoundingBox(); g.computeBoundingSphere();
+    if (window.__studioToast) window.__studioToast(`Displaced ${pos.count} verts`, 'ok');
+    if (window.__studioPushModifier) window.__studioPushModifier('displace-noise', { strength: s });
+    return { ok: true, vertices: pos.count };
+  };
+
   // Slice 582 — Decimate / simplify the selected geometry. Wraps the
   // three SimplifyModifier (quadric edge collapse). Tessellate doubles
   // tri density for higher subdivision.
