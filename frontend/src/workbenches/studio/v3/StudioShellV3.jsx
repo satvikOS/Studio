@@ -2552,6 +2552,8 @@ function WindowMenu() {
     { id: 'panel-toggle',    label: 'Toggle right panel',     hint: 'N',     call: () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n' })) },
     { id: 'cmd-palette',     label: 'Command palette',        hint: 'Cmd+K', call: () => window.dispatchEvent(new CustomEvent('studio-command-palette-toggle')) },
     { id: 'settings',        label: 'Settings',               hint: 'Cmd+,', call: () => window.dispatchEvent(new CustomEvent('studio-settings-toggle')) },
+    { id: 'plugin-manager',  label: 'Plugin manager',                        call: () => window.dispatchEvent(new CustomEvent('studio-plugin-manager-toggle')) },
+    { id: 'curve-editor',    label: 'Animation curves',     hint: 'Cmd+Shift+C', call: () => window.dispatchEvent(new CustomEvent('studio-curve-editor-toggle')) },
     { id: 'reset-layout',    label: 'Reset layout',                          call: resetLayout },
   ];
   return (
@@ -2768,6 +2770,136 @@ function CurveEditor() {
             />
           ))}
         </svg>
+      </div>
+    </div>
+  );
+}
+
+// Slice 574 — Plugin manager modal. Open via studio-plugin-manager-toggle
+// or Cmd+Shift+P (overriding the older "focus cmdbar" alias). Install /
+// list / uninstall persistent userland plugins.
+function PluginManager() {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [code, setCode] = useState('window.__studioToast && window.__studioToast(\'hello from plugin\', \'info\');');
+  const [list, setList] = useState([]);
+  useEffect(() => {
+    const onToggle = () => setOpen((v) => !v);
+    const onKey = (e) => {
+      const ae = document.activeElement;
+      if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+      if (open && e.key === 'Escape') { setOpen(false); e.preventDefault(); }
+    };
+    window.addEventListener('studio-plugin-manager-toggle', onToggle);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('studio-plugin-manager-toggle', onToggle);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+  useEffect(() => {
+    if (open) setList((window.__studioListPlugins && window.__studioListPlugins()) || []);
+  }, [open]);
+  const refresh = () => setList((window.__studioListPlugins && window.__studioListPlugins()) || []);
+  const install = () => {
+    if (!name.trim()) return;
+    if (window.__studioInstallPlugin) window.__studioInstallPlugin(name.trim(), code);
+    setName('');
+    refresh();
+  };
+  const uninstall = (n) => { if (window.__studioUninstallPlugin) window.__studioUninstallPlugin(n); refresh(); };
+  if (!open) return null;
+  return (
+    <div
+      data-studio-v3-plugin-manager
+      onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 9200,
+        background: 'rgba(13,17,23,0.6)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: 'var(--studio-bg-elev, #161b22)',
+          border: '1px solid var(--studio-accent, #1de9b6)',
+          borderRadius: 8, padding: '18px 22px', minWidth: 520, maxWidth: 640,
+          color: 'var(--studio-ink, #e6edf3)', fontFamily: 'inherit',
+        }}
+      >
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+          marginBottom: 12,
+        }}>
+          <strong style={{ color: 'var(--studio-accent, #1de9b6)', fontSize: 13, letterSpacing: '0.04em' }}>Plugin manager</strong>
+          <span style={{ opacity: 0.55, fontSize: 11, fontFamily: 'var(--studio-mono, ui-monospace)' }}>{list.length} installed · Esc</span>
+        </div>
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="plugin name (e.g. my-cube-spawner)"
+          data-studio-v3-plugin-name
+          style={{
+            width: '100%', marginBottom: 6,
+            padding: '6px 10px', background: 'var(--studio-bg, #0d1117)',
+            border: '1px solid var(--studio-ink-mute, #1f2733)',
+            color: 'var(--studio-ink, #e6edf3)', borderRadius: 3,
+            fontFamily: 'var(--studio-mono, ui-monospace)', fontSize: 11,
+          }}
+        />
+        <textarea
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+          placeholder="// JS executed with (THREE, scene, viewport). Register window.__studio* here."
+          data-studio-v3-plugin-code
+          rows={5}
+          style={{
+            width: '100%', marginBottom: 10,
+            padding: '6px 10px', background: 'var(--studio-bg, #0d1117)',
+            border: '1px solid var(--studio-ink-mute, #1f2733)',
+            color: 'var(--studio-ink, #e6edf3)', borderRadius: 3,
+            fontFamily: 'var(--studio-mono, ui-monospace)', fontSize: 11, resize: 'vertical',
+          }}
+        />
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
+          <button
+            type="button"
+            onClick={install}
+            data-studio-v3-plugin-install
+            style={{
+              background: 'var(--studio-accent, #1de9b6)', border: 0, color: '#0d1117',
+              fontWeight: 600, padding: '6px 18px', borderRadius: 4, fontSize: 11, cursor: 'pointer',
+            }}
+          >Install</button>
+        </div>
+        <div style={{ borderTop: '1px solid var(--studio-ink-mute, #1f2733)', paddingTop: 12 }}>
+          {list.length === 0 && <div style={{ opacity: 0.5, fontSize: 11 }}>No plugins installed.</div>}
+          {list.map((p) => (
+            <div
+              key={p.name}
+              data-studio-v3-plugin-row={p.name}
+              style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                padding: '4px 0', fontSize: 11,
+                borderBottom: '1px dotted var(--studio-ink-mute, #1f2733)',
+              }}
+            >
+              <span style={{ fontFamily: 'var(--studio-mono, ui-monospace)' }}>{p.name}</span>
+              <button
+                type="button"
+                data-studio-v3-plugin-uninstall={p.name}
+                onClick={() => uninstall(p.name)}
+                style={{
+                  padding: '2px 8px', fontSize: 10,
+                  background: 'transparent', color: 'var(--studio-ink-mute, #9aa6b2)',
+                  border: '1px solid var(--studio-ink-mute, #1f2733)', borderRadius: 2, cursor: 'pointer',
+                }}
+              >remove</button>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -6506,6 +6638,7 @@ export function StudioShellV3({ mode = 'dark' }) {
       <SaveAsModal />
       <AboutModal />
       <CurveEditor />
+      <PluginManager />
       <FileMenu />
       <EditMenu />
       <SelectMenu />

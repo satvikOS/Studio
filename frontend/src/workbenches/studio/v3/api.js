@@ -438,6 +438,46 @@ export function registerV3Api() {
     return { ok: true, on: true };
   };
 
+  // Slice 574 — Plugin manager. A "plugin" is a string of JS that
+  // gets eval'd at install + at every shell mount. Plugins persist in
+  // localStorage at studio.v3.plugins as { name, code, installedAt }[].
+  const PLUGIN_KEY = 'studio.v3.plugins';
+  const loadPlugins = () => {
+    try { return JSON.parse(window.localStorage.getItem(PLUGIN_KEY) || '[]') || []; } catch (_) { return []; }
+  };
+  const persistPlugins = (arr) => { try { window.localStorage.setItem(PLUGIN_KEY, JSON.stringify(arr)); } catch (_) {} };
+  const runPlugin = (p) => {
+    try {
+      // Plugins get THREE + scene via closure-style args.
+      // eslint-disable-next-line no-new-func
+      const fn = new Function('THREE', 'scene', 'viewport', p.code);
+      fn(THREE, window.__archdiscScene, window.__archdiscViewport);
+    } catch (e) {
+      console.warn('[studio plugin]', p.name, e);
+      if (window.__studioToast) window.__studioToast(`Plugin "${p.name}" error: ${e.message}`, 'warn');
+    }
+  };
+  window.__studioListPlugins = () => loadPlugins();
+  window.__studioInstallPlugin = (name, code) => {
+    if (!name || !code) return { ok: false, error: 'name + code required' };
+    const arr = loadPlugins().filter((p) => p.name !== name);
+    const rec = { name, code, installedAt: Date.now() };
+    arr.push(rec);
+    persistPlugins(arr);
+    runPlugin(rec);
+    if (window.__studioToast) window.__studioToast(`Plugin installed: ${name}`, 'ok');
+    return { ok: true, plugin: rec };
+  };
+  window.__studioUninstallPlugin = (name) => {
+    const arr = loadPlugins();
+    const next = arr.filter((p) => p.name !== name);
+    persistPlugins(next);
+    if (window.__studioToast) window.__studioToast(`Plugin removed: ${name}`, 'info');
+    return { ok: true, removed: arr.length - next.length };
+  };
+  // Auto-run on mount.
+  for (const p of loadPlugins()) runPlugin(p);
+
   // Slice 573 — Sculpt brush settings live on window so the inspector
   // panel + future viewport input handler share the same state.
   if (!window.__studioSculptBrush) {
