@@ -765,6 +765,55 @@ export function registerV3Api() {
     return { ok: true, dir, step: s };
   };
 
+  // Slice 606 — Outline post-process via three's OutlinePass. Toggleable
+  // EffectComposer hooked into the existing renderer; selected mesh gets
+  // a true screen-space outline (parity with Blender's selection halo).
+  let _composer = null;
+  let _outlinePass = null;
+  window.__studioToggleOutlinePass = async () => {
+    const vp = window.__archdiscViewport;
+    if (!vp || !vp.renderer) return { ok: false };
+    if (_composer) {
+      _composer.dispose && _composer.dispose();
+      _composer = null;
+      _outlinePass = null;
+      vp.__studioComposer = null;
+      if (window.__studioToast) window.__studioToast('Outline pass off', 'info');
+      return { ok: true, on: false };
+    }
+    const [composerMod, renderMod, outlineMod, outputMod] = await Promise.all([
+      import('three/examples/jsm/postprocessing/EffectComposer.js'),
+      import('three/examples/jsm/postprocessing/RenderPass.js'),
+      import('three/examples/jsm/postprocessing/OutlinePass.js'),
+      import('three/examples/jsm/postprocessing/OutputPass.js'),
+    ]);
+    _composer = new composerMod.EffectComposer(vp.renderer);
+    _composer.addPass(new renderMod.RenderPass(vp.scene, vp.camera));
+    _outlinePass = new outlineMod.OutlinePass(
+      new THREE.Vector2(vp.renderer.domElement.clientWidth, vp.renderer.domElement.clientHeight),
+      vp.scene,
+      vp.camera,
+    );
+    _outlinePass.edgeStrength = 4;
+    _outlinePass.edgeGlow = 0.4;
+    _outlinePass.edgeThickness = 1.0;
+    _outlinePass.visibleEdgeColor = new THREE.Color(0x1de9b6);
+    _outlinePass.hiddenEdgeColor = new THREE.Color(0x0a4a3a);
+    _composer.addPass(_outlinePass);
+    _composer.addPass(new outputMod.OutputPass());
+    vp.__studioComposer = _composer;
+    vp.__studioOutlinePass = _outlinePass;
+    // Sync selection list to the outline pass.
+    const syncSel = () => {
+      const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+      _outlinePass.selectedObjects = sel ? [sel] : [];
+    };
+    syncSel();
+    vp.__studioOutlineSync = syncSel;
+    if (window.__studioToast) window.__studioToast('Outline pass on', 'ok');
+    return { ok: true, on: true };
+  };
+
   // Slice 605 — Sky gradient background. Builds a 1×64 DataTexture from
   // a linear lerp between top + bottom hex colours and mounts it as the
   // scene.background. EquirectangularReflectionMapping makes it tile
