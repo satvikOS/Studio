@@ -2555,6 +2555,7 @@ function WindowMenu() {
     { id: 'plugin-manager',  label: 'Plugin manager',                        call: () => window.dispatchEvent(new CustomEvent('studio-plugin-manager-toggle')) },
     { id: 'curve-editor',    label: 'Animation curves',     hint: 'Cmd+Shift+C', call: () => window.dispatchEvent(new CustomEvent('studio-curve-editor-toggle')) },
     { id: 'uv-editor',       label: 'UV editor',            hint: 'Cmd+Shift+U', call: () => window.dispatchEvent(new CustomEvent('studio-uv-editor-toggle')) },
+    { id: 'asset-browser',   label: 'Asset browser',        hint: 'Cmd+Shift+A', call: () => window.dispatchEvent(new CustomEvent('studio-asset-browser-toggle')) },
     { id: 'reset-layout',    label: 'Reset layout',                          call: resetLayout },
   ];
   return (
@@ -3012,6 +3013,129 @@ function UVEditor() {
             />
           ))}
         </svg>
+      </div>
+    </div>
+  );
+}
+
+// Slice 577 — Asset browser. Grid of primitive tiles + recent files +
+// reference plates. Open via studio-asset-browser-toggle or Cmd+Shift+A
+// (overrides quick-add menu's bare Shift+A — different chord).
+function AssetBrowser() {
+  const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState('primitives');
+  const [recent, setRecent] = useState([]);
+  const [plates, setPlates] = useState([]);
+  useEffect(() => {
+    const onToggle = () => setOpen((v) => !v);
+    const onKey = (e) => {
+      const ae = document.activeElement;
+      if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'a') {
+        e.preventDefault();
+        setOpen((v) => !v);
+      } else if (open && e.key === 'Escape') { setOpen(false); e.preventDefault(); }
+    };
+    window.addEventListener('studio-asset-browser-toggle', onToggle);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('studio-asset-browser-toggle', onToggle);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    setRecent((window.__studioListRecentFiles && window.__studioListRecentFiles()) || []);
+    setPlates((window.__studioListImagePlates && window.__studioListImagePlates()) || []);
+  }, [open, tab]);
+  if (!open) return null;
+  const PRIM_KINDS = ['cube', 'sphere', 'plane', 'cylinder', 'cone', 'torus', 'icosahedron', 'text', 'curve', 'empty'];
+  const spawn = (kind) => {
+    if (window.__spawnPrimitive && window.__archdiscScene) window.__spawnPrimitive(kind, window.__archdiscScene);
+    if (window.__studioToast) window.__studioToast(`Added ${kind}`, 'ok');
+  };
+  const tile = (label, onClick, key) => (
+    <button
+      key={key}
+      type="button"
+      data-studio-v3-asset-tile={key}
+      onClick={onClick}
+      style={{
+        width: 90, height: 90,
+        background: 'var(--studio-bg, #0d1117)',
+        border: '1px solid var(--studio-ink-mute, #1f2733)',
+        color: 'var(--studio-ink, #e6edf3)', borderRadius: 4, cursor: 'pointer',
+        fontFamily: 'inherit', fontSize: 11,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        textAlign: 'center', textTransform: 'capitalize',
+        whiteSpace: 'normal', overflow: 'hidden', textOverflow: 'ellipsis',
+        padding: 6,
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--studio-accent, #1de9b6)'; e.currentTarget.style.color = 'var(--studio-accent, #1de9b6)'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--studio-ink-mute, #1f2733)'; e.currentTarget.style.color = 'var(--studio-ink, #e6edf3)'; }}
+    >{label}</button>
+  );
+  return (
+    <div
+      data-studio-v3-asset-browser
+      onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 9200,
+        background: 'rgba(13,17,23,0.6)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: 'var(--studio-bg-elev, #161b22)',
+          border: '1px solid var(--studio-accent, #1de9b6)',
+          borderRadius: 8, padding: '18px 22px',
+          color: 'var(--studio-ink, #e6edf3)', fontFamily: 'inherit',
+          minWidth: 540, maxWidth: 720,
+        }}
+      >
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+          marginBottom: 14,
+        }}>
+          <strong style={{ color: 'var(--studio-accent, #1de9b6)', fontSize: 13, letterSpacing: '0.04em' }}>Asset browser</strong>
+          <span style={{ opacity: 0.55, fontSize: 11, fontFamily: 'var(--studio-mono, ui-monospace)' }}>Esc to close</span>
+        </div>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+          {['primitives', 'recent', 'plates'].map((t) => (
+            <button
+              key={t}
+              type="button"
+              data-studio-v3-asset-tab={t}
+              data-active={t === tab ? 'true' : 'false'}
+              onClick={() => setTab(t)}
+              style={{
+                padding: '4px 12px',
+                background: t === tab ? 'var(--studio-accent, #1de9b6)' : 'var(--studio-bg, #0d1117)',
+                color: t === tab ? '#0d1117' : 'var(--studio-ink, #e6edf3)',
+                border: '1px solid var(--studio-ink-mute, #1f2733)',
+                borderRadius: 3, fontSize: 11, fontFamily: 'inherit',
+                cursor: 'pointer', textTransform: 'capitalize',
+              }}
+            >{t}</button>
+          ))}
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, maxHeight: 360, overflowY: 'auto' }}>
+          {tab === 'primitives' && PRIM_KINDS.map((k) => tile(k, () => spawn(k), k))}
+          {tab === 'recent' && recent.length === 0 && (
+            <div style={{ opacity: 0.5, fontSize: 11 }}>No recent files.</div>
+          )}
+          {tab === 'recent' && recent.map((r) => tile(r.name.split('-')[0], () => window.__studioOpenRecentFile && window.__studioOpenRecentFile(r.name), r.name))}
+          {tab === 'plates' && plates.length === 0 && (
+            <div style={{ opacity: 0.5, fontSize: 11 }}>No reference plates yet — drop an image on the viewport.</div>
+          )}
+          {tab === 'plates' && plates.map((p) => tile(p.name, () => window.__studioSelectMesh && (() => {
+            let m = null;
+            window.__archdiscScene.traverse((o) => { if (o.uuid === p.uuid) m = o; });
+            if (m) window.__studioSelectMesh(m);
+          })(), p.uuid))}
+        </div>
       </div>
     </div>
   );
@@ -6811,6 +6935,7 @@ export function StudioShellV3({ mode = 'dark' }) {
       <CurveEditor />
       <PluginManager />
       <UVEditor />
+      <AssetBrowser />
       <FileMenu />
       <EditMenu />
       <SelectMenu />
