@@ -3751,6 +3751,7 @@ function RightPanel({ collapsed, onToggle, activeWb, editMode, selection }) {
             {/* Slice 566 — Rename row works whether the React selection
                 prop is set or not, polling __studioSelectedMesh directly. */}
             <RenameSection />
+            <ObjectPropsSection />
             {selection && (
               <div className="studio-right-section" data-studio-v3-inspector-selection>
                 <div className="studio-right-section-title">Selected · {selection.type || 'object'}</div>
@@ -4115,6 +4116,49 @@ function GeometryTools() {
           }}
         >{a.label}</button>
       ))}
+    </div>
+  );
+}
+
+// Slice 583 — Object section: castShadow / receiveShadow / visible
+// toggles bound to the active selection. Polls every 500 ms.
+function ObjectPropsSection() {
+  const [state, setState] = useState(null);
+  useEffect(() => {
+    const read = () => {
+      const m = window.__studioSelectedMesh && window.__studioSelectedMesh();
+      setState(m ? { uuid: m.uuid, cast: !!m.castShadow, receive: !!m.receiveShadow, visible: m.visible !== false } : null);
+    };
+    const id = setInterval(read, 500);
+    read();
+    return () => clearInterval(id);
+  }, []);
+  if (!state) return null;
+  const toggle = (key) => {
+    const m = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!m) return;
+    if (key === 'cast') m.castShadow = !m.castShadow;
+    else if (key === 'receive') m.receiveShadow = !m.receiveShadow;
+    else if (key === 'visible') m.visible = !m.visible;
+    setState({ uuid: m.uuid, cast: !!m.castShadow, receive: !!m.receiveShadow, visible: m.visible !== false });
+  };
+  const row = (k, label, val) => (
+    <div className="studio-right-row" style={{ alignItems: 'center' }}>
+      <span>{label}</span>
+      <input
+        type="checkbox"
+        data-studio-v3-object-prop={k}
+        checked={val}
+        onChange={() => toggle(k)}
+      />
+    </div>
+  );
+  return (
+    <div className="studio-right-section" data-studio-v3-object-props>
+      <div className="studio-right-section-title">Object</div>
+      {row('visible', 'Visible', state.visible)}
+      {row('cast', 'Cast shadow', state.cast)}
+      {row('receive', 'Receive shadow', state.receive)}
     </div>
   );
 }
