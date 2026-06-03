@@ -1278,6 +1278,7 @@ const KEYMAP = [
     ['Cmd+Alt+A', 'Add text annotation at selection'],
     ['Cmd+L', 'Toggle transform lock on selection'],
     ['Cmd+R', 'Reset camera home'],
+    ['Cmd+J', 'Join multi-selected meshes'],
     ['Alt+1..9', 'Recall camera bookmark by index'],
     ['Numpad 1/3/7', 'Front / Right / Top camera (Blender parity)'],
     ['Numpad 5', 'Toggle perspective / ortho'],
@@ -5887,6 +5888,12 @@ export function StudioShellV3({ mode = 'dark' }) {
         const ae = document.activeElement;
         if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
         if (window.__studioToggleTurntable) window.__studioToggleTurntable();
+        e.preventDefault();
+      } else if (meta && !e.shiftKey && !e.altKey && (e.key === 'j' || e.key === 'J')) {
+        // Slice 569 — Cmd/Ctrl+J joins multi-selected meshes.
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        if (window.__studioJoinSelected) window.__studioJoinSelected();
         e.preventDefault();
       } else if (meta && !e.shiftKey && !e.altKey && (e.key === 'r' || e.key === 'R')) {
         // Slice 556 — Cmd+R resets the camera home.

@@ -438,6 +438,57 @@ export function registerV3Api() {
     return { ok: true, on: true };
   };
 
+  // Slice 569 — Join multi-selected meshes into a single archdisc
+  // primitive. Each member is baked to world space, then their
+  // geometries are merged.
+  window.__studioJoinSelected = async () => {
+    const set = Array.isArray(window.__studioSelectedMeshesSet) && window.__studioSelectedMeshesSet.length >= 2
+      ? window.__studioSelectedMeshesSet.slice()
+      : [];
+    if (!set.length) return { ok: false, error: 'need 2+ selected' };
+    const mod = await import('three/examples/jsm/utils/BufferGeometryUtils.js');
+    if (window.__studioPushUndo) window.__studioPushUndo('join');
+    const geoms = [];
+    for (const m of set) {
+      if (!m.geometry) continue;
+      const g = m.geometry.clone();
+      m.updateMatrixWorld(true);
+      g.applyMatrix4(m.matrixWorld);
+      // Strip extraneous attributes that would block the merge.
+      const keep = ['position', 'normal'];
+      for (const k of Object.keys(g.attributes)) {
+        if (!keep.includes(k)) g.deleteAttribute(k);
+      }
+      geoms.push(g);
+    }
+    if (geoms.length < 2) return { ok: false, error: 'no geometries' };
+    const merged = mod.mergeGeometries(geoms, false);
+    if (!merged) return { ok: false, error: 'merge failed' };
+    const first = set[0];
+    const mat = Array.isArray(first.material) ? first.material[0] : first.material;
+    const joined = new THREE.Mesh(merged, mat ? mat.clone() : new THREE.MeshStandardMaterial({ color: 0xffffff }));
+    joined.name = `${first.name || 'mesh'}-joined`;
+    joined.castShadow = true; joined.receiveShadow = true;
+    joined.userData = {
+      archdiscStudioPrimitive: true,
+      archdiscStudioPrimitiveKind: 'mesh',
+      archdiscStudioJoinedFrom: set.length,
+    };
+    const s = window.__archdiscScene;
+    s.add(joined);
+    // Dispose + remove the originals.
+    for (const m of set) {
+      if (m.geometry) m.geometry.dispose();
+      if (Array.isArray(m.material)) m.material.forEach((x) => x.dispose && x.dispose());
+      else if (m.material && m.material.dispose) m.material.dispose();
+      (m.parent || s).remove(m);
+    }
+    window.__studioSelectedMeshesSet = [joined];
+    if (window.__studioSelectMesh) window.__studioSelectMesh(joined);
+    if (window.__studioToast) window.__studioToast(`Joined ${set.length} → 1`, 'ok');
+    return { ok: true, members: set.length };
+  };
+
   // Slice 565 — Geometry tools. Compute smooth normals; merge near-
   // duplicate vertices (welding). Lazy-imports BufferGeometryUtils.
   window.__studioComputeVertexNormals = () => {
