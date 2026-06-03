@@ -550,6 +550,32 @@ export function registerV3Api() {
     return { ok: true };
   };
 
+  // Slice 590 — Camera follow. When enabled, the orbit target tracks
+  // the selected mesh's world position each frame. Toggle via
+  // __studioToggleCameraFollow(); state persists per session.
+  if (!window.__studioCameraFollowGuardAttached) {
+    window.__studioCameraFollowGuardAttached = true;
+    const tmp = new THREE.Vector3();
+    const tick = () => {
+      if (window.__studioCameraFollowOn) {
+        const vp = window.__archdiscViewport;
+        const m = window.__studioSelectedMesh && window.__studioSelectedMesh();
+        if (vp && vp.orbitControls && vp.orbitControls.target && m) {
+          m.getWorldPosition(tmp);
+          vp.orbitControls.target.lerp(tmp, 0.25);
+          if (typeof vp.orbitControls.update === 'function') vp.orbitControls.update();
+        }
+      }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+  window.__studioToggleCameraFollow = () => {
+    window.__studioCameraFollowOn = !window.__studioCameraFollowOn;
+    if (window.__studioToast) window.__studioToast(`Camera follow ${window.__studioCameraFollowOn ? 'on' : 'off'}`, 'info');
+    return { ok: true, on: !!window.__studioCameraFollowOn };
+  };
+
   // Slice 589 — STL + OBJ importers. STL takes ArrayBuffer; OBJ takes
   // a string. Both wrap their lazy loader in __studioImport*.
   window.__studioImportSTL = (arrayBuffer, name) => new Promise(async (resolve) => {

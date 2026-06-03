@@ -4509,6 +4509,7 @@ function CameraSection() {
         >{proj}</button>
       </div>
       <CameraSpeedRows />
+      <CameraFollowRow />
     </div>
   );
 }
@@ -4940,6 +4941,31 @@ function NotesSection({ activeWb }) {
           outline: 'none',
         }}
       />
+    </div>
+  );
+}
+
+// Slice 590 — Camera follow toggle row inside the Camera section.
+function CameraFollowRow() {
+  const [on, setOn] = React.useState(!!window.__studioCameraFollowOn);
+  React.useEffect(() => {
+    const id = setInterval(() => setOn(!!window.__studioCameraFollowOn), 500);
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <div className="studio-right-row" style={{ alignItems: 'center' }}>
+      <span>Follow selection</span>
+      <button
+        type="button"
+        data-studio-v3-camera-follow
+        data-studio-v3-camera-follow-on={on ? 'true' : 'false'}
+        onClick={() => { window.__studioToggleCameraFollow && window.__studioToggleCameraFollow(); setOn(!on); }}
+        style={{
+          background: 'transparent', border: '1px solid var(--studio-ink-mute, #1f2733)',
+          color: on ? 'var(--studio-accent, #1de9b6)' : 'var(--studio-ink, #e6edf3)',
+          padding: '2px 8px', borderRadius: 3, fontSize: 11, cursor: 'pointer',
+        }}
+      >{on ? 'on' : 'off'}</button>
     </div>
   );
 }
