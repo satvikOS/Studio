@@ -1280,6 +1280,7 @@ const KEYMAP = [
     ['Cmd+R', 'Reset camera home'],
     ['Cmd+J', 'Join multi-selected meshes'],
     ['Cmd+] / Cmd+[', 'Cycle selection next / prev'],
+    ['Cmd+.', 'Center orbit target on selection'],
     ['Alt+1..9', 'Recall camera bookmark by index'],
     ['Numpad 1/3/7', 'Front / Right / Top camera (Blender parity)'],
     ['Numpad 5', 'Toggle perspective / ortho'],
@@ -7262,6 +7263,27 @@ export function StudioShellV3({ mode = 'dark' }) {
         // No dock in V3 — focus the cmdbar input as the most useful alias.
         const inp = document.querySelector('[data-studio-v3-cmdbar-input]');
         if (inp) inp.focus();
+      } else if (meta && !e.shiftKey && !e.altKey && e.key === '.') {
+        // Slice 614 — Cmd+. moves the orbit target to the active mesh's
+        // world center without changing camera position. Cleaner than Frame
+        // selected when you want to keep your current angle.
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        e.preventDefault();
+        const m = window.__studioSelectedMesh && window.__studioSelectedMesh();
+        const vp = window.__archdiscViewport;
+        if (m && vp && vp.orbitControls && vp.orbitControls.target) {
+          const wp = new (window.__archdiscTHREE || {}).Vector3 ? new window.__archdiscTHREE.Vector3() : null;
+          if (wp && typeof m.getWorldPosition === 'function') {
+            m.getWorldPosition(wp);
+            vp.orbitControls.target.set(wp.x, wp.y, wp.z);
+            if (typeof vp.orbitControls.update === 'function') vp.orbitControls.update();
+          } else {
+            vp.orbitControls.target.set(m.position.x, m.position.y, m.position.z);
+            if (typeof vp.orbitControls.update === 'function') vp.orbitControls.update();
+          }
+          if (window.__studioToast) window.__studioToast('Orbit centered on selection', 'info');
+        }
       } else if (!meta && !e.shiftKey && !e.altKey && e.key === '/') {
         // Slice 524 — bare / toggles solo: isolate selection + fit.
         // Press again to reveal all and frame everything.
