@@ -531,6 +531,91 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 660 — Smart selection helpers — pick meshes by structural
+  // criteria, not just by clicking.
+  const _allUserMeshes = () => {
+    const out = [];
+    const scene = window.__archdiscScene; if (!scene) return out;
+    scene.traverse((o) => {
+      if (!o.isMesh) return;
+      const ud = o.userData || {};
+      if (ud.archdiscStudioGizmo || ud.archdiscStudioGrid || ud.archdiscStudioGround || ud.archdiscStudioCameraHelper || ud.archdiscStudioAnnotation) return;
+      out.push(o);
+    });
+    return out;
+  };
+
+  window.__studioSelectByPolygon = (points2D) => {
+    if (!Array.isArray(points2D) || points2D.length < 3) return { ok: false, error: 'need ≥3 points' };
+    const v = window.__archdiscViewport; if (!v || !v.camera || !v.renderer) return { ok: false };
+    const size = v.renderer.getSize(new THREE.Vector2());
+    const W = size.x || 800, H = size.y || 600;
+    const ptInPoly = (x, y, poly) => {
+      let inside = false;
+      for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+        const xi = poly[i][0], yi = poly[i][1];
+        const xj = poly[j][0], yj = poly[j][1];
+        const intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi + 1e-12) + xi);
+        if (intersect) inside = !inside;
+      }
+      return inside;
+    };
+    const hits = [];
+    const tmp = new THREE.Vector3();
+    for (const m of _allUserMeshes()) {
+      m.getWorldPosition(tmp).project(v.camera);
+      const sx = (tmp.x * 0.5 + 0.5) * W;
+      const sy = (1 - (tmp.y * 0.5 + 0.5)) * H;
+      if (ptInPoly(sx, sy, points2D)) hits.push(m);
+    }
+    if (window.__studioSelectMeshes) window.__studioSelectMeshes(hits);
+    else if (window.__studioSelectMesh && hits.length) window.__studioSelectMesh(hits[hits.length - 1]);
+    return { ok: true, count: hits.length };
+  };
+
+  window.__studioSelectByMaterialName = (name) => {
+    const target = String(name || '').toLowerCase();
+    const hits = _allUserMeshes().filter((m) => {
+      const mat = Array.isArray(m.material) ? m.material[0] : m.material;
+      return mat && String(mat.name || '').toLowerCase() === target;
+    });
+    if (window.__studioSelectMeshes) window.__studioSelectMeshes(hits);
+    return { ok: true, count: hits.length };
+  };
+
+  window.__studioSelectByKind = (kind) => {
+    const target = String(kind || '');
+    const hits = _allUserMeshes().filter((m) => (m.userData?.archdiscStudioPrimitiveKind || '') === target);
+    if (window.__studioSelectMeshes) window.__studioSelectMeshes(hits);
+    return { ok: true, count: hits.length, kind: target };
+  };
+
+  window.__studioSelectSimilar = () => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel) return { ok: false };
+    const k = sel.userData?.archdiscStudioPrimitiveKind;
+    if (!k) return { ok: false, error: 'no primitive kind' };
+    return window.__studioSelectByKind(k);
+  };
+
+  window.__studioSelectByGeometryFingerprint = () => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel || !sel.geometry) return { ok: false };
+    const v = sel.geometry.attributes.position?.count || 0;
+    const hits = _allUserMeshes().filter((m) => (m.geometry?.attributes.position?.count || 0) === v);
+    if (window.__studioSelectMeshes) window.__studioSelectMeshes(hits);
+    return { ok: true, count: hits.length, vertCount: v };
+  };
+
+  window.__studioGetSelectionCount = () => {
+    if (window.__studioSelectedMeshes) {
+      const r = window.__studioSelectedMeshes();
+      return { ok: true, count: Array.isArray(r) ? r.length : 0 };
+    }
+    const one = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    return { ok: true, count: one ? 1 : 0 };
+  };
+
   // Slice 659 — Scene-wide units & metadata. Lives in scene.userData
   // so it round-trips through scene.toJSON / fromJSON.
   if (!window.__studioSceneMeta) {
