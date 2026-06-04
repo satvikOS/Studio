@@ -531,6 +531,86 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 645 — Environment / sky pack. Wraps scene.environment and
+  // every PBR material's envMapIntensity to control how strongly the
+  // env contributes.
+  window.__studioSetEnvIntensity = (v) => {
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    const i = Math.max(0, Math.min(5, Number(v) ?? 1));
+    scene.traverse((o) => {
+      if (!o.isMesh) return;
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      mats.forEach((m) => { if (m && 'envMapIntensity' in m) { m.envMapIntensity = i; m.needsUpdate = true; } });
+    });
+    if (!scene.userData) scene.userData = {};
+    scene.userData.archdiscStudioEnvIntensity = i;
+    return { ok: true, intensity: i };
+  };
+
+  window.__studioSetEnvRotation = (degrees) => {
+    const scene = window.__archdiscScene; if (!scene || !scene.environment) return { ok: false, error: 'no env' };
+    const rad = (Number(degrees) || 0) * Math.PI / 180;
+    if (typeof scene.environmentRotation?.setFromAxisAngle === 'function') {
+      // r163+ exposes scene.environmentRotation as Euler
+      scene.environmentRotation = new THREE.Euler(0, rad, 0);
+    } else {
+      // older path: rotate the texture's offset/repeat (approximation)
+      scene.environment.offset = scene.environment.offset || new THREE.Vector2();
+      scene.environment.offset.x = degrees / 360;
+      scene.environment.needsUpdate = true;
+    }
+    return { ok: true, degrees };
+  };
+
+  window.__studioToggleEnvAsBackground = (on) => {
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    const want = on === undefined ? !scene.background : !!on;
+    if (want) {
+      if (scene.environment) scene.background = scene.environment;
+      else return { ok: false, error: 'no env' };
+    } else {
+      scene.background = null;
+    }
+    return { ok: true, on: !!scene.background };
+  };
+
+  window.__studioBakeProceduralSky = (top, mid, bot) => {
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    const t = new THREE.Color(top || 0x4060a0);
+    const m = new THREE.Color(mid || 0xc4d0e6);
+    const b = new THREE.Color(bot || 0xeec99c);
+    const data = new Uint8Array(3 * 4);
+    const fill = (i, c) => { data[i*4] = c.r*255 | 0; data[i*4+1] = c.g*255 | 0; data[i*4+2] = c.b*255 | 0; data[i*4+3] = 255; };
+    fill(0, b); fill(1, m); fill(2, t);
+    const tex = new THREE.DataTexture(data, 1, 3, THREE.RGBAFormat);
+    tex.mapping = THREE.EquirectangularReflectionMapping;
+    tex.needsUpdate = true;
+    if (scene.environment && scene.environment.dispose) scene.environment.dispose();
+    scene.environment = tex;
+    return { ok: true, stops: 3 };
+  };
+
+  window.__studioGetEnvState = () => {
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    return {
+      ok: true,
+      hasEnv: !!scene.environment,
+      hasBackground: !!scene.background,
+      intensity: scene.userData?.archdiscStudioEnvIntensity ?? 1,
+    };
+  };
+
+  window.__studioCycleHDRIPreset = () => {
+    if (!window.__studioListHDRIPresets || !window.__studioSetHDRIEnvironment) return { ok: false };
+    const presets = window.__studioListHDRIPresets().presets;
+    if (!Array.isArray(presets)) return { ok: false };
+    if (!window.__studioHDRIIdx) window.__studioHDRIIdx = 0;
+    const next = (window.__studioHDRIIdx + 1) % presets.length;
+    window.__studioHDRIIdx = next;
+    const r = window.__studioSetHDRIEnvironment(presets[next]);
+    return { ok: r.ok, preset: presets[next] };
+  };
+
   // Slice 644 — Freehand 3D strokes: a Blender-grease-pencil-style
   // drawing layer that lives in the scene. Each stroke becomes a
   // THREE.Line so it survives exports.
