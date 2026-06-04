@@ -531,6 +531,125 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 640 — Procedural primitive pack. Six "add" ops that build
+  // geometries the existing primitive bar doesn't cover.
+  const _addAndSelect = (geometry, namePrefix, opts) => {
+    const scene = window.__archdiscScene; if (!scene) return null;
+    const mat = new THREE.MeshStandardMaterial({
+      color: (opts && opts.color) || 0xc4d4e6,
+      roughness: opts?.roughness ?? 0.55,
+      metalness: opts?.metalness ?? 0.15,
+    });
+    const mesh = new THREE.Mesh(geometry, mat);
+    mesh.castShadow = true; mesh.receiveShadow = true;
+    mesh.userData.archdiscStudioPrimitiveKind = namePrefix;
+    mesh.name = namePrefix;
+    scene.add(mesh);
+    if (window.__studioSelectMesh) window.__studioSelectMesh(mesh);
+    return mesh;
+  };
+
+  window.__studioCreateText3D = async (text, opts) => {
+    const o = opts || {};
+    const fontUrl = o.fontUrl || 'https://unpkg.com/three@0.160.0/examples/fonts/helvetiker_regular.typeface.json';
+    const { FontLoader } = await import('three/examples/jsm/loaders/FontLoader.js');
+    const { TextGeometry } = await import('three/examples/jsm/geometries/TextGeometry.js');
+    let fontJson = o.fontJson;
+    if (!fontJson) {
+      try {
+        const res = await fetch(fontUrl); fontJson = await res.json();
+      } catch (e) {
+        return { ok: false, error: 'font load failed: ' + (e?.message || e) };
+      }
+    }
+    const font = new FontLoader().parse(fontJson);
+    const geo = new TextGeometry(String(text || 'Studio'), {
+      font, size: o.size || 0.4, depth: o.depth || 0.08,
+      curveSegments: 6, bevelEnabled: o.bevel ?? true, bevelThickness: 0.01, bevelSize: 0.005, bevelSegments: 2,
+    });
+    geo.center();
+    const mesh = _addAndSelect(geo, 'text3d', o);
+    return { ok: !!mesh, uuid: mesh?.uuid, verts: geo.attributes.position.count };
+  };
+
+  window.__studioCreateTorusKnot = (radius, tube, p, q) => {
+    const geo = new THREE.TorusKnotGeometry(radius || 0.5, tube || 0.15, 128, 16, p || 2, q || 3);
+    const mesh = _addAndSelect(geo, 'torus-knot', { color: 0xff8866 });
+    return { ok: !!mesh, uuid: mesh?.uuid };
+  };
+
+  window.__studioCreateIcosphere = (radius, subdiv) => {
+    const geo = new THREE.IcosahedronGeometry(radius || 0.5, Math.min(4, subdiv || 2));
+    const mesh = _addAndSelect(geo, 'icosphere', { color: 0xaabbff });
+    return { ok: !!mesh, uuid: mesh?.uuid };
+  };
+
+  window.__studioCreateGear = (teeth, innerR, outerR, thickness) => {
+    const T = Math.max(6, Math.min(80, Number(teeth) || 18));
+    const ri = Number(innerR) || 0.15;
+    const ro = Number(outerR) || 0.5;
+    const rt = ro + 0.06;
+    const th = Number(thickness) || 0.15;
+    const shape = new THREE.Shape();
+    for (let i = 0; i < T * 2; i++) {
+      const a = (i / (T * 2)) * Math.PI * 2;
+      const r = i % 2 === 0 ? rt : ro;
+      const x = Math.cos(a) * r, y = Math.sin(a) * r;
+      if (i === 0) shape.moveTo(x, y); else shape.lineTo(x, y);
+    }
+    shape.closePath();
+    const hole = new THREE.Path();
+    hole.absarc(0, 0, ri, 0, Math.PI * 2, true);
+    shape.holes.push(hole);
+    const geo = new THREE.ExtrudeGeometry(shape, { depth: th, bevelEnabled: true, bevelThickness: 0.005, bevelSize: 0.005, bevelSegments: 1, steps: 1 });
+    geo.translate(0, 0, -th / 2);
+    const mesh = _addAndSelect(geo, 'gear', { color: 0x99a0a8, metalness: 0.6, roughness: 0.4 });
+    return { ok: !!mesh, uuid: mesh?.uuid, teeth: T };
+  };
+
+  window.__studioCreateSpring = (turns, radius, height, tube) => {
+    const N = Math.max(2, Math.min(50, Number(turns) || 6));
+    const R = Number(radius) || 0.3;
+    const H = Number(height) || 0.8;
+    const r = Number(tube) || 0.04;
+    const segs = Math.max(64, N * 24);
+    const points = [];
+    for (let i = 0; i <= segs; i++) {
+      const t = i / segs;
+      const a = t * N * Math.PI * 2;
+      points.push(new THREE.Vector3(Math.cos(a) * R, t * H - H / 2, Math.sin(a) * R));
+    }
+    const curve = new THREE.CatmullRomCurve3(points);
+    const geo = new THREE.TubeGeometry(curve, segs, r, 12, false);
+    const mesh = _addAndSelect(geo, 'spring', { color: 0xc8c8d0, metalness: 0.6, roughness: 0.3 });
+    return { ok: !!mesh, uuid: mesh?.uuid, turns: N };
+  };
+
+  window.__studioCreateRoundedBox = (w, h, d, radius, segs) => {
+    const W = Number(w) || 1, H = Number(h) || 1, D = Number(d) || 1;
+    const R = Math.max(0.001, Math.min(Math.min(W, H, D) * 0.45, Number(radius) || 0.15));
+    const S = Math.max(2, Math.min(16, Number(segs) || 6));
+    // Build via Shape extrude with rounded XY profile, then push the
+    // Z faces back so the whole solid has rounded edges; cheap-and-OK.
+    const shape = new THREE.Shape();
+    const halfW = W / 2, halfH = H / 2;
+    shape.moveTo(-halfW + R, -halfH);
+    shape.lineTo(halfW - R, -halfH);
+    shape.quadraticCurveTo(halfW, -halfH, halfW, -halfH + R);
+    shape.lineTo(halfW, halfH - R);
+    shape.quadraticCurveTo(halfW, halfH, halfW - R, halfH);
+    shape.lineTo(-halfW + R, halfH);
+    shape.quadraticCurveTo(-halfW, halfH, -halfW, halfH - R);
+    shape.lineTo(-halfW, -halfH + R);
+    shape.quadraticCurveTo(-halfW, -halfH, -halfW + R, -halfH);
+    const geo = new THREE.ExtrudeGeometry(shape, {
+      depth: D, bevelEnabled: true, bevelSize: R, bevelThickness: R, bevelSegments: S, steps: 1, curveSegments: S,
+    });
+    geo.translate(0, 0, -D / 2);
+    const mesh = _addAndSelect(geo, 'rounded-box', { color: 0xffd9a8, roughness: 0.4, metalness: 0.1 });
+    return { ok: !!mesh, uuid: mesh?.uuid };
+  };
+
   // Slice 639 — Extended I/O. ASCII PLY, binary glTF, SVG paths,
   // image plane, custom-resolution snapshot, scene-state JSON.
   window.__studioExportPlyAscii = () => {
