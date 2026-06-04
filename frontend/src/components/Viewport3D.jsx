@@ -1271,6 +1271,14 @@ function Viewport3D({ canvasId = 'render-canvas', domain = 'mechanical', onReady
               lastFrameMs = now;
             }
             orbitControls.update();
+            // Slice 610 — Composer takes over rendering when post-effects
+            // are enabled (slice 606+). Keep outline-pass selection synced.
+            const composer = window.__archdiscViewport && window.__archdiscViewport.__studioComposer;
+            if (composer) {
+              const sync = window.__archdiscViewport.__studioOutlineSync;
+              if (typeof sync === 'function') { try { sync(); } catch (_) {} }
+              try { composer.render(); return; } catch (_) {}
+            }
             renderer.render(scene, camera);
         }
         rafRef.current = requestAnimationFrame(animate);
