@@ -531,6 +531,101 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 661 — Local file management: scene snapshots stored in
+  // localStorage under studio.v3.files.{name}. Each entry is a stringy
+  // scene.toJSON() payload.
+  const _FILE_PREFIX = 'studio.v3.files.';
+
+  const _readFileNames = () => {
+    const names = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(_FILE_PREFIX)) names.push(k.slice(_FILE_PREFIX.length));
+    }
+    return names.sort();
+  };
+
+  window.__studioFileSave = (name) => {
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    const json = JSON.stringify(scene.toJSON());
+    const n = String(name || `scene_${Date.now()}`);
+    try {
+      localStorage.setItem(_FILE_PREFIX + n, json);
+      return { ok: true, name: n, bytes: json.length };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
+
+  window.__studioFileLoad = async (name) => {
+    const raw = localStorage.getItem(_FILE_PREFIX + name);
+    if (!raw) return { ok: false, error: 'not found' };
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    let parsed;
+    try { parsed = JSON.parse(raw); } catch (e) { return { ok: false, error: 'bad JSON' }; }
+    const loader = new THREE.ObjectLoader();
+    const loaded = await new Promise((resolve) => {
+      try { resolve(loader.parse(parsed)); } catch (e) { resolve(null); }
+    });
+    if (!loaded) return { ok: false, error: 'loader failed' };
+    // Remove existing user meshes
+    const remove = [];
+    scene.traverse((o) => {
+      if (!o.isMesh) return;
+      const ud = o.userData || {};
+      if (ud.archdiscStudioGizmo || ud.archdiscStudioGrid || ud.archdiscStudioGround || ud.archdiscStudioCameraHelper) return;
+      remove.push(o);
+    });
+    for (const o of remove) o.parent?.remove(o);
+    // Add loaded children
+    let added = 0;
+    while (loaded.children.length > 0) {
+      const child = loaded.children[0];
+      loaded.remove(child);
+      scene.add(child);
+      added++;
+    }
+    return { ok: true, added };
+  };
+
+  window.__studioFileList = () => {
+    const names = _readFileNames();
+    return {
+      ok: true,
+      count: names.length,
+      files: names.map((n) => ({
+        name: n,
+        bytes: (localStorage.getItem(_FILE_PREFIX + n) || '').length,
+      })),
+    };
+  };
+
+  window.__studioFileDelete = (name) => {
+    const k = _FILE_PREFIX + name;
+    const had = localStorage.getItem(k) != null;
+    localStorage.removeItem(k);
+    return { ok: true, removed: had };
+  };
+
+  window.__studioFileRename = (oldName, newName) => {
+    const k1 = _FILE_PREFIX + oldName, k2 = _FILE_PREFIX + newName;
+    const v = localStorage.getItem(k1);
+    if (v == null) return { ok: false, error: 'source not found' };
+    if (localStorage.getItem(k2) != null) return { ok: false, error: 'target exists' };
+    localStorage.setItem(k2, v);
+    localStorage.removeItem(k1);
+    return { ok: true, oldName, newName };
+  };
+
+  window.__studioFileExport = (name) => {
+    const r = window.__studioFileSave(name || `export_${new Date().toISOString().replace(/[:.]/g, '-')}`);
+    if (!r.ok) return r;
+    // also produce a downloadable dataUrl
+    const raw = localStorage.getItem(_FILE_PREFIX + r.name);
+    const dataUrl = 'data:application/json;base64,' + btoa(unescape(encodeURIComponent(raw)));
+    return Object.assign({}, r, { dataUrl });
+  };
+
   // Slice 660 — Smart selection helpers — pick meshes by structural
   // criteria, not just by clicking.
   const _allUserMeshes = () => {
