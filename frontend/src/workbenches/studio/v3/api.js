@@ -531,6 +531,49 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 650 — UI / theme / scale / accent pack. Manipulates root
+  // attributes + CSS variables so every styled token responds.
+  window.__studioSetTheme = (theme) => {
+    const valid = ['dark', 'light', 'high-contrast'];
+    const t = valid.includes(theme) ? theme : 'dark';
+    document.documentElement.setAttribute('data-studio-theme', t);
+    try { localStorage.setItem('studio.v3.theme', t); } catch (_) {}
+    return { ok: true, theme: t };
+  };
+
+  window.__studioGetTheme = () => ({
+    ok: true,
+    theme: document.documentElement.getAttribute('data-studio-theme') || 'dark',
+  });
+
+  window.__studioSetUiScale = (s) => {
+    const v = Math.max(0.5, Math.min(2, Number(s) || 1));
+    document.documentElement.style.setProperty('--studio-ui-scale', String(v));
+    document.documentElement.style.fontSize = `${v * 16}px`;
+    try { localStorage.setItem('studio.v3.ui-scale', String(v)); } catch (_) {}
+    return { ok: true, scale: v };
+  };
+
+  window.__studioGetUiScale = () => {
+    const cv = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--studio-ui-scale'));
+    return { ok: true, scale: isNaN(cv) ? 1 : cv };
+  };
+
+  window.__studioSetAccentColor = (hex) => {
+    const c = new THREE.Color(hex || 0x66aaff);
+    const css = `#${c.getHexString()}`;
+    document.documentElement.style.setProperty('--studio-accent', css);
+    document.documentElement.style.setProperty('--studio-accent-soft', css + '55');
+    try { localStorage.setItem('studio.v3.accent', css); } catch (_) {}
+    return { ok: true, accent: css };
+  };
+
+  window.__studioToggleHighContrast = () => {
+    const cur = document.documentElement.getAttribute('data-studio-theme');
+    const next = cur === 'high-contrast' ? 'dark' : 'high-contrast';
+    return window.__studioSetTheme(next);
+  };
+
   // Slice 649 — Collections / selection sets. Named groups of mesh
   // uuids that survive across edit sessions.
   if (!window.__studioCollections) window.__studioCollections = new Map();
