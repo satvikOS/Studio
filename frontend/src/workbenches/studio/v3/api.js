@@ -531,6 +531,84 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 644 — Freehand 3D strokes: a Blender-grease-pencil-style
+  // drawing layer that lives in the scene. Each stroke becomes a
+  // THREE.Line so it survives exports.
+  if (!window.__studioFreehandState) window.__studioFreehandState = { current: null, strokes: [] };
+  const _fh = window.__studioFreehandState;
+
+  window.__studioFreehandStart = (color, thickness) => {
+    if (_fh.current) return { ok: false, error: 'stroke in progress' };
+    _fh.current = {
+      points: [],
+      color: color != null ? color : 0xff5577,
+      thickness: Math.max(1, Number(thickness) || 2),
+    };
+    return { ok: true };
+  };
+
+  window.__studioFreehandPoint = (x, y, z) => {
+    if (!_fh.current) return { ok: false, error: 'no stroke' };
+    _fh.current.points.push([Number(x) || 0, Number(y) || 0, Number(z) || 0]);
+    return { ok: true, count: _fh.current.points.length };
+  };
+
+  window.__studioFreehandEnd = () => {
+    const scene = window.__archdiscScene;
+    if (!_fh.current || !scene) return { ok: false };
+    const pts = _fh.current.points.map((p) => new THREE.Vector3(p[0], p[1], p[2]));
+    if (pts.length < 2) { _fh.current = null; return { ok: false, error: 'too few points' }; }
+    const geo = new THREE.BufferGeometry().setFromPoints(pts);
+    const mat = new THREE.LineBasicMaterial({ color: _fh.current.color, linewidth: _fh.current.thickness });
+    const line = new THREE.Line(geo, mat);
+    line.userData.archdiscStudioFreehand = true;
+    line.name = `freehand_${_fh.strokes.length + 1}`;
+    scene.add(line);
+    _fh.strokes.push({ uuid: line.uuid, object: line, length: _strokeLength(pts) });
+    _fh.current = null;
+    return { ok: true, uuid: line.uuid, points: pts.length };
+  };
+
+  const _strokeLength = (pts) => {
+    let len = 0;
+    for (let i = 1; i < pts.length; i++) len += pts[i].distanceTo(pts[i - 1]);
+    return len;
+  };
+
+  window.__studioFreehandList = () => ({
+    ok: true,
+    count: _fh.strokes.length,
+    strokes: _fh.strokes.map((s) => ({ uuid: s.uuid, length: s.length })),
+  });
+
+  window.__studioFreehandClear = (uuid) => {
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    const idx = _fh.strokes.findIndex((s) => s.uuid === uuid);
+    if (idx < 0) return { ok: false };
+    const rec = _fh.strokes[idx];
+    if (rec.object && rec.object.parent) {
+      rec.object.geometry?.dispose();
+      rec.object.material?.dispose();
+      rec.object.parent.remove(rec.object);
+    }
+    _fh.strokes.splice(idx, 1);
+    return { ok: true, remaining: _fh.strokes.length };
+  };
+
+  window.__studioFreehandClearAll = () => {
+    let n = 0;
+    for (const s of _fh.strokes.slice()) {
+      if (s.object && s.object.parent) {
+        s.object.geometry?.dispose();
+        s.object.material?.dispose();
+        s.object.parent.remove(s.object);
+        n++;
+      }
+    }
+    _fh.strokes.length = 0;
+    return { ok: true, cleared: n };
+  };
+
   // Slice 643 — Geometry analysis / measurement pack. Pure-function
   // readouts that take coordinates or mesh uuids and return numeric
   // results — useful for engineering, QA, BOMs.
