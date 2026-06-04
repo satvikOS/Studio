@@ -182,6 +182,13 @@
 .studio-statusbar { grid-area: statusbar; }
 .studio-cmdbar    { grid-area: cmdbar; }
 
+/* Slice 624 — Maximize viewport: hide every panel except viewport+topbar */
+.studio-v3-maximized .studio-wb-rail,
+.studio-v3-maximized .studio-toolbar,
+.studio-v3-maximized .studio-right,
+.studio-v3-maximized .studio-statusbar,
+.studio-v3-maximized .studio-cmdbar { display: none !important; }
+
 /* ============ Top bar ============ */
 .studio-topbar {
   display: flex;

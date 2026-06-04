@@ -531,6 +531,132 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 624 — Solidify: add a back-face shell at -thickness along
+  // each vertex normal. Doubles vert count.
+  window.__studioSolidify = (thickness) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel || !sel.geometry) return { ok: false, error: 'no selection' };
+    if (window.__studioPushUndo) window.__studioPushUndo('solidify');
+    const t = Number(thickness) || 0.05;
+    const src = sel.geometry.index ? sel.geometry.toNonIndexed() : sel.geometry.clone();
+    src.computeVertexNormals();
+    const sPos = src.attributes.position.array;
+    const sN   = src.attributes.normal.array;
+    const tris = sPos.length / 9;
+    const out = new Float32Array(tris * 2 * 9);
+    // front: copy as-is
+    out.set(sPos, 0);
+    // back: offset by -t * normal, reversed winding
+    for (let i = 0; i < tris; i++) {
+      const off = tris * 9 + i * 9;
+      const s = i * 9;
+      // reverse winding: c, b, a
+      for (let k = 2, w = 0; k >= 0; k--, w++) {
+        out[off + w * 3]     = sPos[s + k * 3]     - sN[s + k * 3]     * t;
+        out[off + w * 3 + 1] = sPos[s + k * 3 + 1] - sN[s + k * 3 + 1] * t;
+        out[off + w * 3 + 2] = sPos[s + k * 3 + 2] - sN[s + k * 3 + 2] * t;
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(out, 3));
+    g.computeVertexNormals();
+    g.computeBoundingBox(); g.computeBoundingSphere();
+    sel.geometry.dispose();
+    sel.geometry = g;
+    if (window.__studioToast) window.__studioToast(`Solidify ${t} → ${g.attributes.position.count} verts`, 'ok');
+    return { ok: true, verts: g.attributes.position.count, thickness: t };
+  };
+
+  // Slice 624 — Invert normals / flip face winding.
+  window.__studioInvertNormals = () => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel || !sel.geometry) return { ok: false, error: 'no selection' };
+    if (window.__studioPushUndo) window.__studioPushUndo('invert-normals');
+    let g = sel.geometry.index ? sel.geometry.toNonIndexed() : sel.geometry;
+    const pos = g.attributes.position;
+    for (let i = 0; i < pos.count; i += 3) {
+      // swap vert 1 and vert 2
+      for (let k = 0; k < 3; k++) {
+        const a = (i + 1) * 3 + k, b = (i + 2) * 3 + k;
+        const t = pos.array[a]; pos.array[a] = pos.array[b]; pos.array[b] = t;
+      }
+    }
+    pos.needsUpdate = true;
+    g.computeVertexNormals();
+    if (sel.geometry !== g) { sel.geometry.dispose(); sel.geometry = g; }
+    return { ok: true };
+  };
+
+  // Slice 624 — Weld coincident verts within eps via mergeVertices.
+  window.__studioWeldByDistance = async (eps) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel || !sel.geometry) return { ok: false, error: 'no selection' };
+    const { mergeVertices } = await import('three/examples/jsm/utils/BufferGeometryUtils.js');
+    const before = (sel.geometry.index ? sel.geometry.toNonIndexed() : sel.geometry).attributes.position.count;
+    const merged = mergeVertices(sel.geometry, Number(eps) || 1e-3);
+    sel.geometry.dispose();
+    sel.geometry = merged;
+    sel.geometry.computeVertexNormals();
+    sel.geometry.computeBoundingBox(); sel.geometry.computeBoundingSphere();
+    const after = merged.attributes.position.count;
+    if (window.__studioToast) window.__studioToast(`Welded ${before} → ${after} verts`, 'ok');
+    return { ok: true, before, after };
+  };
+
+  // Slice 624 — Recenter origin to geometry's bbox centre. The mesh
+  // position moves so the world space stays put.
+  window.__studioCenterOrigin = () => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel || !sel.geometry) return { ok: false, error: 'no selection' };
+    if (window.__studioPushUndo) window.__studioPushUndo('center-origin');
+    sel.geometry.computeBoundingBox();
+    const c = new THREE.Vector3();
+    sel.geometry.boundingBox.getCenter(c);
+    sel.geometry.translate(-c.x, -c.y, -c.z);
+    sel.position.add(c.applyQuaternion(sel.quaternion).multiply(sel.scale));
+    sel.geometry.computeBoundingBox(); sel.geometry.computeBoundingSphere();
+    return { ok: true, offset: [c.x, c.y, c.z] };
+  };
+
+  // Slice 624 — Flat vs smooth shading. Flat: copy face normal to all
+  // 3 verts per tri. Smooth: averaged vertex normals.
+  window.__studioShadingFlat = () => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel || !sel.geometry) return { ok: false, error: 'no selection' };
+    let g = sel.geometry.index ? sel.geometry.toNonIndexed() : sel.geometry;
+    const pos = g.attributes.position;
+    const norms = new Float32Array(pos.count * 3);
+    const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+    const ab = new THREE.Vector3(), ac = new THREE.Vector3(), n = new THREE.Vector3();
+    for (let i = 0; i < pos.count; i += 3) {
+      a.fromArray(pos.array, i * 3);
+      b.fromArray(pos.array, (i + 1) * 3);
+      c.fromArray(pos.array, (i + 2) * 3);
+      ab.subVectors(b, a); ac.subVectors(c, a);
+      n.crossVectors(ab, ac).normalize();
+      for (let k = 0; k < 3; k++) { norms.set([n.x, n.y, n.z], (i + k) * 3); }
+    }
+    g.setAttribute('normal', new THREE.BufferAttribute(norms, 3));
+    if (sel.geometry !== g) { sel.geometry.dispose(); sel.geometry = g; }
+    return { ok: true };
+  };
+  window.__studioShadingSmooth = () => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel || !sel.geometry) return { ok: false, error: 'no selection' };
+    sel.geometry.computeVertexNormals();
+    return { ok: true };
+  };
+
+  // Slice 624 — Toggle maximize: hide left+right panels via a CSS class
+  // on the shell. Mirrors Blender's Ctrl+Space focus mode.
+  window.__studioMaximizeViewport = () => {
+    const shell = document.querySelector('[data-studio-v3-shell]');
+    if (!shell) return { ok: false };
+    const max = !shell.classList.contains('studio-v3-maximized');
+    shell.classList.toggle('studio-v3-maximized', max);
+    return { ok: true, maximized: max };
+  };
+
   // Slice 623 — Subdivide each triangle into 4 by inserting midpoints
   // on every edge. Iteration N multiplies face count by 4. No smoothing
   // (loop/catmull-clark fairing is a future slice) — just splits the
