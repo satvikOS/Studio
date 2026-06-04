@@ -531,6 +531,85 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 641 — Bulk selection / visibility helpers. These operate
+  // across the whole scene so the user can act on big groups without
+  // hunting in the outliner.
+  const _userMeshes = () => {
+    const out = [];
+    const scene = window.__archdiscScene; if (!scene) return out;
+    scene.traverse((o) => {
+      if (!o.isMesh) return;
+      const ud = o.userData;
+      if (ud && (ud.archdiscStudioGizmo || ud.archdiscStudioGrid || ud.archdiscStudioGround || ud.archdiscStudioCameraHelper)) return;
+      out.push(o);
+    });
+    return out;
+  };
+
+  window.__studioSelectByDistance = (point, radius) => {
+    const p = Array.isArray(point) ? point : [0, 0, 0];
+    const r2 = (Number(radius) || 1) ** 2;
+    const hits = [];
+    const v = new THREE.Vector3();
+    for (const m of _userMeshes()) {
+      m.getWorldPosition(v);
+      const d2 = (v.x - p[0])**2 + (v.y - p[1])**2 + (v.z - p[2])**2;
+      if (d2 <= r2) hits.push(m);
+    }
+    if (window.__studioSelectMeshes) window.__studioSelectMeshes(hits);
+    else if (window.__studioSelectMesh && hits.length) window.__studioSelectMesh(hits[hits.length - 1]);
+    return { ok: true, count: hits.length, uuids: hits.map((m) => m.uuid) };
+  };
+
+  window.__studioSelectByName = (pattern) => {
+    if (!pattern) return { ok: false, error: 'pattern required' };
+    let rx;
+    try { rx = pattern instanceof RegExp ? pattern : new RegExp(pattern, 'i'); }
+    catch (_) { return { ok: false, error: 'bad regex' }; }
+    const hits = _userMeshes().filter((m) => rx.test(m.name || ''));
+    if (window.__studioSelectMeshes) window.__studioSelectMeshes(hits);
+    else if (window.__studioSelectMesh && hits.length) window.__studioSelectMesh(hits[hits.length - 1]);
+    return { ok: true, count: hits.length, uuids: hits.map((m) => m.uuid) };
+  };
+
+  window.__studioSelectByMaterialColor = (hex) => {
+    if (hex == null) return { ok: false };
+    const target = new THREE.Color(hex);
+    const hits = _userMeshes().filter((m) => {
+      const mat = Array.isArray(m.material) ? m.material[0] : m.material;
+      if (!mat || !mat.color) return false;
+      return Math.abs(mat.color.r - target.r) < 0.01
+        && Math.abs(mat.color.g - target.g) < 0.01
+        && Math.abs(mat.color.b - target.b) < 0.01;
+    });
+    if (window.__studioSelectMeshes) window.__studioSelectMeshes(hits);
+    else if (window.__studioSelectMesh && hits.length) window.__studioSelectMesh(hits[hits.length - 1]);
+    return { ok: true, count: hits.length, uuids: hits.map((m) => m.uuid) };
+  };
+
+  window.__studioInvertVisibility = () => {
+    let n = 0;
+    for (const m of _userMeshes()) { m.visible = !m.visible; n++; }
+    return { ok: true, toggled: n };
+  };
+
+  window.__studioHideUnselected = () => {
+    const sel = (window.__studioSelectedMeshes && window.__studioSelectedMeshes())
+      || ((window.__studioSelectedMesh && window.__studioSelectedMesh()) ? [window.__studioSelectedMesh()] : []);
+    const set = new Set(sel);
+    let n = 0;
+    for (const m of _userMeshes()) {
+      if (!set.has(m) && m.visible) { m.visible = false; n++; }
+    }
+    return { ok: true, hidden: n };
+  };
+
+  window.__studioShowAll = () => {
+    let n = 0;
+    for (const m of _userMeshes()) { if (!m.visible) { m.visible = true; n++; } }
+    return { ok: true, revealed: n };
+  };
+
   // Slice 640 — Procedural primitive pack. Six "add" ops that build
   // geometries the existing primitive bar doesn't cover.
   const _addAndSelect = (geometry, namePrefix, opts) => {
