@@ -917,6 +917,41 @@ export function registerV3Api() {
     return { ok: true, count: n };
   };
 
+  // Slice 620 — V3 LOD: wrap the active mesh in three.LOD with three
+  // distance tiers. tier 0 is original geometry, 1 is BufferGeometryUtils
+  // mergeVertices+SimplifyModifier removing ~50% verts, 2 ~80%. Lower
+  // tiers swap in at distances [2, 6] world units from the camera.
+  window.__studioCreateLOD = async (dists) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel || !sel.geometry || !sel.material) return { ok: false, error: 'no selection' };
+    if (sel.isLOD || sel.parent?.isLOD) return { ok: false, error: 'already LOD' };
+    const [{ SimplifyModifier }, { mergeVertices }] = await Promise.all([
+      import('three/examples/jsm/modifiers/SimplifyModifier.js'),
+      import('three/examples/jsm/utils/BufferGeometryUtils.js'),
+    ]);
+    const mod = new SimplifyModifier();
+    const base = mergeVertices(sel.geometry.clone(), 1e-3);
+    const count = base.attributes.position.count;
+    const half = mod.modify(base, Math.max(3, Math.floor(count * 0.5)));
+    const low  = mod.modify(base, Math.max(3, Math.floor(count * 0.2)));
+    const lod = new THREE.LOD();
+    lod.position.copy(sel.position);
+    lod.quaternion.copy(sel.quaternion);
+    lod.scale.copy(sel.scale);
+    const matA = Array.isArray(sel.material) ? sel.material[0] : sel.material;
+    const d = Array.isArray(dists) && dists.length === 2 ? dists : [2, 6];
+    lod.addLevel(new THREE.Mesh(sel.geometry, matA), 0);
+    lod.addLevel(new THREE.Mesh(half, matA.clone()), d[0]);
+    lod.addLevel(new THREE.Mesh(low, matA.clone()), d[1]);
+    lod.userData.archdiscStudioLOD = true;
+    const parent = sel.parent || window.__archdiscScene;
+    parent.add(lod);
+    parent.remove(sel);
+    if (window.__studioSelectMesh) window.__studioSelectMesh(lod.levels[0].object);
+    if (window.__studioToast) window.__studioToast(`LOD: ${count} → ${half.attributes.position.count} → ${low.attributes.position.count} verts`, 'ok');
+    return { ok: true, levels: 3, verts: [count, half.attributes.position.count, low.attributes.position.count] };
+  };
+
   // Slice 613 — Create an InstancedMesh from the active mesh as the
   // template + an array of [x, y, z] positions. Useful for forests,
   // crowds, particle-style swarms without N draw calls.
