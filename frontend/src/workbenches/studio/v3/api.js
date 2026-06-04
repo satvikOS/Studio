@@ -531,6 +531,85 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 626 — Camera near/far/fov readout + setters.
+  window.__studioSetCameraFov = (fov) => {
+    const v = window.__archdiscViewport; if (!v || !v.camera || !v.camera.isPerspectiveCamera) return { ok: false };
+    v.camera.fov = Math.max(5, Math.min(170, Number(fov) || 50));
+    v.camera.updateProjectionMatrix();
+    return { ok: true, fov: v.camera.fov };
+  };
+  window.__studioSetCameraNear = (n) => {
+    const v = window.__archdiscViewport; if (!v || !v.camera) return { ok: false };
+    v.camera.near = Math.max(1e-4, Number(n) || 0.1);
+    v.camera.updateProjectionMatrix();
+    return { ok: true, near: v.camera.near };
+  };
+  window.__studioSetCameraFar = (f) => {
+    const v = window.__archdiscViewport; if (!v || !v.camera) return { ok: false };
+    v.camera.far = Math.max(v.camera.near + 1, Number(f) || 1000);
+    v.camera.updateProjectionMatrix();
+    return { ok: true, far: v.camera.far };
+  };
+
+  // Slice 626 — Axis lines: draw a +X/+Y/+Z red/green/blue helper.
+  window.__studioToggleAxisLines = () => {
+    const v = window.__archdiscViewport; if (!v || !v.scene) return { ok: false };
+    let helper = v.__studioAxisHelper;
+    if (helper) {
+      v.scene.remove(helper);
+      helper.geometry.dispose();
+      if (Array.isArray(helper.material)) helper.material.forEach((m) => m.dispose()); else helper.material.dispose();
+      v.__studioAxisHelper = null;
+      return { ok: true, on: false };
+    }
+    helper = new THREE.AxesHelper(2);
+    helper.userData.archdiscStudioGizmo = true;
+    helper.renderOrder = 9999;
+    v.scene.add(helper);
+    v.__studioAxisHelper = helper;
+    return { ok: true, on: true };
+  };
+
+  // Slice 626 — Ground plane toggle: a 100×100 grid-textured plane at y=0.
+  window.__studioToggleGround = () => {
+    const v = window.__archdiscViewport; if (!v || !v.scene) return { ok: false };
+    let ground = v.__studioGround;
+    if (ground) {
+      v.scene.remove(ground);
+      ground.geometry.dispose(); ground.material.dispose();
+      v.__studioGround = null;
+      return { ok: true, on: false };
+    }
+    const geo = new THREE.PlaneGeometry(50, 50);
+    const mat = new THREE.MeshStandardMaterial({ color: 0x303030, roughness: 0.9, metalness: 0 });
+    ground = new THREE.Mesh(geo, mat);
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    ground.userData.archdiscStudioGround = true;
+    v.scene.add(ground);
+    v.__studioGround = ground;
+    return { ok: true, on: true };
+  };
+
+  // Slice 626 — Wireframe overlay for the active mesh: cyan EdgesGeometry.
+  window.__studioToggleWireOverlay = () => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel || !sel.geometry) return { ok: false, error: 'no selection' };
+    if (sel.__studioWireOverlay) {
+      sel.remove(sel.__studioWireOverlay);
+      sel.__studioWireOverlay.geometry.dispose();
+      sel.__studioWireOverlay.material.dispose();
+      sel.__studioWireOverlay = null;
+      return { ok: true, on: false };
+    }
+    const edges = new THREE.EdgesGeometry(sel.geometry, 30);
+    const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x00ffff }));
+    line.userData.archdiscStudioGizmo = true;
+    sel.add(line);
+    sel.__studioWireOverlay = line;
+    return { ok: true, on: true };
+  };
+
   // Slice 625 — Randomize: jitter each vertex by ±strength on every axis.
   window.__studioRandomize = (strength) => {
     const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
