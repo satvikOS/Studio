@@ -88,10 +88,13 @@ function setCameraAxis(axis) {
   const target = (ctrl && ctrl.target) || new THREE.Vector3(0, 0, 0);
   const dist = Math.max(cam.position.distanceTo(target), 0.15);
   let dir;
-  if (axis === 'top')        dir = new THREE.Vector3(0, 1, 0.001);
-  else if (axis === 'front') dir = new THREE.Vector3(0, 0, 1);
-  else if (axis === 'side')  dir = new THREE.Vector3(1, 0, 0);
-  else if (axis === 'persp') dir = new THREE.Vector3(1, 0.7, 1).normalize();
+  if (axis === 'top')         dir = new THREE.Vector3(0, 1, 0.001);
+  else if (axis === 'bottom') dir = new THREE.Vector3(0, -1, 0.001);
+  else if (axis === 'front')  dir = new THREE.Vector3(0, 0, 1);
+  else if (axis === 'back')   dir = new THREE.Vector3(0, 0, -1);
+  else if (axis === 'side')   dir = new THREE.Vector3(1, 0, 0);
+  else if (axis === 'left')   dir = new THREE.Vector3(-1, 0, 0);
+  else if (axis === 'persp')  dir = new THREE.Vector3(1, 0.7, 1).normalize();
   else return { ok: false, error: 'unknown axis' };
   cam.position.copy(target).addScaledVector(dir, dist);
   if (ctrl) { if (ctrl.update) ctrl.update(); }

@@ -7427,15 +7427,20 @@ export function StudioShellV3({ mode = 'dark' }) {
         const next = cycle[(cycle.indexOf(cur) + 1) % cycle.length];
         if (window.__studioSetShadingMode) window.__studioSetShadingMode(next);
         e.preventDefault();
-      } else if (!meta && !e.shiftKey && !e.altKey && (e.code === 'Numpad1' || e.code === 'Numpad3' || e.code === 'Numpad7' || e.code === 'Numpad5')) {
-        // Slice 555 — Numpad-1/3/7 = front/right/top (Blender parity);
-        // Numpad-5 toggles persp/ortho.
+      } else if (!meta && !e.shiftKey && (e.code === 'Numpad1' || e.code === 'Numpad3' || e.code === 'Numpad7' || e.code === 'Numpad5' || e.code === 'NumpadDecimal' || e.code === 'NumpadDivide')) {
+        // Slice 555/622 — Numpad-1/3/7 = front/right/top (Blender parity);
+        // Numpad-5 toggles persp/ortho. Ctrl+Numpad-1/3/7 flips to
+        // back/left/bottom. Numpad-. centres orbit on selection.
+        // Numpad-/ toggles local/isolate view.
         const ae = document.activeElement;
         if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
-        if (e.code === 'Numpad1' && window.__studioSetCameraAxis) window.__studioSetCameraAxis('front');
-        else if (e.code === 'Numpad3' && window.__studioSetCameraAxis) window.__studioSetCameraAxis('side');
-        else if (e.code === 'Numpad7' && window.__studioSetCameraAxis) window.__studioSetCameraAxis('top');
+        const ctrl = e.ctrlKey || e.metaKey;
+        if (e.code === 'Numpad1' && window.__studioSetCameraAxis) window.__studioSetCameraAxis(ctrl ? 'back' : 'front');
+        else if (e.code === 'Numpad3' && window.__studioSetCameraAxis) window.__studioSetCameraAxis(ctrl ? 'left' : 'side');
+        else if (e.code === 'Numpad7' && window.__studioSetCameraAxis) window.__studioSetCameraAxis(ctrl ? 'bottom' : 'top');
         else if (e.code === 'Numpad5' && window.__studioToggleViewProjection) window.__studioToggleViewProjection();
+        else if (e.code === 'NumpadDecimal' && window.__studioFrameSelection) window.__studioFrameSelection();
+        else if (e.code === 'NumpadDivide' && window.__studioToggleIsolateSelection) window.__studioToggleIsolateSelection();
         e.preventDefault();
       } else if (!meta && !e.shiftKey && e.altKey && e.key >= '1' && e.key <= '9') {
         // Slice 537 — Alt+1..9 recalls camera bookmark by index. Bookmark

@@ -531,6 +531,54 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 622 — Frame the active selection: move the camera so the
+  // selection's bounding sphere fills ~half the viewport, and centre
+  // orbit on it. Mirrors Blender's Numpad-.
+  window.__studioFrameSelection = () => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    const v = window.__archdiscViewport;
+    if (!sel || !v || !v.camera) return { ok: false, error: 'no selection' };
+    sel.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(sel);
+    if (box.isEmpty()) return { ok: false, error: 'empty bounds' };
+    const sph = new THREE.Sphere();
+    box.getBoundingSphere(sph);
+    const cam = v.camera;
+    const ctrl = v.orbitControls || v.controls;
+    const fov = (cam.fov || 50) * Math.PI / 180;
+    const dist = Math.max(0.3, sph.radius / Math.sin(fov / 2)) * 1.4;
+    const dir = new THREE.Vector3().subVectors(cam.position, ctrl ? ctrl.target : new THREE.Vector3()).normalize();
+    cam.position.copy(sph.center).addScaledVector(dir, dist);
+    if (ctrl) { ctrl.target.copy(sph.center); if (ctrl.update) ctrl.update(); }
+    cam.lookAt(sph.center);
+    cam.updateMatrixWorld(true);
+    return { ok: true, radius: sph.radius, center: [sph.center.x, sph.center.y, sph.center.z] };
+  };
+
+  // Slice 622 — Isolate selection: hide every other mesh in the scene
+  // (push to a tucked-away parent); toggle restores them. Mirrors
+  // Blender's Numpad-/.
+  if (!window.__studioIsolateStack) window.__studioIsolateStack = [];
+  window.__studioToggleIsolateSelection = () => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel) return { ok: false, error: 'no selection' };
+    if (window.__studioIsolateStack.length > 0) {
+      // restore
+      window.__studioIsolateStack.forEach((rec) => { rec.mesh.visible = rec.was; });
+      window.__studioIsolateStack = [];
+      return { ok: true, isolated: false };
+    }
+    const records = [];
+    window.__archdiscScene.traverse((o) => {
+      if (!o.isMesh || o === sel) return;
+      if (o.userData && (o.userData.archdiscStudioGizmo || o.userData.archdiscStudioGrid || o.userData.archdiscStudioGround)) return;
+      records.push({ mesh: o, was: o.visible });
+      o.visible = false;
+    });
+    window.__studioIsolateStack = records;
+    return { ok: true, isolated: true, hidden: records.length };
+  };
+
   // Slice 621 — Real sculpt brush displacement. point is local-space
   // [x,y,z]; vertices within `size` are pushed along the average of
   // their normals by `strength` × falloff. kind: draw | inflate | smooth.
