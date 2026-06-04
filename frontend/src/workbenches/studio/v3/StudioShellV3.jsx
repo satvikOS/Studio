@@ -5437,6 +5437,7 @@ function LightingSection() {
       </div>
       <HDRIRow />
       <ToneMappingRows />
+      <PostFXSection />
     </div>
   );
 }
@@ -5479,6 +5480,48 @@ function StagePresets() {
               textTransform: 'capitalize',
             }}
           >{p.id}</button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Slice 611 — Post FX panel: Outline / SSAO / Bloom / FXAA toggle chips.
+function PostFXSection() {
+  const items = [
+    { id: 'outline', label: 'Outline', toggle: () => window.__studioToggleOutlinePass && window.__studioToggleOutlinePass(), check: () => !!(window.__archdiscViewport && window.__archdiscViewport.__studioOutlinePass) },
+    { id: 'ssao',    label: 'SSAO',    toggle: () => window.__studioToggleSSAO && window.__studioToggleSSAO(),       check: () => { const c = window.__archdiscViewport && window.__archdiscViewport.__studioComposer; return c && c.passes.some((p) => p.constructor.name === 'SSAOPass'); } },
+    { id: 'bloom',   label: 'Bloom',   toggle: () => window.__studioToggleBloom && window.__studioToggleBloom(),     check: () => { const c = window.__archdiscViewport && window.__archdiscViewport.__studioComposer; return c && c.passes.some((p) => p.constructor.name === 'UnrealBloomPass'); } },
+    { id: 'fxaa',    label: 'FXAA',    toggle: () => window.__studioToggleFXAA && window.__studioToggleFXAA(),       check: () => { const c = window.__archdiscViewport && window.__archdiscViewport.__studioComposer; return c && c.passes.some((p) => p.material && p.material.uniforms && 'resolution' in p.material.uniforms); } },
+  ];
+  const [state, setState] = useState({});
+  useEffect(() => {
+    const read = () => { const s = {}; for (const it of items) s[it.id] = !!it.check(); setState(s); };
+    const id = setInterval(read, 600);
+    read();
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <div className="studio-right-section" data-studio-v3-postfx-section>
+      <div className="studio-right-section-title">Post FX</div>
+      <div className="studio-right-row" style={{ flexWrap: 'wrap', gap: 4 }}>
+        {items.map((it) => (
+          <button
+            key={it.id}
+            type="button"
+            data-studio-v3-postfx={it.id}
+            data-studio-v3-postfx-on={state[it.id] ? 'true' : 'false'}
+            onClick={() => Promise.resolve(it.toggle()).then(() => setTimeout(() => setState((s) => ({ ...s, [it.id]: !s[it.id] })), 50))}
+            style={{
+              flex: '1 1 calc(50% - 4px)', minWidth: 70,
+              padding: '4px 8px', fontSize: 11,
+              background: state[it.id] ? 'var(--studio-accent, #1de9b6)' : 'var(--studio-bg-elev, #161b22)',
+              color: state[it.id] ? '#0d1117' : 'var(--studio-ink, #e6edf3)',
+              border: '1px solid var(--studio-ink-mute, #1f2733)',
+              borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit',
+              fontWeight: state[it.id] ? 600 : 400,
+            }}
+          >{it.label}</button>
         ))}
       </div>
     </div>
