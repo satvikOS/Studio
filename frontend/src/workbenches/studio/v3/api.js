@@ -531,6 +531,58 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 647 — Undo history pack: extend the existing undo stack with
+  // named checkpoints and inspection / cap controls.
+  if (!window.__studioCheckpoints) window.__studioCheckpoints = new Map();
+
+  window.__studioClearUndo = () => {
+    _undo.past.length = 0;
+    _undo.future.length = 0;
+    _undo.labels.length = 0;
+    return { ok: true };
+  };
+
+  window.__studioCheckpoint = (label) => {
+    const name = String(label || `cp_${window.__studioCheckpoints.size + 1}`);
+    const snap = snapshotScene();
+    if (!snap) return { ok: false, error: 'snapshot failed' };
+    window.__studioCheckpoints.set(name, snap);
+    // also push to the regular undo stack so the user can step back
+    _undo.past.push(snap);
+    _undo.labels.push({ label: 'checkpoint:' + name, ts: Date.now() });
+    if (_undo.past.length > 64) { _undo.past.shift(); _undo.labels.shift(); }
+    _undo.future.length = 0;
+    return { ok: true, name, total: window.__studioCheckpoints.size };
+  };
+
+  window.__studioListCheckpoints = () => ({
+    ok: true,
+    names: Array.from(window.__studioCheckpoints.keys()),
+  });
+
+  window.__studioRestoreCheckpoint = (label) => {
+    const snap = window.__studioCheckpoints.get(String(label));
+    if (!snap) return { ok: false, error: 'unknown checkpoint' };
+    const current = snapshotScene();
+    if (current) _undo.future.push(current);
+    return restoreScene(snap);
+  };
+
+  window.__studioGetUndoState = () => ({
+    ok: true,
+    past: _undo.past.length,
+    future: _undo.future.length,
+    latest: _undo.labels.length ? _undo.labels[_undo.labels.length - 1].label : null,
+    checkpoints: window.__studioCheckpoints.size,
+  });
+
+  window.__studioSetUndoLimit = (n) => {
+    const limit = Math.max(1, Math.min(512, Number(n) || 64));
+    while (_undo.past.length > limit) { _undo.past.shift(); _undo.labels.shift(); }
+    window.__studioUndoLimit = limit;
+    return { ok: true, limit };
+  };
+
   // Slice 646 — Performance / scene stats pack.
   window.__studioGetSceneStats = () => {
     const scene = window.__archdiscScene; if (!scene) return { ok: false };
