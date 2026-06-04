@@ -4287,6 +4287,8 @@ function GeometryTools() {
     { id: 'array-z',     label: 'Array ×5 along Z',        call: () => window.__studioCloneAlongAxis && window.__studioCloneAlongAxis('z', 5, 0.05) },
     { id: 'scatter',     label: 'Random scatter ×10',      call: () => window.__studioRandomScatter && window.__studioRandomScatter(10, 0.1) },
     { id: 'polyline-sample', label: 'Sample polyline',     call: () => window.__studioAddPolyline && window.__studioAddPolyline([[0,0,0],[0.05,0.05,0],[0.1,0.02,0.05],[0.15,0.08,-0.03]]) },
+    { id: 'instance-50', label: 'Instance · 50 scatter',   call: () => window.__studioScatterInstances && window.__studioScatterInstances(50, 0.3) },
+    { id: 'instance-200', label: 'Instance · 200 scatter', call: () => window.__studioScatterInstances && window.__studioScatterInstances(200, 0.5) },
   ];
   return (
     <div className="studio-right-section" data-studio-v3-geometry-tools>

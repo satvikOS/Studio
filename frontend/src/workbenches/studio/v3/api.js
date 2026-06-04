@@ -895,6 +895,51 @@ export function registerV3Api() {
     return { ok: true, on: true };
   };
 
+  // Slice 613 — Create an InstancedMesh from the active mesh as the
+  // template + an array of [x, y, z] positions. Useful for forests,
+  // crowds, particle-style swarms without N draw calls.
+  window.__studioInstanceFromSelection = (positions, scale) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel || !sel.geometry) return { ok: false, error: 'no selection' };
+    if (!Array.isArray(positions) || positions.length === 0) return { ok: false, error: 'positions required' };
+    const mat = Array.isArray(sel.material) ? sel.material[0].clone() : sel.material.clone();
+    const im = new THREE.InstancedMesh(sel.geometry.clone(), mat, positions.length);
+    const m = new THREE.Matrix4();
+    const s = Number(scale) || 1;
+    for (let i = 0; i < positions.length; i++) {
+      m.identity();
+      m.makeScale(s, s, s);
+      m.setPosition(positions[i][0], positions[i][1], positions[i][2]);
+      im.setMatrixAt(i, m);
+    }
+    im.instanceMatrix.needsUpdate = true;
+    im.name = `${sel.name || 'mesh'}-instances`;
+    im.castShadow = true; im.receiveShadow = true;
+    im.userData = {
+      archdiscStudioPrimitive: true,
+      archdiscStudioPrimitiveKind: 'instances',
+      archdiscStudioInstanceCount: positions.length,
+      archdiscStudioInstanceFrom: sel.userData.archdiscStudioPrimitiveKind || 'mesh',
+    };
+    const scene = window.__archdiscScene;
+    scene.add(im);
+    if (window.__studioToast) window.__studioToast(`Instanced ×${positions.length}`, 'ok');
+    return { ok: true, uuid: im.uuid, count: positions.length };
+  };
+  window.__studioScatterInstances = (count, radius) => {
+    const n = Math.max(1, Math.min(20000, Math.floor(count || 50)));
+    const r = Math.max(0.001, Number(radius) || 0.3);
+    const positions = [];
+    for (let i = 0; i < n; i++) {
+      positions.push([
+        (Math.random() - 0.5) * 2 * r,
+        0,
+        (Math.random() - 0.5) * 2 * r,
+      ]);
+    }
+    return window.__studioInstanceFromSelection(positions, 1);
+  };
+
   // Slice 605 — Sky gradient background. Builds a 1×64 DataTexture from
   // a linear lerp between top + bottom hex colours and mounts it as the
   // scene.background. EquirectangularReflectionMapping makes it tile
