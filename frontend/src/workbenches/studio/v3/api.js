@@ -765,6 +765,29 @@ export function registerV3Api() {
     return { ok: true, dir, step: s };
   };
 
+  // Slice 608 — Bloom post-effect via UnrealBloomPass.
+  let _bloomPass = null;
+  window.__studioToggleBloom = async () => {
+    const vp = window.__archdiscViewport;
+    if (!vp || !vp.renderer || !vp.scene || !vp.camera) return { ok: false };
+    if (_bloomPass && vp.__studioComposer) {
+      vp.__studioComposer.removePass(_bloomPass);
+      _bloomPass.dispose && _bloomPass.dispose();
+      _bloomPass = null;
+      if (window.__studioToast) window.__studioToast('Bloom off', 'info');
+      return { ok: true, on: false };
+    }
+    if (!vp.__studioComposer && window.__studioToggleOutlinePass) await window.__studioToggleOutlinePass();
+    if (!vp.__studioComposer) return { ok: false, error: 'no composer' };
+    const mod = await import('three/examples/jsm/postprocessing/UnrealBloomPass.js');
+    const dom = vp.renderer.domElement;
+    _bloomPass = new mod.UnrealBloomPass(new THREE.Vector2(dom.clientWidth, dom.clientHeight), 0.4, 0.6, 0.85);
+    const passes = vp.__studioComposer.passes;
+    vp.__studioComposer.insertPass(_bloomPass, Math.max(0, passes.length - 1));
+    if (window.__studioToast) window.__studioToast('Bloom on', 'ok');
+    return { ok: true, on: true };
+  };
+
   // Slice 607 — SSAO post-effect pass; lazy-loads SSAOPass and appends it
   // to the EffectComposer (creating it if needed). Toggleable.
   let _ssaoPass = null;
