@@ -531,6 +531,94 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 643 — Geometry analysis / measurement pack. Pure-function
+  // readouts that take coordinates or mesh uuids and return numeric
+  // results — useful for engineering, QA, BOMs.
+  window.__studioMeasureDistance = (p1, p2) => {
+    if (!Array.isArray(p1) || !Array.isArray(p2)) return { ok: false };
+    const dx = p2[0] - p1[0], dy = p2[1] - p1[1], dz = p2[2] - p1[2];
+    return { ok: true, distance: Math.sqrt(dx*dx + dy*dy + dz*dz) };
+  };
+
+  window.__studioMeasureAngle = (p1, p2, p3) => {
+    if (!Array.isArray(p1) || !Array.isArray(p2) || !Array.isArray(p3)) return { ok: false };
+    const a = new THREE.Vector3(p1[0]-p2[0], p1[1]-p2[1], p1[2]-p2[2]);
+    const b = new THREE.Vector3(p3[0]-p2[0], p3[1]-p2[1], p3[2]-p2[2]);
+    if (a.lengthSq() < 1e-12 || b.lengthSq() < 1e-12) return { ok: false, error: 'degenerate' };
+    const cos = a.normalize().dot(b.normalize());
+    const rad = Math.acos(Math.min(1, Math.max(-1, cos)));
+    return { ok: true, radians: rad, degrees: rad * 180 / Math.PI };
+  };
+
+  const _resolveMeshOrSel = (uuid) => {
+    if (uuid) {
+      const scene = window.__archdiscScene; if (!scene) return null;
+      return scene.getObjectByProperty('uuid', uuid);
+    }
+    return window.__studioSelectedMesh && window.__studioSelectedMesh();
+  };
+
+  window.__studioMeasureBoundingBoxVolume = (uuid) => {
+    const m = _resolveMeshOrSel(uuid);
+    if (!m || !m.geometry) return { ok: false };
+    m.geometry.computeBoundingBox();
+    const bb = m.geometry.boundingBox;
+    const ex = (bb.max.x - bb.min.x) * m.scale.x;
+    const ey = (bb.max.y - bb.min.y) * m.scale.y;
+    const ez = (bb.max.z - bb.min.z) * m.scale.z;
+    return { ok: true, extents: [ex, ey, ez], volume: ex * ey * ez };
+  };
+
+  window.__studioMeasureSurfaceArea = (uuid) => {
+    const m = _resolveMeshOrSel(uuid);
+    if (!m || !m.geometry) return { ok: false };
+    const g = m.geometry.index ? m.geometry.toNonIndexed() : m.geometry;
+    const pos = g.attributes.position.array;
+    let area = 0;
+    const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+    const ab = new THREE.Vector3(), ac = new THREE.Vector3(), cr = new THREE.Vector3();
+    const tris = pos.length / 9;
+    for (let t = 0; t < tris; t++) {
+      a.fromArray(pos, t*9);
+      b.fromArray(pos, t*9 + 3);
+      c.fromArray(pos, t*9 + 6);
+      ab.subVectors(b, a); ac.subVectors(c, a);
+      cr.crossVectors(ab, ac);
+      area += cr.length() / 2;
+    }
+    // apply scale (assuming uniform)
+    const s = m.scale.x * m.scale.y; // approximate area scale
+    return { ok: true, triangles: tris, area, scaledArea: area * s };
+  };
+
+  window.__studioMeasurePivot = (uuid) => {
+    const m = _resolveMeshOrSel(uuid);
+    if (!m || !m.geometry) return { ok: false };
+    m.geometry.computeBoundingBox();
+    const c = new THREE.Vector3();
+    m.geometry.boundingBox.getCenter(c);
+    c.multiply(m.scale);
+    c.applyQuaternion(m.quaternion);
+    c.add(m.position);
+    return { ok: true, center: [c.x, c.y, c.z] };
+  };
+
+  window.__studioMeasureGetStats = (uuid) => {
+    const m = _resolveMeshOrSel(uuid);
+    if (!m || !m.geometry) return { ok: false };
+    const v = m.geometry.attributes.position?.count || 0;
+    const tris = m.geometry.index ? m.geometry.index.count / 3 : v / 3;
+    const vol = window.__studioMeasureBoundingBoxVolume(uuid);
+    const area = window.__studioMeasureSurfaceArea(uuid);
+    return {
+      ok: true,
+      vertices: v,
+      triangles: tris,
+      volume: vol.volume || 0,
+      surfaceArea: area.scaledArea || area.area || 0,
+    };
+  };
+
   // Slice 642 — Procedural texture pack. Six canvas-based generators
   // that return a CanvasTexture (srgb) and apply it as the active
   // mesh's material map.
