@@ -531,6 +531,57 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 649 — Collections / selection sets. Named groups of mesh
+  // uuids that survive across edit sessions.
+  if (!window.__studioCollections) window.__studioCollections = new Map();
+  const _coll = window.__studioCollections;
+
+  window.__studioCollectionCreate = (name) => {
+    const n = String(name || `coll_${_coll.size + 1}`);
+    if (_coll.has(n)) return { ok: false, error: 'exists' };
+    _coll.set(n, new Set());
+    return { ok: true, name: n, count: _coll.size };
+  };
+
+  window.__studioCollectionAddSelected = (name) => {
+    if (!_coll.has(name)) _coll.set(name, new Set());
+    const set = _coll.get(name);
+    const list = (window.__studioSelectedMeshes && window.__studioSelectedMeshes())
+      || ((window.__studioSelectedMesh && window.__studioSelectedMesh()) ? [window.__studioSelectedMesh()] : []);
+    for (const m of list) if (m && m.uuid) set.add(m.uuid);
+    return { ok: true, name, size: set.size };
+  };
+
+  window.__studioCollectionRemove = (name, uuid) => {
+    if (!_coll.has(name)) return { ok: false };
+    const set = _coll.get(name);
+    const had = set.delete(uuid);
+    return { ok: true, removed: had, size: set.size };
+  };
+
+  window.__studioCollectionList = () => ({
+    ok: true,
+    collections: Array.from(_coll.entries()).map(([k, v]) => ({ name: k, size: v.size })),
+  });
+
+  window.__studioCollectionSelectAll = (name) => {
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    if (!_coll.has(name)) return { ok: false, error: 'unknown' };
+    const hits = [];
+    for (const uuid of _coll.get(name)) {
+      const m = scene.getObjectByProperty('uuid', uuid);
+      if (m) hits.push(m);
+    }
+    if (window.__studioSelectMeshes) window.__studioSelectMeshes(hits);
+    else if (window.__studioSelectMesh && hits.length) window.__studioSelectMesh(hits[hits.length - 1]);
+    return { ok: true, count: hits.length };
+  };
+
+  window.__studioCollectionDelete = (name) => {
+    const had = _coll.delete(name);
+    return { ok: true, removed: had, count: _coll.size };
+  };
+
   // Slice 648 — Orbit / view-controls tuning pack. Six dials that
   // tweak the camera's OrbitControls in place.
   const _orbit = () => {
