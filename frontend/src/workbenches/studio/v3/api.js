@@ -531,6 +531,71 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 635 — Lightweight 2D sketch: build a polyline in the XZ plane
+  // then extrude (Y) or revolve (around Y) into a real mesh.
+  if (!window.__studioSketchState) window.__studioSketchState = { points: [], closed: false };
+  const _sk = window.__studioSketchState;
+
+  window.__studioSketchAddPoint = (x, z) => {
+    _sk.points.push([Number(x) || 0, Number(z) || 0]);
+    return { ok: true, count: _sk.points.length };
+  };
+
+  window.__studioSketchClose = () => {
+    _sk.closed = true;
+    return { ok: true, closed: true, count: _sk.points.length };
+  };
+
+  window.__studioSketchClear = () => {
+    _sk.points.length = 0;
+    _sk.closed = false;
+    return { ok: true };
+  };
+
+  window.__studioSketchGetPoints = () => ({
+    ok: true,
+    points: _sk.points.slice(),
+    closed: _sk.closed,
+  });
+
+  window.__studioSketchExtrude = (depth) => {
+    if (_sk.points.length < 3) return { ok: false, error: 'need ≥3 points' };
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    const d = Number(depth) || 1;
+    const shape = new THREE.Shape();
+    shape.moveTo(_sk.points[0][0], _sk.points[0][1]);
+    for (let i = 1; i < _sk.points.length; i++) shape.lineTo(_sk.points[i][0], _sk.points[i][1]);
+    if (_sk.closed) shape.closePath();
+    const geo = new THREE.ExtrudeGeometry(shape, { depth: d, bevelEnabled: false, steps: 1 });
+    geo.rotateX(-Math.PI / 2); // lay XZ flat on ground
+    const mat = new THREE.MeshStandardMaterial({ color: 0xffaa66, roughness: 0.7, metalness: 0.1 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.userData.archdiscStudioPrimitiveKind = 'sketch-extrude';
+    mesh.name = 'sketch_extrude';
+    scene.add(mesh);
+    if (window.__studioSelectMesh) window.__studioSelectMesh(mesh);
+    if (window.__studioToast) window.__studioToast(`Extrude depth ${d}`, 'ok');
+    return { ok: true, uuid: mesh.uuid, depth: d, verts: geo.attributes.position.count };
+  };
+
+  window.__studioSketchRevolve = (segments, angleDeg) => {
+    if (_sk.points.length < 2) return { ok: false, error: 'need ≥2 points' };
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    const segs = Math.max(3, Math.min(360, Number(segments) || 64));
+    const span = (Number(angleDeg) || 360) * Math.PI / 180;
+    // Lathe wants Vector2 [x=radius, y=height]; map sketch.x → radius, sketch.z → height.
+    const pts = _sk.points.map(([x, z]) => new THREE.Vector2(Math.abs(x), z));
+    const geo = new THREE.LatheGeometry(pts, segs, 0, span);
+    const mat = new THREE.MeshStandardMaterial({ color: 0x66aaff, roughness: 0.5, metalness: 0.2, side: THREE.DoubleSide });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.userData.archdiscStudioPrimitiveKind = 'sketch-revolve';
+    mesh.name = 'sketch_revolve';
+    scene.add(mesh);
+    if (window.__studioSelectMesh) window.__studioSelectMesh(mesh);
+    if (window.__studioToast) window.__studioToast(`Revolve ${segs} segs`, 'ok');
+    return { ok: true, uuid: mesh.uuid, segments: segs, verts: geo.attributes.position.count };
+  };
+
   // Slice 634 — Object constraint pack: per-frame ties between meshes.
   // Each constraint stores {kind, source, target, opts}. Applied every
   // frame via the viewport anim tick chain so they survive pause/play.
