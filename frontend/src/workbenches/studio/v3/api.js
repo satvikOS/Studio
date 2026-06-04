@@ -531,6 +531,127 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 639 — Extended I/O. ASCII PLY, binary glTF, SVG paths,
+  // image plane, custom-resolution snapshot, scene-state JSON.
+  window.__studioExportPlyAscii = () => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel || !sel.geometry) return { ok: false, error: 'no selection' };
+    let g = sel.geometry.index ? sel.geometry.toNonIndexed() : sel.geometry;
+    const pos = g.attributes.position;
+    const norm = g.attributes.normal;
+    const n = pos.count;
+    const faceCount = Math.floor(n / 3);
+    const lines = [
+      'ply', 'format ascii 1.0',
+      `element vertex ${n}`,
+      'property float x', 'property float y', 'property float z',
+    ];
+    if (norm) lines.push('property float nx', 'property float ny', 'property float nz');
+    lines.push(`element face ${faceCount}`, 'property list uchar int vertex_indices', 'end_header');
+    for (let i = 0; i < n; i++) {
+      const r = [pos.array[i*3], pos.array[i*3+1], pos.array[i*3+2]];
+      if (norm) r.push(norm.array[i*3], norm.array[i*3+1], norm.array[i*3+2]);
+      lines.push(r.map((v) => v.toFixed(6)).join(' '));
+    }
+    for (let i = 0; i < faceCount; i++) lines.push(`3 ${i*3} ${i*3+1} ${i*3+2}`);
+    return { ok: true, text: lines.join('\n'), verts: n, faces: faceCount };
+  };
+
+  window.__studioExportGlbBinary = async () => {
+    const v = window.__archdiscViewport; if (!v || !v.scene) return { ok: false };
+    const { GLTFExporter } = await import('three/examples/jsm/exporters/GLTFExporter.js');
+    return new Promise((resolve) => {
+      new GLTFExporter().parse(
+        v.scene,
+        (buf) => resolve({ ok: true, bytes: buf.byteLength, buffer: buf }),
+        (err) => resolve({ ok: false, error: err?.message || 'export failed' }),
+        { binary: true },
+      );
+    });
+  };
+
+  window.__studioImportSvgPaths = async (svgText, depth) => {
+    if (!svgText) return { ok: false, error: 'empty svg' };
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    const { SVGLoader } = await import('three/examples/jsm/loaders/SVGLoader.js');
+    const loader = new SVGLoader();
+    const data = loader.parse(svgText);
+    const group = new THREE.Group();
+    const d = Number(depth);
+    for (const p of data.paths) {
+      const shapes = SVGLoader.createShapes(p);
+      for (const shape of shapes) {
+        const geo = d > 0
+          ? new THREE.ExtrudeGeometry(shape, { depth: d, bevelEnabled: false })
+          : new THREE.ShapeGeometry(shape);
+        const mat = new THREE.MeshStandardMaterial({
+          color: (p.userData && p.userData.style && p.userData.style.fill) || 0xeeeeee,
+          side: THREE.DoubleSide, roughness: 0.6, metalness: 0,
+        });
+        const mesh = new THREE.Mesh(geo, mat);
+        group.add(mesh);
+      }
+    }
+    // SVG y-axis is flipped vs three.js; scale Y by -1.
+    group.scale.y = -1;
+    group.userData.archdiscStudioPrimitiveKind = 'svg-import';
+    group.name = 'svg_import';
+    scene.add(group);
+    return { ok: true, uuid: group.uuid, paths: data.paths.length };
+  };
+
+  window.__studioImportImagePlane = (dataUrl, width) => new Promise((resolve) => {
+    if (!dataUrl) { resolve({ ok: false, error: 'empty dataUrl' }); return; }
+    const scene = window.__archdiscScene;
+    if (!scene) { resolve({ ok: false }); return; }
+    const img = new Image();
+    img.onload = () => {
+      const w = Number(width) || 2;
+      const h = w * (img.height / img.width);
+      const geo = new THREE.PlaneGeometry(w, h);
+      const tex = new THREE.Texture(img);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.needsUpdate = true;
+      const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.userData.archdiscStudioPrimitiveKind = 'image-plane';
+      mesh.name = 'image_plane';
+      scene.add(mesh);
+      resolve({ ok: true, uuid: mesh.uuid, width: w, height: h });
+    };
+    img.onerror = () => resolve({ ok: false, error: 'load failed' });
+    img.src = dataUrl;
+  });
+
+  window.__studioExportSnapshotPng = (width, height) => {
+    const v = window.__archdiscViewport;
+    if (!v || !v.renderer || !v.camera || !v.scene) return { ok: false };
+    const w = Math.max(64, Number(width) || 1024);
+    const h = Math.max(64, Number(height) || 1024);
+    const renderer = v.renderer;
+    const oldSize = renderer.getSize(new THREE.Vector2());
+    const oldPR = renderer.getPixelRatio();
+    const oldAspect = v.camera.aspect;
+    renderer.setSize(w, h, false);
+    renderer.setPixelRatio(1);
+    v.camera.aspect = w / h;
+    v.camera.updateProjectionMatrix();
+    renderer.render(v.scene, v.camera);
+    const url = renderer.domElement.toDataURL('image/png');
+    renderer.setSize(oldSize.x, oldSize.y, false);
+    renderer.setPixelRatio(oldPR);
+    v.camera.aspect = oldAspect;
+    v.camera.updateProjectionMatrix();
+    return { ok: true, dataUrl: url, width: w, height: h };
+  };
+
+  window.__studioExportSceneJson = () => {
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    const out = scene.toJSON();
+    const json = JSON.stringify(out);
+    return { ok: true, bytes: json.length, json };
+  };
+
   // Slice 638 — Multi-camera registry. We don't swap the renderer's
   // active camera (that's the main viewport's job); instead we record
   // PerspectiveCamera transforms as scene objects with CameraHelper
