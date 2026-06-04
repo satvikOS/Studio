@@ -531,6 +531,71 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 659 — Scene-wide units & metadata. Lives in scene.userData
+  // so it round-trips through scene.toJSON / fromJSON.
+  if (!window.__studioSceneMeta) {
+    window.__studioSceneMeta = {
+      units: 'm',
+      scale: 1,
+      author: '',
+      title: '',
+      createdAt: new Date().toISOString(),
+      custom: {},
+    };
+  }
+  const _meta = window.__studioSceneMeta;
+  const _writeMetaToScene = () => {
+    const scene = window.__archdiscScene;
+    if (scene) {
+      if (!scene.userData) scene.userData = {};
+      scene.userData.archdiscStudioMeta = JSON.parse(JSON.stringify(_meta));
+    }
+  };
+
+  const _UNIT_TO_M = { mm: 0.001, cm: 0.01, m: 1, in: 0.0254, ft: 0.3048 };
+
+  window.__studioSetSceneUnits = (units) => {
+    if (!_UNIT_TO_M[units]) return { ok: false, valid: Object.keys(_UNIT_TO_M) };
+    _meta.units = units;
+    _writeMetaToScene();
+    return { ok: true, units, factor: _UNIT_TO_M[units] };
+  };
+
+  window.__studioGetSceneUnits = () => ({
+    ok: true,
+    units: _meta.units,
+    factor: _UNIT_TO_M[_meta.units] || 1,
+  });
+
+  window.__studioSetSceneScale = (s) => {
+    const v = Math.max(1e-6, Number(s) || 1);
+    _meta.scale = v;
+    _writeMetaToScene();
+    return { ok: true, scale: v };
+  };
+
+  window.__studioGetSceneMetadata = () => ({
+    ok: true,
+    meta: JSON.parse(JSON.stringify(_meta)),
+  });
+
+  window.__studioSetSceneMetadata = (key, value) => {
+    if (!key) return { ok: false };
+    if (key in _meta && key !== 'custom') {
+      _meta[key] = value;
+    } else {
+      _meta.custom[String(key)] = value;
+    }
+    _writeMetaToScene();
+    return { ok: true, key, value };
+  };
+
+  // Convert a value in scene units to metres (handy for physics / FEM).
+  window.__studioConvertToMeters = (value) => ({
+    ok: true,
+    meters: Number(value) * _meta.scale * (_UNIT_TO_M[_meta.units] || 1),
+  });
+
   // Slice 658 — TransformControls gizmo pack: 6 wrappers around the
   // Viewport3D-owned TransformControls instance.
   const _tc = () => {
