@@ -531,6 +531,125 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 630 — UV planar projection along one axis. Maps the two
+  // remaining axes onto u/v, normalized to the bounding box.
+  window.__studioUvProjectPlanar = (axis) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel || !sel.geometry) return { ok: false };
+    if (window.__studioPushUndo) window.__studioPushUndo('uv-planar');
+    sel.geometry.computeBoundingBox();
+    const bb = sel.geometry.boundingBox;
+    const pos = sel.geometry.attributes.position;
+    const uv = new Float32Array(pos.count * 2);
+    const ax = (axis || 'y').toLowerCase();
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.array[i * 3], y = pos.array[i * 3 + 1], z = pos.array[i * 3 + 2];
+      let u, v;
+      if (ax === 'x') { u = (z - bb.min.z) / (bb.max.z - bb.min.z || 1); v = (y - bb.min.y) / (bb.max.y - bb.min.y || 1); }
+      else if (ax === 'z') { u = (x - bb.min.x) / (bb.max.x - bb.min.x || 1); v = (y - bb.min.y) / (bb.max.y - bb.min.y || 1); }
+      else { u = (x - bb.min.x) / (bb.max.x - bb.min.x || 1); v = (z - bb.min.z) / (bb.max.z - bb.min.z || 1); }
+      uv[i * 2] = u; uv[i * 2 + 1] = v;
+    }
+    sel.geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    return { ok: true, axis: ax, count: pos.count };
+  };
+
+  // Slice 630 — Cube projection: pick the dominant face normal per
+  // triangle, project the 3 verts to that face's 2D plane.
+  window.__studioUvProjectCube = () => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel || !sel.geometry) return { ok: false };
+    if (window.__studioPushUndo) window.__studioPushUndo('uv-cube');
+    let g = sel.geometry.index ? sel.geometry.toNonIndexed() : sel.geometry;
+    g.computeBoundingBox();
+    const bb = g.boundingBox;
+    const ex = bb.max.x - bb.min.x || 1, ey = bb.max.y - bb.min.y || 1, ez = bb.max.z - bb.min.z || 1;
+    const pos = g.attributes.position;
+    const uv = new Float32Array(pos.count * 2);
+    const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+    const ab = new THREE.Vector3(), ac = new THREE.Vector3(), n = new THREE.Vector3();
+    for (let t = 0; t < pos.count; t += 3) {
+      a.fromArray(pos.array, t * 3);
+      b.fromArray(pos.array, (t + 1) * 3);
+      c.fromArray(pos.array, (t + 2) * 3);
+      n.crossVectors(ab.subVectors(b, a), ac.subVectors(c, a)).normalize();
+      const ax = Math.abs(n.x), ay = Math.abs(n.y), az = Math.abs(n.z);
+      const map = (vert) => {
+        const i = vert * 2;
+        if (ax >= ay && ax >= az)      { uv[i] = (pos.array[vert*3+2] - bb.min.z) / ez; uv[i+1] = (pos.array[vert*3+1] - bb.min.y) / ey; }
+        else if (ay >= ax && ay >= az) { uv[i] = (pos.array[vert*3]   - bb.min.x) / ex; uv[i+1] = (pos.array[vert*3+2] - bb.min.z) / ez; }
+        else                           { uv[i] = (pos.array[vert*3]   - bb.min.x) / ex; uv[i+1] = (pos.array[vert*3+1] - bb.min.y) / ey; }
+      };
+      map(t); map(t + 1); map(t + 2);
+    }
+    g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    if (sel.geometry !== g) { sel.geometry.dispose(); sel.geometry = g; }
+    return { ok: true, count: pos.count };
+  };
+
+  // Slice 630 — Spherical projection: u = atan2(x,z)/2π+0.5, v = asin(y/|p|)/π+0.5.
+  window.__studioUvProjectSphere = () => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel || !sel.geometry) return { ok: false };
+    if (window.__studioPushUndo) window.__studioPushUndo('uv-sphere');
+    const pos = sel.geometry.attributes.position;
+    const uv = new Float32Array(pos.count * 2);
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.array[i * 3], y = pos.array[i * 3 + 1], z = pos.array[i * 3 + 2];
+      const r = Math.sqrt(x * x + y * y + z * z) || 1e-6;
+      uv[i * 2]     = Math.atan2(x, z) / (Math.PI * 2) + 0.5;
+      uv[i * 2 + 1] = Math.asin(y / r) / Math.PI + 0.5;
+    }
+    sel.geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    return { ok: true, count: pos.count };
+  };
+
+  // Slice 630 — Cylindrical projection (Y-axis): u = atan2(x,z)/2π+0.5, v = (y-min)/extent.
+  window.__studioUvProjectCylinder = () => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel || !sel.geometry) return { ok: false };
+    if (window.__studioPushUndo) window.__studioPushUndo('uv-cyl');
+    sel.geometry.computeBoundingBox();
+    const bb = sel.geometry.boundingBox;
+    const ext = bb.max.y - bb.min.y || 1;
+    const pos = sel.geometry.attributes.position;
+    const uv = new Float32Array(pos.count * 2);
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.array[i * 3], y = pos.array[i * 3 + 1], z = pos.array[i * 3 + 2];
+      uv[i * 2]     = Math.atan2(x, z) / (Math.PI * 2) + 0.5;
+      uv[i * 2 + 1] = (y - bb.min.y) / ext;
+    }
+    sel.geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    return { ok: true, count: pos.count };
+  };
+
+  // Slice 630 — UV scale (tile or shrink texture).
+  window.__studioUvScale = (s) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel || !sel.geometry || !sel.geometry.attributes.uv) return { ok: false };
+    const sc = Number(s) || 1;
+    const uv = sel.geometry.attributes.uv;
+    for (let i = 0; i < uv.array.length; i++) uv.array[i] *= sc;
+    uv.needsUpdate = true;
+    return { ok: true, scale: sc };
+  };
+
+  // Slice 630 — UV rotate (deg).
+  window.__studioUvRotate = (deg) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel || !sel.geometry || !sel.geometry.attributes.uv) return { ok: false };
+    const a = (Number(deg) || 0) * Math.PI / 180;
+    const cos = Math.cos(a), sin = Math.sin(a);
+    const uv = sel.geometry.attributes.uv;
+    for (let i = 0; i < uv.array.length; i += 2) {
+      const u = uv.array[i] - 0.5, v = uv.array[i + 1] - 0.5;
+      uv.array[i]     = u * cos - v * sin + 0.5;
+      uv.array[i + 1] = u * sin + v * cos + 0.5;
+    }
+    uv.needsUpdate = true;
+    return { ok: true, deg };
+  };
+
   // Slice 629 — Lightweight keyframe + playback system. Tracks are
   // keyed by mesh uuid + property; play() builds an AnimationClip and
   // runs it through a THREE.AnimationMixer driven by the viewport tick.
