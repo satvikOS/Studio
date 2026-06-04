@@ -4071,6 +4071,14 @@ function TransformRows() {
         {numIn('scale', 'y', m.scale.y.toFixed(4))}
         {numIn('scale', 'z', m.scale.z.toFixed(4))}
       </div>
+      {/* Slice 618 — Quaternion readout (read-only). */}
+      <div className="studio-right-row" style={{ alignItems: 'center' }}>
+        <span>Quat</span>
+        <strong
+          data-studio-v3-quaternion
+          style={{ fontFamily: 'var(--studio-mono, ui-monospace)', fontSize: 10, opacity: 0.85 }}
+        >{[m.quaternion.x, m.quaternion.y, m.quaternion.z, m.quaternion.w].map((n) => n.toFixed(3)).join(', ')}</strong>
+      </div>
     </div>
   );
 }
