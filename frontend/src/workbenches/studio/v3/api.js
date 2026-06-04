@@ -531,6 +531,86 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 621 — Real sculpt brush displacement. point is local-space
+  // [x,y,z]; vertices within `size` are pushed along the average of
+  // their normals by `strength` × falloff. kind: draw | inflate | smooth.
+  window.__studioSculptBrushApply = (point) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel || !sel.geometry || !sel.geometry.attributes.position) {
+      return { ok: false, error: 'no selection' };
+    }
+    const brush = window.__studioSculptBrush;
+    const pos = sel.geometry.attributes.position;
+    let normal = sel.geometry.attributes.normal;
+    if (!normal) { sel.geometry.computeVertexNormals(); normal = sel.geometry.attributes.normal; }
+    const p = Array.isArray(point) ? point : [0, 0, 0];
+    const size = brush.size || 0.04;
+    const strength = brush.strength || 0.3;
+    const falloff = brush.falloff || 0.6;
+    const r2 = size * size;
+    let touched = 0;
+    const tmp = new THREE.Vector3();
+    const tmpN = new THREE.Vector3();
+    if (window.__studioPushUndo) window.__studioPushUndo('sculpt');
+    if (brush.kind === 'smooth') {
+      // simple laplacian: average each vertex within radius with neighbors
+      const original = new Float32Array(pos.array);
+      for (let i = 0; i < pos.count; i++) {
+        tmp.fromArray(original, i * 3);
+        const d2 = (tmp.x - p[0]) ** 2 + (tmp.y - p[1]) ** 2 + (tmp.z - p[2]) ** 2;
+        if (d2 > r2) continue;
+        const w = Math.pow(1 - Math.sqrt(d2) / size, falloff * 4 + 0.1);
+        let cx = 0, cy = 0, cz = 0, n = 0;
+        for (let j = 0; j < pos.count; j++) {
+          if (i === j) continue;
+          const dx = original[j * 3] - tmp.x;
+          const dy = original[j * 3 + 1] - tmp.y;
+          const dz = original[j * 3 + 2] - tmp.z;
+          if (dx * dx + dy * dy + dz * dz < r2 * 0.25) {
+            cx += original[j * 3]; cy += original[j * 3 + 1]; cz += original[j * 3 + 2]; n++;
+          }
+        }
+        if (n > 0) {
+          pos.array[i * 3]     = tmp.x + ((cx / n) - tmp.x) * w * strength;
+          pos.array[i * 3 + 1] = tmp.y + ((cy / n) - tmp.y) * w * strength;
+          pos.array[i * 3 + 2] = tmp.z + ((cz / n) - tmp.z) * w * strength;
+          touched++;
+        }
+      }
+    } else {
+      const sign = brush.kind === 'inflate' ? 1 : (brush.kind === 'pinch' ? -1 : 1);
+      for (let i = 0; i < pos.count; i++) {
+        tmp.fromArray(pos.array, i * 3);
+        const dx = tmp.x - p[0], dy = tmp.y - p[1], dz = tmp.z - p[2];
+        const d2 = dx * dx + dy * dy + dz * dz;
+        if (d2 > r2) continue;
+        const t = 1 - Math.sqrt(d2) / size;
+        const w = Math.pow(t, falloff * 4 + 0.1);
+        if (brush.kind === 'inflate') {
+          tmpN.fromArray(normal.array, i * 3);
+          pos.array[i * 3]     += tmpN.x * w * strength * sign;
+          pos.array[i * 3 + 1] += tmpN.y * w * strength * sign;
+          pos.array[i * 3 + 2] += tmpN.z * w * strength * sign;
+        } else {
+          // draw: push along brush direction (default +Y; or supplied normal)
+          tmpN.fromArray(normal.array, i * 3);
+          pos.array[i * 3]     += tmpN.x * w * strength * sign;
+          pos.array[i * 3 + 1] += tmpN.y * w * strength * sign;
+          pos.array[i * 3 + 2] += tmpN.z * w * strength * sign;
+        }
+        touched++;
+      }
+    }
+    pos.needsUpdate = true;
+    sel.geometry.computeVertexNormals();
+    if (sel.geometry.boundsTree) {
+      try { sel.geometry.computeBoundsTree(); } catch (_) {}
+    }
+    sel.geometry.computeBoundingBox();
+    sel.geometry.computeBoundingSphere();
+    return { ok: true, touched };
+  };
+
   // Slice 570 — Bake the selected mesh's world matrix into its geometry,
   // then reset position/rotation/scale to identity. Useful for snapshotting
   // a transformed mesh into a fresh primitive.
