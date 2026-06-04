@@ -565,35 +565,30 @@ export function registerV3Api() {
     return { ok: true, uuid: helper.uuid };
   };
 
-  window.__studioShowFaceNormals = async (uuid, length) => {
+  window.__studioShowFaceNormals = (uuid, length) => {
     const scene = window.__archdiscScene; if (!scene) return { ok: false };
     const m = uuid ? scene.getObjectByProperty('uuid', uuid) : (window.__studioSelectedMesh && window.__studioSelectedMesh());
     if (!m || !m.geometry) return { ok: false };
-    let helper = null;
-    try {
-      const mod = await import('three/examples/jsm/helpers/FaceNormalsHelper.js');
-      const F = mod.FaceNormalsHelper || mod.default;
-      helper = new F(m, Number(length) || 0.1, 0xff6677);
-    } catch (_) {
-      // Fallback: per-face midpoint arrows.
-      const g = m.geometry.index ? m.geometry.toNonIndexed() : m.geometry;
-      const pos = g.attributes.position.array;
-      const positions = [];
-      const len = Number(length) || 0.1;
-      const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
-      const ab = new THREE.Vector3(), ac = new THREE.Vector3(), n = new THREE.Vector3(), mid = new THREE.Vector3();
-      for (let t = 0; t < pos.length / 9; t++) {
-        a.fromArray(pos, t * 9); b.fromArray(pos, t * 9 + 3); c.fromArray(pos, t * 9 + 6);
-        ab.subVectors(b, a); ac.subVectors(c, a);
-        n.crossVectors(ab, ac).normalize();
-        mid.set((a.x + b.x + c.x) / 3, (a.y + b.y + c.y) / 3, (a.z + b.z + c.z) / 3);
-        positions.push(mid.x, mid.y, mid.z, mid.x + n.x * len, mid.y + n.y * len, mid.z + n.z * len);
-      }
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-      helper = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: 0xff6677 }));
-      m.add(helper);
+    // Inline per-tri midpoint-to-normal segments — three.js dropped its
+    // bundled FaceNormalsHelper; ours is good enough and lives in scene
+    // space tracked by the helper registry.
+    const g = m.geometry.index ? m.geometry.toNonIndexed() : m.geometry;
+    const pos = g.attributes.position.array;
+    const positions = [];
+    const len = Number(length) || 0.1;
+    const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+    const ab = new THREE.Vector3(), ac = new THREE.Vector3(), n = new THREE.Vector3(), mid = new THREE.Vector3();
+    for (let t = 0; t < pos.length / 9; t++) {
+      a.fromArray(pos, t * 9); b.fromArray(pos, t * 9 + 3); c.fromArray(pos, t * 9 + 6);
+      ab.subVectors(b, a); ac.subVectors(c, a);
+      n.crossVectors(ab, ac).normalize();
+      mid.set((a.x + b.x + c.x) / 3, (a.y + b.y + c.y) / 3, (a.z + b.z + c.z) / 3);
+      positions.push(mid.x, mid.y, mid.z, mid.x + n.x * len, mid.y + n.y * len, mid.z + n.z * len);
     }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    const helper = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: 0xff6677 }));
+    m.add(helper);
     _addHelper(helper, 'fnormals');
     return { ok: true, uuid: helper.uuid };
   };
