@@ -531,6 +531,92 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 636 — Modifier stack. A "recipe" of {kind, opts} stored on
+  // mesh.userData.archdiscStudioModifiers. The user can add / list /
+  // reorder / remove before baking via applyAll. Kinds map to existing
+  // __studio* ops so we don't reinvent the modifiers themselves.
+  const _modifierMap = {
+    subdivide: (o) => window.__studioSubdivide(o?.iters ?? 1),
+    solidify:  (o) => window.__studioSolidify(o?.thickness ?? 0.05),
+    invert:    () => window.__studioInvertNormals(),
+    weld:      (o) => window.__studioWeldByDistance(o?.eps ?? 1e-3),
+    triangulate: () => window.__studioTriangulate(),
+    decimate:  (o) => window.__studioDecimate(o?.ratio ?? 0.5),
+    spherify:  (o) => window.__studioSpherify(o?.radius ?? 1),
+    randomize: (o) => window.__studioRandomize(o?.strength ?? 0.02),
+    voxelize:  (o) => window.__studioVoxelize(o?.size ?? 0.1),
+    cast:      (o) => window.__studioCastToSphere(o?.strength ?? 1, o?.radius ?? 1),
+    smooth:    () => window.__studioShadingSmooth(),
+    flat:      () => window.__studioShadingFlat(),
+    twist:     (o) => window.__studioTwistY(o?.degrees ?? 90),
+    bend:      (o) => window.__studioBendYZ(o?.degrees ?? 45),
+    taper:     (o) => window.__studioTaperY(o?.topRatio ?? 0.5),
+  };
+
+  const _modList = (sel) => {
+    if (!sel.userData) sel.userData = {};
+    if (!Array.isArray(sel.userData.archdiscStudioModifiers)) sel.userData.archdiscStudioModifiers = [];
+    return sel.userData.archdiscStudioModifiers;
+  };
+
+  window.__studioModifierAdd = (kind, opts) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel) return { ok: false, error: 'no selection' };
+    if (!_modifierMap[kind]) return { ok: false, error: 'unknown kind: ' + kind };
+    const list = _modList(sel);
+    list.push({ kind, opts: opts || {} });
+    return { ok: true, count: list.length, stack: list.map((m) => m.kind) };
+  };
+
+  window.__studioModifierList = () => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel) return { ok: false };
+    return { ok: true, stack: _modList(sel).slice() };
+  };
+
+  window.__studioModifierRemove = (idx) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel) return { ok: false };
+    const list = _modList(sel);
+    if (idx < 0 || idx >= list.length) return { ok: false, error: 'out of range' };
+    const removed = list.splice(idx, 1)[0];
+    return { ok: true, removed: removed.kind, count: list.length };
+  };
+
+  window.__studioModifierReorder = (from, to) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel) return { ok: false };
+    const list = _modList(sel);
+    if (from < 0 || from >= list.length || to < 0 || to >= list.length) return { ok: false };
+    const [m] = list.splice(from, 1);
+    list.splice(to, 0, m);
+    return { ok: true, stack: list.map((x) => x.kind) };
+  };
+
+  window.__studioModifierApply = async (idx) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel) return { ok: false };
+    const list = _modList(sel);
+    if (idx < 0 || idx >= list.length) return { ok: false };
+    const m = list[idx];
+    const r = await _modifierMap[m.kind](m.opts);
+    list.splice(idx, 1);
+    return { ok: true, applied: m.kind, result: r };
+  };
+
+  window.__studioModifierApplyAll = async () => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel) return { ok: false };
+    const list = _modList(sel);
+    const applied = [];
+    for (const m of list.slice()) {
+      const r = await _modifierMap[m.kind](m.opts);
+      applied.push({ kind: m.kind, result: r });
+    }
+    list.length = 0;
+    return { ok: true, applied };
+  };
+
   // Slice 635 — Lightweight 2D sketch: build a polyline in the XZ plane
   // then extrude (Y) or revolve (around Y) into a real mesh.
   if (!window.__studioSketchState) window.__studioSketchState = { points: [], closed: false };
