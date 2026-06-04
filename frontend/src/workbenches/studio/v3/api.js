@@ -531,6 +531,116 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 646 — Performance / scene stats pack.
+  window.__studioGetSceneStats = () => {
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    let meshes = 0, verts = 0, tris = 0, lights = 0;
+    const matSet = new Set();
+    scene.traverse((o) => {
+      if (o.isLight) lights++;
+      if (!o.isMesh) return;
+      meshes++;
+      const v = o.geometry?.attributes?.position?.count || 0;
+      verts += v;
+      tris += o.geometry?.index ? (o.geometry.index.count / 3) : (v / 3);
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      mats.forEach((m) => { if (m) matSet.add(m.uuid); });
+    });
+    const v = window.__archdiscViewport;
+    const info = v?.renderer?.info;
+    return {
+      ok: true,
+      meshes, lights, verts, triangles: tris,
+      materials: matSet.size,
+      drawCalls: info?.render?.calls ?? null,
+      memoryGeo: info?.memory?.geometries ?? null,
+      memoryTex: info?.memory?.textures ?? null,
+    };
+  };
+
+  if (!window.__studioFpsState) window.__studioFpsState = { last: performance.now(), frames: [], hist: [] };
+  const _fps = window.__studioFpsState;
+
+  // hook into AnimTick once so every frame is counted
+  const _attachFpsTick = () => {
+    const v = window.__archdiscViewport; if (!v) return;
+    if (v.__studioAnimTick && v.__studioAnimTick.__fps) return;
+    const prev = v.__studioAnimTick;
+    const fn = (now) => {
+      const t = now ?? performance.now();
+      const dt = t - _fps.last; _fps.last = t;
+      _fps.frames.push(dt);
+      if (_fps.frames.length > 120) _fps.frames.shift();
+      if (_fps.recording) _fps.hist.push(dt);
+      if (prev) prev(t);
+    };
+    fn.__fps = true; fn.__prev = prev;
+    v.__studioAnimTick = fn;
+  };
+
+  window.__studioGetFps = () => {
+    _attachFpsTick();
+    if (!_fps.frames.length) return { ok: true, fps: 0, samples: 0 };
+    const avg = _fps.frames.reduce((a, b) => a + b, 0) / _fps.frames.length;
+    return { ok: true, fps: avg > 0 ? 1000 / avg : 0, samples: _fps.frames.length };
+  };
+
+  window.__studioStartProfile = () => {
+    _attachFpsTick();
+    _fps.hist.length = 0;
+    _fps.recording = true;
+    _fps.startedAt = performance.now();
+    return { ok: true };
+  };
+
+  window.__studioStopProfile = () => {
+    _fps.recording = false;
+    const samples = _fps.hist.length;
+    if (!samples) return { ok: true, samples: 0 };
+    const sum = _fps.hist.reduce((a, b) => a + b, 0);
+    const sorted = _fps.hist.slice().sort((a, b) => a - b);
+    const avg = sum / samples;
+    const p50 = sorted[Math.floor(samples / 2)];
+    const p95 = sorted[Math.floor(samples * 0.95)];
+    const max = sorted[samples - 1];
+    return {
+      ok: true,
+      samples,
+      durationMs: performance.now() - _fps.startedAt,
+      avgFrameMs: avg,
+      avgFps: avg > 0 ? 1000 / avg : 0,
+      p50: p50, p95: p95, max,
+    };
+  };
+
+  window.__studioClearScene = () => {
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    const remove = [];
+    scene.traverse((o) => {
+      if (!o.isMesh && !o.isLine && !(o.isLight && !o.userData?.archdiscStudioKeyLight)) return;
+      const ud = o.userData;
+      if (ud && (ud.archdiscStudioGizmo || ud.archdiscStudioGrid || ud.archdiscStudioGround || ud.archdiscStudioCameraHelper)) return;
+      remove.push(o);
+    });
+    let n = 0;
+    for (const o of remove) {
+      if (o.parent) {
+        o.geometry?.dispose?.();
+        const mats = Array.isArray(o.material) ? o.material : [o.material];
+        mats.forEach((m) => m && m.dispose && m.dispose());
+        o.parent.remove(o); n++;
+      }
+    }
+    return { ok: true, removed: n };
+  };
+
+  window.__studioSetRendererPixelRatio = (r) => {
+    const v = window.__archdiscViewport; if (!v || !v.renderer) return { ok: false };
+    const pr = Math.max(0.25, Math.min(window.devicePixelRatio || 2, Number(r) || 1));
+    v.renderer.setPixelRatio(pr);
+    return { ok: true, pixelRatio: pr };
+  };
+
   // Slice 645 — Environment / sky pack. Wraps scene.environment and
   // every PBR material's envMapIntensity to control how strongly the
   // env contributes.
