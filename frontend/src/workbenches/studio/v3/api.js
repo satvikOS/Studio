@@ -531,6 +531,76 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 652 — Mesh clipboard / duplicate pack. Maintains a stack of
+  // mesh snapshots that can be pasted as fresh instances. Each
+  // snapshot is a {geometry clone, material clone, world transform}.
+  if (!window.__studioMeshClipboard) window.__studioMeshClipboard = [];
+
+  const _snapshotMesh = (mesh) => {
+    if (!mesh || !mesh.geometry) return null;
+    return {
+      geometry: mesh.geometry.clone(),
+      material: (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material)?.clone() || new THREE.MeshStandardMaterial(),
+      position: mesh.position.toArray(),
+      quaternion: mesh.quaternion.toArray(),
+      scale: mesh.scale.toArray(),
+      name: mesh.name || '',
+      userData: { archdiscStudioPrimitiveKind: mesh.userData?.archdiscStudioPrimitiveKind || 'pasted' },
+    };
+  };
+
+  window.__studioClipboardCopy = (uuid) => {
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    let target = null;
+    if (uuid) target = scene.getObjectByProperty('uuid', uuid);
+    else target = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!target) return { ok: false, error: 'no target' };
+    const snap = _snapshotMesh(target);
+    if (!snap) return { ok: false };
+    window.__studioMeshClipboard.push(snap);
+    return { ok: true, depth: window.__studioMeshClipboard.length };
+  };
+
+  window.__studioClipboardPaste = (offset) => {
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    const top = window.__studioMeshClipboard[window.__studioMeshClipboard.length - 1];
+    if (!top) return { ok: false, error: 'empty' };
+    const mesh = new THREE.Mesh(top.geometry.clone(), top.material.clone());
+    mesh.position.fromArray(top.position);
+    mesh.quaternion.fromArray(top.quaternion);
+    mesh.scale.fromArray(top.scale);
+    const off = Array.isArray(offset) ? offset : [0.5, 0, 0];
+    mesh.position.x += off[0]; mesh.position.y += off[1]; mesh.position.z += off[2];
+    mesh.name = (top.name || 'paste') + '_copy';
+    mesh.userData = Object.assign({}, top.userData);
+    scene.add(mesh);
+    if (window.__studioSelectMesh) window.__studioSelectMesh(mesh);
+    return { ok: true, uuid: mesh.uuid };
+  };
+
+  window.__studioClipboardClear = () => {
+    const n = window.__studioMeshClipboard.length;
+    window.__studioMeshClipboard.forEach((s) => { s.geometry?.dispose(); s.material?.dispose(); });
+    window.__studioMeshClipboard.length = 0;
+    return { ok: true, cleared: n };
+  };
+
+  window.__studioClipboardCount = () => ({ ok: true, count: window.__studioMeshClipboard.length });
+
+  window.__studioClipboardHasContent = () => ({
+    ok: true,
+    has: window.__studioMeshClipboard.length > 0,
+  });
+
+  window.__studioClipboardDuplicateSelected = (offset) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel) return { ok: false };
+    const snap = _snapshotMesh(sel);
+    if (!snap) return { ok: false };
+    window.__studioMeshClipboard.push(snap);
+    return window.__studioClipboardPaste(offset);
+  };
+
   // Slice 651 — Material library: built-in PBR presets + a per-user
   // saved-preset map persisted to localStorage.
   const _MATERIAL_PRESETS = {
