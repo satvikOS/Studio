@@ -5345,6 +5345,27 @@ function DisplaySection() {
     { id: 'archie-status', label: 'Archie dot', defaultOn: true, onChange: (v) => { const el = document.querySelector('[data-studio-v3-archie-status]'); if (el) el.style.display = v ? '' : 'none'; } },
     { id: 'keypress', label: 'Keypress flash', defaultOn: false, onChange: () => {} },
     { id: 'ground', label: 'Shadow ground', defaultOn: true, onChange: (v) => { if (window.__studioSetGroundVisible) window.__studioSetGroundVisible(v); } },
+    { id: 'safe-area', label: 'Safe area', defaultOn: false, onChange: (v) => {
+      let el = document.querySelector('[data-studio-v3-safe-area]');
+      if (v) {
+        if (!el) {
+          const vp = document.querySelector('[data-studio-v3-viewport]');
+          if (!vp) return;
+          el = document.createElement('div');
+          el.setAttribute('data-studio-v3-safe-area', '');
+          el.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:3;';
+          const box = (pct, color) => {
+            const b = document.createElement('div');
+            const inset = `${pct}%`;
+            b.style.cssText = `position:absolute;top:${inset};right:${inset};bottom:${inset};left:${inset};border:1px dashed ${color};`;
+            return b;
+          };
+          el.appendChild(box(5, 'rgba(255,200,100,0.5)'));   // action safe
+          el.appendChild(box(10, 'rgba(255,80,80,0.5)'));    // title safe
+          vp.appendChild(el);
+        }
+      } else if (el) { el.parentNode.removeChild(el); }
+    } },
     { id: 'letterbox', label: 'Cinema bars', defaultOn: false, onChange: (v) => {
       let el = document.querySelector('[data-studio-v3-letterbox]');
       if (v) {
