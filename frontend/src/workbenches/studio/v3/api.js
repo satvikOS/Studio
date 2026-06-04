@@ -531,6 +531,110 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 662 — Math / geometry query helpers. These let callers do
+  // precise scene introspection without poking at the viewport directly.
+  window.__studioMathProjectToScreen = (point) => {
+    const v = window.__archdiscViewport; if (!v || !v.camera || !v.renderer) return { ok: false };
+    const p = new THREE.Vector3(...(point || [0, 0, 0]));
+    p.project(v.camera);
+    const size = v.renderer.getSize(new THREE.Vector2());
+    return {
+      ok: true,
+      ndc: [p.x, p.y, p.z],
+      pixel: [(p.x * 0.5 + 0.5) * size.x, (1 - (p.y * 0.5 + 0.5)) * size.y],
+    };
+  };
+
+  window.__studioMathScreenToWorld = (pixel, depth) => {
+    const v = window.__archdiscViewport; if (!v || !v.camera || !v.renderer) return { ok: false };
+    const size = v.renderer.getSize(new THREE.Vector2());
+    const x = (pixel?.[0] ?? 0) / size.x * 2 - 1;
+    const y = -((pixel?.[1] ?? 0) / size.y * 2 - 1);
+    const z = depth === undefined ? 0.5 : Number(depth);
+    const ndc = new THREE.Vector3(x, y, z);
+    ndc.unproject(v.camera);
+    return { ok: true, world: [ndc.x, ndc.y, ndc.z] };
+  };
+
+  window.__studioMathCenterOfMass = (uuid) => {
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    const m = uuid ? scene.getObjectByProperty('uuid', uuid) : (window.__studioSelectedMesh && window.__studioSelectedMesh());
+    if (!m || !m.geometry) return { ok: false };
+    const g = m.geometry.index ? m.geometry.toNonIndexed() : m.geometry;
+    const pos = g.attributes.position.array;
+    const tris = pos.length / 9;
+    let totalArea = 0, cx = 0, cy = 0, cz = 0;
+    const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+    const ab = new THREE.Vector3(), ac = new THREE.Vector3(), cr = new THREE.Vector3();
+    for (let t = 0; t < tris; t++) {
+      a.fromArray(pos, t * 9);
+      b.fromArray(pos, t * 9 + 3);
+      c.fromArray(pos, t * 9 + 6);
+      ab.subVectors(b, a); ac.subVectors(c, a);
+      const area = cr.crossVectors(ab, ac).length() / 2;
+      totalArea += area;
+      cx += area * (a.x + b.x + c.x) / 3;
+      cy += area * (a.y + b.y + c.y) / 3;
+      cz += area * (a.z + b.z + c.z) / 3;
+    }
+    if (totalArea < 1e-12) return { ok: false, error: 'degenerate' };
+    return { ok: true, center: [cx / totalArea, cy / totalArea, cz / totalArea], area: totalArea };
+  };
+
+  window.__studioMathRayFromScreen = (pixelX, pixelY) => {
+    const v = window.__archdiscViewport; if (!v || !v.camera || !v.renderer) return { ok: false };
+    const size = v.renderer.getSize(new THREE.Vector2());
+    const x = (pixelX / size.x) * 2 - 1;
+    const y = -((pixelY / size.y) * 2 - 1);
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera({ x, y }, v.camera);
+    return {
+      ok: true,
+      origin: [ray.ray.origin.x, ray.ray.origin.y, ray.ray.origin.z],
+      direction: [ray.ray.direction.x, ray.ray.direction.y, ray.ray.direction.z],
+    };
+  };
+
+  window.__studioMathClosestRayHit = (pixelX, pixelY) => {
+    const v = window.__archdiscViewport; if (!v) return { ok: false };
+    const size = v.renderer.getSize(new THREE.Vector2());
+    const x = (pixelX / size.x) * 2 - 1;
+    const y = -((pixelY / size.y) * 2 - 1);
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera({ x, y }, v.camera);
+    const meshes = [];
+    window.__archdiscScene.traverse((o) => {
+      if (o.isMesh && !(o.userData && (o.userData.archdiscStudioGizmo || o.userData.archdiscStudioGrid || o.userData.archdiscStudioGround))) {
+        meshes.push(o);
+      }
+    });
+    const hits = ray.intersectObjects(meshes, false);
+    if (!hits.length) return { ok: true, hit: null };
+    const h = hits[0];
+    return {
+      ok: true,
+      hit: {
+        uuid: h.object.uuid,
+        point: [h.point.x, h.point.y, h.point.z],
+        distance: h.distance,
+        face: h.faceIndex,
+      },
+    };
+  };
+
+  window.__studioMathBoundingSphere = (uuid) => {
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    const m = uuid ? scene.getObjectByProperty('uuid', uuid) : (window.__studioSelectedMesh && window.__studioSelectedMesh());
+    if (!m || !m.geometry) return { ok: false };
+    m.geometry.computeBoundingSphere();
+    const s = m.geometry.boundingSphere;
+    if (!s) return { ok: false };
+    m.updateMatrixWorld(true);
+    const c = s.center.clone().applyMatrix4(m.matrixWorld);
+    const sc = Math.max(Math.abs(m.scale.x), Math.abs(m.scale.y), Math.abs(m.scale.z));
+    return { ok: true, center: [c.x, c.y, c.z], radius: s.radius * sc };
+  };
+
   // Slice 661 — Local file management: scene snapshots stored in
   // localStorage under studio.v3.files.{name}. Each entry is a stringy
   // scene.toJSON() payload.
