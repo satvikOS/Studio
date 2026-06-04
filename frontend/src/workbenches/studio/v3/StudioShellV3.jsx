@@ -1279,6 +1279,7 @@ const KEYMAP = [
     ['Cmd+L', 'Toggle transform lock on selection'],
     ['Cmd+R', 'Reset camera home'],
     ['Cmd+J', 'Join multi-selected meshes'],
+    ['Cmd+] / Cmd+[', 'Cycle selection next / prev'],
     ['Alt+1..9', 'Recall camera bookmark by index'],
     ['Numpad 1/3/7', 'Front / Right / Top camera (Blender parity)'],
     ['Numpad 5', 'Toggle perspective / ortho'],
@@ -7450,6 +7451,24 @@ export function StudioShellV3({ mode = 'dark' }) {
         if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
         if (window.__studioJoinSelected) window.__studioJoinSelected();
         e.preventDefault();
+      } else if (meta && !e.shiftKey && !e.altKey && (e.key === ']' || e.key === '[')) {
+        // Slice 612 — Cmd+] / Cmd+[ cycle selection through visible
+        // archdisc primitives in scene-graph order.
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        e.preventDefault();
+        const s = window.__archdiscScene;
+        if (!s) return;
+        const list = [];
+        s.traverse((o) => { if (o.userData && o.userData.archdiscStudioPrimitive && o.visible !== false) list.push(o); });
+        if (!list.length) return;
+        const cur = window.__studioSelectedMesh && window.__studioSelectedMesh();
+        const idx = cur ? list.findIndex((m) => m.uuid === cur.uuid) : -1;
+        const next = e.key === ']'
+          ? (idx + 1) % list.length
+          : (idx <= 0 ? list.length - 1 : idx - 1);
+        if (window.__studioSelectMesh) window.__studioSelectMesh(list[next]);
+        if (window.__studioToast) window.__studioToast(`${next + 1}/${list.length}: ${list[next].name || 'mesh'}`, 'info');
       } else if (meta && !e.shiftKey && !e.altKey && (e.key === 'r' || e.key === 'R')) {
         // Slice 556 — Cmd+R resets the camera home.
         const ae = document.activeElement;
