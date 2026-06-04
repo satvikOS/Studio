@@ -765,6 +765,34 @@ export function registerV3Api() {
     return { ok: true, dir, step: s };
   };
 
+  // Slice 609 — FXAA antialias pass.
+  let _fxaaPass = null;
+  window.__studioToggleFXAA = async () => {
+    const vp = window.__archdiscViewport;
+    if (!vp || !vp.renderer) return { ok: false };
+    if (_fxaaPass && vp.__studioComposer) {
+      vp.__studioComposer.removePass(_fxaaPass);
+      _fxaaPass.dispose && _fxaaPass.dispose();
+      _fxaaPass = null;
+      if (window.__studioToast) window.__studioToast('FXAA off', 'info');
+      return { ok: true, on: false };
+    }
+    if (!vp.__studioComposer && window.__studioToggleOutlinePass) await window.__studioToggleOutlinePass();
+    if (!vp.__studioComposer) return { ok: false, error: 'no composer' };
+    const [passMod, shaderMod] = await Promise.all([
+      import('three/examples/jsm/postprocessing/ShaderPass.js'),
+      import('three/examples/jsm/shaders/FXAAShader.js'),
+    ]);
+    _fxaaPass = new passMod.ShaderPass(shaderMod.FXAAShader);
+    const dom = vp.renderer.domElement;
+    const dpr = vp.renderer.getPixelRatio();
+    _fxaaPass.material.uniforms.resolution.value.set(1 / (dom.clientWidth * dpr), 1 / (dom.clientHeight * dpr));
+    const passes = vp.__studioComposer.passes;
+    vp.__studioComposer.insertPass(_fxaaPass, Math.max(0, passes.length - 1));
+    if (window.__studioToast) window.__studioToast('FXAA on', 'ok');
+    return { ok: true, on: true };
+  };
+
   // Slice 608 — Bloom post-effect via UnrealBloomPass.
   let _bloomPass = null;
   window.__studioToggleBloom = async () => {
