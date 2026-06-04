@@ -531,6 +531,79 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 628 — Convert active material to MeshPhysicalMaterial if it
+  // isn't already, so clearcoat / transmission / ior slots exist.
+  const _ensurePhys = (sel) => {
+    if (!sel.material) return null;
+    const cur = Array.isArray(sel.material) ? sel.material[0] : sel.material;
+    if (cur.isMeshPhysicalMaterial) return cur;
+    const next = new THREE.MeshPhysicalMaterial({
+      color: cur.color ? cur.color.clone() : new THREE.Color(0xffffff),
+      map: cur.map || null,
+      roughness: cur.roughness ?? 0.5,
+      metalness: cur.metalness ?? 0,
+      emissive: cur.emissive ? cur.emissive.clone() : new THREE.Color(0),
+      emissiveIntensity: cur.emissiveIntensity ?? 1,
+      vertexColors: !!cur.vertexColors,
+    });
+    if (Array.isArray(sel.material)) sel.material[0] = next; else sel.material = next;
+    cur.dispose();
+    return next;
+  };
+
+  window.__studioSetEmissive = (hex, intensity) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel) return { ok: false };
+    const m = _ensurePhys(sel); if (!m) return { ok: false };
+    if (hex !== undefined) m.emissive.set(hex);
+    if (intensity !== undefined) m.emissiveIntensity = Math.max(0, Number(intensity));
+    m.needsUpdate = true;
+    return { ok: true, hex: '#' + m.emissive.getHexString(), intensity: m.emissiveIntensity };
+  };
+  window.__studioSetRoughness = (v) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel) return { ok: false };
+    const m = _ensurePhys(sel); if (!m) return { ok: false };
+    m.roughness = Math.max(0, Math.min(1, Number(v) || 0));
+    m.needsUpdate = true;
+    return { ok: true, roughness: m.roughness };
+  };
+  window.__studioSetMetalness = (v) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel) return { ok: false };
+    const m = _ensurePhys(sel); if (!m) return { ok: false };
+    m.metalness = Math.max(0, Math.min(1, Number(v) || 0));
+    m.needsUpdate = true;
+    return { ok: true, metalness: m.metalness };
+  };
+  window.__studioSetClearcoat = (v, rough) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel) return { ok: false };
+    const m = _ensurePhys(sel); if (!m) return { ok: false };
+    m.clearcoat = Math.max(0, Math.min(1, Number(v) || 0));
+    if (rough !== undefined) m.clearcoatRoughness = Math.max(0, Math.min(1, Number(rough)));
+    m.needsUpdate = true;
+    return { ok: true, clearcoat: m.clearcoat, clearcoatRoughness: m.clearcoatRoughness };
+  };
+  window.__studioSetTransmission = (v, thickness) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel) return { ok: false };
+    const m = _ensurePhys(sel); if (!m) return { ok: false };
+    m.transmission = Math.max(0, Math.min(1, Number(v) || 0));
+    if (thickness !== undefined) m.thickness = Math.max(0, Number(thickness));
+    m.transparent = m.transmission > 0;
+    m.needsUpdate = true;
+    return { ok: true, transmission: m.transmission, thickness: m.thickness };
+  };
+  window.__studioSetIor = (v) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel) return { ok: false };
+    const m = _ensurePhys(sel); if (!m) return { ok: false };
+    m.ior = Math.max(1, Math.min(2.5, Number(v) || 1.5));
+    m.needsUpdate = true;
+    return { ok: true, ior: m.ior };
+  };
+
   // Slice 627 — Add a free-floating point light.
   window.__studioAddPointLight = (pos, color, intensity) => {
     const v = window.__archdiscViewport; if (!v || !v.scene) return { ok: false };
