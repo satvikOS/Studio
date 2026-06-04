@@ -531,6 +531,60 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 648 — Orbit / view-controls tuning pack. Six dials that
+  // tweak the camera's OrbitControls in place.
+  const _orbit = () => {
+    const v = window.__archdiscViewport;
+    return (v && (v.orbitControls || v.controls)) || null;
+  };
+
+  window.__studioSetOrbitSpeed = (s) => {
+    const c = _orbit(); if (!c) return { ok: false };
+    c.rotateSpeed = Math.max(0.05, Math.min(5, Number(s) || 1));
+    return { ok: true, rotateSpeed: c.rotateSpeed };
+  };
+
+  window.__studioSetZoomSpeed = (s) => {
+    const c = _orbit(); if (!c) return { ok: false };
+    c.zoomSpeed = Math.max(0.05, Math.min(5, Number(s) || 1));
+    return { ok: true, zoomSpeed: c.zoomSpeed };
+  };
+
+  window.__studioSetPanSpeed = (s) => {
+    const c = _orbit(); if (!c) return { ok: false };
+    c.panSpeed = Math.max(0.05, Math.min(5, Number(s) || 1));
+    return { ok: true, panSpeed: c.panSpeed };
+  };
+
+  window.__studioSetDamping = (factor) => {
+    const c = _orbit(); if (!c) return { ok: false };
+    const f = Math.max(0, Math.min(1, Number(factor) ?? 0.1));
+    c.enableDamping = f > 0;
+    c.dampingFactor = f;
+    return { ok: true, damping: f };
+  };
+
+  window.__studioLockCameraY = (on) => {
+    const c = _orbit(); if (!c) return { ok: false };
+    const lock = !!on;
+    c.minPolarAngle = lock ? Math.PI / 2 : 0;
+    c.maxPolarAngle = lock ? Math.PI / 2 : Math.PI;
+    return { ok: true, locked: lock };
+  };
+
+  window.__studioGetOrbitState = () => {
+    const c = _orbit(); if (!c) return { ok: false };
+    return {
+      ok: true,
+      rotateSpeed: c.rotateSpeed,
+      zoomSpeed: c.zoomSpeed,
+      panSpeed: c.panSpeed,
+      damping: c.enableDamping ? c.dampingFactor : 0,
+      lockedY: c.minPolarAngle > 1e-6 && c.maxPolarAngle - c.minPolarAngle < 1e-6,
+      target: [c.target.x, c.target.y, c.target.z],
+    };
+  };
+
   // Slice 647 — Undo history pack: extend the existing undo stack with
   // named checkpoints and inspection / cap controls.
   if (!window.__studioCheckpoints) window.__studioCheckpoints = new Map();
