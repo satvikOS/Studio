@@ -895,6 +895,28 @@ export function registerV3Api() {
     return { ok: true, on: true };
   };
 
+  // Slice 619 — Recolour every instance of the active InstancedMesh.
+  // hueFromIndex(i, n) → 0..1; falls back to a rainbow when fn omitted.
+  window.__studioInstanceRecolor = (fn) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel || !sel.isInstancedMesh) return { ok: false, error: 'no instanced mesh' };
+    const n = sel.count;
+    const c = new THREE.Color();
+    if (!sel.instanceColor) {
+      sel.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3);
+      const mat = Array.isArray(sel.material) ? sel.material[0] : sel.material;
+      if (mat) { mat.vertexColors = true; mat.needsUpdate = true; }
+    }
+    const f = typeof fn === 'function' ? fn : (i) => i / Math.max(1, n - 1);
+    for (let i = 0; i < n; i++) {
+      c.setHSL(f(i, n), 0.65, 0.55);
+      sel.setColorAt(i, c);
+    }
+    if (sel.instanceColor) sel.instanceColor.needsUpdate = true;
+    if (window.__studioToast) window.__studioToast(`Recoloured ${n} instances`, 'ok');
+    return { ok: true, count: n };
+  };
+
   // Slice 613 — Create an InstancedMesh from the active mesh as the
   // template + an array of [x, y, z] positions. Useful for forests,
   // crowds, particle-style swarms without N draw calls.
