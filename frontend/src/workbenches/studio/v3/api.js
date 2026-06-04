@@ -531,6 +531,83 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 627 — Add a free-floating point light.
+  window.__studioAddPointLight = (pos, color, intensity) => {
+    const v = window.__archdiscViewport; if (!v || !v.scene) return { ok: false };
+    const p = Array.isArray(pos) ? pos : [1, 2, 1];
+    const light = new THREE.PointLight(color || 0xffeecc, Number(intensity) || 1, 0, 2);
+    light.position.set(p[0], p[1], p[2]);
+    light.castShadow = true;
+    light.userData.archdiscStudioLight = 'point';
+    v.scene.add(light);
+    return { ok: true, uuid: light.uuid };
+  };
+
+  // Slice 627 — Spot light with cone target.
+  window.__studioAddSpotLight = (pos, target, color, intensity) => {
+    const v = window.__archdiscViewport; if (!v || !v.scene) return { ok: false };
+    const p = Array.isArray(pos) ? pos : [2, 3, 2];
+    const t = Array.isArray(target) ? target : [0, 0, 0];
+    const light = new THREE.SpotLight(color || 0xffffff, Number(intensity) || 2, 0, Math.PI / 6, 0.3, 1);
+    light.position.set(p[0], p[1], p[2]);
+    light.target.position.set(t[0], t[1], t[2]);
+    light.castShadow = true;
+    light.userData.archdiscStudioLight = 'spot';
+    v.scene.add(light);
+    v.scene.add(light.target);
+    return { ok: true, uuid: light.uuid };
+  };
+
+  // Slice 627 — Hemisphere (sky/ground) light.
+  window.__studioAddHemiLight = (sky, ground, intensity) => {
+    const v = window.__archdiscViewport; if (!v || !v.scene) return { ok: false };
+    const light = new THREE.HemisphereLight(sky || 0xa0c4ff, ground || 0x442200, Number(intensity) || 0.6);
+    light.position.set(0, 5, 0);
+    light.userData.archdiscStudioLight = 'hemi';
+    v.scene.add(light);
+    return { ok: true, uuid: light.uuid };
+  };
+
+  // Slice 627 — Rectangular area light (good for product / studio lighting).
+  window.__studioAddRectLight = (pos, w, h, color, intensity) => {
+    const v = window.__archdiscViewport; if (!v || !v.scene) return { ok: false };
+    const p = Array.isArray(pos) ? pos : [0, 3, 0];
+    const light = new THREE.RectAreaLight(color || 0xffffff, Number(intensity) || 3, Number(w) || 1, Number(h) || 1);
+    light.position.set(p[0], p[1], p[2]);
+    light.lookAt(0, 0, 0);
+    light.userData.archdiscStudioLight = 'rect';
+    v.scene.add(light);
+    return { ok: true, uuid: light.uuid };
+  };
+
+  // Slice 627 — Toggle shadows on every mesh + the renderer.
+  window.__studioToggleShadows = () => {
+    const v = window.__archdiscViewport; if (!v || !v.renderer || !v.scene) return { ok: false };
+    const on = !v.renderer.shadowMap.enabled;
+    v.renderer.shadowMap.enabled = on;
+    v.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    v.scene.traverse((o) => {
+      if (o.isMesh) { o.castShadow = on; o.receiveShadow = on; }
+      if (o.isLight && o.shadow) o.castShadow = on;
+    });
+    return { ok: true, shadows: on };
+  };
+
+  // Slice 627 — List every light by type for the inspector.
+  window.__studioListLights = () => {
+    const v = window.__archdiscViewport; if (!v || !v.scene) return { ok: false };
+    const out = { ambient: 0, directional: 0, point: 0, spot: 0, hemi: 0, rect: 0 };
+    v.scene.traverse((o) => {
+      if (o.isAmbientLight) out.ambient++;
+      else if (o.isDirectionalLight) out.directional++;
+      else if (o.isPointLight) out.point++;
+      else if (o.isSpotLight) out.spot++;
+      else if (o.isHemisphereLight) out.hemi++;
+      else if (o.isRectAreaLight) out.rect++;
+    });
+    return { ok: true, ...out };
+  };
+
   // Slice 626 — Camera near/far/fov readout + setters.
   window.__studioSetCameraFov = (fov) => {
     const v = window.__archdiscViewport; if (!v || !v.camera || !v.camera.isPerspectiveCamera) return { ok: false };
