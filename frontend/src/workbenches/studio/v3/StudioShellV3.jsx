@@ -5345,6 +5345,26 @@ function DisplaySection() {
     { id: 'archie-status', label: 'Archie dot', defaultOn: true, onChange: (v) => { const el = document.querySelector('[data-studio-v3-archie-status]'); if (el) el.style.display = v ? '' : 'none'; } },
     { id: 'keypress', label: 'Keypress flash', defaultOn: false, onChange: () => {} },
     { id: 'ground', label: 'Shadow ground', defaultOn: true, onChange: (v) => { if (window.__studioSetGroundVisible) window.__studioSetGroundVisible(v); } },
+    { id: 'letterbox', label: 'Cinema bars', defaultOn: false, onChange: (v) => {
+      let el = document.querySelector('[data-studio-v3-letterbox]');
+      if (v) {
+        if (!el) {
+          const vp = document.querySelector('[data-studio-v3-viewport]');
+          if (!vp) return;
+          el = document.createElement('div');
+          el.setAttribute('data-studio-v3-letterbox', '');
+          el.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:3;';
+          const bar = (pos) => {
+            const b = document.createElement('div');
+            b.style.cssText = `position:absolute;left:0;right:0;${pos}:0;height:12%;background:#000;`;
+            return b;
+          };
+          el.appendChild(bar('top'));
+          el.appendChild(bar('bottom'));
+          vp.appendChild(el);
+        }
+      } else if (el) { el.parentNode.removeChild(el); }
+    } },
     { id: 'world-axes', label: 'World axes', defaultOn: false, onChange: (v) => {
       const already = !!window.__studioWorldAxesHelper;
       if (v && !already) window.__studioToggleWorldAxes && window.__studioToggleWorldAxes();
