@@ -531,6 +531,93 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 638 — Multi-camera registry. We don't swap the renderer's
+  // active camera (that's the main viewport's job); instead we record
+  // PerspectiveCamera transforms as scene objects with CameraHelper
+  // gizmos so the user can lay out shots and snap the main cam to any.
+  if (!window.__studioCameras) window.__studioCameras = [];
+
+  window.__studioCameraCreate = (name, opts) => {
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    const o = opts || {};
+    const fov = Number(o.fov) || 50;
+    const near = Number(o.near) || 0.01;
+    const far = Number(o.far) || 100;
+    const cam = new THREE.PerspectiveCamera(fov, 16/9, near, far);
+    const p = Array.isArray(o.position) ? o.position : [2, 2, 2];
+    const t = Array.isArray(o.target) ? o.target : [0, 0, 0];
+    cam.position.set(p[0], p[1], p[2]);
+    cam.lookAt(t[0], t[1], t[2]);
+    cam.updateMatrixWorld(true);
+    const helper = new THREE.CameraHelper(cam);
+    helper.userData.archdiscStudioCameraHelper = true;
+    cam.name = name || `cam_${window.__studioCameras.length + 1}`;
+    cam.userData.archdiscStudioCamera = { name: cam.name, target: t.slice() };
+    scene.add(cam);
+    scene.add(helper);
+    const rec = { uuid: cam.uuid, name: cam.name, camera: cam, helper, target: t.slice() };
+    window.__studioCameras.push(rec);
+    return { ok: true, uuid: cam.uuid, name: cam.name };
+  };
+
+  window.__studioCameraDelete = (uuid) => {
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    const idx = window.__studioCameras.findIndex((r) => r.uuid === uuid);
+    if (idx < 0) return { ok: false, error: 'not found' };
+    const r = window.__studioCameras[idx];
+    if (r.helper) { scene.remove(r.helper); r.helper.geometry?.dispose(); r.helper.material?.dispose(); }
+    if (r.camera) scene.remove(r.camera);
+    window.__studioCameras.splice(idx, 1);
+    return { ok: true, remaining: window.__studioCameras.length };
+  };
+
+  window.__studioCameraSetPosition = (uuid, pos) => {
+    const rec = window.__studioCameras.find((r) => r.uuid === uuid);
+    if (!rec) return { ok: false };
+    const p = Array.isArray(pos) ? pos : [0, 0, 0];
+    rec.camera.position.set(p[0], p[1], p[2]);
+    rec.camera.lookAt(rec.target[0], rec.target[1], rec.target[2]);
+    rec.camera.updateMatrixWorld(true);
+    rec.helper.update();
+    return { ok: true, position: p };
+  };
+
+  window.__studioCameraSetTarget = (uuid, target) => {
+    const rec = window.__studioCameras.find((r) => r.uuid === uuid);
+    if (!rec) return { ok: false };
+    const t = Array.isArray(target) ? target : [0, 0, 0];
+    rec.target = t.slice();
+    rec.camera.lookAt(t[0], t[1], t[2]);
+    rec.camera.updateMatrixWorld(true);
+    rec.helper.update();
+    if (rec.camera.userData.archdiscStudioCamera) rec.camera.userData.archdiscStudioCamera.target = t.slice();
+    return { ok: true, target: t };
+  };
+
+  window.__studioCameraSnapMainTo = (uuid) => {
+    const v = window.__archdiscViewport; if (!v || !v.camera) return { ok: false };
+    const rec = window.__studioCameras.find((r) => r.uuid === uuid);
+    if (!rec) return { ok: false };
+    v.camera.position.copy(rec.camera.position);
+    const ctrl = v.orbitControls || v.controls;
+    if (ctrl) { ctrl.target.set(rec.target[0], rec.target[1], rec.target[2]); if (ctrl.update) ctrl.update(); }
+    v.camera.lookAt(rec.target[0], rec.target[1], rec.target[2]);
+    v.camera.updateMatrixWorld(true);
+    return { ok: true, snapped: rec.name };
+  };
+
+  window.__studioCameraListAll = () => ({
+    ok: true,
+    count: window.__studioCameras.length,
+    cameras: window.__studioCameras.map((r) => ({
+      uuid: r.uuid,
+      name: r.name,
+      position: [r.camera.position.x, r.camera.position.y, r.camera.position.z],
+      target: r.target,
+      fov: r.camera.fov,
+    })),
+  });
+
   // Slice 637 — Annotation pack: text labels, arrows, dimensions and
   // callouts. All annotations live on a flat list keyed by uuid so
   // they can be listed / cleared independently of the scene meshes.
