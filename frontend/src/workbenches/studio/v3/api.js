@@ -531,6 +531,117 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 653 — Alignment / distribution pack for CAD-style layout.
+  // Operate on the current multi-selection; single selection no-ops.
+  const _selectedList = () => {
+    if (window.__studioSelectedMeshes) {
+      const r = window.__studioSelectedMeshes();
+      if (Array.isArray(r) && r.length) return r;
+    }
+    const one = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    return one ? [one] : [];
+  };
+
+  const _bboxOf = (mesh) => {
+    if (!mesh.geometry) return null;
+    mesh.geometry.computeBoundingBox();
+    const b = mesh.geometry.boundingBox.clone();
+    mesh.updateMatrixWorld(true);
+    b.applyMatrix4(mesh.matrixWorld);
+    return b;
+  };
+
+  window.__studioAlignSelectionTo = (axis, mode) => {
+    const list = _selectedList(); if (list.length < 2) return { ok: false, error: 'need ≥2' };
+    const ax = (axis || 'x').toLowerCase();
+    const md = mode || 'center';
+    const bboxes = list.map(_bboxOf).filter(Boolean);
+    if (!bboxes.length) return { ok: false };
+    let target;
+    if (md === 'min') target = Math.min(...bboxes.map((b) => b.min[ax]));
+    else if (md === 'max') target = Math.max(...bboxes.map((b) => b.max[ax]));
+    else target = bboxes.reduce((acc, b) => acc + (b.min[ax] + b.max[ax]) / 2, 0) / bboxes.length;
+    if (window.__studioPushUndo) window.__studioPushUndo('align');
+    list.forEach((m, i) => {
+      const b = bboxes[i];
+      const cur = md === 'min' ? b.min[ax] : (md === 'max' ? b.max[ax] : (b.min[ax] + b.max[ax]) / 2);
+      m.position[ax] += target - cur;
+      m.updateMatrixWorld(true);
+    });
+    return { ok: true, axis: ax, mode: md, count: list.length };
+  };
+
+  window.__studioDistributeSelection = (axis) => {
+    const list = _selectedList(); if (list.length < 3) return { ok: false, error: 'need ≥3' };
+    const ax = (axis || 'x').toLowerCase();
+    const bboxes = list.map(_bboxOf).filter(Boolean);
+    const centers = bboxes.map((b) => (b.min[ax] + b.max[ax]) / 2);
+    const sorted = centers.map((c, i) => ({ c, i })).sort((a, b) => a.c - b.c);
+    const lo = sorted[0].c, hi = sorted[sorted.length - 1].c;
+    const step = (hi - lo) / (sorted.length - 1);
+    if (window.__studioPushUndo) window.__studioPushUndo('distribute');
+    sorted.forEach((entry, k) => {
+      const target = lo + step * k;
+      const mesh = list[entry.i];
+      mesh.position[ax] += target - entry.c;
+      mesh.updateMatrixWorld(true);
+    });
+    return { ok: true, axis: ax, span: hi - lo, step };
+  };
+
+  window.__studioStackOnAxis = (axis, gap) => {
+    const list = _selectedList(); if (list.length < 2) return { ok: false, error: 'need ≥2' };
+    const ax = (axis || 'x').toLowerCase();
+    const g = Number(gap) || 0;
+    const bboxes = list.map(_bboxOf).filter(Boolean);
+    if (window.__studioPushUndo) window.__studioPushUndo('stack');
+    let cursor = bboxes[0].min[ax];
+    list.forEach((m, i) => {
+      const b = bboxes[i];
+      const half = (b.max[ax] - b.min[ax]) / 2;
+      const cur = (b.min[ax] + b.max[ax]) / 2;
+      const targetCenter = cursor + half;
+      m.position[ax] += targetCenter - cur;
+      cursor = cursor + (b.max[ax] - b.min[ax]) + g;
+      m.updateMatrixWorld(true);
+    });
+    return { ok: true, axis: ax, gap: g, count: list.length };
+  };
+
+  window.__studioCenterSelectionToOrigin = () => {
+    const list = _selectedList(); if (!list.length) return { ok: false };
+    const bboxes = list.map(_bboxOf).filter(Boolean);
+    const center = new THREE.Vector3();
+    const full = new THREE.Box3();
+    bboxes.forEach((b) => full.union(b));
+    full.getCenter(center);
+    if (window.__studioPushUndo) window.__studioPushUndo('center-origin');
+    list.forEach((m) => {
+      m.position.sub(center);
+      m.updateMatrixWorld(true);
+    });
+    return { ok: true, offset: [center.x, center.y, center.z] };
+  };
+
+  window.__studioGroupBoundsCenter = () => {
+    const list = _selectedList(); if (!list.length) return { ok: false };
+    const bboxes = list.map(_bboxOf).filter(Boolean);
+    const full = new THREE.Box3();
+    bboxes.forEach((b) => full.union(b));
+    const c = new THREE.Vector3(); full.getCenter(c);
+    const s = new THREE.Vector3(); full.getSize(s);
+    return { ok: true, center: [c.x, c.y, c.z], size: [s.x, s.y, s.z] };
+  };
+
+  window.__studioMirrorSelection = (plane) => {
+    // plane in {'xy','xz','yz'} — flip the perpendicular axis
+    const list = _selectedList(); if (!list.length) return { ok: false };
+    const ax = plane === 'xy' ? 'z' : (plane === 'xz' ? 'y' : 'x');
+    if (window.__studioPushUndo) window.__studioPushUndo('mirror');
+    list.forEach((m) => { m.position[ax] = -m.position[ax]; m.scale[ax] *= -1; });
+    return { ok: true, axis: ax, plane: plane || 'yz', count: list.length };
+  };
+
   // Slice 652 — Mesh clipboard / duplicate pack. Maintains a stack of
   // mesh snapshots that can be pasted as fresh instances. Each
   // snapshot is a {geometry clone, material clone, world transform}.
