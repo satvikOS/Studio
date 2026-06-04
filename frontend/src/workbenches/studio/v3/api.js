@@ -531,6 +531,73 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 658 — TransformControls gizmo pack: 6 wrappers around the
+  // Viewport3D-owned TransformControls instance.
+  const _tc = () => {
+    const v = window.__archdiscViewport;
+    return (v && v.transformControls) || null;
+  };
+
+  window.__studioGizmoSetMode = (mode) => {
+    const tc = _tc(); if (!tc) return { ok: false };
+    const valid = ['translate', 'rotate', 'scale'];
+    if (!valid.includes(mode)) return { ok: false, valid };
+    tc.setMode(mode);
+    return { ok: true, mode };
+  };
+
+  window.__studioGizmoSetSpace = (space) => {
+    const tc = _tc(); if (!tc) return { ok: false };
+    const valid = ['world', 'local'];
+    if (!valid.includes(space)) return { ok: false, valid };
+    tc.setSpace(space);
+    return { ok: true, space };
+  };
+
+  window.__studioGizmoSetSize = (s) => {
+    const tc = _tc(); if (!tc) return { ok: false };
+    const v = Math.max(0.1, Math.min(4, Number(s) || 0.8));
+    tc.setSize(v);
+    return { ok: true, size: v };
+  };
+
+  window.__studioGizmoSetVisible = (on) => {
+    const tc = _tc(); if (!tc) return { ok: false };
+    tc.visible = !!on;
+    if (tc.getHelper) {
+      try { const h = tc.getHelper(); if (h) h.visible = !!on; } catch (_) {}
+    }
+    return { ok: true, visible: tc.visible };
+  };
+
+  window.__studioGizmoSetSnap = (translateSnap, rotateSnapDeg, scaleSnap) => {
+    const tc = _tc(); if (!tc) return { ok: false };
+    if (translateSnap !== undefined) tc.translationSnap = translateSnap === null ? null : Number(translateSnap);
+    if (rotateSnapDeg !== undefined) tc.rotationSnap = rotateSnapDeg === null ? null : Number(rotateSnapDeg) * Math.PI / 180;
+    if (scaleSnap !== undefined) tc.scaleSnap = scaleSnap === null ? null : Number(scaleSnap);
+    return {
+      ok: true,
+      translateSnap: tc.translationSnap,
+      rotateSnap: tc.rotationSnap,
+      scaleSnap: tc.scaleSnap,
+    };
+  };
+
+  window.__studioGizmoGetState = () => {
+    const tc = _tc(); if (!tc) return { ok: false };
+    return {
+      ok: true,
+      mode: tc.mode,
+      space: tc.space,
+      size: tc.size,
+      visible: tc.visible,
+      translateSnap: tc.translationSnap,
+      rotateSnap: tc.rotationSnap,
+      scaleSnap: tc.scaleSnap,
+      attached: !!tc.object,
+    };
+  };
+
   // Slice 657 — Presentation / slide pack. Captures camera viewpoints
   // into an ordered list and steps through them like Keynote slides.
   if (!window.__studioPresentation) window.__studioPresentation = { slides: [], index: -1, active: false };
