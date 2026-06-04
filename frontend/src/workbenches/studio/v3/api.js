@@ -531,6 +531,148 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 632 — Particle system: a THREE.Points with per-vertex
+  // velocity / lifetime / colour stored on userData arrays.
+  window.__studioCreateParticleSystem = (count, opts) => {
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    const n = Math.max(1, Math.min(50000, Number(count) || 1000));
+    const o = opts || {};
+    const positions = new Float32Array(n * 3);
+    const colors = new Float32Array(n * 3);
+    const vels = new Float32Array(n * 3);
+    const life = new Float32Array(n);
+    const max = new Float32Array(n);
+    const c1 = new THREE.Color(o.color1 || 0xff8844);
+    const c2 = new THREE.Color(o.color2 || 0x66ccff);
+    const radius = Number(o.radius) || 0.2;
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = Math.random() * radius;
+      positions[i * 3]     = Math.cos(a) * r;
+      positions[i * 3 + 1] = (Math.random() - 0.1) * 0.05;
+      positions[i * 3 + 2] = Math.sin(a) * r;
+      vels[i * 3]     = (Math.random() - 0.5) * 0.4;
+      vels[i * 3 + 1] = Math.random() * 1.2 + 0.4;
+      vels[i * 3 + 2] = (Math.random() - 0.5) * 0.4;
+      max[i] = 0.8 + Math.random() * 1.4;
+      life[i] = Math.random() * max[i];
+      const t = life[i] / max[i];
+      colors[i * 3]     = c1.r * (1 - t) + c2.r * t;
+      colors[i * 3 + 1] = c1.g * (1 - t) + c2.g * t;
+      colors[i * 3 + 2] = c1.b * (1 - t) + c2.b * t;
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    g.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    const mat = new THREE.PointsMaterial({ size: o.size || 0.04, vertexColors: true, transparent: true, opacity: 0.95, depthWrite: false });
+    const pts = new THREE.Points(g, mat);
+    pts.userData.archdiscStudioParticles = { vels, life, max, count: n, c1, c2, gravity: o.gravity ?? -1.2 };
+    pts.name = o.name || 'particles';
+    scene.add(pts);
+    if (!window.__studioParticleSystems) window.__studioParticleSystems = [];
+    window.__studioParticleSystems.push(pts);
+    if (window.__studioToast) window.__studioToast(`Particles ×${n}`, 'ok');
+    return { ok: true, uuid: pts.uuid, count: n };
+  };
+
+  window.__studioParticleStep = (dt) => {
+    const sys = window.__studioParticleSystems;
+    if (!sys || !sys.length) return { ok: false, error: 'no systems' };
+    const step = Number(dt) || 0.016;
+    let touched = 0;
+    for (const pts of sys) {
+      const ud = pts.userData.archdiscStudioParticles; if (!ud) continue;
+      const pos = pts.geometry.attributes.position.array;
+      const col = pts.geometry.attributes.color.array;
+      const { vels, life, max, c1, c2, gravity } = ud;
+      for (let i = 0; i < ud.count; i++) {
+        vels[i * 3 + 1] += gravity * step;
+        pos[i * 3]     += vels[i * 3] * step;
+        pos[i * 3 + 1] += vels[i * 3 + 1] * step;
+        pos[i * 3 + 2] += vels[i * 3 + 2] * step;
+        life[i] += step;
+        if (life[i] > max[i]) {
+          life[i] = 0;
+          pos[i * 3]     = 0;
+          pos[i * 3 + 1] = 0;
+          pos[i * 3 + 2] = 0;
+          vels[i * 3]     = (Math.random() - 0.5) * 0.4;
+          vels[i * 3 + 1] = Math.random() * 1.2 + 0.4;
+          vels[i * 3 + 2] = (Math.random() - 0.5) * 0.4;
+        }
+        const t = Math.min(1, life[i] / max[i]);
+        col[i * 3]     = c1.r * (1 - t) + c2.r * t;
+        col[i * 3 + 1] = c1.g * (1 - t) + c2.g * t;
+        col[i * 3 + 2] = c1.b * (1 - t) + c2.b * t;
+        touched++;
+      }
+      pts.geometry.attributes.position.needsUpdate = true;
+      pts.geometry.attributes.color.needsUpdate = true;
+    }
+    return { ok: true, touched };
+  };
+
+  window.__studioParticleSetColors = (uuid, c1, c2) => {
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    const pts = scene.getObjectByProperty('uuid', uuid);
+    if (!pts || !pts.userData || !pts.userData.archdiscStudioParticles) return { ok: false };
+    pts.userData.archdiscStudioParticles.c1 = new THREE.Color(c1);
+    pts.userData.archdiscStudioParticles.c2 = new THREE.Color(c2);
+    return { ok: true };
+  };
+
+  window.__studioStarfield = (count, radius) => {
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    const n = Math.max(100, Math.min(20000, Number(count) || 5000));
+    const r = Number(radius) || 50;
+    const positions = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      // random direction on unit sphere
+      const u = Math.random(), v = Math.random();
+      const theta = 2 * Math.PI * u;
+      const phi = Math.acos(2 * v - 1);
+      positions[i * 3]     = r * Math.sin(phi) * Math.cos(theta);
+      positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+      positions[i * 3 + 2] = r * Math.cos(phi);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const m = new THREE.PointsMaterial({ size: 0.06, color: 0xffffff, transparent: true, opacity: 0.8 });
+    const sky = new THREE.Points(g, m);
+    sky.userData.archdiscStudioStarfield = true;
+    scene.add(sky);
+    return { ok: true, uuid: sky.uuid, count: n };
+  };
+
+  window.__studioToggleParticleAnim = () => {
+    const v = window.__archdiscViewport; if (!v) return { ok: false };
+    if (v.__studioParticleTick) {
+      const oldTick = v.__studioAnimTick;
+      v.__studioParticleTick = null;
+      // detach particle tick from animation tick if it was chained
+      if (oldTick && oldTick.__particles) v.__studioAnimTick = oldTick.__prev;
+      return { ok: true, on: false };
+    }
+    let last = performance.now();
+    const tick = (now) => {
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      window.__studioParticleStep(dt);
+    };
+    v.__studioParticleTick = tick;
+    const prev = v.__studioAnimTick;
+    const chained = (now) => { tick(now); if (prev) prev(now); };
+    chained.__particles = true;
+    chained.__prev = prev;
+    v.__studioAnimTick = chained;
+    return { ok: true, on: true };
+  };
+
+  window.__studioListParticleSystems = () => {
+    const sys = window.__studioParticleSystems || [];
+    return { ok: true, count: sys.length, uuids: sys.map((p) => p.uuid) };
+  };
+
   // Slice 631 — Scene outliner: list every user-mesh by uuid + metadata.
   window.__studioListSceneMeshes = () => {
     const scene = window.__archdiscScene; if (!scene) return { ok: false };
