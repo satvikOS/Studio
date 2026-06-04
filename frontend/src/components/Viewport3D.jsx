@@ -1271,6 +1271,9 @@ function Viewport3D({ canvasId = 'render-canvas', domain = 'mechanical', onReady
               lastFrameMs = now;
             }
             orbitControls.update();
+            // Slice 629 — Drive the animation mixer if present.
+            const tick = window.__archdiscViewport && window.__archdiscViewport.__studioAnimTick;
+            if (typeof tick === 'function') { try { tick(now); } catch (_) {} }
             // Slice 610 — Composer takes over rendering when post-effects
             // are enabled (slice 606+). Keep outline-pass selection synced.
             const composer = window.__archdiscViewport && window.__archdiscViewport.__studioComposer;

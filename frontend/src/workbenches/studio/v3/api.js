@@ -531,6 +531,124 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 629 — Lightweight keyframe + playback system. Tracks are
+  // keyed by mesh uuid + property; play() builds an AnimationClip and
+  // runs it through a THREE.AnimationMixer driven by the viewport tick.
+  if (!window.__studioAnimState) {
+    window.__studioAnimState = {
+      tracks: new Map(),     // uuid → { property → [{time, value:[]}] }
+      mixer: null,
+      action: null,
+      duration: 2,
+      playing: false,
+      lastTickMs: 0,
+    };
+  }
+  const _anim = window.__studioAnimState;
+
+  window.__studioKeyframeSet = (property, time, value) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel) return { ok: false, error: 'no selection' };
+    const id = sel.uuid;
+    if (!_anim.tracks.has(id)) _anim.tracks.set(id, {});
+    const bag = _anim.tracks.get(id);
+    if (!bag[property]) bag[property] = [];
+    const t = Number(time) || 0;
+    let vals;
+    if (Array.isArray(value)) vals = value.slice();
+    else if (property === '.position' || property === '.scale') {
+      vals = [sel.position.x, sel.position.y, sel.position.z];
+      if (property === '.scale') vals = [sel.scale.x, sel.scale.y, sel.scale.z];
+    } else if (property === '.quaternion') vals = [sel.quaternion.x, sel.quaternion.y, sel.quaternion.z, sel.quaternion.w];
+    const exist = bag[property].findIndex((k) => Math.abs(k.time - t) < 1e-4);
+    if (exist >= 0) bag[property][exist].value = vals;
+    else bag[property].push({ time: t, value: vals });
+    bag[property].sort((a, b) => a.time - b.time);
+    return { ok: true, uuid: id, property, time: t, total: bag[property].length };
+  };
+
+  window.__studioKeyframeDelete = (property, time) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel) return { ok: false };
+    const bag = _anim.tracks.get(sel.uuid);
+    if (!bag || !bag[property]) return { ok: false };
+    const t = Number(time);
+    bag[property] = bag[property].filter((k) => Math.abs(k.time - t) > 1e-4);
+    return { ok: true, remaining: bag[property].length };
+  };
+
+  window.__studioKeyframeList = () => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel) return { ok: false };
+    const bag = _anim.tracks.get(sel.uuid) || {};
+    const out = {};
+    Object.keys(bag).forEach((k) => { out[k] = bag[k].map((kf) => kf.time); });
+    return { ok: true, tracks: out };
+  };
+
+  const _rebuildClip = () => {
+    const v = window.__archdiscViewport; if (!v || !v.scene) return null;
+    const tracks = [];
+    _anim.tracks.forEach((bag, uuid) => {
+      const node = v.scene.getObjectByProperty('uuid', uuid);
+      if (!node) return;
+      Object.keys(bag).forEach((prop) => {
+        const sorted = bag[prop].slice().sort((a, b) => a.time - b.time);
+        if (sorted.length < 2) return;
+        const times = sorted.map((k) => k.time);
+        const values = [];
+        sorted.forEach((k) => values.push(...k.value));
+        const trackName = node.name ? `${node.name}${prop}` : uuid + prop;
+        const Ctor = prop === '.quaternion' ? THREE.QuaternionKeyframeTrack : THREE.VectorKeyframeTrack;
+        tracks.push(new Ctor(trackName, times, values));
+      });
+    });
+    if (!tracks.length) return null;
+    return new THREE.AnimationClip('studio', _anim.duration, tracks);
+  };
+
+  window.__studioPlayAnimation = (duration) => {
+    const v = window.__archdiscViewport; if (!v || !v.scene) return { ok: false };
+    if (duration) _anim.duration = Number(duration);
+    const clip = _rebuildClip();
+    if (!clip) return { ok: false, error: 'need ≥2 keyframes per track' };
+    // Build a mixer rooted at the scene so multiple objects can animate.
+    const mixer = new THREE.AnimationMixer(v.scene);
+    // Re-bind every track to a real node by name; if names are uuids, use the uuid path.
+    _anim.mixer = mixer;
+    _anim.action = mixer.clipAction(clip);
+    _anim.action.setLoop(THREE.LoopRepeat).play();
+    _anim.playing = true;
+    _anim.lastTickMs = performance.now();
+    v.__studioAnimTick = (nowMs) => {
+      if (!_anim.playing || !_anim.mixer) return;
+      const dt = Math.min(0.1, (nowMs - _anim.lastTickMs) / 1000);
+      _anim.lastTickMs = nowMs;
+      _anim.mixer.update(dt);
+    };
+    return { ok: true, duration: _anim.duration, tracks: clip.tracks.length };
+  };
+
+  window.__studioPauseAnimation = () => {
+    _anim.playing = false;
+    if (_anim.action) _anim.action.paused = true;
+    return { ok: true, playing: false };
+  };
+
+  window.__studioSeekTime = (t) => {
+    if (!_anim.mixer || !_anim.action) return { ok: false };
+    _anim.action.time = Math.max(0, Math.min(_anim.duration, Number(t) || 0));
+    _anim.mixer.update(0);
+    return { ok: true, time: _anim.action.time };
+  };
+
+  window.__studioGetAnimState = () => ({
+    playing: _anim.playing,
+    duration: _anim.duration,
+    time: _anim.action ? _anim.action.time : 0,
+    trackCount: Array.from(_anim.tracks.values()).reduce((n, bag) => n + Object.keys(bag).length, 0),
+  });
+
   // Slice 628 — Convert active material to MeshPhysicalMaterial if it
   // isn't already, so clearcoat / transmission / ior slots exist.
   const _ensurePhys = (sel) => {
