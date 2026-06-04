@@ -531,6 +531,124 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 651 — Material library: built-in PBR presets + a per-user
+  // saved-preset map persisted to localStorage.
+  const _MATERIAL_PRESETS = {
+    gold:     { color: 0xffd166, metalness: 1.0, roughness: 0.15, clearcoat: 0 },
+    chrome:   { color: 0xffffff, metalness: 1.0, roughness: 0.05 },
+    copper:   { color: 0xb87333, metalness: 1.0, roughness: 0.3 },
+    glass:    { color: 0xffffff, metalness: 0, roughness: 0.05, transmission: 1, ior: 1.5, thickness: 0.5 },
+    plastic:  { color: 0xeeeeee, metalness: 0, roughness: 0.6, clearcoat: 0.4 },
+    rubber:   { color: 0x222222, metalness: 0, roughness: 0.95 },
+    wood:     { color: 0xb38950, metalness: 0, roughness: 0.7 },
+    concrete: { color: 0xa0a0a0, metalness: 0, roughness: 0.95 },
+    velvet:   { color: 0x6e1e3a, metalness: 0, roughness: 1, sheen: 1, sheenColor: 0xff8aa5 },
+  };
+
+  const _ensurePhysMat = (sel) => {
+    const mat0 = Array.isArray(sel.material) ? sel.material[0] : sel.material;
+    if (mat0 && mat0.isMeshPhysicalMaterial) return mat0;
+    const next = new THREE.MeshPhysicalMaterial({ color: mat0?.color?.clone() || new THREE.Color(0xeeeeee) });
+    if (Array.isArray(sel.material)) sel.material[0] = next; else sel.material = next;
+    mat0?.dispose?.();
+    return next;
+  };
+
+  window.__studioMaterialPresetApply = (name) => {
+    const def = _MATERIAL_PRESETS[name];
+    if (!def) return { ok: false, error: 'unknown preset', valid: Object.keys(_MATERIAL_PRESETS) };
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel) return { ok: false, error: 'no selection' };
+    const m = _ensurePhysMat(sel);
+    if (def.color != null) m.color.set(def.color);
+    if (def.metalness != null) m.metalness = def.metalness;
+    if (def.roughness != null) m.roughness = def.roughness;
+    if (def.clearcoat != null) m.clearcoat = def.clearcoat;
+    if (def.transmission != null) { m.transmission = def.transmission; m.transparent = def.transmission > 0; }
+    if (def.ior != null) m.ior = def.ior;
+    if (def.thickness != null) m.thickness = def.thickness;
+    if (def.sheen != null) m.sheen = def.sheen;
+    if (def.sheenColor != null) m.sheenColor = new THREE.Color(def.sheenColor);
+    m.needsUpdate = true;
+    return { ok: true, preset: name };
+  };
+
+  window.__studioMaterialPresetList = () => ({
+    ok: true,
+    builtin: Object.keys(_MATERIAL_PRESETS),
+    user: Object.keys(_getUserMats()),
+  });
+
+  const _getUserMats = () => {
+    try {
+      const raw = localStorage.getItem('studio.v3.user-materials');
+      return raw ? JSON.parse(raw) : {};
+    } catch (_) { return {}; }
+  };
+  const _setUserMats = (obj) => {
+    try { localStorage.setItem('studio.v3.user-materials', JSON.stringify(obj)); return true; }
+    catch (_) { return false; }
+  };
+
+  const _snapshotMat = (mat) => ({
+    color: mat.color ? mat.color.getHex() : 0xffffff,
+    metalness: mat.metalness ?? 0,
+    roughness: mat.roughness ?? 0.5,
+    clearcoat: mat.clearcoat ?? 0,
+    transmission: mat.transmission ?? 0,
+    ior: mat.ior ?? 1.5,
+    thickness: mat.thickness ?? 0,
+    emissive: mat.emissive ? mat.emissive.getHex() : 0,
+    emissiveIntensity: mat.emissiveIntensity ?? 1,
+  });
+
+  window.__studioMaterialSavePreset = (name) => {
+    if (!name) return { ok: false };
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel) return { ok: false };
+    const mat = Array.isArray(sel.material) ? sel.material[0] : sel.material;
+    if (!mat) return { ok: false };
+    const user = _getUserMats();
+    user[String(name)] = _snapshotMat(mat);
+    _setUserMats(user);
+    return { ok: true, name, total: Object.keys(user).length };
+  };
+
+  window.__studioMaterialLoadPreset = (name) => {
+    const user = _getUserMats();
+    const def = user[String(name)];
+    if (!def) return { ok: false, error: 'unknown' };
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel) return { ok: false };
+    const m = _ensurePhysMat(sel);
+    Object.keys(def).forEach((k) => {
+      if (k === 'color') m.color.set(def.color);
+      else if (k === 'emissive') m.emissive.set(def.emissive);
+      else m[k] = def[k];
+    });
+    m.needsUpdate = true;
+    return { ok: true };
+  };
+
+  window.__studioMaterialDeletePreset = (name) => {
+    const user = _getUserMats();
+    const had = !!user[String(name)];
+    delete user[String(name)];
+    _setUserMats(user);
+    return { ok: true, removed: had, total: Object.keys(user).length };
+  };
+
+  if (!window.__studioMaterialClipboard) window.__studioMaterialClipboard = null;
+
+  window.__studioMaterialCopySelection = () => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel) return { ok: false };
+    const mat = Array.isArray(sel.material) ? sel.material[0] : sel.material;
+    if (!mat) return { ok: false };
+    window.__studioMaterialClipboard = _snapshotMat(mat);
+    return { ok: true, snapshot: window.__studioMaterialClipboard };
+  };
+
   // Slice 650 — UI / theme / scale / accent pack. Manipulates root
   // attributes + CSS variables so every styled token responds.
   window.__studioSetTheme = (theme) => {
