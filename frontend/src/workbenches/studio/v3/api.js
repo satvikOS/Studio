@@ -531,6 +531,97 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 634 — Object constraint pack: per-frame ties between meshes.
+  // Each constraint stores {kind, source, target, opts}. Applied every
+  // frame via the viewport anim tick chain so they survive pause/play.
+  if (!window.__studioConstraints) window.__studioConstraints = [];
+
+  const _resolveMesh = (uuid) => {
+    const scene = window.__archdiscScene; if (!scene) return null;
+    if (!uuid) return window.__studioSelectedMesh && window.__studioSelectedMesh();
+    return scene.getObjectByProperty('uuid', uuid);
+  };
+
+  const _ensureConstraintTick = () => {
+    const v = window.__archdiscViewport; if (!v) return;
+    if (v.__studioAnimTick && v.__studioAnimTick.__constraints) return;
+    const prev = v.__studioAnimTick;
+    const fn = () => {
+      for (const c of window.__studioConstraints) {
+        if (!c.source || !c.target) continue;
+        if (c.kind === 'follow') {
+          c.source.position.copy(c.target.position).add(c.offset || new THREE.Vector3());
+        } else if (c.kind === 'lookAt') {
+          c.source.lookAt(c.target.position);
+        } else if (c.kind === 'track') {
+          // Track-to: align c.axis on source to vector(target - source).
+          const dir = new THREE.Vector3().subVectors(c.target.position, c.source.position).normalize();
+          const axis = c.axis || new THREE.Vector3(0, 1, 0);
+          const q = new THREE.Quaternion().setFromUnitVectors(axis, dir);
+          c.source.quaternion.copy(q);
+        } else if (c.kind === 'copyRot') {
+          c.source.quaternion.copy(c.target.quaternion);
+        } else if (c.kind === 'copyScale') {
+          c.source.scale.copy(c.target.scale);
+        }
+      }
+    };
+    const chained = (now) => { fn(); if (prev) prev(now); };
+    chained.__constraints = true;
+    chained.__prev = prev;
+    v.__studioAnimTick = chained;
+  };
+
+  window.__studioConstraintFollow = (sourceUuid, targetUuid, offset) => {
+    const s = _resolveMesh(sourceUuid), t = _resolveMesh(targetUuid);
+    if (!s || !t) return { ok: false, error: 'mesh not found' };
+    const off = Array.isArray(offset) ? new THREE.Vector3(offset[0], offset[1], offset[2]) : new THREE.Vector3();
+    window.__studioConstraints.push({ kind: 'follow', source: s, target: t, offset: off });
+    _ensureConstraintTick();
+    return { ok: true, count: window.__studioConstraints.length };
+  };
+
+  window.__studioConstraintLookAt = (sourceUuid, targetUuid) => {
+    const s = _resolveMesh(sourceUuid), t = _resolveMesh(targetUuid);
+    if (!s || !t) return { ok: false };
+    window.__studioConstraints.push({ kind: 'lookAt', source: s, target: t });
+    _ensureConstraintTick();
+    return { ok: true, count: window.__studioConstraints.length };
+  };
+
+  window.__studioConstraintTrack = (sourceUuid, axis, targetUuid) => {
+    const s = _resolveMesh(sourceUuid), t = _resolveMesh(targetUuid);
+    if (!s || !t) return { ok: false };
+    const ax = Array.isArray(axis) ? new THREE.Vector3(axis[0], axis[1], axis[2]).normalize() : new THREE.Vector3(0, 1, 0);
+    window.__studioConstraints.push({ kind: 'track', source: s, target: t, axis: ax });
+    _ensureConstraintTick();
+    return { ok: true, axis: [ax.x, ax.y, ax.z] };
+  };
+
+  window.__studioConstraintCopyRotation = (sourceUuid, targetUuid) => {
+    const s = _resolveMesh(sourceUuid), t = _resolveMesh(targetUuid);
+    if (!s || !t) return { ok: false };
+    window.__studioConstraints.push({ kind: 'copyRot', source: s, target: t });
+    _ensureConstraintTick();
+    return { ok: true };
+  };
+
+  window.__studioConstraintCopyScale = (sourceUuid, targetUuid) => {
+    const s = _resolveMesh(sourceUuid), t = _resolveMesh(targetUuid);
+    if (!s || !t) return { ok: false };
+    window.__studioConstraints.push({ kind: 'copyScale', source: s, target: t });
+    _ensureConstraintTick();
+    return { ok: true };
+  };
+
+  window.__studioConstraintClear = (sourceUuid) => {
+    if (!sourceUuid) { window.__studioConstraints.length = 0; return { ok: true, cleared: 'all' }; }
+    const s = _resolveMesh(sourceUuid); if (!s) return { ok: false };
+    const before = window.__studioConstraints.length;
+    window.__studioConstraints = window.__studioConstraints.filter((c) => c.source !== s);
+    return { ok: true, removed: before - window.__studioConstraints.length };
+  };
+
   // Slice 633 — Hand-rolled rigid-body sandbox. No external physics
   // dep; sphere-vs-ground (y=0) + sphere-vs-sphere with restitution.
   // Bodies store {mesh, vel:[3], mass, radius, restitution, kinematic}.
