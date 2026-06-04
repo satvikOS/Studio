@@ -531,6 +531,69 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 655 — Snap / grid configuration pack. Lightweight state
+  // store that drag handlers in the shell can read.
+  if (!window.__studioSnapState) {
+    window.__studioSnapState = {
+      enabled: false,
+      mode: 'grid',
+      gridSize: 0.1,
+      angleStepDeg: 15,
+      lockedAxis: null, // 'x' | 'y' | 'z' | null
+    };
+  }
+  const _snap = window.__studioSnapState;
+
+  window.__studioSnapModeSet = (mode) => {
+    const valid = ['grid', 'vertex', 'edge', 'face', 'none'];
+    if (!valid.includes(mode)) return { ok: false, valid };
+    _snap.mode = mode;
+    if (mode === 'none') _snap.enabled = false;
+    return { ok: true, mode };
+  };
+
+  window.__studioSnapModeGet = () => ({ ok: true, ..._snap });
+
+  window.__studioSnapGridSize = (units) => {
+    const v = Math.max(1e-4, Math.min(10, Number(units) || 0.1));
+    _snap.gridSize = v;
+    return { ok: true, gridSize: v };
+  };
+
+  window.__studioSnapAngleStep = (deg) => {
+    const v = Math.max(1, Math.min(180, Number(deg) || 15));
+    _snap.angleStepDeg = v;
+    return { ok: true, angleStepDeg: v };
+  };
+
+  window.__studioSnapLockAxis = (axis) => {
+    const a = (axis || '').toLowerCase();
+    _snap.lockedAxis = ['x', 'y', 'z'].includes(a) ? a : null;
+    return { ok: true, lockedAxis: _snap.lockedAxis };
+  };
+
+  window.__studioSnapEnabled = (on) => {
+    _snap.enabled = on === undefined ? !_snap.enabled : !!on;
+    return { ok: true, enabled: _snap.enabled };
+  };
+
+  // Apply snap to a candidate position. Useful when drag handlers call
+  // out to the snap state instead of forking the entire pipeline.
+  window.__studioSnapApply = (pos) => {
+    const p = Array.isArray(pos) ? pos.slice() : [0, 0, 0];
+    if (!_snap.enabled) return { ok: true, position: p };
+    if (_snap.mode === 'grid') {
+      const g = _snap.gridSize;
+      p[0] = Math.round(p[0] / g) * g;
+      p[1] = Math.round(p[1] / g) * g;
+      p[2] = Math.round(p[2] / g) * g;
+    }
+    if (_snap.lockedAxis === 'x') { p[1] = 0; p[2] = 0; }
+    else if (_snap.lockedAxis === 'y') { p[0] = 0; p[2] = 0; }
+    else if (_snap.lockedAxis === 'z') { p[0] = 0; p[1] = 0; }
+    return { ok: true, position: p };
+  };
+
   // Slice 654 — Custom key-binding registry. Sits ALONGSIDE the
   // existing shell-level onKeyDown switch — listens at window-capture
   // before React's onKeyDown so user-mapped combos win.
