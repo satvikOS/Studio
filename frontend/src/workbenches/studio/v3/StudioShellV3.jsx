@@ -4583,6 +4583,7 @@ function CameraSection() {
       </div>
       <CameraSpeedRows />
       <CameraFollowRow />
+      <CameraCoordsRow />
     </div>
   );
 }
@@ -5131,6 +5132,36 @@ function NotesSection({ activeWb }) {
         }}
       />
     </div>
+  );
+}
+
+// Slice 615 — Camera position + orbit target readout.
+function CameraCoordsRow() {
+  const [info, setInfo] = React.useState({ p: [0, 0, 0], t: [0, 0, 0] });
+  React.useEffect(() => {
+    const id = setInterval(() => {
+      const vp = window.__archdiscViewport;
+      if (!vp || !vp.camera) return;
+      const tt = vp.orbitControls && vp.orbitControls.target;
+      setInfo({
+        p: [vp.camera.position.x, vp.camera.position.y, vp.camera.position.z],
+        t: tt ? [tt.x, tt.y, tt.z] : [0, 0, 0],
+      });
+    }, 500);
+    return () => clearInterval(id);
+  }, []);
+  const fmt = (v) => v.map((n) => n.toFixed(3)).join(', ');
+  return (
+    <>
+      <div className="studio-right-row" style={{ alignItems: 'center' }}>
+        <span>Pos</span>
+        <strong data-studio-v3-camera-pos style={{ fontFamily: 'var(--studio-mono, ui-monospace)', fontSize: 10 }}>{fmt(info.p)}</strong>
+      </div>
+      <div className="studio-right-row" style={{ alignItems: 'center' }}>
+        <span>Tgt</span>
+        <strong data-studio-v3-camera-tgt style={{ fontFamily: 'var(--studio-mono, ui-monospace)', fontSize: 10 }}>{fmt(info.t)}</strong>
+      </div>
+    </>
   );
 }
 
