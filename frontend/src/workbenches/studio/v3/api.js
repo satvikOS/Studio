@@ -531,6 +531,113 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 625 — Randomize: jitter each vertex by ±strength on every axis.
+  window.__studioRandomize = (strength) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel || !sel.geometry) return { ok: false, error: 'no selection' };
+    if (window.__studioPushUndo) window.__studioPushUndo('randomize');
+    const s = Number(strength) || 0.02;
+    const pos = sel.geometry.attributes.position;
+    for (let i = 0; i < pos.array.length; i++) pos.array[i] += (Math.random() - 0.5) * 2 * s;
+    pos.needsUpdate = true;
+    sel.geometry.computeVertexNormals();
+    sel.geometry.computeBoundingBox(); sel.geometry.computeBoundingSphere();
+    return { ok: true, strength: s };
+  };
+
+  // Slice 625 — Cast to sphere: blend each vertex toward |r| * normalize(p).
+  window.__studioCastToSphere = (strength, radius) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel || !sel.geometry) return { ok: false, error: 'no selection' };
+    if (window.__studioPushUndo) window.__studioPushUndo('cast-sphere');
+    const t = Math.max(0, Math.min(1, Number(strength) ?? 1));
+    const r = Number(radius) || 1;
+    const pos = sel.geometry.attributes.position;
+    const tmp = new THREE.Vector3();
+    for (let i = 0; i < pos.count; i++) {
+      tmp.fromArray(pos.array, i * 3);
+      const len = tmp.length() || 1e-6;
+      const tx = tmp.x / len * r, ty = tmp.y / len * r, tz = tmp.z / len * r;
+      pos.array[i * 3]     = tmp.x + (tx - tmp.x) * t;
+      pos.array[i * 3 + 1] = tmp.y + (ty - tmp.y) * t;
+      pos.array[i * 3 + 2] = tmp.z + (tz - tmp.z) * t;
+    }
+    pos.needsUpdate = true;
+    sel.geometry.computeVertexNormals();
+    sel.geometry.computeBoundingBox(); sel.geometry.computeBoundingSphere();
+    return { ok: true, strength: t, radius: r };
+  };
+
+  // Slice 625 — Voxelize: snap each vert to nearest grid cell of size s.
+  window.__studioVoxelize = (size) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel || !sel.geometry) return { ok: false, error: 'no selection' };
+    if (window.__studioPushUndo) window.__studioPushUndo('voxelize');
+    const s = Number(size) || 0.1;
+    const pos = sel.geometry.attributes.position;
+    for (let i = 0; i < pos.array.length; i++) pos.array[i] = Math.round(pos.array[i] / s) * s;
+    pos.needsUpdate = true;
+    sel.geometry.computeVertexNormals();
+    sel.geometry.computeBoundingBox(); sel.geometry.computeBoundingSphere();
+    return { ok: true, size: s };
+  };
+
+  // Slice 625 — Triangulate: forcibly convert to non-indexed tri soup.
+  window.__studioTriangulate = () => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel || !sel.geometry) return { ok: false, error: 'no selection' };
+    if (sel.geometry.index) {
+      const tri = sel.geometry.toNonIndexed();
+      sel.geometry.dispose();
+      sel.geometry = tri;
+    }
+    sel.geometry.computeVertexNormals();
+    return { ok: true, verts: sel.geometry.attributes.position.count };
+  };
+
+  // Slice 625 — Decimate by ratio (0..1) using SimplifyModifier. ratio
+  // is the fraction to *keep* (0.5 = drop half).
+  window.__studioDecimate = async (ratio) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel || !sel.geometry) return { ok: false, error: 'no selection' };
+    const [{ SimplifyModifier }, { mergeVertices }] = await Promise.all([
+      import('three/examples/jsm/modifiers/SimplifyModifier.js'),
+      import('three/examples/jsm/utils/BufferGeometryUtils.js'),
+    ]);
+    if (window.__studioPushUndo) window.__studioPushUndo('decimate');
+    const merged = mergeVertices(sel.geometry, 1e-4);
+    const before = merged.attributes.position.count;
+    const keep = Math.max(0.05, Math.min(0.95, Number(ratio) || 0.5));
+    const remove = Math.floor(before * (1 - keep));
+    const out = new SimplifyModifier().modify(merged, remove);
+    sel.geometry.dispose();
+    sel.geometry = out;
+    sel.geometry.computeVertexNormals();
+    sel.geometry.computeBoundingBox(); sel.geometry.computeBoundingSphere();
+    return { ok: true, before, after: out.attributes.position.count };
+  };
+
+  // Slice 625 — Spherify: set every vertex's |p| = radius (exact).
+  window.__studioSpherify = (radius) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel || !sel.geometry) return { ok: false, error: 'no selection' };
+    if (window.__studioPushUndo) window.__studioPushUndo('spherify');
+    const r = Number(radius) || 1;
+    const pos = sel.geometry.attributes.position;
+    const tmp = new THREE.Vector3();
+    for (let i = 0; i < pos.count; i++) {
+      tmp.fromArray(pos.array, i * 3);
+      const len = tmp.length() || 1e-6;
+      pos.array[i * 3]     = tmp.x / len * r;
+      pos.array[i * 3 + 1] = tmp.y / len * r;
+      pos.array[i * 3 + 2] = tmp.z / len * r;
+    }
+    pos.needsUpdate = true;
+    sel.geometry.computeVertexNormals();
+    sel.geometry.computeBoundingBox(); sel.geometry.computeBoundingSphere();
+    return { ok: true, radius: r };
+  };
+
   // Slice 624 — Solidify: add a back-face shell at -thickness along
   // each vertex normal. Doubles vert count.
   window.__studioSolidify = (thickness) => {
