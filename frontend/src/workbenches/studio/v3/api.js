@@ -531,6 +531,152 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 637 — Annotation pack: text labels, arrows, dimensions and
+  // callouts. All annotations live on a flat list keyed by uuid so
+  // they can be listed / cleared independently of the scene meshes.
+  if (!window.__studioAnnotations) window.__studioAnnotations = [];
+
+  const _annotationLabelTexture = (text, opts) => {
+    const o = opts || {};
+    const dpr = window.devicePixelRatio || 1;
+    const fontSize = (o.fontSize || 32) * dpr;
+    const padding = (o.padding || 8) * dpr;
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    ctx.font = `${fontSize}px ${o.font || 'sans-serif'}`;
+    const w = ctx.measureText(text).width + padding * 2;
+    const h = fontSize + padding * 2;
+    canvas.width = w;
+    canvas.height = h;
+    ctx.fillStyle = o.background || 'rgba(15, 20, 28, 0.85)';
+    ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = o.border || '#3a4a5c';
+    ctx.lineWidth = dpr;
+    ctx.strokeRect(0, 0, w, h);
+    ctx.font = `${fontSize}px ${o.font || 'sans-serif'}`;
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = o.color || '#ecf3fb';
+    ctx.fillText(text, padding, padding);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return { tex, aspect: w / h };
+  };
+
+  window.__studioAddTextLabel = (position, text, opts) => {
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    const { tex, aspect } = _annotationLabelTexture(String(text || ''), opts);
+    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: !(opts && opts.alwaysOnTop) });
+    const sprite = new THREE.Sprite(mat);
+    const size = (opts && opts.size) || 0.4;
+    sprite.scale.set(size * aspect, size, 1);
+    const p = Array.isArray(position) ? position : [0, 1, 0];
+    sprite.position.set(p[0], p[1], p[2]);
+    sprite.userData.archdiscStudioAnnotation = { kind: 'label', text };
+    sprite.renderOrder = 99;
+    scene.add(sprite);
+    window.__studioAnnotations.push({ kind: 'label', uuid: sprite.uuid, object: sprite });
+    return { ok: true, uuid: sprite.uuid };
+  };
+
+  window.__studioAddArrow = (from, to, color) => {
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    const f = new THREE.Vector3(...(from || [0, 0, 0]));
+    const t = new THREE.Vector3(...(to   || [1, 0, 0]));
+    const dir = new THREE.Vector3().subVectors(t, f);
+    const len = dir.length();
+    if (len < 1e-6) return { ok: false, error: 'degenerate' };
+    dir.normalize();
+    const arrow = new THREE.ArrowHelper(dir, f, len, color || 0xffaa00, len * 0.18, len * 0.1);
+    arrow.userData.archdiscStudioAnnotation = { kind: 'arrow' };
+    scene.add(arrow);
+    window.__studioAnnotations.push({ kind: 'arrow', uuid: arrow.uuid, object: arrow });
+    return { ok: true, uuid: arrow.uuid, length: len };
+  };
+
+  window.__studioAddDimension = (p1, p2, opts) => {
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    const a = new THREE.Vector3(...(p1 || [0, 0, 0]));
+    const b = new THREE.Vector3(...(p2 || [1, 0, 0]));
+    const dist = a.distanceTo(b);
+    const group = new THREE.Group();
+    const line = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints([a, b]),
+      new THREE.LineBasicMaterial({ color: 0x44ddff }),
+    );
+    group.add(line);
+    const mid = new THREE.Vector3().addVectors(a, b).multiplyScalar(0.5);
+    const labelOpts = Object.assign({ size: 0.35 }, opts || {});
+    const { tex, aspect } = _annotationLabelTexture(dist.toFixed(3), labelOpts);
+    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true });
+    const sprite = new THREE.Sprite(mat);
+    sprite.scale.set(labelOpts.size * aspect, labelOpts.size, 1);
+    sprite.position.copy(mid).add(new THREE.Vector3(0, labelOpts.size * 0.6, 0));
+    group.add(sprite);
+    group.userData.archdiscStudioAnnotation = { kind: 'dimension', a: [a.x, a.y, a.z], b: [b.x, b.y, b.z], distance: dist };
+    scene.add(group);
+    window.__studioAnnotations.push({ kind: 'dimension', uuid: group.uuid, object: group, distance: dist });
+    return { ok: true, uuid: group.uuid, distance: dist };
+  };
+
+  window.__studioAddCallout = (position, text, opts) => {
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    const p = Array.isArray(position) ? position : [0, 1, 0];
+    const offset = (opts && opts.offset) || [0.6, 0.6, 0];
+    const labelPos = [p[0] + offset[0], p[1] + offset[1], p[2] + offset[2]];
+    const group = new THREE.Group();
+    // pin sphere
+    const pin = new THREE.Mesh(
+      new THREE.SphereGeometry(0.04, 16, 12),
+      new THREE.MeshBasicMaterial({ color: 0xff5577 }),
+    );
+    pin.position.set(p[0], p[1], p[2]);
+    group.add(pin);
+    // connector line
+    const line = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(p[0], p[1], p[2]),
+        new THREE.Vector3(labelPos[0], labelPos[1], labelPos[2]),
+      ]),
+      new THREE.LineBasicMaterial({ color: 0xff8899 }),
+    );
+    group.add(line);
+    // label
+    const label = window.__studioAddTextLabel(labelPos, text, opts);
+    if (label.ok) {
+      const labelSprite = scene.getObjectByProperty('uuid', label.uuid);
+      if (labelSprite) {
+        scene.remove(labelSprite);
+        group.add(labelSprite);
+        // remove from annotation list since it lives inside this group
+        window.__studioAnnotations = window.__studioAnnotations.filter((a) => a.uuid !== label.uuid);
+      }
+    }
+    group.userData.archdiscStudioAnnotation = { kind: 'callout', text };
+    scene.add(group);
+    window.__studioAnnotations.push({ kind: 'callout', uuid: group.uuid, object: group });
+    return { ok: true, uuid: group.uuid };
+  };
+
+  window.__studioClearAnnotations = () => {
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    for (const a of window.__studioAnnotations) {
+      if (a.object && a.object.parent) a.object.parent.remove(a.object);
+      a.object?.traverse?.((o) => {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); }
+      });
+    }
+    const n = window.__studioAnnotations.length;
+    window.__studioAnnotations.length = 0;
+    return { ok: true, cleared: n };
+  };
+
+  window.__studioListAnnotations = () => ({
+    ok: true,
+    count: window.__studioAnnotations.length,
+    annotations: window.__studioAnnotations.map((a) => ({ kind: a.kind, uuid: a.uuid, distance: a.distance })),
+  });
+
   // Slice 636 — Modifier stack. A "recipe" of {kind, opts} stored on
   // mesh.userData.archdiscStudioModifiers. The user can add / list /
   // reorder / remove before baking via applyAll. Kinds map to existing
