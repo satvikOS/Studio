@@ -531,6 +531,87 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 654 — Custom key-binding registry. Sits ALONGSIDE the
+  // existing shell-level onKeyDown switch — listens at window-capture
+  // before React's onKeyDown so user-mapped combos win.
+  if (!window.__studioKeyBindings) window.__studioKeyBindings = new Map();
+  const _kb = window.__studioKeyBindings;
+
+  const _comboFromEvent = (e) => {
+    const parts = [];
+    if (e.ctrlKey) parts.push('ctrl');
+    if (e.metaKey) parts.push('meta');
+    if (e.altKey) parts.push('alt');
+    if (e.shiftKey) parts.push('shift');
+    let key = (e.key || '').toLowerCase();
+    if (key === ' ') key = 'space';
+    if (key === 'arrowleft') key = 'left';
+    if (key === 'arrowright') key = 'right';
+    if (key === 'arrowup') key = 'up';
+    if (key === 'arrowdown') key = 'down';
+    parts.push(key);
+    return parts.join('+');
+  };
+
+  if (!window.__studioKeyListenerAttached) {
+    window.__studioKeyListenerAttached = true;
+    document.addEventListener('keydown', (e) => {
+      const ae = document.activeElement;
+      if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+      const combo = _comboFromEvent(e);
+      const fn = _kb.get(combo);
+      if (typeof fn === 'function') {
+        e.preventDefault();
+        try { fn(e); } catch (_) {}
+      } else if (typeof fn === 'string' && typeof window[fn] === 'function') {
+        e.preventDefault();
+        try { window[fn](); } catch (_) {}
+      }
+    }, true);
+  }
+
+  window.__studioSetKeyBinding = (combo, target) => {
+    if (!combo) return { ok: false };
+    _kb.set(String(combo).toLowerCase(), target);
+    return { ok: true, combo, total: _kb.size };
+  };
+
+  window.__studioRemoveKeyBinding = (combo) => {
+    const had = _kb.delete(String(combo).toLowerCase());
+    return { ok: true, removed: had, total: _kb.size };
+  };
+
+  window.__studioListKeyBindings = () => ({
+    ok: true,
+    count: _kb.size,
+    bindings: Array.from(_kb.entries()).map(([combo, t]) => ({ combo, target: typeof t === 'function' ? '<fn>' : t })),
+  });
+
+  window.__studioResetKeyBindings = () => {
+    const n = _kb.size;
+    _kb.clear();
+    return { ok: true, removed: n };
+  };
+
+  window.__studioInvokeShortcut = (combo) => {
+    const fn = _kb.get(String(combo).toLowerCase());
+    if (typeof fn === 'function') { try { fn(); return { ok: true, fired: true }; } catch (e) { return { ok: false, error: e.message }; } }
+    if (typeof fn === 'string' && typeof window[fn] === 'function') {
+      try { window[fn](); return { ok: true, fired: true, name: fn }; } catch (e) { return { ok: false, error: e.message }; }
+    }
+    return { ok: false, error: 'no binding' };
+  };
+
+  // resolves the next single key combo the user presses (returns Promise).
+  window.__studioCaptureNextKey = () => new Promise((resolve) => {
+    const handler = (e) => {
+      document.removeEventListener('keydown', handler, true);
+      e.preventDefault();
+      resolve({ ok: true, combo: _comboFromEvent(e) });
+    };
+    document.addEventListener('keydown', handler, true);
+  });
+
   // Slice 653 — Alignment / distribution pack for CAD-style layout.
   // Operate on the current multi-selection; single selection no-ops.
   const _selectedList = () => {
