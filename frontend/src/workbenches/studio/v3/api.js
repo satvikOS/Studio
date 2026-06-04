@@ -531,6 +531,256 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 633 — Hand-rolled rigid body sim: every body is a sphere
+  // anchored to a mesh's centre. Collides with y=0 ground and other
+  // bodies using simple penetration resolution + bounce.
+  if (!window.__studioPhysicsState) {
+    window.__studioPhysicsState = {
+      bodies: [],
+      gravity: -9.81,
+      playing: false,
+      lastTickMs: 0,
+      groundY: 0,
+    };
+  }
+  const _phys = window.__studioPhysicsState;
+
+  window.__studioPhysicsInit = () => {
+    _phys.bodies = []; _phys.playing = false;
+    return { ok: true };
+  };
+
+  window.__studioPhysicsAddBody = (uuid, mass, restitution) => {
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    const mesh = scene.getObjectByProperty('uuid', uuid);
+    if (!mesh || !mesh.isMesh) return { ok: false, error: 'mesh not found' };
+    mesh.geometry.computeBoundingSphere();
+    const r = (mesh.geometry.boundingSphere && mesh.geometry.boundingSphere.radius) || 0.5;
+    _phys.bodies.push({
+      uuid, mesh,
+      mass: Math.max(0.001, Number(mass) || 1),
+      r: r * Math.max(mesh.scale.x, mesh.scale.y, mesh.scale.z),
+      vx: 0, vy: 0, vz: 0,
+      e: Math.max(0, Math.min(1, Number(restitution) ?? 0.5)),
+      x0: mesh.position.x, y0: mesh.position.y, z0: mesh.position.z,
+    });
+    return { ok: true, bodyCount: _phys.bodies.length, radius: r };
+  };
+
+  window.__studioPhysicsSetGravity = (g) => {
+    _phys.gravity = Number(g);
+    return { ok: true, gravity: _phys.gravity };
+  };
+
+  window.__studioPhysicsStep = (dt) => {
+    const step = Math.min(0.05, Number(dt) || 0.016);
+    for (const b of _phys.bodies) {
+      b.vy += _phys.gravity * step;
+      b.mesh.position.x += b.vx * step;
+      b.mesh.position.y += b.vy * step;
+      b.mesh.position.z += b.vz * step;
+      // ground collide
+      if (b.mesh.position.y - b.r < _phys.groundY) {
+        b.mesh.position.y = _phys.groundY + b.r;
+        if (b.vy < 0) b.vy = -b.vy * b.e;
+        b.vx *= (1 - 0.05);
+        b.vz *= (1 - 0.05);
+      }
+    }
+    // pair-wise collide
+    for (let i = 0; i < _phys.bodies.length; i++) {
+      for (let j = i + 1; j < _phys.bodies.length; j++) {
+        const a = _phys.bodies[i], b = _phys.bodies[j];
+        const dx = b.mesh.position.x - a.mesh.position.x;
+        const dy = b.mesh.position.y - a.mesh.position.y;
+        const dz = b.mesh.position.z - a.mesh.position.z;
+        const d2 = dx * dx + dy * dy + dz * dz;
+        const min = a.r + b.r;
+        if (d2 < min * min && d2 > 1e-8) {
+          const d = Math.sqrt(d2);
+          const nx = dx / d, ny = dy / d, nz = dz / d;
+          const pen = (min - d) * 0.5;
+          a.mesh.position.x -= nx * pen; a.mesh.position.y -= ny * pen; a.mesh.position.z -= nz * pen;
+          b.mesh.position.x += nx * pen; b.mesh.position.y += ny * pen; b.mesh.position.z += nz * pen;
+          // exchange velocity along normal (elastic-ish)
+          const vrel = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny + (b.vz - a.vz) * nz;
+          if (vrel < 0) {
+            const e = Math.min(a.e, b.e);
+            const m1 = a.mass, m2 = b.mass;
+            const J = -(1 + e) * vrel / (1 / m1 + 1 / m2);
+            const jx = J * nx, jy = J * ny, jz = J * nz;
+            a.vx -= jx / m1; a.vy -= jy / m1; a.vz -= jz / m1;
+            b.vx += jx / m2; b.vy += jy / m2; b.vz += jz / m2;
+          }
+        }
+      }
+    }
+    return { ok: true, bodies: _phys.bodies.length };
+  };
+
+  window.__studioPhysicsTogglePlay = () => {
+    const v = window.__archdiscViewport; if (!v) return { ok: false };
+    _phys.playing = !_phys.playing;
+    if (_phys.playing) {
+      _phys.lastTickMs = performance.now();
+      const prev = v.__studioAnimTick;
+      const chained = (now) => {
+        if (_phys.playing) {
+          const d = Math.min(0.05, (now - _phys.lastTickMs) / 1000);
+          _phys.lastTickMs = now;
+          window.__studioPhysicsStep(d);
+        }
+        if (prev) prev(now);
+      };
+      chained.__phys = true; chained.__prev = prev;
+      v.__studioAnimTick = chained;
+    }
+    return { ok: true, playing: _phys.playing };
+  };
+
+  window.__studioPhysicsReset = () => {
+    for (const b of _phys.bodies) {
+      b.mesh.position.set(b.x0, b.y0, b.z0);
+      b.vx = b.vy = b.vz = 0;
+    }
+    return { ok: true, bodies: _phys.bodies.length };
+  };
+
+  // Slice 633 — Hand-rolled rigid-body sandbox. No external physics
+  // dep; sphere-vs-ground (y=0) + sphere-vs-sphere with restitution.
+  // Bodies store {mesh, vel:[3], mass, radius, restitution, kinematic}.
+  if (!window.__studioPhysics) {
+    window.__studioPhysics = {
+      bodies: [],
+      gravity: [0, -9.81, 0],
+      playing: false,
+      lastTickMs: 0,
+    };
+  }
+  const _phys = window.__studioPhysics;
+
+  window.__studioPhysicsInit = (gravity) => {
+    _phys.bodies.length = 0;
+    _phys.gravity = Array.isArray(gravity) ? gravity.slice() : [0, -9.81, 0];
+    _phys.playing = false;
+    return { ok: true, gravity: _phys.gravity };
+  };
+
+  window.__studioPhysicsAddRigid = (uuid, opts) => {
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    let mesh = uuid ? scene.getObjectByProperty('uuid', uuid)
+      : (window.__studioSelectedMesh && window.__studioSelectedMesh());
+    if (!mesh) return { ok: false, error: 'not found' };
+    if (!mesh.geometry) return { ok: false, error: 'no geometry' };
+    mesh.geometry.computeBoundingSphere();
+    const o = opts || {};
+    const body = {
+      mesh,
+      vel: Array.isArray(o.vel) ? o.vel.slice() : [0, 0, 0],
+      mass: Number(o.mass) || 1,
+      radius: Number(o.radius) || (mesh.geometry.boundingSphere ? mesh.geometry.boundingSphere.radius * Math.max(mesh.scale.x, mesh.scale.y, mesh.scale.z) : 0.5),
+      restitution: o.restitution ?? 0.6,
+      kinematic: !!o.kinematic,
+    };
+    _phys.bodies.push(body);
+    return { ok: true, uuid: mesh.uuid, count: _phys.bodies.length, radius: body.radius };
+  };
+
+  window.__studioPhysicsSetGravity = (g) => {
+    if (Array.isArray(g) && g.length === 3) _phys.gravity = g.slice();
+    return { ok: true, gravity: _phys.gravity };
+  };
+
+  window.__studioPhysicsStep = (dt) => {
+    const step = Math.max(1e-4, Math.min(0.05, Number(dt) || 0.016));
+    const [gx, gy, gz] = _phys.gravity;
+    const bodies = _phys.bodies;
+    // integrate
+    for (const b of bodies) {
+      if (b.kinematic) continue;
+      b.vel[0] += gx * step;
+      b.vel[1] += gy * step;
+      b.vel[2] += gz * step;
+      b.mesh.position.x += b.vel[0] * step;
+      b.mesh.position.y += b.vel[1] * step;
+      b.mesh.position.z += b.vel[2] * step;
+    }
+    // ground collision (plane y=0)
+    for (const b of bodies) {
+      if (b.kinematic) continue;
+      const groundY = b.radius;
+      if (b.mesh.position.y < groundY) {
+        b.mesh.position.y = groundY;
+        if (b.vel[1] < 0) b.vel[1] = -b.vel[1] * b.restitution;
+        // tangential friction
+        b.vel[0] *= 0.95;
+        b.vel[2] *= 0.95;
+      }
+    }
+    // pair collisions
+    for (let i = 0; i < bodies.length; i++) {
+      for (let j = i + 1; j < bodies.length; j++) {
+        const a = bodies[i], c = bodies[j];
+        if (a.kinematic && c.kinematic) continue;
+        const dx = c.mesh.position.x - a.mesh.position.x;
+        const dy = c.mesh.position.y - a.mesh.position.y;
+        const dz = c.mesh.position.z - a.mesh.position.z;
+        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1e-6;
+        const minD = a.radius + c.radius;
+        if (dist < minD) {
+          const nx = dx / dist, ny = dy / dist, nz = dz / dist;
+          const overlap = (minD - dist) * 0.5;
+          if (!a.kinematic) { a.mesh.position.x -= nx * overlap; a.mesh.position.y -= ny * overlap; a.mesh.position.z -= nz * overlap; }
+          if (!c.kinematic) { c.mesh.position.x += nx * overlap; c.mesh.position.y += ny * overlap; c.mesh.position.z += nz * overlap; }
+          // 1D impulse along normal
+          const va = a.vel[0] * nx + a.vel[1] * ny + a.vel[2] * nz;
+          const vc = c.vel[0] * nx + c.vel[1] * ny + c.vel[2] * nz;
+          const rest = Math.min(a.restitution, c.restitution);
+          const ma = a.kinematic ? 1e9 : a.mass;
+          const mc = c.kinematic ? 1e9 : c.mass;
+          const jImp = -(1 + rest) * (vc - va) / (1 / ma + 1 / mc);
+          if (!a.kinematic) { a.vel[0] -= (jImp / ma) * nx; a.vel[1] -= (jImp / ma) * ny; a.vel[2] -= (jImp / ma) * nz; }
+          if (!c.kinematic) { c.vel[0] += (jImp / mc) * nx; c.vel[1] += (jImp / mc) * ny; c.vel[2] += (jImp / mc) * nz; }
+        }
+      }
+    }
+    return { ok: true, bodies: bodies.length, dt: step };
+  };
+
+  window.__studioPhysicsReset = () => {
+    _phys.bodies.length = 0;
+    _phys.playing = false;
+    const v = window.__archdiscViewport;
+    if (v && v.__studioAnimTick && v.__studioAnimTick.__physics) {
+      v.__studioAnimTick = v.__studioAnimTick.__prev || null;
+    }
+    return { ok: true };
+  };
+
+  window.__studioPhysicsTogglePlay = () => {
+    const v = window.__archdiscViewport; if (!v) return { ok: false };
+    if (_phys.playing) {
+      _phys.playing = false;
+      if (v.__studioAnimTick && v.__studioAnimTick.__physics) {
+        v.__studioAnimTick = v.__studioAnimTick.__prev || null;
+      }
+      return { ok: true, on: false };
+    }
+    _phys.playing = true;
+    _phys.lastTickMs = performance.now();
+    const prev = v.__studioAnimTick;
+    const chained = (now) => {
+      const dt = Math.min(0.05, (now - _phys.lastTickMs) / 1000);
+      _phys.lastTickMs = now;
+      window.__studioPhysicsStep(dt);
+      if (prev) prev(now);
+    };
+    chained.__physics = true;
+    chained.__prev = prev;
+    v.__studioAnimTick = chained;
+    return { ok: true, on: true, count: _phys.bodies.length };
+  };
+
   // Slice 632 — Particle system: a THREE.Points with per-vertex
   // velocity / lifetime / colour stored on userData arrays.
   window.__studioCreateParticleSystem = (count, opts) => {
