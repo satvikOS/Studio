@@ -531,6 +531,76 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 657 — Presentation / slide pack. Captures camera viewpoints
+  // into an ordered list and steps through them like Keynote slides.
+  if (!window.__studioPresentation) window.__studioPresentation = { slides: [], index: -1, active: false };
+  const _pres = window.__studioPresentation;
+
+  window.__studioPresentationCaptureSlide = (name) => {
+    const v = window.__archdiscViewport; if (!v || !v.camera) return { ok: false };
+    const ctrl = v.orbitControls || v.controls;
+    const slide = {
+      name: String(name || `slide_${_pres.slides.length + 1}`),
+      cameraPosition: v.camera.position.toArray(),
+      target: ctrl ? [ctrl.target.x, ctrl.target.y, ctrl.target.z] : [0, 0, 0],
+      fov: v.camera.fov,
+    };
+    _pres.slides.push(slide);
+    return { ok: true, name: slide.name, total: _pres.slides.length };
+  };
+
+  window.__studioPresentationListSlides = () => ({
+    ok: true,
+    count: _pres.slides.length,
+    slides: _pres.slides.map((s, i) => ({ index: i, name: s.name, fov: s.fov })),
+  });
+
+  window.__studioPresentationDeleteSlide = (name) => {
+    const idx = _pres.slides.findIndex((s) => s.name === name);
+    if (idx < 0) return { ok: false };
+    _pres.slides.splice(idx, 1);
+    if (_pres.index >= _pres.slides.length) _pres.index = _pres.slides.length - 1;
+    return { ok: true, remaining: _pres.slides.length };
+  };
+
+  const _gotoSlide = (idx) => {
+    const v = window.__archdiscViewport; if (!v || !v.camera) return { ok: false };
+    if (idx < 0 || idx >= _pres.slides.length) return { ok: false, error: 'out of range' };
+    const s = _pres.slides[idx];
+    v.camera.position.fromArray(s.cameraPosition);
+    if (v.camera.isPerspectiveCamera) {
+      v.camera.fov = s.fov;
+      v.camera.updateProjectionMatrix();
+    }
+    const ctrl = v.orbitControls || v.controls;
+    if (ctrl) { ctrl.target.fromArray(s.target); if (ctrl.update) ctrl.update(); }
+    v.camera.lookAt(s.target[0], s.target[1], s.target[2]);
+    v.camera.updateMatrixWorld(true);
+    _pres.index = idx;
+    return { ok: true, index: idx, name: s.name };
+  };
+
+  window.__studioPresentationStart = () => {
+    if (!_pres.slides.length) return { ok: false, error: 'no slides' };
+    _pres.active = true;
+    return _gotoSlide(0);
+  };
+
+  window.__studioPresentationNext = () => {
+    if (!_pres.active) return { ok: false, error: 'not started' };
+    const next = _pres.index + 1;
+    if (next >= _pres.slides.length) return { ok: true, finished: true };
+    return _gotoSlide(next);
+  };
+
+  window.__studioPresentationClear = () => {
+    const n = _pres.slides.length;
+    _pres.slides.length = 0;
+    _pres.index = -1;
+    _pres.active = false;
+    return { ok: true, cleared: n };
+  };
+
   // Slice 656 — Render-pass image pack. Each op swaps every mesh's
   // material for a special variant, renders the current view, returns
   // a dataURL, then restores the original materials.
