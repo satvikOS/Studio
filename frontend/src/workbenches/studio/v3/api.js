@@ -531,6 +531,74 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 656 — Render-pass image pack. Each op swaps every mesh's
+  // material for a special variant, renders the current view, returns
+  // a dataURL, then restores the original materials.
+  const _withTemporaryMaterial = (factoryFn) => {
+    const v = window.__archdiscViewport;
+    if (!v || !v.scene || !v.renderer || !v.camera) return { ok: false };
+    const saved = [];
+    v.scene.traverse((o) => {
+      if (!o.isMesh) return;
+      saved.push({ mesh: o, material: o.material });
+      o.material = factoryFn(o);
+    });
+    v.renderer.render(v.scene, v.camera);
+    const url = v.renderer.domElement.toDataURL('image/png');
+    saved.forEach((s) => { s.mesh.material = s.material; });
+    return { ok: true, dataUrl: url };
+  };
+
+  window.__studioRenderDepthImage = () => {
+    const mat = new THREE.MeshDepthMaterial();
+    return _withTemporaryMaterial(() => mat);
+  };
+
+  window.__studioRenderNormalImage = () => {
+    const mat = new THREE.MeshNormalMaterial();
+    return _withTemporaryMaterial(() => mat);
+  };
+
+  window.__studioRenderMatcapImage = async (matcapDataUrl) => {
+    if (!matcapDataUrl) return { ok: false, error: 'matcap required' };
+    const tex = await new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => { const t = new THREE.Texture(img); t.colorSpace = THREE.SRGBColorSpace; t.needsUpdate = true; resolve(t); };
+      img.onerror = () => resolve(null);
+      img.src = matcapDataUrl;
+    });
+    if (!tex) return { ok: false, error: 'matcap load failed' };
+    const mat = new THREE.MeshMatcapMaterial({ matcap: tex });
+    return _withTemporaryMaterial(() => mat);
+  };
+
+  window.__studioRenderToonImage = (color) => {
+    const c = new THREE.Color(color || 0xb6c4d2);
+    const grad = new Uint8Array([64, 64, 64, 128, 128, 128, 200, 200, 200, 255, 255, 255]);
+    const gradTex = new THREE.DataTexture(grad, 4, 1, THREE.RGBFormat);
+    gradTex.needsUpdate = true;
+    const mat = new THREE.MeshToonMaterial({ color: c, gradientMap: gradTex });
+    return _withTemporaryMaterial(() => mat);
+  };
+
+  window.__studioRenderClayImage = () => {
+    const mat = new THREE.MeshLambertMaterial({ color: 0xc8c8c8 });
+    return _withTemporaryMaterial(() => mat);
+  };
+
+  window.__studioRenderXrayImage = () => {
+    // Wireframe overlay against a dark base — quick X-ray feel.
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0x66ccff,
+      transparent: true,
+      opacity: 0.25,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      wireframe: true,
+    });
+    return _withTemporaryMaterial(() => mat);
+  };
+
   // Slice 655 — Snap / grid configuration pack. Lightweight state
   // store that drag handlers in the shell can read.
   if (!window.__studioSnapState) {
