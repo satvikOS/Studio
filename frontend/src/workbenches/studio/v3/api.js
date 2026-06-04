@@ -531,6 +531,141 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 642 — Procedural texture pack. Six canvas-based generators
+  // that return a CanvasTexture (srgb) and apply it as the active
+  // mesh's material map.
+  const _makeCanvasTex = (size, draw) => {
+    const s = Math.max(8, Math.min(2048, Number(size) || 256));
+    const c = document.createElement('canvas');
+    c.width = s; c.height = s;
+    const ctx = c.getContext('2d');
+    draw(ctx, s);
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.needsUpdate = true;
+    return tex;
+  };
+
+  const _applyMap = (tex, channel) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel) return { ok: false };
+    const mat = Array.isArray(sel.material) ? sel.material[0] : sel.material;
+    if (!mat) return { ok: false };
+    if (channel === 'normal') mat.normalMap = tex;
+    else if (channel === 'rough') mat.roughnessMap = tex;
+    else if (channel === 'metal') mat.metalnessMap = tex;
+    else if (channel === 'emissive') mat.emissiveMap = tex;
+    else mat.map = tex;
+    mat.needsUpdate = true;
+    return { ok: true, channel: channel || 'map' };
+  };
+
+  window.__studioMakeCheckerTexture = (size, c1, c2, divisions) => {
+    const a = new THREE.Color(c1 || 0xffffff), b = new THREE.Color(c2 || 0x222222);
+    const div = Math.max(2, Math.min(64, Number(divisions) || 8));
+    const tex = _makeCanvasTex(size, (ctx, s) => {
+      const cell = s / div;
+      for (let y = 0; y < div; y++) for (let x = 0; x < div; x++) {
+        const c = (x + y) % 2 === 0 ? a : b;
+        ctx.fillStyle = `rgb(${(c.r*255)|0},${(c.g*255)|0},${(c.b*255)|0})`;
+        ctx.fillRect(x * cell, y * cell, cell + 1, cell + 1);
+      }
+    });
+    const r = _applyMap(tex, arguments[4]);
+    return { ok: true, uuid: tex.uuid, divisions: div, applied: r.ok };
+  };
+
+  window.__studioMakeGradientTexture = (size, c1, c2, dir) => {
+    const a = new THREE.Color(c1 || 0x1e2a3a), b = new THREE.Color(c2 || 0xff8866);
+    const d = dir || 'vertical';
+    const tex = _makeCanvasTex(size, (ctx, s) => {
+      const g = ctx.createLinearGradient(0, 0, d === 'horizontal' ? s : 0, d === 'horizontal' ? 0 : s);
+      g.addColorStop(0, `rgb(${(a.r*255)|0},${(a.g*255)|0},${(a.b*255)|0})`);
+      g.addColorStop(1, `rgb(${(b.r*255)|0},${(b.g*255)|0},${(b.b*255)|0})`);
+      ctx.fillStyle = g; ctx.fillRect(0, 0, s, s);
+    });
+    const r = _applyMap(tex, arguments[4]);
+    return { ok: true, uuid: tex.uuid, applied: r.ok };
+  };
+
+  window.__studioMakeNoiseTexture = (size, scale) => {
+    const sc = Math.max(1, Math.min(32, Number(scale) || 4));
+    const tex = _makeCanvasTex(size, (ctx, s) => {
+      const img = ctx.createImageData(s, s);
+      for (let y = 0; y < s; y++) for (let x = 0; x < s; x++) {
+        const v = Math.floor(Math.random() * 255);
+        const i = (y * s + x) * 4;
+        img.data[i] = v; img.data[i+1] = v; img.data[i+2] = v; img.data[i+3] = 255;
+      }
+      ctx.putImageData(img, 0, 0);
+    });
+    tex.repeat.set(sc, sc);
+    const r = _applyMap(tex, arguments[2]);
+    return { ok: true, uuid: tex.uuid, scale: sc, applied: r.ok };
+  };
+
+  window.__studioMakeVoronoiTexture = (size, cellCount) => {
+    const N = Math.max(4, Math.min(200, Number(cellCount) || 24));
+    const tex = _makeCanvasTex(size, (ctx, s) => {
+      const seeds = [];
+      for (let i = 0; i < N; i++) {
+        seeds.push({
+          x: Math.random() * s,
+          y: Math.random() * s,
+          c: [Math.floor(Math.random()*255), Math.floor(Math.random()*255), Math.floor(Math.random()*255)],
+        });
+      }
+      const img = ctx.createImageData(s, s);
+      for (let y = 0; y < s; y++) for (let x = 0; x < s; x++) {
+        let best = Infinity, bestC = [0, 0, 0];
+        for (const sd of seeds) {
+          const d = (sd.x - x)**2 + (sd.y - y)**2;
+          if (d < best) { best = d; bestC = sd.c; }
+        }
+        const i = (y * s + x) * 4;
+        img.data[i] = bestC[0]; img.data[i+1] = bestC[1]; img.data[i+2] = bestC[2]; img.data[i+3] = 255;
+      }
+      ctx.putImageData(img, 0, 0);
+    });
+    const r = _applyMap(tex, arguments[2]);
+    return { ok: true, uuid: tex.uuid, cells: N, applied: r.ok };
+  };
+
+  window.__studioMakeStripeTexture = (size, count, c1, c2, vertical) => {
+    const n = Math.max(2, Math.min(64, Number(count) || 8));
+    const a = new THREE.Color(c1 || 0xffffff), b = new THREE.Color(c2 || 0x222222);
+    const tex = _makeCanvasTex(size, (ctx, s) => {
+      const stripe = s / n;
+      for (let i = 0; i < n; i++) {
+        const col = i % 2 === 0 ? a : b;
+        ctx.fillStyle = `rgb(${(col.r*255)|0},${(col.g*255)|0},${(col.b*255)|0})`;
+        if (vertical) ctx.fillRect(i * stripe, 0, stripe + 1, s);
+        else          ctx.fillRect(0, i * stripe, s, stripe + 1);
+      }
+    });
+    const r = _applyMap(tex, arguments[5]);
+    return { ok: true, uuid: tex.uuid, stripes: n, applied: r.ok };
+  };
+
+  window.__studioMakeDotsTexture = (size, count, dotR) => {
+    const n = Math.max(2, Math.min(64, Number(count) || 8));
+    const rad = Number(dotR) || 0.2;
+    const tex = _makeCanvasTex(size, (ctx, s) => {
+      ctx.fillStyle = '#1e2a3a'; ctx.fillRect(0, 0, s, s);
+      ctx.fillStyle = '#ffd1a8';
+      const cell = s / n;
+      for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+        ctx.beginPath();
+        ctx.arc(x * cell + cell/2, y * cell + cell/2, rad * cell, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    });
+    const r = _applyMap(tex, arguments[3]);
+    return { ok: true, uuid: tex.uuid, dots: n*n, applied: r.ok };
+  };
+
   // Slice 641 — Bulk selection / visibility helpers. These operate
   // across the whole scene so the user can act on big groups without
   // hunting in the outliner.
