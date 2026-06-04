@@ -531,6 +531,76 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 631 — Scene outliner: list every user-mesh by uuid + metadata.
+  window.__studioListSceneMeshes = () => {
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    const out = [];
+    scene.traverse((o) => {
+      if (!o.isMesh) return;
+      if (o.userData && (o.userData.archdiscStudioGizmo || o.userData.archdiscStudioGround || o.userData.archdiscStudioGrid)) return;
+      out.push({
+        uuid: o.uuid,
+        name: o.name || '(unnamed)',
+        kind: (o.userData && o.userData.archdiscStudioPrimitiveKind) || 'mesh',
+        visible: o.visible,
+        selectable: !(o.userData && o.userData.archdiscStudioFrozen),
+        parent: o.parent && o.parent.uuid !== scene.uuid ? o.parent.uuid : null,
+      });
+    });
+    return { ok: true, count: out.length, meshes: out };
+  };
+
+  window.__studioRenameMesh = (uuid, newName) => {
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    const m = scene.getObjectByProperty('uuid', uuid);
+    if (!m) return { ok: false, error: 'not found' };
+    m.name = String(newName || '');
+    return { ok: true, uuid, name: m.name };
+  };
+
+  window.__studioSetMeshVisible = (uuid, visible) => {
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    const m = scene.getObjectByProperty('uuid', uuid);
+    if (!m) return { ok: false };
+    m.visible = !!visible;
+    return { ok: true, uuid, visible: m.visible };
+  };
+
+  window.__studioSetMeshFrozen = (uuid, frozen) => {
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    const m = scene.getObjectByProperty('uuid', uuid);
+    if (!m) return { ok: false };
+    if (!m.userData) m.userData = {};
+    m.userData.archdiscStudioFrozen = !!frozen;
+    return { ok: true, uuid, frozen: !!frozen };
+  };
+
+  window.__studioReparentMesh = (childUuid, parentUuid) => {
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    const child = scene.getObjectByProperty('uuid', childUuid);
+    if (!child) return { ok: false, error: 'child not found' };
+    const newParent = parentUuid ? scene.getObjectByProperty('uuid', parentUuid) : scene;
+    if (!newParent) return { ok: false, error: 'parent not found' };
+    // preserve world transform
+    const oldMatrix = child.matrixWorld.clone();
+    newParent.add(child);
+    newParent.updateMatrixWorld(true);
+    const m = new THREE.Matrix4().copy(newParent.matrixWorld).invert().multiply(oldMatrix);
+    m.decompose(child.position, child.quaternion, child.scale);
+    return { ok: true, child: childUuid, parent: newParent.uuid };
+  };
+
+  // Slice 631 — Outliner colour tag (handy for grouping). Persisted on
+  // userData so it survives serialisation.
+  window.__studioSetMeshTagColor = (uuid, hex) => {
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    const m = scene.getObjectByProperty('uuid', uuid);
+    if (!m) return { ok: false };
+    if (!m.userData) m.userData = {};
+    m.userData.archdiscStudioTagColor = hex || null;
+    return { ok: true, uuid, color: hex || null };
+  };
+
   // Slice 630 — UV planar projection along one axis. Maps the two
   // remaining axes onto u/v, normalized to the bounding box.
   window.__studioUvProjectPlanar = (axis) => {
