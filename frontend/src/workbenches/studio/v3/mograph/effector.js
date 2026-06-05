@@ -22,6 +22,7 @@
 import * as THREE from 'three';
 import { findClonerByUuid } from './cloner.js';
 import { getField } from './field.js';
+import { mulberry32, fnv1a32 as hashString } from '../common/random.js';
 
 // Map of effectorUuid -> { kind, clonerUuid, params, fieldUuid }.
 // Maintained so a re-apply (via __studioEffectorBindField + a fresh
@@ -45,24 +46,7 @@ function matFromArray(arr) {
 // + instance index) so a "random" effector replays identically when
 // re-applied. Avoids the C4D footgun where re-running random keeps
 // shuffling clones around forever.
-function hashString(s) {
-  let h = 2166136261 >>> 0;
-  for (let i = 0; i < s.length; i++) {
-    h = (h ^ s.charCodeAt(i)) >>> 0;
-    h = Math.imul(h, 16777619) >>> 0;
-  }
-  return h >>> 0;
-}
-function mulberry32(seed) {
-  let a = (seed >>> 0) || 1;
-  return function next() {
-    a = (a + 0x6D2B79F5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
+// hashString + mulberry32 imported from common/random.js.
 
 // ─── Core apply loop ────────────────────────────────────────────────────
 // `deltaFn` returns { dPos: Vector3, dRot: Vector3 (euler), dScl: Vector3 }

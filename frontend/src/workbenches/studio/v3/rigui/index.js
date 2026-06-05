@@ -25,25 +25,10 @@ import {
   uninstall as uninstallDragger,
   isInstalled as draggerIsInstalled,
 } from './dragger.js';
+import { registerOp, unregisterOps } from '../common/registry.js';
 
 function reg(name, fn, description) {
-  if (typeof window === 'undefined') return;
-  window[name] = fn;
-  const tryReg = () => {
-    if (typeof window.__studioCommandRegister === 'function') {
-      try {
-        window.__studioCommandRegister(name, fn, { category: 'rig', description });
-        return true;
-      } catch (_) { return false; }
-    }
-    return false;
-  };
-  if (!tryReg()) {
-    // Command registry races registerV3Api — retry on the next macrotask
-    // (matches rig/index.js's autoload retry).
-    setTimeout(() => { tryReg(); }, 0);
-    setTimeout(() => { tryReg(); }, 100);
-  }
+  registerOp(name, fn, 'rig', description);
 }
 
 function tryInstallDragger(retries) {
@@ -82,15 +67,10 @@ export function installRigUI() {
 export function uninstallRigUI() {
   if (typeof window === 'undefined') return { ok: false };
   uninstallDragger();
-  for (const k of [
+  unregisterOps([
     '__studioRigUIShowHandles', '__studioRigUIHideHandles', '__studioRigUIListHandles',
     '__studioRigUIDragHandle', '__studioRigUISetChainLength', '__studioRigUIRefreshHandles',
-  ]) {
-    try { delete window[k]; } catch (_) {}
-    if (typeof window.__studioCommandUnregister === 'function') {
-      try { window.__studioCommandUnregister(k); } catch (_) {}
-    }
-  }
+  ]);
   window.__studioRigUIInstalled = false;
   return { ok: true };
 }

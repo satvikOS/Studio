@@ -6,34 +6,30 @@
 // its own command-palette entry under category 'matlib'.
 
 import React from 'react';
-import { createRoot } from 'react-dom/client';
 import {
   RECIPES, CATEGORIES, recipesByCategory, findRecipe,
   countByCategory, safeIdSuffix,
 } from './library.js';
 import { applyRecipe } from './applyToSelection.js';
 import MaterialBrowser, { disposeThumbnailer } from './MaterialBrowser.jsx';
+import { mountPanel, unmountPanel } from '../common/panel.js';
+import { registerOp, unregisterOps } from '../common/registry.js';
 
 let _installed = false;
-let _host = null;
-let _root = null;
+let _panel = null;
 let _open = false;
 
 // ─── Browser mount control ───────────────────────────────────────────────
 function ensureHost() {
-  if (typeof document === 'undefined') return null;
-  if (_host) return _host;
-  _host = document.createElement('div');
-  _host.setAttribute('data-studio-v3-matlib-host', '');
-  document.body.appendChild(_host);
-  _root = createRoot(_host);
-  return _host;
+  if (_panel) return _panel.host;
+  _panel = mountPanel('matlib');
+  return _panel ? _panel.host : null;
 }
 
 function render() {
-  if (!_root) return;
-  if (!_open) { _root.render(null); return; }
-  _root.render(
+  if (!_panel) return;
+  if (!_open) { _panel.render(null); return; }
+  _panel.render(
     React.createElement(MaterialBrowser, {
       onApply: (id) => {
         const r = applyRecipe(id);
@@ -126,33 +122,25 @@ export function installMatLib() {
   };
   window.addEventListener('keydown', onKey);
 
-  // Register with the V3 command palette if available. The shader
-  // installer uses the same defensive check — registry may not exist
-  // yet during very early boots.
-  const reg = window.__studioCommandRegister;
-  if (typeof reg === 'function') {
-    const cat = 'matlib';
-    const generics = [
-      ['__studioMatLibList',            'List matlib recipes (optionally filtered by category)'],
-      ['__studioMatLibApply',           'Apply a matlib recipe id to the active selection'],
-      ['__studioMatLibListCategories',  'List matlib categories'],
-      ['__studioMatLibBrowserOpen',     'Open the Material Browser panel'],
-      ['__studioMatLibBrowserClose',    'Close the Material Browser panel'],
-      ['__studioMatLibBrowserToggle',   'Toggle the Material Browser panel'],
-      ['__studioMatLibCount',           'Return total + per-category recipe counts'],
-      ['__studioMatLibFind',            'Look up a single recipe by id'],
-    ];
-    for (const [name, desc] of generics) {
-      try { reg(name, window[name], { category: cat, description: desc }); } catch (_) { /* swallow */ }
-    }
-    for (const [fnName, recipe] of perPresetNames) {
-      try {
-        reg(fnName, window[fnName], {
-          category: cat,
-          description: `Apply ${recipe.name} (${recipe.category}) to selection`,
-        });
-      } catch (_) { /* swallow */ }
-    }
+  // Register with the V3 command palette via common/registry.js, which
+  // handles cold-start retry for both the per-preset ops and the generic
+  // ones.
+  const generics = [
+    ['__studioMatLibList',            'List matlib recipes (optionally filtered by category)'],
+    ['__studioMatLibApply',           'Apply a matlib recipe id to the active selection'],
+    ['__studioMatLibListCategories',  'List matlib categories'],
+    ['__studioMatLibBrowserOpen',     'Open the Material Browser panel'],
+    ['__studioMatLibBrowserClose',    'Close the Material Browser panel'],
+    ['__studioMatLibBrowserToggle',   'Toggle the Material Browser panel'],
+    ['__studioMatLibCount',           'Return total + per-category recipe counts'],
+    ['__studioMatLibFind',            'Look up a single recipe by id'],
+  ];
+  for (const [name, desc] of generics) {
+    registerOp(name, window[name], 'matlib', desc);
+  }
+  for (const [fnName, recipe] of perPresetNames) {
+    registerOp(fnName, window[fnName], 'matlib',
+      `Apply ${recipe.name} (${recipe.category}) to selection`);
   }
 
   return {
@@ -167,18 +155,14 @@ export function installMatLib() {
 export function uninstallMatLib() {
   if (!_installed) return { ok: true };
   _installed = false;
-  const keys = [
+  unregisterOps([
     '__studioMatLibList', '__studioMatLibApply', '__studioMatLibListCategories',
     '__studioMatLibBrowserOpen', '__studioMatLibBrowserClose', '__studioMatLibBrowserToggle',
     '__studioMatLibCount', '__studioMatLibFind',
-  ];
-  for (const k of keys) { try { delete window[k]; } catch (_) {} }
-  for (const r of RECIPES) {
-    try { delete window[`__studioMatLib_${safeIdSuffix(r.id)}`]; } catch (_) {}
-  }
-  if (_root) { try { _root.unmount(); } catch (_) {} _root = null; }
-  if (_host && _host.parentNode) _host.parentNode.removeChild(_host);
-  _host = null; _open = false;
+  ]);
+  unregisterOps(RECIPES.map((r) => `__studioMatLib_${safeIdSuffix(r.id)}`));
+  if (_panel) { unmountPanel('matlib'); _panel = null; }
+  _open = false;
   try { disposeThumbnailer(); } catch (_) {}
   return { ok: true };
 }

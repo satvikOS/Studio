@@ -20,6 +20,7 @@ import {
 import {
   alphaList, alphaSet, alphaSample, alphaWeightAt,
 } from './alpha.js';
+import { registerOp } from '../common/registry.js';
 
 function getSelectedMesh() {
   if (typeof window === 'undefined') return null;
@@ -29,18 +30,7 @@ function getSelectedMesh() {
 }
 
 function reg(name, fn, description) {
-  window[name] = fn;
-  const doRegister = () => {
-    if (typeof window.__studioCommandRegister === 'function') {
-      try {
-        window.__studioCommandRegister(name, fn, { category: 'sculpt', description });
-      } catch (_) {}
-    }
-  };
-  doRegister();
-  // The palette registry may not be live yet (autoload races
-  // registerV3Api). Retry on the next macrotask, like rig/index.js.
-  setTimeout(doRegister, 0);
+  registerOp(name, fn, 'sculpt', description);
 }
 
 // Build the world-space → mesh-local point given the existing brush

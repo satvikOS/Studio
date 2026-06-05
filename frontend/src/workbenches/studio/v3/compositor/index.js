@@ -21,17 +21,17 @@
 //   overlay (top-right corner) and paints the Output buffer into it.
 
 import React from 'react';
-import { createRoot } from 'react-dom/client';
 import {
   createGraph, addNode, removeNode, connect, disconnect,
   evaluate as evalGraph, toJSON, fromJSON,
 } from './graph.js';
 import CompositorEditor from './CompositorEditor.jsx';
+import { mountPanel, unmountPanel } from '../common/panel.js';
+import { registerOp } from '../common/registry.js';
 
 let _installed = false;
 let _graph = null;
-let _editorHost = null;
-let _editorRoot = null;
+let _panel = null;
 let _editorOpen = false;
 let _outputCanvas = null;
 
@@ -149,22 +149,18 @@ function clearOutput() {
 // ─── Editor mount control ───────────────────────────────────────────────
 
 function mountEditorHost() {
-  if (typeof document === 'undefined') return null;
-  if (_editorHost) return _editorHost;
-  _editorHost = document.createElement('div');
-  _editorHost.setAttribute('data-studio-v3-compositor-editor-host', '');
-  document.body.appendChild(_editorHost);
-  _editorRoot = createRoot(_editorHost);
-  return _editorHost;
+  if (_panel) return _panel.host;
+  _panel = mountPanel('compositor-editor');
+  return _panel ? _panel.host : null;
 }
 
 function renderEditor() {
-  if (!_editorRoot) return;
+  if (!_panel) return;
   if (!_editorOpen) {
-    _editorRoot.render(null);
+    _panel.render(null);
     return;
   }
-  _editorRoot.render(
+  _panel.render(
     React.createElement(CompositorEditor, {
       getGraph: () => _graph,
       // Editor's Evaluate button calls into the public op so we go through
@@ -265,22 +261,10 @@ function listNodes() {
   };
 }
 
-// ─── Command palette registration ───────────────────────────────────────
+// ─── Command palette registration (delegates to common/registry.js) ────
 
 function regCommand(name, fn, description) {
-  if (typeof window === 'undefined') return;
-  const reg = window.__studioCommandRegister;
-  if (typeof reg === 'function') {
-    try { reg(name, fn, { category: 'compositor', description }); return; } catch (_) { /* fall through */ }
-  }
-  // Palette may not be live yet; retry on next macrotask.
-  setTimeout(() => {
-    try {
-      if (typeof window.__studioCommandRegister === 'function') {
-        window.__studioCommandRegister(name, fn, { category: 'compositor', description });
-      }
-    } catch (_) { /* swallow */ }
-  }, 0);
+  registerOp(name, fn, 'compositor', description);
 }
 
 // ─── Install ────────────────────────────────────────────────────────────
@@ -393,9 +377,8 @@ export function uninstallCompositor() {
     '__studioCompositorEditorOpen', '__studioCompositorEditorClose', '__studioCompositorEditorToggle',
     '__studioCompositorListNodes', '__studioCompositorGraph',
   ]) { try { delete window[k]; } catch (_) {} }
-  if (_editorRoot) { try { _editorRoot.unmount(); } catch (_) {} _editorRoot = null; }
-  if (_editorHost && _editorHost.parentNode) _editorHost.parentNode.removeChild(_editorHost);
-  _editorHost = null; _editorOpen = false;
+  if (_panel) { unmountPanel('compositor-editor'); _panel = null; }
+  _editorOpen = false;
   if (_outputCanvas && _outputCanvas.parentNode) _outputCanvas.parentNode.removeChild(_outputCanvas);
   _outputCanvas = null;
   _graph = null;

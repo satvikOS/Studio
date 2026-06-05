@@ -31,6 +31,7 @@ import {
   mergeGeometries,
   mergeVertices,
 } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { mulberry32 } from '../common/random.js';
 
 // ─── Shared helpers (kept local so geomtotal doesn't import from the
 //     prior slice directories — the brief says "create NEW files only,
@@ -61,17 +62,7 @@ function bbox(geo) {
   return geo.boundingBox.clone();
 }
 
-// Mulberry32 — small, fast, deterministic PRNG; returns floats in [0,1).
-function mulberry32(a) {
-  let s = (a >>> 0) || 1;
-  return function () {
-    s = (s + 0x6D2B79F5) >>> 0;
-    let t = s;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return (((t ^ (t >>> 14)) >>> 0) / 4294967296);
-  };
-}
+// mulberry32 imported from common/random.js (same algorithm, shared).
 
 // Build a non-indexed BufferGeometry from a list of triangles.
 // `tris` is a Float32Array of length triCount * 9, each triple = vertex.

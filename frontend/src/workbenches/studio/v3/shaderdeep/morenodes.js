@@ -23,8 +23,9 @@
 // These nodes operate purely on the per-pixel evaluator. They never
 // touch three.js directly — three.js + React only at the host layer.
 
-// ─── Helpers (mirror shader/nodes.js — duplicated so this module is
-//     self-contained and registers cleanly when shader/ is absent). ──
+import { hash2, valueNoise2D as valueNoise } from '../common/noise.js';
+
+// ─── Helpers (mirror shader/nodes.js) ─────────────────────────────────
 function clamp01(x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
 function clampR(x, lo, hi) { return x < lo ? lo : x > hi ? hi : x; }
 function toColor(v) {
@@ -52,26 +53,12 @@ function toVec3(v) {
   if (typeof v === 'number') return [v, v, v];
   return [0, 0, 0];
 }
-function hash2(x, y) {
-  let h = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
-  h -= Math.floor(h);
-  return h;
-}
+// hash2 + valueNoise imported from common/noise.js. hash3 kept local
+// because no other module uses the 3-arg sin-based hash flavour.
 function hash3(x, y, z) {
   let h = Math.sin(x * 127.1 + y * 311.7 + z * 74.7) * 43758.5453;
   h -= Math.floor(h);
   return h;
-}
-function valueNoise(x, y) {
-  const xi = Math.floor(x), yi = Math.floor(y);
-  const xf = x - xi, yf = y - yi;
-  const a = hash2(xi, yi);
-  const b = hash2(xi + 1, yi);
-  const c = hash2(xi, yi + 1);
-  const d = hash2(xi + 1, yi + 1);
-  const u = xf * xf * (3 - 2 * xf);
-  const v = yf * yf * (3 - 2 * yf);
-  return a * (1 - u) * (1 - v) + b * u * (1 - v) + c * (1 - u) * v + d * u * v;
 }
 function fract(x) { return x - Math.floor(x); }
 

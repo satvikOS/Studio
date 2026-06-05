@@ -21,20 +21,10 @@ import {
   createSphereField, createBoxField, createRandomField,
   listFields, getField, removeField, sampleField,
 } from './field.js';
+import { registerOp } from '../common/registry.js';
 
 function reg(name, fn, description) {
-  window[name] = fn;
-  const doReg = () => {
-    if (typeof window.__studioCommandRegister === 'function') {
-      try {
-        window.__studioCommandRegister(name, fn, { category: 'mograph', description });
-      } catch (_) { /* swallow */ }
-    }
-  };
-  // Try immediately; retry once on the next macrotask so we cover the
-  // race between autoload landing pre- and post- registerV3Api().
-  doReg();
-  setTimeout(doReg, 0);
+  registerOp(name, fn, 'mograph', description);
 }
 
 export function installMoGraph() {

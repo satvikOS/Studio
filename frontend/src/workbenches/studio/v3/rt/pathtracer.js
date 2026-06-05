@@ -28,6 +28,7 @@
 
 import * as THREE from 'three';
 import { recordSample, resetBuffer } from './buffer.js';
+import { sampleMaterialTextureAtUV as _sampleMaterialTextureAtUV } from '../common/sample-texture.js';
 
 const EPS = 1e-6;
 
@@ -73,45 +74,13 @@ function _albedoOf(material) {
   };
 }
 
-// Slice 689 — Sample the active material's `.map` (CanvasTexture from
-// slice-684 shader graph bake, slice-642 procedural textures, slice-688
-// matlib presets) at a given UV; returns null if no sampleable texture.
-// Result is multiplied into the per-tri albedo at soup-build time so
-// shader graphs visibly influence the rendered image without needing
-// per-hit UV interpolation (a fuller pass for the next iteration).
-function _sampleMaterialTextureAtUV(material, u, v) {
-  const m = Array.isArray(material) ? material[0] : material;
-  if (!m || !m.map) return null;
-  const tex = m.map;
-  const img = tex.image;
-  if (!img || !img.width || !img.height) return null;
-  // Wrap UV [0,1) then transform via tex.offset/repeat if set.
-  let uu = u, vv = v;
-  if (tex.offset) { uu = uu + tex.offset.x; vv = vv + tex.offset.y; }
-  if (tex.repeat) { uu *= tex.repeat.x; vv *= tex.repeat.y; }
-  uu = ((uu % 1) + 1) % 1;
-  vv = ((vv % 1) + 1) % 1;
-  // CanvasTexture (preferred) and HTMLImageElement both render to a
-  // throwaway canvas to extract a 1×1 pixel via getImageData.
-  try {
-    let canvas;
-    if (img instanceof HTMLCanvasElement) {
-      canvas = img;
-    } else if (img instanceof HTMLImageElement || (img.tagName === 'IMG' && img.complete)) {
-      canvas = document.createElement('canvas');
-      canvas.width = img.width; canvas.height = img.height;
-      canvas.getContext('2d').drawImage(img, 0, 0);
-    } else {
-      return null;
-    }
-    const px = Math.max(0, Math.min(canvas.width - 1, Math.floor(uu * canvas.width)));
-    const py = Math.max(0, Math.min(canvas.height - 1, Math.floor((1 - vv) * canvas.height)));
-    const data = canvas.getContext('2d').getImageData(px, py, 1, 1).data;
-    return { r: data[0] / 255, g: data[1] / 255, b: data[2] / 255 };
-  } catch (_) {
-    return null;
-  }
-}
+// Slice 689 — Sample the active material's `.map` at a given UV.
+// Implementation lives in common/sample-texture.js (re-used by rt/rtgpu
+// and the shader↔pathtracer bridge when wave-8 lands). Result is
+// multiplied into the per-tri albedo at soup-build time so shader graphs
+// visibly influence the rendered image without needing per-hit UV
+// interpolation.
+// _sampleMaterialTextureAtUV imported above.
 
 // ── Triangle soup builder ────────────────────────────────────────────────
 //

@@ -15,7 +15,8 @@
 // drives animated 2D-in-3D drawings.
 
 import React from 'react';
-import { createRoot } from 'react-dom/client';
+import { mountPanel, unmountPanel } from '../common/panel.js';
+import { registerOp, unregisterOps } from '../common/registry.js';
 
 import {
   createStroke, addPoint, setPoints, finalize,
@@ -60,24 +61,19 @@ const _brush = {
 pbAttach({ getStroke });
 
 // ─── Panel lifecycle ─────────────────────────────────────────────────
-let _host = null;
-let _root = null;
+let _panel = null;
 let _open = false;
 
 function mountHost() {
-  if (typeof document === 'undefined') return null;
-  if (_host) return _host;
-  _host = document.createElement('div');
-  _host.setAttribute('data-studio-v3-gp-host', '');
-  document.body.appendChild(_host);
-  _root = createRoot(_host);
-  return _host;
+  if (_panel) return _panel.host;
+  _panel = mountPanel('gp');
+  return _panel ? _panel.host : null;
 }
 
 function renderPanel() {
-  if (!_root) return;
-  if (!_open) { _root.render(null); return; }
-  _root.render(
+  if (!_panel) return;
+  if (!_open) { _panel.render(null); return; }
+  _panel.render(
     React.createElement(GPPanel, {
       getLayers: () => listLayers(),
       getActiveUuid: () => getActiveUuid(),
@@ -133,18 +129,9 @@ function getScene() {
   return null;
 }
 
-// ─── Op registration helper ──────────────────────────────────────────
+// ─── Op registration helper (delegates to common/registry.js) ────────
 function reg(name, fn, description) {
-  if (typeof window === 'undefined') return;
-  window[name] = fn;
-  const tryReg = () => {
-    if (typeof window.__studioCommandRegister !== 'function') return false;
-    try {
-      window.__studioCommandRegister(name, fn, { category: 'gp', description });
-      return true;
-    } catch (_) { return false; }
-  };
-  if (!tryReg()) setTimeout(tryReg, 0);
+  registerOp(name, fn, 'gp', description);
 }
 
 const OP_NAMES = [
@@ -466,15 +453,8 @@ export function installGreasePencil() {
 export function uninstallGreasePencil() {
   if (typeof window === 'undefined') return { ok: false };
   if (!_installed) return { ok: true };
-  for (const k of OP_NAMES) {
-    try { delete window[k]; } catch (_) {}
-    if (typeof window.__studioCommandUnregister === 'function') {
-      try { window.__studioCommandUnregister(k); } catch (_) {}
-    }
-  }
-  if (_root) { try { _root.unmount(); } catch (_) {} _root = null; }
-  if (_host && _host.parentNode) { _host.parentNode.removeChild(_host); }
-  _host = null;
+  unregisterOps(OP_NAMES);
+  if (_panel) { unmountPanel('gp'); _panel = null; }
   _open = false;
   for (const s of _strokes.values()) disposeStroke(s);
   _strokes.clear();

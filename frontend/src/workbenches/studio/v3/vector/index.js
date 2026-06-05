@@ -19,23 +19,10 @@ import { importSvgString } from './svgImport.js';
 import { createText, listFonts, setActiveFont, DEFAULT_FONT_URL } from './textMesh.js';
 import { extrudeFromPaths } from './logoExtrude.js';
 import { offsetPath, chamferPath, closePath } from './pathOps.js';
+import { registerOp, unregisterOps } from '../common/registry.js';
 
 function reg(name, fn, description) {
-  if (typeof window === 'undefined') return;
-  window[name] = fn;
-  const tryReg = () => {
-    if (typeof window.__studioCommandRegister === 'function') {
-      try {
-        window.__studioCommandRegister(name, fn, { category: 'vector', description });
-        return true;
-      } catch (_) { return false; }
-    }
-    return false;
-  };
-  if (!tryReg()) {
-    // Palette may not be live yet (autoload races registerV3Api).
-    setTimeout(() => { tryReg(); }, 0);
-  }
+  registerOp(name, fn, 'vector', description);
 }
 
 const OP_NAMES = [
@@ -117,12 +104,7 @@ export function installVector() {
 export function uninstallVector() {
   if (typeof window === 'undefined') return { ok: false };
   if (!window.__studioVectorInstalled) return { ok: true };
-  for (const k of OP_NAMES) {
-    try { delete window[k]; } catch (_) {}
-    if (typeof window.__studioCommandUnregister === 'function') {
-      try { window.__studioCommandUnregister(k); } catch (_) {}
-    }
-  }
+  unregisterOps(OP_NAMES);
   delete window.__studioVectorDefaultFontUrl;
   window.__studioVectorInstalled = false;
   return { ok: true };

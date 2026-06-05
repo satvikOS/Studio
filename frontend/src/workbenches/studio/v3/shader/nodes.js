@@ -17,6 +17,8 @@
 // `ctx` shape (built by graph.evaluate()):
 //   { u, v, x, y, size, worldX, worldY, worldZ, noise(s, x, y) }
 
+import { hash2 as _commonHash2, valueNoise2D as _commonValueNoise2D } from '../common/noise.js';
+
 // ─── Helpers ─────────────────────────────────────────────────────────────
 export function clamp01(x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
 export function toColor(v) {
@@ -43,24 +45,11 @@ function lerpColor(a, b, t) {
   return [mix(a[0], b[0], t), mix(a[1], b[1], t), mix(a[2], b[2], t)];
 }
 
-// Deterministic value-noise. Two-arg hash → 0..1.
-export function hash2(x, y) {
-  let h = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
-  h -= Math.floor(h);
-  return h;
-}
-export function valueNoise(x, y) {
-  const xi = Math.floor(x), yi = Math.floor(y);
-  const xf = x - xi, yf = y - yi;
-  const a = hash2(xi, yi);
-  const b = hash2(xi + 1, yi);
-  const c = hash2(xi, yi + 1);
-  const d = hash2(xi + 1, yi + 1);
-  // smoothstep blend
-  const u = xf * xf * (3 - 2 * xf);
-  const v = yf * yf * (3 - 2 * yf);
-  return mix(mix(a, b, u), mix(c, d, u), v);
-}
+// Deterministic value-noise. Two-arg hash → 0..1. Re-exported from the
+// shared common/noise.js module so the shader graph + shaderdeep +
+// geomdeep + modstack all share one implementation.
+export const hash2 = _commonHash2;
+export const valueNoise = _commonValueNoise2D;
 
 // ─── Node definitions ────────────────────────────────────────────────────
 export const NODE_KINDS = {

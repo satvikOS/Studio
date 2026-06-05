@@ -9,7 +9,6 @@
 // tree (createRoot into a body div) so we never touch StudioShellV3.jsx.
 
 import React from 'react';
-import { createRoot } from 'react-dom/client';
 import {
   createGraph, addNode, removeNode,
   connectExec, connectData, disconnect,
@@ -17,30 +16,21 @@ import {
 } from './graph.js';
 import { createRuntime } from './runtime.js';
 import BPEditor from './BPEditor.jsx';
+import { mountPanel, unmountPanel } from '../common/panel.js';
+import { registerOps, unregisterOps } from '../common/registry.js';
 
 let _installed = false;
 let _graph = null;
 let _runtime = null;
-let _editorHost = null;
-let _editorRoot = null;
+let _panel = null;
 let _editorOpen = false;
 let _escListener = null;
 
 // ─── Editor mount control ────────────────────────────────────────────────
-function mountEditorHost() {
-  if (typeof document === 'undefined') return null;
-  if (_editorHost) return _editorHost;
-  _editorHost = document.createElement('div');
-  _editorHost.setAttribute('data-studio-v3-bp-editor-host', '');
-  document.body.appendChild(_editorHost);
-  _editorRoot = createRoot(_editorHost);
-  return _editorHost;
-}
-
 function renderEditor() {
-  if (!_editorRoot) return;
-  if (!_editorOpen) { _editorRoot.render(null); return; }
-  _editorRoot.render(
+  if (!_panel) return;
+  if (!_editorOpen) { _panel.render(null); return; }
+  _panel.render(
     React.createElement(BPEditor, {
       getGraph: () => _graph,
       onCloseRequest: () => editorClose(),
@@ -52,7 +42,7 @@ function renderEditor() {
 }
 
 function editorOpen() {
-  mountEditorHost();
+  if (!_panel) _panel = mountPanel('bp-editor');
   _editorOpen = true;
   renderEditor();
   return { ok: true, open: true };
@@ -187,31 +177,23 @@ export function installBlueprints() {
   };
   window.addEventListener('keydown', _escListener);
 
-  // ── Register every op with the V3 command palette. ──
-  const reg = window.__studioCommandRegister;
-  if (typeof reg === 'function') {
-    const cat = 'bp';
-    const cmds = [
-      ['__studioBPNodeAdd', 'Add a Blueprints node (kind, params)'],
-      ['__studioBPNodeRemove', 'Remove a Blueprints node by uuid'],
-      ['__studioBPConnectExec', 'Connect an exec wire between two nodes'],
-      ['__studioBPConnectData', 'Connect a data wire between two nodes'],
-      ['__studioBPDisconnect', 'Disconnect a wire by endpoints'],
-      ['__studioBPRuntimeStart', 'Start the Blueprints runtime (arms OnStart/OnTick/OnKeyDown)'],
-      ['__studioBPRuntimeStop', 'Stop the Blueprints runtime'],
-      ['__studioBPFireKey', 'Manually fire OnKeyDown for a given key (testing)'],
-      ['__studioBPSerialize', 'Serialise the Blueprints graph to JSON'],
-      ['__studioBPDeserialize', 'Replace the Blueprints graph from JSON'],
-      ['__studioBPEditorOpen', 'Open the Blueprints editor'],
-      ['__studioBPEditorClose', 'Close the Blueprints editor'],
-      ['__studioBPEditorToggle', 'Toggle the Blueprints editor'],
-      ['__studioBPListNodes', 'List nodes + wires currently in the graph'],
-    ];
-    for (const [name, desc] of cmds) {
-      try { reg(name, window[name], { category: cat, description: desc }); }
-      catch (_) { /* ignore */ }
-    }
-  }
+  // ── Register every op with the V3 command palette via common/registry.js.
+  registerOps({
+    __studioBPNodeAdd:        [window.__studioBPNodeAdd,        'Add a Blueprints node (kind, params)'],
+    __studioBPNodeRemove:     [window.__studioBPNodeRemove,     'Remove a Blueprints node by uuid'],
+    __studioBPConnectExec:    [window.__studioBPConnectExec,    'Connect an exec wire between two nodes'],
+    __studioBPConnectData:    [window.__studioBPConnectData,    'Connect a data wire between two nodes'],
+    __studioBPDisconnect:     [window.__studioBPDisconnect,     'Disconnect a wire by endpoints'],
+    __studioBPRuntimeStart:   [window.__studioBPRuntimeStart,   'Start the Blueprints runtime (arms OnStart/OnTick/OnKeyDown)'],
+    __studioBPRuntimeStop:    [window.__studioBPRuntimeStop,    'Stop the Blueprints runtime'],
+    __studioBPFireKey:        [window.__studioBPFireKey,        'Manually fire OnKeyDown for a given key (testing)'],
+    __studioBPSerialize:      [window.__studioBPSerialize,      'Serialise the Blueprints graph to JSON'],
+    __studioBPDeserialize:    [window.__studioBPDeserialize,    'Replace the Blueprints graph from JSON'],
+    __studioBPEditorOpen:     [window.__studioBPEditorOpen,     'Open the Blueprints editor'],
+    __studioBPEditorClose:    [window.__studioBPEditorClose,    'Close the Blueprints editor'],
+    __studioBPEditorToggle:   [window.__studioBPEditorToggle,   'Toggle the Blueprints editor'],
+    __studioBPListNodes:      [window.__studioBPListNodes,      'List nodes + wires currently in the graph'],
+  }, 'bp');
 
   return { ok: true, ops: 14 };
 }
@@ -221,26 +203,19 @@ export function uninstallBlueprints() {
   if (!_installed) return { ok: true };
   _installed = false;
   if (_runtime) { try { _runtime.stop(); } catch (_) {} }
-  for (const k of [
+  unregisterOps([
     '__studioBPNodeAdd', '__studioBPNodeRemove',
     '__studioBPConnectExec', '__studioBPConnectData', '__studioBPDisconnect',
     '__studioBPRuntimeStart', '__studioBPRuntimeStop', '__studioBPFireKey',
     '__studioBPSerialize', '__studioBPDeserialize',
     '__studioBPEditorOpen', '__studioBPEditorClose', '__studioBPEditorToggle',
     '__studioBPListNodes', '__studioBPGraph', '__studioBPRuntime',
-  ]) { try { delete window[k]; } catch (_) {} }
+  ]);
   if (_escListener) {
     try { window.removeEventListener('keydown', _escListener); } catch (_) {}
     _escListener = null;
   }
-  if (_editorRoot) {
-    try { _editorRoot.unmount(); } catch (_) {}
-    _editorRoot = null;
-  }
-  if (_editorHost && _editorHost.parentNode) {
-    _editorHost.parentNode.removeChild(_editorHost);
-  }
-  _editorHost = null;
+  if (_panel) { unmountPanel('bp-editor'); _panel = null; }
   _editorOpen = false;
   _graph = null;
   _runtime = null;

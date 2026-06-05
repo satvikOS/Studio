@@ -12,38 +12,34 @@
 // save-scene paths discover it automatically.
 
 import React from 'react';
-import { createRoot } from 'react-dom/client';
 import * as THREE from 'three';
 import {
   createGraph, addNode, removeNode, connect, disconnect,
   evaluate, toJSON, fromJSON,
 } from './graph.js';
 import GeomNodesEditor from './GeomNodesEditor.jsx';
+import { mountPanel, unmountPanel } from '../common/panel.js';
+import { registerOps, unregisterOps } from '../common/registry.js';
 
 let _installed = false;
 let _graph = null;
-let _editorHost = null;
-let _editorRoot = null;
+let _panel = null;
 let _editorOpen = false;
 
 // ─── Editor mount control ────────────────────────────────────────────────
 function mountEditorHost() {
-  if (typeof document === 'undefined') return null;
-  if (_editorHost) return _editorHost;
-  _editorHost = document.createElement('div');
-  _editorHost.setAttribute('data-studio-v3-geomnodes-editor-host', '');
-  document.body.appendChild(_editorHost);
-  _editorRoot = createRoot(_editorHost);
-  return _editorHost;
+  if (_panel) return _panel.host;
+  _panel = mountPanel('geomnodes-editor');
+  return _panel ? _panel.host : null;
 }
 
 function renderEditor() {
-  if (!_editorRoot) return;
+  if (!_panel) return;
   if (!_editorOpen) {
-    _editorRoot.render(null);
+    _panel.render(null);
     return;
   }
-  _editorRoot.render(
+  _panel.render(
     React.createElement(GeomNodesEditor, {
       getGraph: () => _graph,
       evalOnly: () => evaluateGraph(),
@@ -192,28 +188,21 @@ export function installGeomNodes() {
   };
   window.addEventListener('keydown', _onKey);
 
-  // Register every op with the V3 command palette under category 'geomnodes'.
-  const reg = window.__studioCommandRegister;
-  if (typeof reg === 'function') {
-    const cat = 'geomnodes';
-    const cmds = [
-      ['__studioGeomNodeAdd', 'Add a geometry node (kind, params)'],
-      ['__studioGeomNodeRemove', 'Remove a geometry node by uuid'],
-      ['__studioGeomNodeConnect', 'Connect two geometry sockets'],
-      ['__studioGeomNodeDisconnect', 'Disconnect two geometry sockets'],
-      ['__studioGeomEvaluate', 'Evaluate the geometry graph (stats)'],
-      ['__studioGeomBuildMesh', 'Evaluate and add a Mesh to the scene'],
-      ['__studioGeomGraphSerialize', 'Serialise the geometry graph to JSON'],
-      ['__studioGeomGraphDeserialize', 'Replace the graph from JSON'],
-      ['__studioGeomEditorOpen', 'Open the geometry-nodes editor'],
-      ['__studioGeomEditorClose', 'Close the geometry-nodes editor'],
-      ['__studioGeomEditorToggle', 'Toggle the geometry-nodes editor'],
-      ['__studioGeomListNodes', 'List geometry nodes currently in the graph'],
-    ];
-    for (const [name, desc] of cmds) {
-      reg(name, window[name], { category: cat, description: desc });
-    }
-  }
+  // Register every op via common/registry.js (handles cold-start retry).
+  registerOps({
+    __studioGeomNodeAdd:           [window.__studioGeomNodeAdd,           'Add a geometry node (kind, params)'],
+    __studioGeomNodeRemove:        [window.__studioGeomNodeRemove,        'Remove a geometry node by uuid'],
+    __studioGeomNodeConnect:       [window.__studioGeomNodeConnect,       'Connect two geometry sockets'],
+    __studioGeomNodeDisconnect:    [window.__studioGeomNodeDisconnect,    'Disconnect two geometry sockets'],
+    __studioGeomEvaluate:          [window.__studioGeomEvaluate,          'Evaluate the geometry graph (stats)'],
+    __studioGeomBuildMesh:         [window.__studioGeomBuildMesh,         'Evaluate and add a Mesh to the scene'],
+    __studioGeomGraphSerialize:    [window.__studioGeomGraphSerialize,    'Serialise the geometry graph to JSON'],
+    __studioGeomGraphDeserialize:  [window.__studioGeomGraphDeserialize,  'Replace the graph from JSON'],
+    __studioGeomEditorOpen:        [window.__studioGeomEditorOpen,        'Open the geometry-nodes editor'],
+    __studioGeomEditorClose:       [window.__studioGeomEditorClose,       'Close the geometry-nodes editor'],
+    __studioGeomEditorToggle:      [window.__studioGeomEditorToggle,      'Toggle the geometry-nodes editor'],
+    __studioGeomListNodes:         [window.__studioGeomListNodes,         'List geometry nodes currently in the graph'],
+  }, 'geomnodes');
 
   return { ok: true, ops: 12 };
 }
@@ -222,22 +211,15 @@ export function installGeomNodes() {
 export function uninstallGeomNodes() {
   if (!_installed) return { ok: true };
   _installed = false;
-  for (const k of [
+  unregisterOps([
     '__studioGeomNodeAdd', '__studioGeomNodeRemove',
     '__studioGeomNodeConnect', '__studioGeomNodeDisconnect',
     '__studioGeomEvaluate', '__studioGeomBuildMesh',
     '__studioGeomGraphSerialize', '__studioGeomGraphDeserialize',
     '__studioGeomEditorOpen', '__studioGeomEditorClose', '__studioGeomEditorToggle',
     '__studioGeomListNodes', '__studioGeomGraph',
-  ]) { try { delete window[k]; } catch (_) {} }
-  if (_editorRoot) {
-    try { _editorRoot.unmount(); } catch (_) {}
-    _editorRoot = null;
-  }
-  if (_editorHost && _editorHost.parentNode) {
-    _editorHost.parentNode.removeChild(_editorHost);
-  }
-  _editorHost = null;
+  ]);
+  if (_panel) { unmountPanel('geomnodes-editor'); _panel = null; }
   _editorOpen = false;
   _graph = null;
   return { ok: true };

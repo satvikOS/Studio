@@ -18,6 +18,7 @@
 // stroke from the toolbar.
 
 import { BRUSHES } from './brushes.js';
+import { registerOp } from '../common/registry.js';
 
 const ACTIVE_KEY = '__studioSculptBrushActiveName';
 const RADIUS_KEY = '__studioSculptBrushDefaultRadius';
@@ -30,18 +31,7 @@ function getSelectedMesh() {
 }
 
 function reg(name, fn, description) {
-  if (typeof window === 'undefined') return;
-  window[name] = fn;
-  const doRegister = () => {
-    if (typeof window.__studioCommandRegister === 'function') {
-      try {
-        window.__studioCommandRegister(name, fn, { category: 'sculpt', description });
-      } catch (_) {}
-    }
-  };
-  doRegister();
-  // The palette registry may not be live yet — retry on next macrotask.
-  setTimeout(doRegister, 0);
+  registerOp(name, fn, 'sculpt', description);
 }
 
 // Build a per-brush op that resolves the selected mesh, pushes undo,

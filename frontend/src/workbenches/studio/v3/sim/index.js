@@ -25,49 +25,16 @@ import {
   fluidCreate, fluidStep, fluidList,
   fluidReset, fluidResetAll, fluidRemove,
 } from './fluid.js';
+import { registerOp } from '../common/registry.js';
+import { isChained, chainIntoAnimTick, unchainFromAnimTick } from '../common/anim-tick.js';
 
 function reg(name, fn, description) {
-  if (typeof window === 'undefined') return;
-  window[name] = fn;
-  const tryReg = () => {
-    if (typeof window.__studioCommandRegister === 'function') {
-      try {
-        window.__studioCommandRegister(name, fn, { category: 'sim', description });
-        return true;
-      } catch (_) { return false; }
-    }
-    return false;
-  };
-  if (!tryReg()) {
-    // Palette may not be live yet (autoload races registerV3Api).
-    setTimeout(() => { tryReg(); }, 0);
-  }
+  registerOp(name, fn, 'sim', description);
 }
 
-// ── chain helpers ───────────────────────────────────────────────────────
-function hasSimTickIn(viewport) {
-  let cur = viewport.__studioAnimTick;
-  while (cur) {
-    if (cur.__sim) return true;
-    cur = cur.__prev;
-  }
-  return false;
-}
-
-function removeSimTick(viewport) {
-  // Walk the chain, splicing out every link whose __sim flag is set.
-  // Each link's __prev points at the next-older tick; we rebuild the
-  // chain top-down skipping sim links.
-  const links = [];
-  let cur = viewport.__studioAnimTick;
-  while (cur) { links.push(cur); cur = cur.__prev; }
-  const kept = links.filter((l) => !l.__sim);
-  // Re-link in original order: kept[0] is most recent, set its __prev
-  // to kept[1], etc.
-  for (let i = 0; i < kept.length - 1; i++) kept[i].__prev = kept[i + 1];
-  if (kept.length) kept[kept.length - 1].__prev = null;
-  viewport.__studioAnimTick = kept[0] || null;
-}
+// ── chain helpers (delegate to common/anim-tick.js) ────────────────────
+function hasSimTickIn(_viewport) { return isChained('sim'); }
+function removeSimTick(_viewport) { unchainFromAnimTick('sim'); }
 
 // Master state — used by __studioSimTogglePlay so the chain wire-up
 // happens exactly once and the sub-sim ticks share a single time base.
@@ -76,22 +43,15 @@ const _state = { playing: false, last: 0 };
 function ensureSimTick() {
   const v = (typeof window !== 'undefined') ? window.__archdiscViewport : null;
   if (!v) return { ok: false, error: 'no viewport' };
-  if (hasSimTickIn(v)) return { ok: true, alreadyChained: true };
+  if (isChained('sim')) return { ok: true, alreadyChained: true };
   _state.last = (typeof performance !== 'undefined') ? performance.now() : Date.now();
-  const prev = v.__studioAnimTick;
-  const chained = (now) => {
-    const t = (typeof now === 'number') ? now : ((typeof performance !== 'undefined') ? performance.now() : Date.now());
+  return chainIntoAnimTick('sim', (t) => {
     const dt = Math.min(0.05, (t - _state.last) / 1000) || 0.016;
     _state.last = t;
     try { clothStep(dt); } catch (_) {}
     try { softBodyStep(dt); } catch (_) {}
     try { fluidStep(dt); } catch (_) {}
-    if (prev) { try { prev(t); } catch (_) {} }
-  };
-  chained.__sim = true;
-  chained.__prev = prev;
-  v.__studioAnimTick = chained;
-  return { ok: true, chained: true };
+  });
 }
 
 function simTogglePlay() {

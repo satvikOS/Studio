@@ -32,45 +32,17 @@ import {
   addCollider, removeCollider, listColliders, clearColliders,
   refreshColliderBoxes, applyColliders,
 } from './collider.js';
+import { registerOp } from '../common/registry.js';
+import { isChained, chainIntoAnimTick, unchainFromAnimTick } from '../common/anim-tick.js';
 
-// ─── command-palette registration helper ────────────────────────────────
+// ─── command-palette registration helper (delegates to common/) ────────
 function reg(name, fn, description) {
-  if (typeof window === 'undefined') return;
-  window[name] = fn;
-  const tryReg = () => {
-    if (typeof window.__studioCommandRegister === 'function') {
-      try {
-        window.__studioCommandRegister(name, fn, { category: 'fx', description });
-        return true;
-      } catch (_) { return false; }
-    }
-    return false;
-  };
-  if (!tryReg()) {
-    // Palette may not be live yet (autoload races registerV3Api).
-    setTimeout(() => { tryReg(); }, 0);
-  }
+  registerOp(name, fn, 'fx', description);
 }
 
-// ─── animation chain helpers ───────────────────────────────────────────
-function _hasFXTickIn(viewport) {
-  let cur = viewport.__studioAnimTick;
-  while (cur) {
-    if (cur.__fx) return true;
-    cur = cur.__prev;
-  }
-  return false;
-}
-
-function _removeFXTick(viewport) {
-  const links = [];
-  let cur = viewport.__studioAnimTick;
-  while (cur) { links.push(cur); cur = cur.__prev; }
-  const kept = links.filter((l) => !l.__fx);
-  for (let i = 0; i < kept.length - 1; i++) kept[i].__prev = kept[i + 1];
-  if (kept.length) kept[kept.length - 1].__prev = null;
-  viewport.__studioAnimTick = kept[0] || null;
-}
+// ─── animation chain helpers (delegate to common/anim-tick.js) ─────────
+function _hasFXTickIn(_viewport) { return isChained('fx'); }
+function _removeFXTick(_viewport) { unchainFromAnimTick('fx'); }
 
 // Per-particle scratch arrays — never reallocate inside the hot loop.
 const _forceAccum   = [0, 0, 0];
@@ -120,22 +92,15 @@ const _state = { playing: false, last: 0 };
 function _ensureFXTick() {
   const v = (typeof window !== 'undefined') ? window.__archdiscViewport : null;
   if (!v) return { ok: false, error: 'no viewport' };
-  if (_hasFXTickIn(v)) return { ok: true, alreadyChained: true };
+  if (isChained('fx')) return { ok: true, alreadyChained: true };
   _state.last = (typeof performance !== 'undefined') ? performance.now() : Date.now();
-  const prev = v.__studioAnimTick;
-  const chained = (now) => {
-    const t = (typeof now === 'number') ? now : ((typeof performance !== 'undefined') ? performance.now() : Date.now());
+  return chainIntoAnimTick('fx', (t) => {
     const dt = Math.min(0.05, (t - _state.last) / 1000) || 0.016;
     _state.last = t;
     try { refreshColliderBoxes(); } catch (_) {}
     try { _augmentParticles(dt); } catch (_) {}
     try { hairStep(dt); } catch (_) {}
-    if (prev) { try { prev(t); } catch (_) {} }
-  };
-  chained.__fx = true;
-  chained.__prev = prev;
-  v.__studioAnimTick = chained;
-  return { ok: true, chained: true };
+  });
 }
 
 function fxTogglePlay() {

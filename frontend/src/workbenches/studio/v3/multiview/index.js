@@ -30,37 +30,25 @@
 // post-effects composer).
 
 import React from 'react';
-import { createRoot } from 'react-dom/client';
 
 import QuadPanel from './QuadPanel.jsx';
 import {
   createQuadState, setPerspCamera, renderQuad, keyToIndex,
 } from './quadrender.js';
+import { mountPanel, unmountPanel } from '../common/panel.js';
+import { registerOp, unregisterOps } from '../common/registry.js';
+import { isChained, chainIntoAnimTick, unchainFromAnimTick } from '../common/anim-tick.js';
 
 let _installed = false;
 let _on = false;
 let _state = null;            // QuadState — survives toggles
-let _host = null;             // body-attached div
-let _root = null;             // React root
+let _panel = null;            // common/panel mount record
 let _prevComposer = undefined; // saved composer reference (undef = never set)
 let _multiComposer = null;    // our render-takeover object
 
-// ─── Op registration helper (matches animadv/index.js pattern) ──────
+// ─── Op registration helper (delegates to common/registry.js) ──────
 function reg(name, fn, description) {
-  if (typeof window === 'undefined') return;
-  window[name] = fn;
-  const tryRegister = () => {
-    if (typeof window.__studioCommandRegister === 'function') {
-      try {
-        window.__studioCommandRegister(name, fn, { category: 'multiview', description });
-        return true;
-      } catch (_) { /* swallow */ }
-    }
-    return false;
-  };
-  if (!tryRegister()) {
-    setTimeout(tryRegister, 0);
-  }
+  registerOp(name, fn, 'multiview', description);
 }
 
 // ─── Canvas locator ─────────────────────────────────────────────────
@@ -108,29 +96,27 @@ function rectsDiffer(a, b) {
 
 // ─── Editor host ────────────────────────────────────────────────────
 function mountHost() {
-  if (typeof document === 'undefined') return null;
-  if (_host) return _host;
-  _host = document.createElement('div');
-  _host.setAttribute('data-studio-v3-multiview-host', '');
-  // The host itself is a 0x0 anchor — QuadPanel renders position:fixed
-  // children, so the host doesn't need layout.
-  _host.style.position = 'fixed';
-  _host.style.left = '0';
-  _host.style.top = '0';
-  _host.style.width = '0';
-  _host.style.height = '0';
-  _host.style.pointerEvents = 'none';
-  _host.style.zIndex = '50';
-  document.body.appendChild(_host);
-  _root = createRoot(_host);
-  return _host;
+  if (_panel) return _panel.host;
+  _panel = mountPanel('multiview');
+  if (_panel && _panel.host) {
+    // The host itself is a 0x0 anchor — QuadPanel renders position:fixed
+    // children, so the host doesn't need layout.
+    _panel.host.style.position = 'fixed';
+    _panel.host.style.left = '0';
+    _panel.host.style.top = '0';
+    _panel.host.style.width = '0';
+    _panel.host.style.height = '0';
+    _panel.host.style.pointerEvents = 'none';
+    _panel.host.style.zIndex = '50';
+  }
+  return _panel ? _panel.host : null;
 }
 
 function renderOverlay() {
-  if (!_root) return;
-  if (!_on) { _root.render(null); return; }
+  if (!_panel) return;
+  if (!_on) { _panel.render(null); return; }
   const rect = readCanvasRect() || _lastRect;
-  _root.render(
+  _panel.render(
     React.createElement(QuadPanel, {
       canvasRect: rect,
       horizontalRatio: _state ? _state.horizontalRatio : 0.5,
@@ -155,57 +141,27 @@ function renderOverlay() {
 // ─── Per-frame tick — __multiview chain marker ──────────────────────
 //
 // Tagged so audit code can walk the tick chain and see our pipeline
-// stage. Does only the cheap state work each frame:
-//
-//   • sync overlay rect if the canvas moved/resized
-//   • refresh the persp camera reference if it changed
-//
-// The actual scissored render runs from the composer hook (below).
+// stage. Delegates to common/anim-tick.js for chain bookkeeping.
 function installTickIfNeeded() {
-  const v = window.__archdiscViewport;
-  if (!v) return false;
-  if (v.__studioAnimTick && v.__studioAnimTick.__multiview) return true;
-  const prev = v.__studioAnimTick;
-  const fn = (now) => {
-    try {
-      if (_on) {
-        // Reframe persp ref if viewport camera switched out from under us.
-        const cam = getViewportCamera();
-        if (cam && _state && _state.panes[0] !== cam) setPerspCamera(_state, cam);
-        // Resync overlay rect on canvas resize / window move.
-        const rect = readCanvasRect();
-        if (rect && rectsDiffer(rect, _lastRect)) {
-          _lastRect = rect;
-          renderOverlay();
-        }
-      }
-    } catch (_) { /* swallow */ }
-    if (prev) {
-      try { prev(now); } catch (_) { /* swallow */ }
+  if (isChained('multiview')) return true;
+  const r = chainIntoAnimTick('multiview', () => {
+    if (!_on) return;
+    // Reframe persp ref if viewport camera switched out from under us.
+    const cam = getViewportCamera();
+    if (cam && _state && _state.panes[0] !== cam) setPerspCamera(_state, cam);
+    // Resync overlay rect on canvas resize / window move.
+    const rect = readCanvasRect();
+    if (rect && rectsDiffer(rect, _lastRect)) {
+      _lastRect = rect;
+      renderOverlay();
     }
-  };
-  fn.__multiview = true;
-  fn.__prev = prev;
-  v.__studioAnimTick = fn;
-  return true;
+  });
+  return !!(r && (r.ok || r.attached || r.alreadyChained));
 }
 
 function uninstallTick() {
-  const v = window.__archdiscViewport;
-  if (!v) return false;
-  if (v.__studioAnimTick && v.__studioAnimTick.__multiview) {
-    v.__studioAnimTick = v.__studioAnimTick.__prev || null;
-    return true;
-  }
-  let head = v.__studioAnimTick;
-  while (head && head.__prev) {
-    if (head.__prev.__multiview) {
-      head.__prev = head.__prev.__prev || null;
-      return true;
-    }
-    head = head.__prev;
-  }
-  return false;
+  unchainFromAnimTick('multiview');
+  return true;
 }
 
 // ─── Render-takeover via the composer slot ──────────────────────────
@@ -360,25 +316,13 @@ export function uninstallMultiView() {
   if (_on) {
     try { disable(); } catch (_) { /* swallow */ }
   }
-  for (const k of [
+  unregisterOps([
     '__studioMultiViewToggle', '__studioMultiViewEnable', '__studioMultiViewDisable',
     '__studioMultiViewMaximizePane', '__studioMultiViewSetSplit',
     '__studioMultiViewGetState',
-  ]) {
-    try { delete window[k]; } catch (_) { /* swallow */ }
-    if (typeof window.__studioCommandUnregister === 'function') {
-      try { window.__studioCommandUnregister(k); } catch (_) { /* swallow */ }
-    }
-  }
+  ]);
   uninstallTick();
-  if (_root) {
-    try { _root.unmount(); } catch (_) { /* swallow */ }
-    _root = null;
-  }
-  if (_host && _host.parentNode) {
-    _host.parentNode.removeChild(_host);
-  }
-  _host = null;
+  if (_panel) { unmountPanel('multiview'); _panel = null; }
   _installed = false;
   _state = null;
   _multiComposer = null;

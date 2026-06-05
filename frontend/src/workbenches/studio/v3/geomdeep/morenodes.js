@@ -36,6 +36,8 @@ import {
 } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { SimplifyModifier } from 'three/examples/jsm/modifiers/SimplifyModifier.js';
 import { ConvexGeometry } from 'three/examples/jsm/geometries/ConvexGeometry.js';
+import { mulberry32 } from '../common/random.js';
+import { valueNoise3D as valueNoise } from '../common/noise.js';
 
 // ─── Shared helpers (kept local so morenodes.js doesn't import from the
 //     slice-684 geomnodes/ directory — the brief says "create NEW files
@@ -64,24 +66,8 @@ function bbox(geo) {
   return geo.boundingBox.clone();
 }
 
-// Cheap deterministic value-noise (matches the api.js displace noise
-// formula so reading studio docs feels consistent).
-function valueNoise(x, y, z) {
-  const h = Math.sin(x * 12.9898 + y * 78.233 + z * 37.719) * 43758.5453;
-  return (h - Math.floor(h)) * 2 - 1;
-}
-
-// Mulberry32 — seeded RNG.
-function mulberry32(a) {
-  let s = (a >>> 0) || 1;
-  return function () {
-    s = (s + 0x6D2B79F5) >>> 0;
-    let t = s;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return (((t ^ (t >>> 14)) >>> 0) / 4294967296);
-  };
-}
+// valueNoise + mulberry32 imported from common/* — single canonical
+// implementation reused by api.js, shader, modstack, geomtotal, etc.
 
 // Parse "#aabbcc" or "0xaabbcc" or a 0xRRGGBB number → {r,g,b} 0..1.
 function parseColor(c) {

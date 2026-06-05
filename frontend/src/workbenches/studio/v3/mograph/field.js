@@ -17,6 +17,7 @@
 // keep the registry observable from the command palette + tests.
 
 import * as THREE from 'three';
+import { mulberry32 } from '../common/random.js';
 
 const _fields = new Map(); // uuid -> { kind, params, weight(clonePos) }
 
@@ -101,16 +102,7 @@ export function createBoxField(minXYZ, maxXYZ) {
 // Deterministic mulberry32 PRNG seeded by both the field seed and a
 // quantised clone position, so the same field returns the same weight
 // at the same point on every call.
-function mulberry32(seed) {
-  let a = (seed >>> 0) || 1;
-  return function next() {
-    a = (a + 0x6D2B79F5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
+// mulberry32 imported from common/random.js.
 
 export function createRandomField(seed) {
   const s = Number.isFinite(+seed) ? (+seed >>> 0) : ((Math.random() * 1e9) >>> 0);

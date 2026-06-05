@@ -20,6 +20,7 @@
 
 import { NODE_KINDS } from './nodes.js';
 import { resolveInputs, findExecTarget, listEventNodes } from './graph.js';
+import { chainIntoAnimTick, unchainFromAnimTick } from '../common/anim-tick.js';
 
 function getInvoker() {
   if (typeof window === 'undefined') return null;
@@ -155,47 +156,22 @@ export function createRuntime(graph) {
     }
   }
 
-  // Hook the tick fn into __studioAnimTick using the standard pattern
-  // (preserve prev, tag with __bp). Re-arming is idempotent.
+  // Hook the tick fn into __studioAnimTick via common/anim-tick.js. The
+  // shared helper preserves prev, tags the wrapper, and walks the chain
+  // on detach so we don't repeat the splice bookkeeping here.
   function _attachTick() {
-    if (typeof window === 'undefined') return;
-    const v = window.__archdiscViewport;
-    if (!v) return;
-    if (v.__studioAnimTick && v.__studioAnimTick.__bp) return;
-    const prev = v.__studioAnimTick;
     let lastNow = 0;
-    const fn = (now) => {
-      if (rt.started) {
-        const ms = typeof now === 'number' ? now : ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now());
-        const dt = lastNow ? (ms - lastNow) / 1000 : 0;
-        lastNow = ms;
-        try { fireOnTick(dt); } catch (_) {}
-      }
-      if (prev) prev(now);
-    };
-    fn.__bp = true;
-    fn.__prev = prev;
-    v.__studioAnimTick = fn;
-    rt._tickFn = fn;
+    chainIntoAnimTick('bp', (ms) => {
+      if (!rt.started) return;
+      const dt = lastNow ? (ms - lastNow) / 1000 : 0;
+      lastNow = ms;
+      try { fireOnTick(dt); } catch (_) {}
+    });
+    rt._tickFn = true;
   }
 
   function _detachTick() {
-    if (typeof window === 'undefined') return;
-    const v = window.__archdiscViewport;
-    if (!v) return;
-    // Walk the chain and splice out our __bp link.
-    if (v.__studioAnimTick && v.__studioAnimTick.__bp) {
-      v.__studioAnimTick = v.__studioAnimTick.__prev || null;
-    } else if (v.__studioAnimTick) {
-      let head = v.__studioAnimTick;
-      while (head && head.__prev) {
-        if (head.__prev.__bp) {
-          head.__prev = head.__prev.__prev || null;
-          break;
-        }
-        head = head.__prev;
-      }
-    }
+    unchainFromAnimTick('bp');
     rt._tickFn = null;
   }
 

@@ -35,6 +35,7 @@ import {
   editSeparateBySelection,
   editMarkSeam,
 } from './editmore.js';
+import { registerOp, unregisterOps } from '../common/registry.js';
 
 const OPS = [
   { name: '__studioEditExtrudeIndividual',         fn: editExtrudeIndividual,         description: 'Extrude every face independently along its own normal.' },
@@ -53,31 +54,10 @@ const OPS = [
 
 let _installed = false;
 
-function registerWithPalette(name, fn, description) {
-  if (typeof window === 'undefined') return;
-  if (typeof window.__studioCommandRegister === 'function') {
-    try {
-      window.__studioCommandRegister(name, fn, { category: 'edit', description });
-      return;
-    } catch (_) {
-      /* fall through to deferred retry */
-    }
-  }
-  // Deferred: api.js may install the palette on a later tick.
-  setTimeout(() => {
-    if (typeof window.__studioCommandRegister === 'function') {
-      try {
-        window.__studioCommandRegister(name, fn, { category: 'edit', description });
-      } catch (_) { /* swallow */ }
-    }
-  }, 0);
-}
-
 export function installEditMore() {
   if (typeof window === 'undefined') return { ok: false, error: 'no window' };
   for (const { name, fn, description } of OPS) {
-    window[name] = fn;
-    registerWithPalette(name, fn, description);
+    registerOp(name, fn, 'edit', description);
   }
   _installed = true;
   return { ok: true, installed: OPS.length, names: OPS.map((o) => o.name) };
@@ -85,12 +65,7 @@ export function installEditMore() {
 
 export function uninstallEditMore() {
   if (typeof window === 'undefined') return { ok: false, error: 'no window' };
-  for (const { name } of OPS) {
-    try { delete window[name]; } catch (_) {}
-    if (typeof window.__studioCommandUnregister === 'function') {
-      try { window.__studioCommandUnregister(name); } catch (_) {}
-    }
-  }
+  unregisterOps(OPS.map((o) => o.name));
   _installed = false;
   return { ok: true, removed: OPS.length };
 }

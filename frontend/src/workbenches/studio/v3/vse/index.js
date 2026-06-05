@@ -11,7 +11,6 @@
 // the React UI and the headless op surface mutate the same Map.
 
 import React from 'react';
-import { createRoot } from 'react-dom/client';
 import {
   listStrips, getStrip, addStrip, removeStrip,
   setStripTime, setStripChannel, setStripParams,
@@ -20,30 +19,27 @@ import {
 } from './timeline.js';
 import { composeAt, exportSequence, preloadImage } from './compose.js';
 import VSEEditor from './VSEEditor.jsx';
+import { mountPanel, unmountPanel } from '../common/panel.js';
+import { registerOp, unregisterOps } from '../common/registry.js';
 
 let _installed = false;
-let _editorHost = null;
-let _editorRoot = null;
+let _panel = null;
 let _editorOpen = false;
 
 // ─── Editor lifecycle ────────────────────────────────────────────────
 function mountEditorHost() {
-  if (typeof document === 'undefined') return null;
-  if (_editorHost) return _editorHost;
-  _editorHost = document.createElement('div');
-  _editorHost.setAttribute('data-studio-v3-vse-editor-host', '');
-  document.body.appendChild(_editorHost);
-  _editorRoot = createRoot(_editorHost);
-  return _editorHost;
+  if (_panel) return _panel.host;
+  _panel = mountPanel('vse-editor');
+  return _panel ? _panel.host : null;
 }
 
 function renderEditor() {
-  if (!_editorRoot) return;
+  if (!_panel) return;
   if (!_editorOpen) {
-    _editorRoot.render(null);
+    _panel.render(null);
     return;
   }
-  _editorRoot.render(
+  _panel.render(
     React.createElement(VSEEditor, {
       listStrips,
       getState,
@@ -85,23 +81,9 @@ function editorToggle() {
   return _editorOpen ? editorClose() : editorOpen();
 }
 
-// ─── Op registration ────────────────────────────────────────────────
+// ─── Op registration (delegates to common/registry.js) ───────────────
 function reg(name, fn, description) {
-  if (typeof window === 'undefined') return;
-  window[name] = fn;
-  const register = () => {
-    try {
-      if (typeof window.__studioCommandRegister === 'function') {
-        window.__studioCommandRegister(name, fn, { category: 'vse', description });
-        return true;
-      }
-    } catch (_) {}
-    return false;
-  };
-  if (!register()) {
-    // Palette may not be live yet at install time; retry next macrotask.
-    setTimeout(register, 0);
-  }
+  registerOp(name, fn, 'vse', description);
 }
 
 // ─── Install ────────────────────────────────────────────────────────
@@ -259,7 +241,7 @@ export function installVSE() {
 export function uninstallVSE() {
   if (typeof window === 'undefined') return { ok: false };
   if (!_installed) return { ok: true };
-  for (const k of [
+  unregisterOps([
     '__studioVSEAddStrip', '__studioVSEListStrips', '__studioVSEGetStrip',
     '__studioVSESetStripTime', '__studioVSESetStripChannel', '__studioVSESetStripParams',
     '__studioVSERemoveStrip',
@@ -269,15 +251,8 @@ export function uninstallVSE() {
     '__studioVSESerialize', '__studioVSEDeserialize',
     '__studioVSEExportSequence',
     '__studioVSEEditorOpen', '__studioVSEEditorClose', '__studioVSEEditorToggle',
-  ]) {
-    try { delete window[k]; } catch (_) {}
-    if (typeof window.__studioCommandUnregister === 'function') {
-      try { window.__studioCommandUnregister(k); } catch (_) {}
-    }
-  }
-  if (_editorRoot) { try { _editorRoot.unmount(); } catch (_) {} _editorRoot = null; }
-  if (_editorHost && _editorHost.parentNode) _editorHost.parentNode.removeChild(_editorHost);
-  _editorHost = null;
+  ]);
+  if (_panel) { unmountPanel('vse-editor'); _panel = null; }
   _editorOpen = false;
   _installed = false;
   return { ok: true };

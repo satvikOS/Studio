@@ -23,6 +23,8 @@
 
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { mulberry32 } from '../common/random.js';
+import { simpleSplitSubdivide } from '../common/subdivide.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
 function toVec3(v, fallback) {
@@ -150,6 +152,8 @@ export const NODE_KINDS = {
 
   // 3) Subdivide — split every triangle into 4 by edge midpoints. Same
   //                topology algorithm as window.__studioSubdivide.
+  // Implementation lives in common/subdivide.js so api.js, modstack and
+  // this node share one routine.
   subdivide: {
     title: 'Subdivide',
     category: 'geometry',
@@ -160,36 +164,8 @@ export const NODE_KINDS = {
       const src = ins.get('geometry');
       if (!src) return emptyGeometry();
       const n = Math.max(0, Math.min(4, Math.floor(+this.params.iters || 1)));
-      let geo = ensureNonIndexed(src);
-      for (let pass = 0; pass < n; pass++) {
-        const pos = geo.attributes.position;
-        const tris = pos.count / 3;
-        const out = new Float32Array(tris * 4 * 3 * 3);
-        let o = 0;
-        for (let t = 0; t < tris; t++) {
-          const i = t * 9;
-          const ax = pos.array[i],     ay = pos.array[i + 1], az = pos.array[i + 2];
-          const bx = pos.array[i + 3], by = pos.array[i + 4], bz = pos.array[i + 5];
-          const cx = pos.array[i + 6], cy = pos.array[i + 7], cz = pos.array[i + 8];
-          const mx = (ax + bx) / 2, my = (ay + by) / 2, mz = (az + bz) / 2;
-          const nx = (bx + cx) / 2, ny = (by + cy) / 2, nz = (bz + cz) / 2;
-          const ox = (cx + ax) / 2, oy = (cy + ay) / 2, oz = (cz + az) / 2;
-          const push = (x1, y1, z1, x2, y2, z2, x3, y3, z3) => {
-            out[o++] = x1; out[o++] = y1; out[o++] = z1;
-            out[o++] = x2; out[o++] = y2; out[o++] = z2;
-            out[o++] = x3; out[o++] = y3; out[o++] = z3;
-          };
-          push(ax, ay, az, mx, my, mz, ox, oy, oz);
-          push(mx, my, mz, bx, by, bz, nx, ny, nz);
-          push(ox, oy, oz, nx, ny, nz, cx, cy, cz);
-          push(mx, my, mz, nx, ny, nz, ox, oy, oz);
-        }
-        const next = new THREE.BufferGeometry();
-        next.setAttribute('position', new THREE.BufferAttribute(out, 3));
-        next.computeVertexNormals();
-        geo = next;
-      }
-      return geo;
+      const base = ensureNonIndexed(src);
+      return simpleSplitSubdivide(base, n);
     },
   },
 
@@ -365,17 +341,8 @@ export const NODE_KINDS = {
   },
 };
 
-// Mulberry32 — small, fast, deterministic PRNG. Returns floats in [0, 1).
-function mulberry32(a) {
-  let s = a >>> 0;
-  return function () {
-    s = (s + 0x6D2B79F5) >>> 0;
-    let t = s;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return (((t ^ (t >>> 14)) >>> 0) / 4294967296);
-  };
-}
+// Mulberry32 — imported from common/random.js so every parity module
+// shares the same deterministic PRNG.
 
 export function listKinds() { return Object.keys(NODE_KINDS); }
 

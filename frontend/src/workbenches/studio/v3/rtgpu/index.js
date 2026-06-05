@@ -26,6 +26,7 @@ import {
   getOverlay,
   snapshotDataUrl,
 } from './overlay.js';
+import { registerOp } from '../common/registry.js';
 
 let _installed = false;
 let _active = false;
@@ -244,27 +245,9 @@ function rtgpuGetSnapshot() {
 
 // ── Command palette registration ─────────────────────────────────────────
 //
-// Same retry-loop trick as the CPU tracer: if __studioCommandRegister
-// isn't installed yet we retry every 100 ms for ~5 s. Avoids race
-// conditions when autoload.js runs before api.js's registerV3Api().
+// Delegates to common/registry.js which handles cold-start retry.
 function _reg(name, fn, description) {
-  window[name] = fn;
-  const doReg = () => {
-    try {
-      if (typeof window.__studioCommandRegister === 'function') {
-        window.__studioCommandRegister(name, fn, { category: 'rt', description });
-        return true;
-      }
-    } catch (_) {}
-    return false;
-  };
-  if (!doReg()) {
-    let tries = 0;
-    const id = setInterval(() => {
-      tries++;
-      if (doReg() || tries > 50) clearInterval(id);
-    }, 100);
-  }
+  registerOp(name, fn, 'rt', description);
 }
 
 export function installRTGPU() {

@@ -9,16 +9,16 @@
 // Delete / Retag / ListTags) and slice-671 thumbnail generator.
 
 import React from 'react';
-import { createRoot } from 'react-dom/client';
 import AssetBrowserPanel, { filterAssets } from './AssetBrowserPanel.jsx';
 import {
   ensureThumb, clearThumb, setThumb, clearAllThumbs,
   thumbCount, listThumbNames,
 } from './thumbCache.js';
+import { mountPanel, unmountPanel } from '../common/panel.js';
+import { registerOp, unregisterOps } from '../common/registry.js';
 
 let _installed = false;
-let _host = null;
-let _root = null;
+let _panel = null;
 let _open = false;
 let _state = { search: '', filter: '', refreshKey: 0 };
 
@@ -42,19 +42,15 @@ function _readTags() {
 
 // ─── Mount control ───────────────────────────────────────────────────────
 function ensureHost() {
-  if (typeof document === 'undefined') return null;
-  if (_host) return _host;
-  _host = document.createElement('div');
-  _host.setAttribute('data-studio-v3-assetbrowser-host', '');
-  document.body.appendChild(_host);
-  _root = createRoot(_host);
-  return _host;
+  if (_panel) return _panel.host;
+  _panel = mountPanel('assetbrowser');
+  return _panel ? _panel.host : null;
 }
 
 function render() {
-  if (!_root) return;
-  if (!_open) { _root.render(null); return; }
-  _root.render(
+  if (!_panel) return;
+  if (!_open) { _panel.render(null); return; }
+  _panel.render(
     React.createElement(AssetBrowserPanel, {
       search: _state.search,
       filter: _state.filter,
@@ -243,31 +239,27 @@ export function installAssetBrowser() {
   };
   window.addEventListener('keydown', onKey);
 
-  // Auto-register every op under category 'assetbrowser'.
-  const reg = window.__studioCommandRegister;
-  if (typeof reg === 'function') {
-    const cat = 'assetbrowser';
-    const entries = [
-      ['__studioAssetBrowserOpen',          'Open the Asset Browser panel'],
-      ['__studioAssetBrowserClose',         'Close the Asset Browser panel'],
-      ['__studioAssetBrowserToggle',        'Toggle the Asset Browser panel'],
-      ['__studioAssetBrowserSetFilter',     'Filter the asset grid by tag (empty = all)'],
-      ['__studioAssetBrowserSetSearch',     'Filter the asset grid by name/tag substring'],
-      ['__studioAssetBrowserListVisible',   'Return assets currently visible under the active filter / search'],
-      ['__studioAssetBrowserRefreshThumbs', 'Re-warm thumbnail cache for every saved asset'],
-      ['__studioAssetBrowserSaveSelection', 'Save the active selection as a named asset + warm its thumbnail'],
-      ['__studioAssetBrowserInstantiate',   'Instantiate a saved asset by name at a world position'],
-      ['__studioAssetBrowserDelete',        'Delete a saved asset by name'],
-      ['__studioAssetBrowserRetag',         'Set the tag for a saved asset'],
-      ['__studioAssetBrowserGetThumb',      'Return the cached / placeholder thumbnail dataURL for an asset'],
-      ['__studioAssetBrowserClearCache',    'Clear the in-memory thumbnail cache'],
-      ['__studioAssetBrowserListTags',      'List every tag currently in use across saved assets'],
-      ['__studioAssetBrowserIsOpen',        'Return whether the Asset Browser panel is open'],
-      ['__studioAssetBrowserListCachedThumbs', 'List asset names currently warm in the thumb cache'],
-    ];
-    for (const [name, desc] of entries) {
-      try { reg(name, window[name], { category: cat, description: desc }); } catch (_) { /* swallow */ }
-    }
+  // Auto-register every op under category 'assetbrowser' via common/registry.js.
+  const entries = [
+    ['__studioAssetBrowserOpen',          'Open the Asset Browser panel'],
+    ['__studioAssetBrowserClose',         'Close the Asset Browser panel'],
+    ['__studioAssetBrowserToggle',        'Toggle the Asset Browser panel'],
+    ['__studioAssetBrowserSetFilter',     'Filter the asset grid by tag (empty = all)'],
+    ['__studioAssetBrowserSetSearch',     'Filter the asset grid by name/tag substring'],
+    ['__studioAssetBrowserListVisible',   'Return assets currently visible under the active filter / search'],
+    ['__studioAssetBrowserRefreshThumbs', 'Re-warm thumbnail cache for every saved asset'],
+    ['__studioAssetBrowserSaveSelection', 'Save the active selection as a named asset + warm its thumbnail'],
+    ['__studioAssetBrowserInstantiate',   'Instantiate a saved asset by name at a world position'],
+    ['__studioAssetBrowserDelete',        'Delete a saved asset by name'],
+    ['__studioAssetBrowserRetag',         'Set the tag for a saved asset'],
+    ['__studioAssetBrowserGetThumb',      'Return the cached / placeholder thumbnail dataURL for an asset'],
+    ['__studioAssetBrowserClearCache',    'Clear the in-memory thumbnail cache'],
+    ['__studioAssetBrowserListTags',      'List every tag currently in use across saved assets'],
+    ['__studioAssetBrowserIsOpen',        'Return whether the Asset Browser panel is open'],
+    ['__studioAssetBrowserListCachedThumbs', 'List asset names currently warm in the thumb cache'],
+  ];
+  for (const [name, desc] of entries) {
+    registerOp(name, window[name], 'assetbrowser', desc);
   }
 
   return { ok: true, ops: 16 };
@@ -276,7 +268,7 @@ export function installAssetBrowser() {
 export function uninstallAssetBrowser() {
   if (!_installed) return { ok: true };
   _installed = false;
-  const keys = [
+  unregisterOps([
     '__studioAssetBrowserOpen', '__studioAssetBrowserClose', '__studioAssetBrowserToggle',
     '__studioAssetBrowserSetFilter', '__studioAssetBrowserSetSearch',
     '__studioAssetBrowserListVisible', '__studioAssetBrowserRefreshThumbs',
@@ -285,11 +277,9 @@ export function uninstallAssetBrowser() {
     '__studioAssetBrowserGetThumb', '__studioAssetBrowserClearCache',
     '__studioAssetBrowserListTags', '__studioAssetBrowserIsOpen',
     '__studioAssetBrowserListCachedThumbs',
-  ];
-  for (const k of keys) { try { delete window[k]; } catch (_) {} }
-  if (_root) { try { _root.unmount(); } catch (_) {} _root = null; }
-  if (_host && _host.parentNode) _host.parentNode.removeChild(_host);
-  _host = null; _open = false;
+  ]);
+  if (_panel) { unmountPanel('assetbrowser'); _panel = null; }
+  _open = false;
   clearAllThumbs();
   return { ok: true };
 }

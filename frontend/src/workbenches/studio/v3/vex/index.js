@@ -12,7 +12,6 @@
 // interpreter are pure JS, and we never construct any code at runtime.
 
 import React from 'react';
-import { createRoot } from 'react-dom/client';
 import Editor from './Editor.jsx';
 import {
   parseScript,
@@ -22,29 +21,26 @@ import {
   EXAMPLE_NAMES,
   MAX_VERTS,
 } from './runner.js';
+import { mountPanel, unmountPanel } from '../common/panel.js';
+import { registerOp, unregisterOps } from '../common/registry.js';
 
 let _installed = false;
-let _editorHost = null;
-let _editorRoot = null;
+let _panel = null;
 let _editorOpen = false;
 let _editorScript = EXAMPLES['twist-y'];
 
 // ── Editor lifecycle ────────────────────────────────────────────────
 
 function mountEditorHost() {
-  if (typeof document === 'undefined') return null;
-  if (_editorHost) return _editorHost;
-  _editorHost = document.createElement('div');
-  _editorHost.setAttribute('data-studio-v3-vex-editor-host', '');
-  document.body.appendChild(_editorHost);
-  _editorRoot = createRoot(_editorHost);
-  return _editorHost;
+  if (_panel) return _panel.host;
+  _panel = mountPanel('vex-editor');
+  return _panel ? _panel.host : null;
 }
 
 function renderEditor() {
-  if (!_editorRoot) return;
-  if (!_editorOpen) { _editorRoot.render(null); return; }
-  _editorRoot.render(
+  if (!_panel) return;
+  if (!_editorOpen) { _panel.render(null); return; }
+  _panel.render(
     React.createElement(Editor, {
       initialScript: _editorScript,
       onCloseRequest: () => editorClose(),
@@ -73,22 +69,10 @@ function editorToggle() {
 
 function editorIsOpen() { return _editorOpen; }
 
-// ── Op registration helper ─────────────────────────────────────────
+// ── Op registration helper (delegates to common/registry.js) ──────
 
 function reg(name, fn, description) {
-  window[name] = fn;
-  const doReg = () => {
-    if (typeof window.__studioCommandRegister === 'function') {
-      try {
-        window.__studioCommandRegister(name, fn, { category: 'vex', description });
-        return true;
-      } catch (_) { /* swallow */ }
-    }
-    return false;
-  };
-  if (!doReg()) {
-    setTimeout(() => { doReg(); }, 0);
-  }
+  registerOp(name, fn, 'vex', description);
 }
 
 // ── Install entry ───────────────────────────────────────────────────
@@ -152,23 +136,14 @@ export function installVex() {
 export function uninstallVex() {
   if (typeof window === 'undefined') return { ok: false };
   if (!_installed) return { ok: true };
-  for (const k of [
+  unregisterOps([
     '__studioVexParse', '__studioVexRun', '__studioVexRunOnMesh',
     '__studioVexEditorOpen', '__studioVexEditorClose', '__studioVexEditorToggle',
     '__studioVexEditorIsOpen',
     '__studioVexSetScript', '__studioVexGetScript',
     '__studioVexExamples', '__studioVexLoadExample', '__studioVexLimits',
-  ]) {
-    try { delete window[k]; } catch (_) {}
-    if (typeof window.__studioCommandUnregister === 'function') {
-      try { window.__studioCommandUnregister(k); } catch (_) {}
-    }
-  }
-  if (_editorRoot) { try { _editorRoot.unmount(); } catch (_) {} _editorRoot = null; }
-  if (_editorHost && _editorHost.parentNode) {
-    _editorHost.parentNode.removeChild(_editorHost);
-  }
-  _editorHost = null;
+  ]);
+  if (_panel) { unmountPanel('vex-editor'); _panel = null; }
   _editorOpen = false;
   _installed = false;
   return { ok: true };

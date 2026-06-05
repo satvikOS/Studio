@@ -15,7 +15,6 @@
 // curves at all.
 
 import React from 'react';
-import { createRoot } from 'react-dom/client';
 
 import {
   addDriver, deleteDriver, enableDriver, listDrivers,
@@ -29,31 +28,28 @@ import {
   installNLATick, uninstallNLATick,
 } from './nla.js';
 import NLAEditor from './NLAEditor.jsx';
+import { mountPanel, unmountPanel } from '../common/panel.js';
+import { registerOp, unregisterOps } from '../common/registry.js';
 
 let _installed = false;
-let _editorHost = null;
-let _editorRoot = null;
+let _panel = null;
 let _editorOpen = false;
 let _playing = false;
 
 // ─── Editor lifecycle ────────────────────────────────────────────────
 function mountEditorHost() {
-  if (typeof document === 'undefined') return null;
-  if (_editorHost) return _editorHost;
-  _editorHost = document.createElement('div');
-  _editorHost.setAttribute('data-studio-v3-animadv-nla-editor-host', '');
-  document.body.appendChild(_editorHost);
-  _editorRoot = createRoot(_editorHost);
-  return _editorHost;
+  if (_panel) return _panel.host;
+  _panel = mountPanel('animadv-nla-editor');
+  return _panel ? _panel.host : null;
 }
 
 function renderEditor() {
-  if (!_editorRoot) return;
+  if (!_panel) return;
   if (!_editorOpen) {
-    _editorRoot.render(null);
+    _panel.render(null);
     return;
   }
-  _editorRoot.render(
+  _panel.render(
     React.createElement(NLAEditor, {
       getStrips: () => listStrips(),
       getDrivers: () => listDrivers(),
@@ -94,30 +90,9 @@ function editorToggle() {
   return _editorOpen ? editorClose() : editorOpen();
 }
 
-// ─── Op registration helper ──────────────────────────────────────────
+// ─── Op registration helper (delegates to common/registry.js) ────────
 function reg(name, fn, description) {
-  window[name] = fn;
-  if (typeof window.__studioCommandRegister === 'function') {
-    try {
-      window.__studioCommandRegister(name, fn, { category: 'animadv', description });
-    } catch (_) {
-      setTimeout(() => {
-        try {
-          if (typeof window.__studioCommandRegister === 'function') {
-            window.__studioCommandRegister(name, fn, { category: 'animadv', description });
-          }
-        } catch (_) {}
-      }, 0);
-    }
-  } else {
-    setTimeout(() => {
-      try {
-        if (typeof window.__studioCommandRegister === 'function') {
-          window.__studioCommandRegister(name, fn, { category: 'animadv', description });
-        }
-      } catch (_) {}
-    }, 0);
-  }
+  registerOp(name, fn, 'animadv', description);
 }
 
 function getSelectedMesh() {
@@ -267,7 +242,7 @@ export function installAnimAdv() {
 export function uninstallAnimAdv() {
   if (typeof window === 'undefined') return { ok: false };
   if (!_installed) return { ok: true };
-  for (const k of [
+  unregisterOps([
     '__studioAnimAdvDriverAdd', '__studioAnimAdvDriverList',
     '__studioAnimAdvDriverDelete', '__studioAnimAdvDriverEnable',
     '__studioAnimAdvDriverApplyNow', '__studioAnimAdvDriverClear',
@@ -279,22 +254,10 @@ export function uninstallAnimAdv() {
     '__studioAnimAdvNLAEditorOpen', '__studioAnimAdvNLAEditorClose',
     '__studioAnimAdvNLAEditorToggle',
     '__studioAnimAdvTogglePlay', '__studioAnimAdvIsPlaying', '__studioAnimAdvReset',
-  ]) {
-    try { delete window[k]; } catch (_) {}
-    if (typeof window.__studioCommandUnregister === 'function') {
-      try { window.__studioCommandUnregister(k); } catch (_) {}
-    }
-  }
+  ]);
   uninstallDriverTick();
   uninstallNLATick();
-  if (_editorRoot) {
-    try { _editorRoot.unmount(); } catch (_) {}
-    _editorRoot = null;
-  }
-  if (_editorHost && _editorHost.parentNode) {
-    _editorHost.parentNode.removeChild(_editorHost);
-  }
-  _editorHost = null;
+  if (_panel) { unmountPanel('animadv-nla-editor'); _panel = null; }
   _editorOpen = false;
   _installed = false;
   return { ok: true };

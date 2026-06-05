@@ -13,7 +13,6 @@
 // __studioAudioLoad / __studioAudioPlay / etc.
 
 import React from 'react';
-import { createRoot } from 'react-dom/client';
 import {
   loadAudio, generateSineWave, unloadAudio, getEntry, listEntries,
   getAll as getBufferStore,
@@ -24,27 +23,24 @@ import {
 } from './playback.js';
 import { renderWaveform, envelopeFor } from './waveform.js';
 import AudioPanel from './AudioPanel.jsx';
+import { mountPanel, unmountPanel } from '../common/panel.js';
+import { registerOp, unregisterOps } from '../common/registry.js';
 
 let _installed = false;
-let _panelHost = null;
-let _panelRoot = null;
+let _panel = null;
 let _panelOpen = false;
 
 // ─── Panel lifecycle ─────────────────────────────────────────────────
 function mountPanelHost() {
-  if (typeof document === 'undefined') return null;
-  if (_panelHost) return _panelHost;
-  _panelHost = document.createElement('div');
-  _panelHost.setAttribute('data-studio-v3-audio-panel-host', '');
-  document.body.appendChild(_panelHost);
-  _panelRoot = createRoot(_panelHost);
-  return _panelHost;
+  if (_panel) return _panel.host;
+  _panel = mountPanel('audio-panel');
+  return _panel ? _panel.host : null;
 }
 
 function renderPanel() {
-  if (!_panelRoot) return;
-  if (!_panelOpen) { _panelRoot.render(null); return; }
-  _panelRoot.render(
+  if (!_panel) return;
+  if (!_panelOpen) { _panel.render(null); return; }
+  _panel.render(
     React.createElement(AudioPanel, {
       onCloseRequest: () => panelClose(),
     })
@@ -66,21 +62,9 @@ function panelToggle() {
   return _panelOpen ? panelClose() : panelOpen();
 }
 
-// ─── Op registration helper ──────────────────────────────────────────
+// ─── Op registration helper (delegates to common/registry.js) ────────
 function reg(name, fn, description) {
-  if (typeof window === 'undefined') return;
-  window[name] = fn;
-  const doReg = () => {
-    if (typeof window.__studioCommandRegister !== 'function') return false;
-    try {
-      window.__studioCommandRegister(name, fn, { category: 'audio', description });
-      return true;
-    } catch (_) { return false; }
-  };
-  if (!doReg()) {
-    // Command palette may load after us — retry on next tick.
-    setTimeout(doReg, 0);
-  }
+  registerOp(name, fn, 'audio', description);
 }
 
 // ─── Install ─────────────────────────────────────────────────────────
@@ -232,7 +216,7 @@ export function installAudio() {
 export function uninstallAudio() {
   if (typeof window === 'undefined') return { ok: false };
   if (!_installed) return { ok: true };
-  for (const k of [
+  unregisterOps([
     '__studioAudioLoad', '__studioAudioGenerateSineWave',
     '__studioAudioRenderWaveform', '__studioAudioEnvelope',
     '__studioAudioPlay', '__studioAudioPause', '__studioAudioStop',
@@ -241,20 +225,8 @@ export function uninstallAudio() {
     '__studioAudioList', '__studioAudioGetState',
     '__studioAudioDelete', '__studioAudioClear',
     '__studioAudioPanelOpen', '__studioAudioPanelClose', '__studioAudioPanelToggle',
-  ]) {
-    try { delete window[k]; } catch (_) {}
-    if (typeof window.__studioCommandUnregister === 'function') {
-      try { window.__studioCommandUnregister(k); } catch (_) {}
-    }
-  }
-  if (_panelRoot) {
-    try { _panelRoot.unmount(); } catch (_) {}
-    _panelRoot = null;
-  }
-  if (_panelHost && _panelHost.parentNode) {
-    _panelHost.parentNode.removeChild(_panelHost);
-  }
-  _panelHost = null;
+  ]);
+  if (_panel) { unmountPanel('audio-panel'); _panel = null; }
   _panelOpen = false;
   _installed = false;
   return { ok: true };

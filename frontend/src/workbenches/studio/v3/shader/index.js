@@ -10,18 +10,18 @@
 // internal mount state.
 
 import React from 'react';
-import { createRoot } from 'react-dom/client';
 import {
   createGraph, addNode, removeNode, connect, disconnect,
   toJSON, fromJSON,
 } from './graph.js';
 import { bakeGraphToCanvas, applyGraphToMesh } from './applyToMaterial.js';
 import ShaderEditor from './ShaderEditor.jsx';
+import { mountPanel, unmountPanel } from '../common/panel.js';
+import { registerOps, unregisterOps } from '../common/registry.js';
 
 let _installed = false;
 let _graph = null;
-let _editorHost = null;
-let _editorRoot = null;
+let _panel = null;
 let _editorOpen = false;
 
 function getMesh() {
@@ -46,22 +46,18 @@ function applyToSelection() {
 
 // ─── Editor mount control ────────────────────────────────────────────────
 function mountEditorHost() {
-  if (typeof document === 'undefined') return null;
-  if (_editorHost) return _editorHost;
-  _editorHost = document.createElement('div');
-  _editorHost.setAttribute('data-studio-v3-shader-editor-host', '');
-  document.body.appendChild(_editorHost);
-  _editorRoot = createRoot(_editorHost);
-  return _editorHost;
+  if (_panel) return _panel.host;
+  _panel = mountPanel('shader-editor');
+  return _panel ? _panel.host : null;
 }
 
 function renderEditor() {
-  if (!_editorRoot) return;
+  if (!_panel) return;
   if (!_editorOpen) {
-    _editorRoot.render(null);
+    _panel.render(null);
     return;
   }
-  _editorRoot.render(
+  _panel.render(
     React.createElement(ShaderEditor, {
       getGraph: () => _graph,
       evalAndApply: () => applyToSelection(),
@@ -179,31 +175,22 @@ export function installShaderGraph() {
   };
   window.addEventListener('keydown', _onKey);
 
-  // Register with the V3 command palette if available. The auto-seed
-  // pass (in api.js) caches the function reference at registry creation;
-  // we explicitly register *after* install so the entry exists with the
-  // 'shader' category.
-  const reg = window.__studioCommandRegister;
-  if (typeof reg === 'function') {
-    const cat = 'shader';
-    const cmds = [
-      ['__studioShaderNodeAdd', 'Add a shader node (kind, params)'],
-      ['__studioShaderNodeRemove', 'Remove a shader node by uuid'],
-      ['__studioShaderNodeConnect', 'Connect two shader sockets'],
-      ['__studioShaderNodeDisconnect', 'Disconnect two shader sockets'],
-      ['__studioShaderEvaluate', 'Bake the shader graph to a PNG dataUrl'],
-      ['__studioShaderApplyToSelection', 'Bake + assign as the selection mat.map'],
-      ['__studioShaderGraphSerialize', 'Serialise the shader graph to JSON'],
-      ['__studioShaderGraphDeserialize', 'Replace the graph from JSON'],
-      ['__studioShaderEditorOpen', 'Open the shader graph editor'],
-      ['__studioShaderEditorClose', 'Close the shader graph editor'],
-      ['__studioShaderEditorToggle', 'Toggle the shader graph editor'],
-      ['__studioShaderListNodes', 'List nodes currently in the graph'],
-    ];
-    for (const [name, desc] of cmds) {
-      reg(name, window[name], { category: cat, description: desc });
-    }
-  }
+  // Register with the V3 command palette via common/registry.js, which
+  // also handles cold-start retry.
+  registerOps({
+    __studioShaderNodeAdd:           [window.__studioShaderNodeAdd,           'Add a shader node (kind, params)'],
+    __studioShaderNodeRemove:        [window.__studioShaderNodeRemove,        'Remove a shader node by uuid'],
+    __studioShaderNodeConnect:       [window.__studioShaderNodeConnect,       'Connect two shader sockets'],
+    __studioShaderNodeDisconnect:    [window.__studioShaderNodeDisconnect,    'Disconnect two shader sockets'],
+    __studioShaderEvaluate:          [window.__studioShaderEvaluate,          'Bake the shader graph to a PNG dataUrl'],
+    __studioShaderApplyToSelection:  [window.__studioShaderApplyToSelection,  'Bake + assign as the selection mat.map'],
+    __studioShaderGraphSerialize:    [window.__studioShaderGraphSerialize,    'Serialise the shader graph to JSON'],
+    __studioShaderGraphDeserialize:  [window.__studioShaderGraphDeserialize,  'Replace the graph from JSON'],
+    __studioShaderEditorOpen:        [window.__studioShaderEditorOpen,        'Open the shader graph editor'],
+    __studioShaderEditorClose:       [window.__studioShaderEditorClose,       'Close the shader graph editor'],
+    __studioShaderEditorToggle:      [window.__studioShaderEditorToggle,      'Toggle the shader graph editor'],
+    __studioShaderListNodes:         [window.__studioShaderListNodes,         'List nodes currently in the graph'],
+  }, 'shader');
 
   return { ok: true, ops: 12 };
 }
@@ -212,22 +199,15 @@ export function installShaderGraph() {
 export function uninstallShaderGraph() {
   if (!_installed) return { ok: true };
   _installed = false;
-  for (const k of [
+  unregisterOps([
     '__studioShaderNodeAdd', '__studioShaderNodeRemove',
     '__studioShaderNodeConnect', '__studioShaderNodeDisconnect',
     '__studioShaderEvaluate', '__studioShaderApplyToSelection',
     '__studioShaderGraphSerialize', '__studioShaderGraphDeserialize',
     '__studioShaderEditorOpen', '__studioShaderEditorClose', '__studioShaderEditorToggle',
     '__studioShaderListNodes', '__studioShaderGraph',
-  ]) { try { delete window[k]; } catch (_) {} }
-  if (_editorRoot) {
-    try { _editorRoot.unmount(); } catch (_) {}
-    _editorRoot = null;
-  }
-  if (_editorHost && _editorHost.parentNode) {
-    _editorHost.parentNode.removeChild(_editorHost);
-  }
-  _editorHost = null;
+  ]);
+  if (_panel) { unmountPanel('shader-editor'); _panel = null; }
   _editorOpen = false;
   _graph = null;
   return { ok: true };

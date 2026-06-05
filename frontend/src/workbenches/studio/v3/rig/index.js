@@ -20,32 +20,10 @@ import {
 import { bindMeshToArmature } from './skin.js';
 import { solveIK } from './ik.js';
 import { showSkeletonHelper, hideSkeletonHelper } from './helpers.js';
+import { registerOp } from '../common/registry.js';
 
 function reg(name, fn, description) {
-  window[name] = fn;
-  if (typeof window.__studioCommandRegister === 'function') {
-    try {
-      window.__studioCommandRegister(name, fn, { category: 'rig', description });
-    } catch (_) {
-      // Command palette may not be live yet (autoload races registerV3Api).
-      // Re-attempt once on the next macrotask so the registry stays in sync.
-      setTimeout(() => {
-        try {
-          if (typeof window.__studioCommandRegister === 'function') {
-            window.__studioCommandRegister(name, fn, { category: 'rig', description });
-          }
-        } catch (_) {}
-      }, 0);
-    }
-  } else {
-    setTimeout(() => {
-      try {
-        if (typeof window.__studioCommandRegister === 'function') {
-          window.__studioCommandRegister(name, fn, { category: 'rig', description });
-        }
-      } catch (_) {}
-    }, 0);
-  }
+  registerOp(name, fn, 'rig', description);
 }
 
 export function installRigging() {

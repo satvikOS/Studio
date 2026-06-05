@@ -10,7 +10,6 @@
 // Idempotent — guarded by `window.__studioModStackInstalled`.
 
 import React from 'react';
-import { createRoot } from 'react-dom/client';
 import {
   SUPPORTED_KINDS,
   addMod, listMods, setEnabled, setViewport, setParams,
@@ -18,10 +17,11 @@ import {
   rebuildStack,
 } from './stack.js';
 import ModStackPanel from './ModStackPanel.jsx';
+import { mountPanel, unmountPanel } from '../common/panel.js';
+import { registerOp, unregisterOps } from '../common/registry.js';
 
 let _installed = false;
-let _host = null;
-let _root = null;
+let _panel = null;
 let _open = false;
 
 function getSelectedMesh() {
@@ -34,19 +34,15 @@ function getSelectedMesh() {
 }
 
 function mountHost() {
-  if (typeof document === 'undefined') return null;
-  if (_host) return _host;
-  _host = document.createElement('div');
-  _host.setAttribute('data-studio-v3-modstack-host', '');
-  document.body.appendChild(_host);
-  _root = createRoot(_host);
-  return _host;
+  if (_panel) return _panel.host;
+  _panel = mountPanel('modstack');
+  return _panel ? _panel.host : null;
 }
 
 function renderPanel() {
-  if (!_root) return;
-  if (!_open) { _root.render(null); return; }
-  _root.render(
+  if (!_panel) return;
+  if (!_open) { _panel.render(null); return; }
+  _panel.render(
     React.createElement(ModStackPanel, {
       getSelectedMesh,
       listMods: () => {
@@ -109,16 +105,7 @@ function panelClose()  { _open = false; renderPanel(); return { ok: true, open: 
 function panelToggle() { return _open ? panelClose() : panelOpen(); }
 
 function reg(name, fn, description) {
-  window[name] = fn;
-  const tryReg = () => {
-    if (typeof window.__studioCommandRegister !== 'function') return false;
-    try {
-      window.__studioCommandRegister(name, fn, { category: 'modstack', description });
-      return true;
-    } catch (_) { return false; }
-  };
-  // Try now + on the next macrotask to cover the autoload-vs-registerV3Api race.
-  if (!tryReg()) setTimeout(tryReg, 0);
+  registerOp(name, fn, 'modstack', description);
 }
 
 export function installModStack() {
@@ -236,7 +223,7 @@ export function installModStack() {
 
 export function uninstallModStack() {
   if (typeof window === 'undefined') return { ok: false };
-  for (const k of [
+  unregisterOps([
     '__studioModStackAdd', '__studioModStackList',
     '__studioModStackSetEnabled', '__studioModStackSetViewport',
     '__studioModStackReorder', '__studioModStackSetParams',
@@ -244,15 +231,9 @@ export function uninstallModStack() {
     '__studioModStackApplyAll', '__studioModStackResetToBase',
     '__studioModStackRebuild', '__studioModStackSupportedKinds',
     '__studioModStackPanelOpen', '__studioModStackPanelClose', '__studioModStackPanelToggle',
-  ]) {
-    try { delete window[k]; } catch (_) {}
-    if (typeof window.__studioCommandUnregister === 'function') {
-      try { window.__studioCommandUnregister(k); } catch (_) {}
-    }
-  }
-  if (_root) { try { _root.unmount(); } catch (_) {} _root = null; }
-  if (_host && _host.parentNode) _host.parentNode.removeChild(_host);
-  _host = null; _open = false;
+  ]);
+  if (_panel) { unmountPanel('modstack'); _panel = null; }
+  _open = false;
   window.__studioModStackInstalled = false;
   _installed = false;
   return { ok: true };

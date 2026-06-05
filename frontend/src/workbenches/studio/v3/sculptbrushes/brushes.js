@@ -84,11 +84,9 @@ function _ensureNormal(mesh) {
 }
 
 // Smoothstep-style falloff curve: 1 at centre, 0 at radius.
-function _falloff(t) {
-  if (t <= 0) return 0;
-  if (t >= 1) return 1;
-  return t * t * (3 - 2 * t);
-}
+// Wraps common/brush.js so multiple modules share the same primitive.
+import { smoothFalloff as _smoothFalloff } from '../common/brush.js';
+function _falloff(t) { return _smoothFalloff(t); }
 
 function _commit(mesh) {
   const g = mesh.geometry;

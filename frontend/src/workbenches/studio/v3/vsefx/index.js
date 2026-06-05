@@ -32,6 +32,7 @@ import {
 import {
   listEffects, applyEffect, installWindowHook as installEffectHook,
 } from './effects.js';
+import { registerOp, unregisterOps } from '../common/registry.js';
 
 let _installed = false;
 
@@ -166,25 +167,10 @@ function buildTestStripB() {
   return id;
 }
 
-// ─── Op registration helper (mirror of vse/index.js). ───────────────
+// ─── Op registration helper (delegates to common/registry.js). ──────
 
 function reg(name, fn, description) {
-  if (typeof window === 'undefined') return;
-  window[name] = fn;
-  const register = () => {
-    try {
-      if (typeof window.__studioCommandRegister === 'function') {
-        window.__studioCommandRegister(name, fn, { category: 'vse', description });
-        return true;
-      }
-    } catch (_) {}
-    return false;
-  };
-  if (!register()) {
-    // Palette may not have spun up yet; retry next macrotask. Same
-    // pattern used by vse/index.js.
-    setTimeout(register, 0);
-  }
+  registerOp(name, fn, 'vse', description);
 }
 
 // ─── Install ────────────────────────────────────────────────────────
@@ -274,7 +260,7 @@ export function installVSEFX() {
 export function uninstallVSEFX() {
   if (typeof window === 'undefined') return { ok: false };
   if (!_installed) return { ok: true };
-  for (const k of [
+  unregisterOps([
     '__studioVSEFXListTransitions',
     '__studioVSEFXListEffects',
     '__studioVSEFXApplyTransition',
@@ -283,12 +269,7 @@ export function uninstallVSEFX() {
     '__studioVSEFXTestStripB',
     '__studioVSEFXApply',
     '__studioVSEFXApplyOne',
-  ]) {
-    try { delete window[k]; } catch (_) {}
-    if (typeof window.__studioCommandUnregister === 'function') {
-      try { window.__studioCommandUnregister(k); } catch (_) {}
-    }
-  }
+  ]);
   _installed = false;
   return { ok: true };
 }

@@ -28,6 +28,7 @@
 // pipelines apart.
 
 import { sample } from './curves.js';
+import { isChained, chainIntoAnimTick } from '../common/anim-tick.js';
 
 // ─── Module-level state ──────────────────────────────────────────────
 const state = {
@@ -133,33 +134,26 @@ function _installTick() {
   const v = window.__archdiscViewport;
   if (!v) return false;
   // Idempotent — bail if our function is already in the chain.
-  if (v.__studioAnimTick && v.__studioAnimTick.__animGraph) return true;
-  const prev = v.__studioAnimTick;
-  const fn = (now) => {
-    // dt smoothed against a 100 ms cap so a frozen tab + a wake-up
-    // doesn't fast-forward the timeline by minutes in one frame.
-    if (state.playing) {
-      const last = state.lastTickMs || now;
-      const dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
-      state.lastTickMs = now;
-      state.time += dt;
-      const dur = timelineDuration();
-      if (dur > 0 && state.time > dur) {
-        // Loop around — matches the slice 629 behaviour of
-        // AnimationAction.setLoop(THREE.LoopRepeat).
-        state.time = state.time % dur;
-      }
-      applyAllAtTime(state.time);
+  if (isChained('animGraph')) return true;
+  const r = chainIntoAnimTick('animGraph', (now) => {
+    if (!state.playing) return;
+    const last = state.lastTickMs || now;
+    const dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
+    state.lastTickMs = now;
+    state.time += dt;
+    const dur = timelineDuration();
+    if (dur > 0 && state.time > dur) {
+      // Loop around — matches the slice 629 behaviour of
+      // AnimationAction.setLoop(THREE.LoopRepeat).
+      state.time = state.time % dur;
     }
-    if (prev) {
-      try { prev(now); } catch (_) { /* swallow tick chain errors */ }
-    }
-  };
-  fn.__animGraph = true;
-  fn.__prev = prev;
-  v.__studioAnimTick = fn;
-  state.tickInstalled = true;
-  return true;
+    applyAllAtTime(state.time);
+  });
+  if (r && (r.attached || r.alreadyChained)) {
+    state.tickInstalled = true;
+    return true;
+  }
+  return false;
 }
 
 /**

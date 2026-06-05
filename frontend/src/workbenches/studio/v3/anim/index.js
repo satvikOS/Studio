@@ -14,7 +14,6 @@
 // graph editor drives directly.
 
 import React from 'react';
-import { createRoot } from 'react-dom/client';
 import {
   createCurve, addKey, deleteKey,
   setKeyInterp, setKeyHandle, moveKey,
@@ -28,10 +27,11 @@ import {
   timelineDuration, reset as pbReset,
 } from './playback.js';
 import GraphEditor from './GraphEditor.jsx';
+import { mountPanel, unmountPanel } from '../common/panel.js';
+import { registerOp, unregisterOps } from '../common/registry.js';
 
 let _installed = false;
-let _editorHost = null;
-let _editorRoot = null;
+let _panel = null;
 let _editorOpen = false;
 let _activeUuid = null;          // currently-edited curve in the graph
 
@@ -59,22 +59,18 @@ function readMeshValue(mesh, property, channel) {
 
 // ─── Editor lifecycle ────────────────────────────────────────────────
 function mountEditorHost() {
-  if (typeof document === 'undefined') return null;
-  if (_editorHost) return _editorHost;
-  _editorHost = document.createElement('div');
-  _editorHost.setAttribute('data-studio-v3-anim-graph-editor-host', '');
-  document.body.appendChild(_editorHost);
-  _editorRoot = createRoot(_editorHost);
-  return _editorHost;
+  if (_panel) return _panel.host;
+  _panel = mountPanel('anim-graph-editor');
+  return _panel ? _panel.host : null;
 }
 
 function renderEditor() {
-  if (!_editorRoot) return;
+  if (!_panel) return;
   if (!_editorOpen) {
-    _editorRoot.render(null);
+    _panel.render(null);
     return;
   }
-  _editorRoot.render(
+  _panel.render(
     React.createElement(GraphEditor, {
       getCurves: () => getCurves(),
       getActiveUuid: () => _activeUuid,
@@ -156,28 +152,7 @@ function findMeshByUuid(uuid) {
 
 // ─── Op registration ─────────────────────────────────────────────────
 function reg(name, fn, description) {
-  window[name] = fn;
-  if (typeof window.__studioCommandRegister === 'function') {
-    try {
-      window.__studioCommandRegister(name, fn, { category: 'anim', description });
-    } catch (_) {
-      setTimeout(() => {
-        try {
-          if (typeof window.__studioCommandRegister === 'function') {
-            window.__studioCommandRegister(name, fn, { category: 'anim', description });
-          }
-        } catch (_) {}
-      }, 0);
-    }
-  } else {
-    setTimeout(() => {
-      try {
-        if (typeof window.__studioCommandRegister === 'function') {
-          window.__studioCommandRegister(name, fn, { category: 'anim', description });
-        }
-      } catch (_) {}
-    }, 0);
-  }
+  registerOp(name, fn, 'anim', description);
 }
 
 // ─── Install ─────────────────────────────────────────────────────────
@@ -373,7 +348,7 @@ export function installAnimGraph() {
 export function uninstallAnimGraph() {
   if (typeof window === 'undefined') return { ok: false };
   if (!_installed) return { ok: true };
-  for (const k of [
+  unregisterOps([
     '__studioAnimCurveAdd', '__studioAnimCurveAddKey', '__studioAnimCurveListKeys',
     '__studioAnimCurveSample', '__studioAnimCurveDeleteKey', '__studioAnimCurveSetInterp',
     '__studioAnimCurveSetHandle', '__studioAnimCurveMoveKey', '__studioAnimCurveRemove',
@@ -383,20 +358,8 @@ export function uninstallAnimGraph() {
     '__studioAnimApplyNow', '__studioAnimReset',
     '__studioAnimCurveSerialize', '__studioAnimCurveDeserialize',
     '__studioAnimGraphEditorOpen', '__studioAnimGraphEditorClose', '__studioAnimGraphEditorToggle',
-  ]) {
-    try { delete window[k]; } catch (_) {}
-    if (typeof window.__studioCommandUnregister === 'function') {
-      try { window.__studioCommandUnregister(k); } catch (_) {}
-    }
-  }
-  if (_editorRoot) {
-    try { _editorRoot.unmount(); } catch (_) {}
-    _editorRoot = null;
-  }
-  if (_editorHost && _editorHost.parentNode) {
-    _editorHost.parentNode.removeChild(_editorHost);
-  }
-  _editorHost = null;
+  ]);
+  if (_panel) { unmountPanel('anim-graph-editor'); _panel = null; }
   _editorOpen = false;
   _activeUuid = null;
   _installed = false;

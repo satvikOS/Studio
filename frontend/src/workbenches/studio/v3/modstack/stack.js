@@ -31,6 +31,8 @@ import {
   mergeGeometries,
   mergeVertices,
 } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { smoothValueNoise3D } from '../common/noise.js';
+import { loopSubdivide } from '../common/subdivide.js';
 
 export const SUPPORTED_KINDS = Object.freeze([
   'subdivide', 'solidify', 'mirror', 'array', 'decimate',
@@ -92,46 +94,13 @@ function _toNonIndexed(geometry) {
   return geometry.toNonIndexed();
 }
 
-// SUBDIVIDE — Catmull-style midpoint subdivision (1-iteration loop split).
-// For each triangle, insert a midpoint per edge → 4 sub-triangles.
+// SUBDIVIDE — Catmull-style midpoint subdivision (loopSubdivide in
+// common/subdivide.js shares the welding + bookkeeping with every other
+// caller).
 function modSubdivide(geometry, params) {
   const iters = Math.max(1, Math.min(4, (params && params.iterations) | 0 || 1));
-  let g = _toIndexed(geometry);
-  for (let it = 0; it < iters; it++) {
-    const pos = g.attributes.position;
-    const idx = g.index.array;
-    const verts = [];
-    for (let i = 0; i < pos.count; i++) {
-      verts.push(pos.getX(i), pos.getY(i), pos.getZ(i));
-    }
-    const midCache = new Map();
-    const triCount = idx.length / 3;
-    const newIdx = [];
-    const midpoint = (a, b) => {
-      const k = a < b ? `${a}_${b}` : `${b}_${a}`;
-      let id = midCache.get(k);
-      if (id !== undefined) return id;
-      const ax = verts[a * 3 + 0], ay = verts[a * 3 + 1], az = verts[a * 3 + 2];
-      const bx = verts[b * 3 + 0], by = verts[b * 3 + 1], bz = verts[b * 3 + 2];
-      id = verts.length / 3;
-      verts.push((ax + bx) * 0.5, (ay + by) * 0.5, (az + bz) * 0.5);
-      midCache.set(k, id);
-      return id;
-    };
-    for (let f = 0; f < triCount; f++) {
-      const a = idx[f * 3 + 0], b = idx[f * 3 + 1], c = idx[f * 3 + 2];
-      const ab = midpoint(a, b), bc = midpoint(b, c), ca = midpoint(c, a);
-      newIdx.push(a, ab, ca, b, bc, ab, c, ca, bc, ab, bc, ca);
-    }
-    const ng = new THREE.BufferGeometry();
-    ng.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
-    ng.setIndex(newIdx);
-    g = ng;
-  }
-  g.computeVertexNormals();
-  g.computeBoundingSphere();
-  g.computeBoundingBox();
-  return g;
+  const g = _toIndexed(geometry);
+  return loopSubdivide(g, iters);
 }
 
 // SOLIDIFY — extrude the surface outward by `thickness` along vertex
@@ -401,39 +370,9 @@ function modTaper(geometry, params) {
 }
 
 // DISPLACE — push verts along their normals by procedural fractal-like
-// noise (deterministic hash, no external dep). Sum two octaves for a
-// somewhat organic look.
-function _hashNoise(x, y, z, seed) {
-  // Deterministic 3D value-noise hash → -1..1.
-  const s = seed | 0;
-  let h = (Math.imul(x | 0, 374761393) ^ Math.imul(y | 0, 668265263)
-         ^ Math.imul(z | 0, 2147483647) ^ Math.imul(s, 1274126177)) >>> 0;
-  h = Math.imul(h ^ (h >>> 13), 1274126177) >>> 0;
-  h = (h ^ (h >>> 16)) >>> 0;
-  return ((h & 0xffff) / 0x7fff) - 1;
-}
+// noise. Noise primitives live in common/noise.js (smoothValueNoise3D).
 function _smoothNoise(x, y, z, seed) {
-  // Trilinearly-interpolated value noise from the lattice hash.
-  const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
-  const xf = x - xi, yf = y - yi, zf = z - zi;
-  const u = xf * xf * (3 - 2 * xf);
-  const v = yf * yf * (3 - 2 * yf);
-  const w = zf * zf * (3 - 2 * zf);
-  const c000 = _hashNoise(xi, yi, zi, seed);
-  const c100 = _hashNoise(xi + 1, yi, zi, seed);
-  const c010 = _hashNoise(xi, yi + 1, zi, seed);
-  const c110 = _hashNoise(xi + 1, yi + 1, zi, seed);
-  const c001 = _hashNoise(xi, yi, zi + 1, seed);
-  const c101 = _hashNoise(xi + 1, yi, zi + 1, seed);
-  const c011 = _hashNoise(xi, yi + 1, zi + 1, seed);
-  const c111 = _hashNoise(xi + 1, yi + 1, zi + 1, seed);
-  const x00 = c000 * (1 - u) + c100 * u;
-  const x10 = c010 * (1 - u) + c110 * u;
-  const x01 = c001 * (1 - u) + c101 * u;
-  const x11 = c011 * (1 - u) + c111 * u;
-  const y0 = x00 * (1 - v) + x10 * v;
-  const y1 = x01 * (1 - v) + x11 * v;
-  return y0 * (1 - w) + y1 * w;
+  return smoothValueNoise3D(x, y, z, seed);
 }
 function modDisplace(geometry, params) {
   const strength = (params && Number.isFinite(params.strength)) ? +params.strength : 0.1;

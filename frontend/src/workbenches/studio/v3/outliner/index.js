@@ -13,13 +13,13 @@
 //                     re-render that bypasses the panel's setInterval.
 
 import React from 'react';
-import { createRoot } from 'react-dom/client';
 import OutlinerPanel from './OutlinerPanel.jsx';
 import { tree, countAll } from './tree.js';
+import { mountPanel, unmountPanel } from '../common/panel.js';
+import { registerOp, unregisterOps } from '../common/registry.js';
 
 let _installed = false;
-let _host = null;
-let _root = null;
+let _panel = null;
 let _open = false;
 let _expanded = new Set();
 let _expandedRev = 0;
@@ -28,13 +28,9 @@ let _autoExpandedRoot = false;
 
 // ─── Host / mount helpers ────────────────────────────────────────────────
 function ensureHost() {
-  if (typeof document === 'undefined') return null;
-  if (_host) return _host;
-  _host = document.createElement('div');
-  _host.setAttribute('data-studio-v3-outliner-host', '');
-  document.body.appendChild(_host);
-  _root = createRoot(_host);
-  return _host;
+  if (_panel) return _panel.host;
+  _panel = mountPanel('outliner');
+  return _panel ? _panel.host : null;
 }
 
 function autoExpandRoot() {
@@ -51,10 +47,10 @@ function setExpandedRevWrapper(updater) {
 }
 
 function render() {
-  if (!_root) return;
-  if (!_open) { _root.render(null); return; }
+  if (!_panel) return;
+  if (!_open) { _panel.render(null); return; }
   autoExpandRoot();
-  _root.render(
+  _panel.render(
     React.createElement(OutlinerPanel, {
       expandedRef: { current: _expanded },
       setExpandedRev: setExpandedRevWrapper,
@@ -219,12 +215,9 @@ export function installOutliner() {
   };
   window.addEventListener('keydown', onKey);
 
-  const reg = window.__studioCommandRegister;
-  if (typeof reg === 'function') {
-    const cat = 'outliner';
-    for (const [name, [desc]] of Object.entries(OPS)) {
-      try { reg(name, window[name], { category: cat, description: desc }); } catch (_) { /* swallow */ }
-    }
+  // Register via common/registry.js (cold-start retry built-in).
+  for (const [name, [desc]] of Object.entries(OPS)) {
+    registerOp(name, window[name], 'outliner', desc);
   }
 
   return { ok: true, ops: Object.keys(OPS).length };
@@ -233,9 +226,8 @@ export function installOutliner() {
 export function uninstallOutliner() {
   if (!_installed) return { ok: true };
   _installed = false;
-  for (const name of Object.keys(OPS)) { try { delete window[name]; } catch (_) {} }
-  if (_root) { try { _root.unmount(); } catch (_) {} _root = null; }
-  if (_host && _host.parentNode) _host.parentNode.removeChild(_host);
-  _host = null; _open = false; _expanded = new Set(); _autoExpandedRoot = false;
+  unregisterOps(Object.keys(OPS));
+  if (_panel) { unmountPanel('outliner'); _panel = null; }
+  _open = false; _expanded = new Set(); _autoExpandedRoot = false;
   return { ok: true };
 }
