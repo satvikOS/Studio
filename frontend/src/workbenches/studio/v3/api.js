@@ -531,6 +531,105 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 667 — Sharing / clipboard helpers. Uses the async Clipboard
+  // API where available, falls back to no-op (returning ok=false).
+  window.__studioCopySceneJsonToClipboard = async () => {
+    const scene = window.__archdiscScene; if (!scene || !navigator.clipboard) return { ok: false };
+    const json = JSON.stringify(scene.toJSON());
+    try { await navigator.clipboard.writeText(json); return { ok: true, bytes: json.length }; }
+    catch (e) { return { ok: false, error: e.message }; }
+  };
+
+  window.__studioCopyScreenshotToClipboard = async () => {
+    const v = window.__archdiscViewport;
+    if (!v || !v.renderer || !navigator.clipboard) return { ok: false };
+    v.renderer.render(v.scene, v.camera);
+    return new Promise((resolve) => {
+      v.renderer.domElement.toBlob(async (blob) => {
+        if (!blob) { resolve({ ok: false }); return; }
+        try {
+          await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+          resolve({ ok: true, bytes: blob.size });
+        } catch (e) {
+          resolve({ ok: false, error: e.message });
+        }
+      }, 'image/png');
+    });
+  };
+
+  window.__studioGenerateShareUrl = () => {
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    const json = JSON.stringify(scene.toJSON());
+    // base64 + URL-safe replace
+    const b64 = btoa(unescape(encodeURIComponent(json)));
+    const base = location.origin + location.pathname;
+    return { ok: true, url: base + '#scene=' + b64, bytes: b64.length };
+  };
+
+  window.__studioImportFromShareUrl = async (urlOrHash) => {
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    let hash = urlOrHash || location.hash;
+    if (hash.startsWith('http')) {
+      try { hash = new URL(hash).hash; } catch (_) {}
+    }
+    const m = /[#&]scene=([^&]+)/.exec(hash || '');
+    if (!m) return { ok: false, error: 'no scene= in url' };
+    let json;
+    try { json = decodeURIComponent(escape(atob(m[1]))); } catch (e) { return { ok: false, error: 'bad base64' }; }
+    let parsed;
+    try { parsed = JSON.parse(json); } catch (e) { return { ok: false, error: 'bad json' }; }
+    const loader = new THREE.ObjectLoader();
+    let loaded = null;
+    try { loaded = loader.parse(parsed); } catch (e) { return { ok: false, error: e.message }; }
+    // Replace user meshes only.
+    const remove = [];
+    scene.traverse((o) => {
+      if (!o.isMesh) return;
+      const ud = o.userData || {};
+      if (ud.archdiscStudioGizmo || ud.archdiscStudioGrid || ud.archdiscStudioGround || ud.archdiscStudioCameraHelper) return;
+      remove.push(o);
+    });
+    for (const o of remove) o.parent?.remove(o);
+    let added = 0;
+    while (loaded.children.length > 0) {
+      const c = loaded.children[0]; loaded.remove(c); scene.add(c); added++;
+    }
+    return { ok: true, added };
+  };
+
+  window.__studioCopySelectionUuid = async () => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel) return { ok: false };
+    if (navigator.clipboard) {
+      try { await navigator.clipboard.writeText(sel.uuid); }
+      catch (e) { return { ok: false, error: e.message }; }
+    }
+    return { ok: true, uuid: sel.uuid };
+  };
+
+  window.__studioPasteFromClipboard = async () => {
+    if (!navigator.clipboard) return { ok: false };
+    let text;
+    try { text = await navigator.clipboard.readText(); }
+    catch (e) { return { ok: false, error: e.message }; }
+    if (!text) return { ok: false, error: 'empty' };
+    // Try JSON first; if it parses, treat it as a scene snapshot.
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed && (parsed.object || parsed.metadata)) {
+        const loader = new THREE.ObjectLoader();
+        const loaded = loader.parse(parsed);
+        const scene = window.__archdiscScene;
+        let added = 0;
+        while (loaded.children.length > 0) {
+          const c = loaded.children[0]; loaded.remove(c); scene.add(c); added++;
+        }
+        return { ok: true, kind: 'scene', added };
+      }
+    } catch (_) {}
+    return { ok: true, kind: 'text', text };
+  };
+
   // Slice 666 — Asset library / palette pack. Library entries are
   // serialised mesh snapshots saved to localStorage; the user can
   // browse, instantiate, and tag them.
