@@ -7319,6 +7319,11 @@ export function registerV3Api() {
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
   import('./cmdpalette/autoload.js').catch(() => {});
+
+  // Slice 685 — top menu bar that groups every registered op by
+  // category so users don't only get the palette but a discoverable
+  // menu hierarchy too. Lazy so all autoloads above register first.
+  import('./menubar/autoload.js').catch(() => {});
 }
 
 export function unregisterV3Api() {
