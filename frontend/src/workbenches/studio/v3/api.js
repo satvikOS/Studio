@@ -7344,6 +7344,14 @@ export function registerV3Api() {
   import('./csg/autoload.js').catch(() => {});
   // Slice 691 — 25 ZBrush/Blender sculpt brushes (clay/crease/scrape/…).
   import('./sculptbrushes/autoload.js').catch(() => {});
+  // Slice 692 — Outliner scene tree React panel.
+  import('./outliner/autoload.js').catch(() => {});
+  // Slice 692 — Asset Browser grid (Blender 3.0+ parity).
+  import('./assetbrowser/autoload.js').catch(() => {});
+  // Slice 692 — Quad-view 4-pane workspace.
+  import('./multiview/autoload.js').catch(() => {});
+  // Slice 692 — Audio loader + waveform + animation-sync transport.
+  import('./audio/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
