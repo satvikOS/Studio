@@ -35,7 +35,7 @@ precision highp float;
 in vec3 position;
 out vec2 vUv;
 void main() {
-  // ScreenQuad — `position` covers [-1,1] in XY, UV is half-range +0.5.
+  // ScreenQuad: position covers [-1,1] in XY, UV is half-range +0.5.
   vUv = position.xy * 0.5 + 0.5;
   gl_Position = vec4(position.xy, 0.0, 1.0);
 }
@@ -117,7 +117,7 @@ vec4 fetchAlbedo(int triIdx) {
   return texelFetch(uTexAlb, ivec2(triIdx, 0), 0);
 }
 
-// ── Möller–Trumbore (returns t, u, v in `out` params) ──────────────────
+// Moller-Trumbore (returns t, u, v in out params)
 bool intersectTri(vec3 ro, vec3 rd, vec3 a, vec3 b, vec3 c,
                   out float t, out float bu, out float bv) {
   vec3 e1 = b - a;
