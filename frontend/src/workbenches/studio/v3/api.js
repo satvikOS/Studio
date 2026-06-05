@@ -7376,6 +7376,18 @@ export function registerV3Api() {
   import('./shaderptbridge/autoload.js').catch(() => {});
   // Slice 694 — EEVEE-like SSGI + SSR viewport passes.
   import('./eevee/autoload.js').catch(() => {});
+  // Slice 696 — Cascadeur-style AutoPosing (COM, balance, contact, ballistic).
+  import('./autopose/autoload.js').catch(() => {});
+  // Slice 696 — SketchUp-style architectural toolkit (walls/doors/windows/roof/floor/dimensions).
+  import('./arch/autoload.js').catch(() => {});
+  // Slice 696 — 25 Substance-Designer procedural shader nodes.
+  import('./sdesigner/autoload.js').catch(() => {});
+  // Slice 696 — Mari-style UDIM + multi-channel painting.
+  import('./mari/autoload.js').catch(() => {});
+  // Slice 696 — Plasticity-style surface ops (fillet/chamfer/offset/shell/unfold/stitch).
+  import('./surfaces/autoload.js').catch(() => {});
+  // Slice 696 — Houdini HDA bundles + 15 more SOPs.
+  import('./hda/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
