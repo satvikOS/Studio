@@ -531,6 +531,91 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 668 — Command palette registry. A central Map of commands
+  // that any palette UI can read; auto-seeds with every existing
+  // __studio* function so the registry is useful out of the box.
+  if (!window.__studioCommandRegistry) window.__studioCommandRegistry = new Map();
+  const _cmd = window.__studioCommandRegistry;
+
+  // Auto-seed once with every callable __studio* on window.
+  if (!window.__studioCommandSeeded) {
+    window.__studioCommandSeeded = true;
+    for (const k of Object.keys(window)) {
+      if (k.startsWith('__studio') && typeof window[k] === 'function') {
+        _cmd.set(k, { name: k, action: window[k], category: 'auto', description: '' });
+      }
+    }
+  }
+
+  window.__studioCommandRegister = (name, action, opts) => {
+    if (!name) return { ok: false };
+    const fn = typeof action === 'function' ? action
+      : (typeof action === 'string' && typeof window[action] === 'function' ? window[action] : null);
+    if (!fn) return { ok: false, error: 'action not callable' };
+    _cmd.set(name, {
+      name,
+      action: fn,
+      category: opts?.category || 'user',
+      description: opts?.description || '',
+      shortcut: opts?.shortcut || '',
+    });
+    return { ok: true, total: _cmd.size };
+  };
+
+  window.__studioCommandUnregister = (name) => {
+    const had = _cmd.delete(name);
+    return { ok: true, removed: had, total: _cmd.size };
+  };
+
+  window.__studioCommandList = (category) => ({
+    ok: true,
+    count: _cmd.size,
+    commands: Array.from(_cmd.values())
+      .filter((c) => !category || c.category === category)
+      .map((c) => ({ name: c.name, category: c.category, description: c.description, shortcut: c.shortcut })),
+  });
+
+  window.__studioCommandSearch = (query, limit) => {
+    const q = String(query || '').toLowerCase();
+    const lim = Math.max(1, Math.min(100, Number(limit) || 20));
+    if (!q) return { ok: true, count: 0, hits: [] };
+    const score = (name) => {
+      const n = name.toLowerCase();
+      if (n === q) return 1000;
+      if (n.startsWith(q)) return 800;
+      if (n.includes(q)) return 500;
+      // fuzzy: every char of q appears in order in n
+      let i = 0;
+      for (const c of n) if (c === q[i]) { if (++i === q.length) return 200; }
+      return 0;
+    };
+    const scored = [];
+    _cmd.forEach((c) => {
+      const s = score(c.name) + (c.description.toLowerCase().includes(q) ? 50 : 0);
+      if (s > 0) scored.push({ score: s, name: c.name, category: c.category, description: c.description });
+    });
+    scored.sort((a, b) => b.score - a.score);
+    return { ok: true, count: Math.min(scored.length, lim), hits: scored.slice(0, lim) };
+  };
+
+  window.__studioCommandInvoke = async (name, ...args) => {
+    const c = _cmd.get(name);
+    if (!c) return { ok: false, error: 'unknown' };
+    try {
+      const r = await c.action(...args);
+      return { ok: true, result: r };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
+
+  window.__studioCommandResetRegistry = () => {
+    const n = _cmd.size;
+    _cmd.clear();
+    window.__studioCommandSeeded = false;
+    return { ok: true, removed: n };
+  };
+
   // Slice 667 — Sharing / clipboard helpers. Uses the async Clipboard
   // API where available, falls back to no-op (returning ok=false).
   window.__studioCopySceneJsonToClipboard = async () => {
