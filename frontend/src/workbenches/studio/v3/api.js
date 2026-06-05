@@ -7340,6 +7340,10 @@ export function registerV3Api() {
   import('./modstack/autoload.js').catch(() => {});
   // Slice 690 — VSE (video sequence editor) timeline.
   import('./vse/autoload.js').catch(() => {});
+  // Slice 691 — Real watertight CSG (manifold-3d) — union/diff/intersect.
+  import('./csg/autoload.js').catch(() => {});
+  // Slice 691 — 25 ZBrush/Blender sculpt brushes (clay/crease/scrape/…).
+  import('./sculptbrushes/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
