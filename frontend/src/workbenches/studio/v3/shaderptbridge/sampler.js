@@ -22,61 +22,12 @@
 // upgrade to per-triangle centroid UV by extending the bridge once
 // rtgpu/ gains an explicit "write into albedo texture" op.
 
-const _canvasCache = new WeakMap();
-const _imageCanvases = new WeakMap();
-
-// Coerce a THREE.Texture's image (HTMLCanvasElement / HTMLImageElement /
-// OffscreenCanvas / ImageBitmap) into a 2D-canvas-context we can sample.
-// Returns { canvas, ctx, w, h } or null when the image isn't readable
-// yet (e.g. an <img> still loading, or an unsupported source type).
-function _ctxFor(image) {
-  if (!image) return null;
-  if (typeof HTMLCanvasElement !== 'undefined' && image instanceof HTMLCanvasElement) {
-    let entry = _canvasCache.get(image);
-    if (!entry) {
-      const ctx = image.getContext('2d', { willReadFrequently: true });
-      if (!ctx) return null;
-      entry = { canvas: image, ctx, w: image.width, h: image.height };
-      _canvasCache.set(image, entry);
-    } else {
-      // Keep dims in sync — CanvasTextures resize on demand.
-      entry.w = image.width;
-      entry.h = image.height;
-    }
-    return entry;
-  }
-  if (typeof OffscreenCanvas !== 'undefined' && image instanceof OffscreenCanvas) {
-    let entry = _canvasCache.get(image);
-    if (!entry) {
-      const ctx = image.getContext('2d');
-      if (!ctx) return null;
-      entry = { canvas: image, ctx, w: image.width, h: image.height };
-      _canvasCache.set(image, entry);
-    }
-    return entry;
-  }
-  // HTMLImageElement / ImageBitmap → blit into a one-shot scratch canvas.
-  const isImg = (typeof HTMLImageElement !== 'undefined') && (image instanceof HTMLImageElement);
-  const isBitmap = (typeof ImageBitmap !== 'undefined') && (image instanceof ImageBitmap);
-  if (!isImg && !isBitmap) return null;
-  if (isImg && !image.complete) return null;
-  const iw = image.width | 0;
-  const ih = image.height | 0;
-  if (iw <= 0 || ih <= 0) return null;
-  let entry = _imageCanvases.get(image);
-  if (!entry || entry.w !== iw || entry.h !== ih) {
-    if (typeof document === 'undefined') return null;
-    const canvas = document.createElement('canvas');
-    canvas.width = iw;
-    canvas.height = ih;
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    if (!ctx) return null;
-    try { ctx.drawImage(image, 0, 0); } catch (_) { return null; }
-    entry = { canvas, ctx, w: iw, h: ih };
-    _imageCanvases.set(image, entry);
-  }
-  return entry;
-}
+// Slice 695 dedup: the actual UV-to-RGB read is delegated to
+// common/sample-texture.js's sampleMaterialTextureAtUV — same wrap /
+// offset / repeat / flip-Y math the slice-689 CPU sampler used, but
+// shared so rt/pathtracer.js, shaderptbridge and any future consumers
+// stay in lockstep.
+import { sampleMaterialTextureAtUV as _commonSampleMaterialTextureAtUV } from '../common/sample-texture.js';
 
 // Sample the material's `.map` at UV (u, v). Returns
 //   { r, g, b }  with each channel in [0, 1]
@@ -84,33 +35,7 @@ function _ctxFor(image) {
 // not yet ready. Honours tex.offset, tex.repeat, and wrap-by-modulo
 // for [0,1) UVs (matches the slice-689 CPU sampler).
 export function sampleTextureAtUV(material, u, v) {
-  const mat = Array.isArray(material) ? material[0] : material;
-  if (!mat || !mat.map) return null;
-  const tex = mat.map;
-  const img = tex.image;
-  if (!img) return null;
-  let uu = Number.isFinite(u) ? u : 0;
-  let vv = Number.isFinite(v) ? v : 0;
-  if (tex.offset) { uu += tex.offset.x; vv += tex.offset.y; }
-  if (tex.repeat) { uu *= tex.repeat.x; vv *= tex.repeat.y; }
-  uu = ((uu % 1) + 1) % 1;
-  vv = ((vv % 1) + 1) % 1;
-  const entry = _ctxFor(img);
-  if (!entry) return null;
-  const w = entry.w | 0;
-  const h = entry.h | 0;
-  if (w <= 0 || h <= 0) return null;
-  const px = Math.max(0, Math.min(w - 1, Math.floor(uu * w)));
-  // CanvasTexture flipY default = true (matches WebGL convention) — invert v
-  // to align the GPU-sample direction with the slice-684 bake orientation.
-  const py = Math.max(0, Math.min(h - 1, Math.floor((1 - vv) * h)));
-  try {
-    const data = entry.ctx.getImageData(px, py, 1, 1).data;
-    return { r: data[0] / 255, g: data[1] / 255, b: data[2] / 255 };
-  } catch (_) {
-    // Cross-origin or 0-byte canvas — drop the sample.
-    return null;
-  }
+  return _commonSampleMaterialTextureAtUV(material, u, v);
 }
 
 // Pull the average of a small UV grid so a checker/noise graph doesn't
@@ -164,4 +89,7 @@ export function _resetSamplerCacheForTests() {
 }
 
 // Internals re-exported for the bridge module's hash mixer + e2e probes.
-export const __internals__ = { _ctxFor };
+// Slice 695: _ctxFor was removed when the UV-to-RGB read was delegated
+// to common/sample-texture.js; the bridge no longer needs a direct
+// canvas handle so the export now points at the common sampler entry.
+export const __internals__ = { _sampleMaterialTextureAtUV: _commonSampleMaterialTextureAtUV };

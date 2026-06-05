@@ -12,7 +12,6 @@
 // autoload module against the dev server.
 
 import React from 'react';
-import { createRoot } from 'react-dom/client';
 import {
   scatterOnSurface, listFoliage, deleteFoliage, findFoliageByUuid,
 } from './scatter.js';
@@ -26,27 +25,23 @@ import {
   enterPaintMode, exitPaintMode, paintModeStatus, addAt, removeAt,
 } from './paint.js';
 import FoliagePanel from './FoliagePanel.jsx';
+import { mountPanel, unmountPanel } from '../common/panel.js';
+import { registerOp, unregisterOps } from '../common/registry.js';
 
 let _installed = false;
-let _panelHost = null;
-let _panelRoot = null;
+let _panel = null;
 let _panelOpen = false;
 
 // ─── Panel lifecycle ─────────────────────────────────────────────────
 function mountPanelHost() {
-  if (typeof document === 'undefined') return null;
-  if (_panelHost) return _panelHost;
-  _panelHost = document.createElement('div');
-  _panelHost.setAttribute('data-studio-v3-foliage-panel-host', '');
-  document.body.appendChild(_panelHost);
-  _panelRoot = createRoot(_panelHost);
-  return _panelHost;
+  if (!_panel) _panel = mountPanel('foliage');
+  return _panel;
 }
 
 function renderPanel() {
-  if (!_panelRoot) return;
-  if (!_panelOpen) { _panelRoot.render(null); return; }
-  _panelRoot.render(
+  if (!_panel) return;
+  if (!_panelOpen) { _panel.render(null); return; }
+  _panel.render(
     React.createElement(FoliagePanel, {
       onCloseRequest: () => panelClose(),
     })
@@ -70,19 +65,7 @@ function panelToggle() {
 
 // ─── Op registration helper ──────────────────────────────────────────
 function reg(name, fn, description) {
-  if (typeof window === 'undefined') return;
-  window[name] = fn;
-  const doReg = () => {
-    if (typeof window.__studioCommandRegister !== 'function') return false;
-    try {
-      window.__studioCommandRegister(name, fn, { category: 'foliage', description });
-      return true;
-    } catch (_) { return false; }
-  };
-  if (!doReg()) {
-    // Palette may not be live yet (autoload races registerV3Api()).
-    setTimeout(doReg, 0);
-  }
+  registerOp(name, fn, 'foliage', description);
 }
 
 // ─── Install ─────────────────────────────────────────────────────────
@@ -175,12 +158,9 @@ export function uninstallFoliage() {
     '__studioFoliagePaintAddAt', '__studioFoliagePaintRemoveAt',
     '__studioFoliagePanelOpen', '__studioFoliagePanelClose', '__studioFoliagePanelToggle',
   ];
-  for (const k of names) {
-    try { delete window[k]; } catch (_) {}
-    if (typeof window.__studioCommandUnregister === 'function') {
-      try { window.__studioCommandUnregister(k); } catch (_) {}
-    }
-  }
+  unregisterOps(names);
+  unmountPanel('foliage');
+  _panel = null;
   _installed = false;
   window.__studioFoliageInstalled = false;
   return { ok: true };

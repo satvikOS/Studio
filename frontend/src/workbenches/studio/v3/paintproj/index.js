@@ -8,7 +8,6 @@
 // Idempotent — guarded by window.__studioPaintProjInstalled.
 
 import React from 'react';
-import { createRoot } from 'react-dom/client';
 import {
   install as installDragger, uninstall as uninstallDragger,
   enterPaintMode, exitPaintMode, setBrush, getBrush,
@@ -18,10 +17,11 @@ import { stampAt, clearCanvas, exportCanvasDataUrl, DEFAULT_TEX_SIZE } from './c
 import { pickAtScreen } from './raycaster.js';
 import { projectImageFromCamera } from './projectImage.js';
 import PaintPanel from './PaintPanel.jsx';
+import { mountPanel, unmountPanel } from '../common/panel.js';
+import { registerOp, unregisterOps } from '../common/registry.js';
 
 let _installed = false;
-let _host = null;
-let _root = null;
+let _panel = null;
 let _open = false;
 
 function _getSelectedMesh() {
@@ -42,19 +42,14 @@ function _meshByUuid(uuid) {
 }
 
 function _mountHost() {
-  if (typeof document === 'undefined') return null;
-  if (_host) return _host;
-  _host = document.createElement('div');
-  _host.setAttribute('data-studio-v3-paintproj-host', '');
-  document.body.appendChild(_host);
-  _root = createRoot(_host);
-  return _host;
+  if (!_panel) _panel = mountPanel('paintproj');
+  return _panel;
 }
 
 function _renderPanel() {
-  if (!_root) return;
-  if (!_open) { _root.render(null); return; }
-  _root.render(
+  if (!_panel) return;
+  if (!_open) { _panel.render(null); return; }
+  _panel.render(
     React.createElement(PaintPanel, {
       getSelectedMesh: _getSelectedMesh,
       getBrush,
@@ -82,13 +77,7 @@ function panelClose()  { _open = false; _renderPanel(); return { ok: true, open:
 function panelToggle() { return _open ? panelClose() : panelOpen(); }
 
 function _reg(name, fn, description) {
-  window[name] = fn;
-  const tryReg = () => {
-    if (typeof window.__studioCommandRegister !== 'function') return false;
-    try { window.__studioCommandRegister(name, fn, { category: 'texpaint', description }); return true; }
-    catch (_) { return false; }
-  };
-  if (!tryReg()) setTimeout(tryReg, 0);
+  registerOp(name, fn, 'texpaint', description);
 }
 
 export function installPaintProj() {
@@ -189,7 +178,7 @@ export function installPaintProj() {
 
 export function uninstallPaintProj() {
   if (typeof window === 'undefined') return { ok: false };
-  for (const k of [
+  unregisterOps([
     '__studioPaintProjEnterPaintMode', '__studioPaintProjExitPaintMode', '__studioPaintProjIsActive',
     '__studioPaintProjSetBrush', '__studioPaintProjGetBrush',
     '__studioPaintProjStampAtUV', '__studioPaintProjStampAtScreen', '__studioPaintProjPickAtScreen',
@@ -198,16 +187,10 @@ export function uninstallPaintProj() {
     '__studioPaintProjClear', '__studioPaintProjExportDataUrl', '__studioPaintProjStats',
     '__studioPaintProjGetTexSize',
     '__studioPaintProjPanelOpen', '__studioPaintProjPanelClose', '__studioPaintProjPanelToggle',
-  ]) {
-    try { delete window[k]; } catch (_) {}
-    if (typeof window.__studioCommandUnregister === 'function') {
-      try { window.__studioCommandUnregister(k); } catch (_) {}
-    }
-  }
+  ]);
   uninstallDragger();
-  if (_root) { try { _root.unmount(); } catch (_) {} _root = null; }
-  if (_host && _host.parentNode) _host.parentNode.removeChild(_host);
-  _host = null; _open = false;
+  unmountPanel('paintproj');
+  _panel = null; _open = false;
   window.__studioPaintProjInstalled = false;
   _installed = false;
   return { ok: true };

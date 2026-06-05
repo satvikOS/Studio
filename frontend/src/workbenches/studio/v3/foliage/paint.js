@@ -30,6 +30,7 @@ import * as THREE from 'three';
 import { findFoliageByUuid, __internal as scatterInt } from './scatter.js';
 import { rebindLowInst, rebindHighInst } from './lod.js';
 import { rebindWindInst } from './wind.js';
+import { mulberry32 } from '../common/random.js';
 
 const TAG = scatterInt.FOLIAGE_TAG;
 
@@ -82,16 +83,7 @@ function scene() {
 }
 
 // Deterministic local RNG so undo / redo of a paint stroke reproduces.
-function mulberry32(a) {
-  let s = a >>> 0;
-  return function next() {
-    s = (s + 0x6D2B79F5) | 0;
-    let t = s;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
+// Sourced from common/random.js post slice 695.
 
 function setNdcFromEvent(ev, d) {
   const r = d.getBoundingClientRect();

@@ -35,6 +35,7 @@ import {
   disposeAuxBuffers,
   renderAuxBuffers,
 } from './passes.js';
+import { chainIntoAnimTick, unchainFromAnimTick } from '../common/anim-tick.js';
 
 const _ctx = {
   ssgi: false,
@@ -131,10 +132,9 @@ function _ensureAux() {
 
 function _installTick() {
   if (_ctx.tickInstalled) return true;
-  const vp = _viewport();
-  if (!vp) return false;
-  const prev = vp.__studioAnimTick;
-  const fn = (now) => {
+  // Slice 695: chain helper handles wrap-prev bookkeeping. Label
+  // 'eevee' matches the prior wrapper's `__eevee` tag.
+  const ok = chainIntoAnimTick('eevee', () => {
     try {
       if ((_ctx.ssgi || _ctx.ssr) && _ctx.aux) {
         // Resize-on-the-fly: keep aux buffers and uniforms in sync with
@@ -164,41 +164,15 @@ function _installTick() {
     } catch (_) {
       // Never blow up the host render loop.
     }
-    if (prev) {
-      try { prev(now); } catch (_) {}
-    }
-  };
-  fn.__eevee = true;
-  fn.__prev = prev;
-  vp.__studioAnimTick = fn;
+  });
+  if (!ok || !ok.ok) return false;
   _ctx.tickInstalled = true;
   return true;
 }
 
 function _uninstallTick() {
   if (!_ctx.tickInstalled) return;
-  const vp = _viewport();
-  if (!vp) { _ctx.tickInstalled = false; return; }
-  // Walk the tick chain and unlink any node tagged __eevee.
-  let head = vp.__studioAnimTick;
-  if (head && head.__eevee) {
-    vp.__studioAnimTick = head.__prev || null;
-  } else {
-    // Reconstruct chain skipping any __eevee node.
-    const chain = [];
-    let n = head;
-    while (n) {
-      if (!n.__eevee) chain.push(n);
-      n = n.__prev || null;
-    }
-    let next = null;
-    for (let i = chain.length - 1; i >= 0; i--) {
-      const f = chain[i];
-      f.__prev = next;
-      next = f;
-    }
-    vp.__studioAnimTick = next;
-  }
+  unchainFromAnimTick('eevee');
   _ctx.tickInstalled = false;
 }
 

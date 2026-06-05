@@ -16,6 +16,7 @@
 // after registerV3Api(). Re-installs are idempotent.
 
 import { enable, disable, isEnabled, forceRebuild, runOnce } from './bridge.js';
+import { registerOp, unregisterOps } from '../common/registry.js';
 
 let _installed = false;
 
@@ -69,28 +70,11 @@ function bridgeRunOnce() {
   }
 }
 
-// Same registration helper rtgpu/index.js uses: attaches to window,
-// tries the V3 command registry immediately, then retries every 100 ms
-// for ~5 s if the registry isn't installed yet.
+// Same registration helper rtgpu/index.js uses, sourced from common/
+// (slice 695). Attaches to window then queues a retry if the V3 command
+// registry isn't installed yet.
 function _reg(name, fn, description) {
-  if (typeof window === 'undefined') return;
-  window[name] = fn;
-  const doReg = () => {
-    try {
-      if (typeof window.__studioCommandRegister === 'function') {
-        window.__studioCommandRegister(name, fn, { category: 'rt', description });
-        return true;
-      }
-    } catch (_) { /* swallow */ }
-    return false;
-  };
-  if (!doReg()) {
-    let tries = 0;
-    const id = setInterval(() => {
-      tries++;
-      if (doReg() || tries > 50) clearInterval(id);
-    }, 100);
-  }
+  registerOp(name, fn, 'rt', description);
 }
 
 export function installShaderPTBridge() {
@@ -123,14 +107,7 @@ export function uninstallShaderPTBridge() {
     '__studioShaderPTBridgeForceRebuild',
     '__studioShaderPTBridgeRunOnce',
   ];
-  for (const n of names) {
-    if (typeof window !== 'undefined') {
-      try { delete window[n]; } catch (_) {}
-      if (typeof window.__studioCommandUnregister === 'function') {
-        try { window.__studioCommandUnregister(n); } catch (_) {}
-      }
-    }
-  }
+  unregisterOps(names);
   _installed = false;
   return { ok: true };
 }

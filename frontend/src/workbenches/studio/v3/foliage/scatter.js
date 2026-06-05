@@ -32,6 +32,8 @@
 // it up for free.
 
 import * as THREE from 'three';
+import { mulberry32 } from '../common/random.js';
+import { scatterOnSurface as _commonScatterOnSurface } from '../common/scatter.js';
 
 const FOLIAGE_TAG = 'archdiscStudioFoliage';
 
@@ -61,126 +63,13 @@ function attachAndSelect(mesh) {
   }
 }
 
-// ─── Deterministic PRNG (mulberry32) ────────────────────────────────────
-// Same hash as MoGraph effectors so a fixed seed reproduces both wind
-// and scatter layouts cleanly across tests.
-function mulberry32(a) {
-  let s = a >>> 0;
-  return function next() {
-    s = (s + 0x6D2B79F5) | 0;
-    let t = s;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
 // ─── Triangle-area-weighted surface sampler ─────────────────────────────
-//
-// Walks the target's BufferGeometry once to build:
-//   - `triArea[t]`     — area of triangle t (world-space)
-//   - `cumArea[t]`     — running sum (== CDF), normalised to 1 at the end
-//   - cached world-space vertex positions per triangle (a, b, c)
-//
-// Then per-sample: u = rand() → binary-search cumArea to land on a
-// triangle; pick a uniform point inside that triangle via the classic
-// √-warp barycentric trick (so the bias toward the (a) corner is
-// removed).
-//
-// Triangle world positions are computed by transforming the local
-// position attribute through `target.matrixWorld` ONCE per triangle and
-// stashed as flat Float32Arrays — keeps the per-sample loop pointer-free.
-function buildSampler(target) {
-  if (!target || !target.geometry) return null;
-  const geom = target.geometry;
-  const posAttr = geom.getAttribute('position');
-  if (!posAttr || posAttr.count === 0) return null;
-
-  // updateMatrixWorld so terrain that hasn't been ticked yet still
-  // resolves correctly.
-  target.updateMatrixWorld(true);
-  const mw = target.matrixWorld;
-
-  // Pre-transform every vertex into world space once.
-  const N = posAttr.count;
-  const worldPos = new Float32Array(N * 3);
-  const v = new THREE.Vector3();
-  for (let i = 0; i < N; i++) {
-    v.fromBufferAttribute(posAttr, i).applyMatrix4(mw);
-    worldPos[i * 3]     = v.x;
-    worldPos[i * 3 + 1] = v.y;
-    worldPos[i * 3 + 2] = v.z;
-  }
-
-  // Index buffer or implicit triplets.
-  const idx = geom.getIndex();
-  const triCount = idx ? (idx.count / 3) : (N / 3);
-  if (triCount < 1) return null;
-
-  const triArea = new Float32Array(triCount);
-  const cumArea = new Float32Array(triCount);
-  // Flat per-triangle vertex cache: 9 floats per tri (a.xyz, b.xyz, c.xyz).
-  const triVerts = new Float32Array(triCount * 9);
-
-  let total = 0;
-  const a = new THREE.Vector3();
-  const b = new THREE.Vector3();
-  const c = new THREE.Vector3();
-  const ab = new THREE.Vector3();
-  const ac = new THREE.Vector3();
-  const cross = new THREE.Vector3();
-  for (let t = 0; t < triCount; t++) {
-    const ia = idx ? idx.getX(t * 3)     : (t * 3);
-    const ib = idx ? idx.getX(t * 3 + 1) : (t * 3 + 1);
-    const ic = idx ? idx.getX(t * 3 + 2) : (t * 3 + 2);
-    a.set(worldPos[ia * 3], worldPos[ia * 3 + 1], worldPos[ia * 3 + 2]);
-    b.set(worldPos[ib * 3], worldPos[ib * 3 + 1], worldPos[ib * 3 + 2]);
-    c.set(worldPos[ic * 3], worldPos[ic * 3 + 1], worldPos[ic * 3 + 2]);
-    ab.subVectors(b, a);
-    ac.subVectors(c, a);
-    const area = cross.crossVectors(ab, ac).length() * 0.5;
-    triArea[t] = area;
-    total += area;
-    cumArea[t] = total;
-    const o = t * 9;
-    triVerts[o]     = a.x; triVerts[o + 1] = a.y; triVerts[o + 2] = a.z;
-    triVerts[o + 3] = b.x; triVerts[o + 4] = b.y; triVerts[o + 5] = b.z;
-    triVerts[o + 6] = c.x; triVerts[o + 7] = c.y; triVerts[o + 8] = c.z;
-  }
-  if (total <= 0) return null;
-  // Normalise CDF to [0,1] so a uniform rand maps directly.
-  for (let t = 0; t < triCount; t++) cumArea[t] = cumArea[t] / total;
-
-  return { triCount, triArea, cumArea, triVerts, totalArea: total };
-}
-
-// Binary-search the cumulative-area CDF; returns the triangle index
-// whose bucket contains u.
-function pickTri(sampler, u) {
-  const arr = sampler.cumArea;
-  let lo = 0, hi = sampler.triCount - 1;
-  while (lo < hi) {
-    const mid = (lo + hi) >> 1;
-    if (arr[mid] < u) lo = mid + 1; else hi = mid;
-  }
-  return lo;
-}
-
-// Uniform point inside triangle (a, b, c) — √r1 trick gets uniform
-// barycentric coordinates instead of biased ones.
-function samplePointInTri(sampler, ti, r1, r2, out) {
-  const sr1 = Math.sqrt(r1);
-  const u = 1 - sr1;
-  const w = r2 * sr1;
-  const v = 1 - u - w;
-  const o = ti * 9;
-  const ax = sampler.triVerts[o],     ay = sampler.triVerts[o + 1], az = sampler.triVerts[o + 2];
-  const bx = sampler.triVerts[o + 3], by = sampler.triVerts[o + 4], bz = sampler.triVerts[o + 5];
-  const cx = sampler.triVerts[o + 6], cy = sampler.triVerts[o + 7], cz = sampler.triVerts[o + 8];
-  out.x = ax * u + bx * v + cx * w;
-  out.y = ay * u + by * v + cy * w;
-  out.z = az * u + bz * v + cz * w;
-}
+// Slice 695 dedup: the area-weighted surface sampler lives in
+// common/scatter.js as scatterOnSurface(targetMesh, count, opts). The
+// foliage path still owns the InstancedMesh emission + per-instance
+// rotation/scale jitter on top, but the position cloud now flows
+// through the shared helper. Deterministic PRNG (mulberry32) is also
+// imported from common/random.js.
 
 // ─── Public scatter ─────────────────────────────────────────────────────
 // opts:
@@ -207,10 +96,25 @@ export function scatterOnSurface(sourceMeshUuid, targetMeshUuid, count, opts) {
   const maxS = Number.isFinite(+o.maxScale) ? +o.maxScale : (1 + variance);
   const randY = (o.randomYRotation === false) ? false : true;
 
-  const sampler = buildSampler(tgt);
-  if (!sampler) return { ok: false, error: 'target has no valid triangles' };
+  // Slice 695: area-weighted positions come from common/scatter.js.
+  // We pass `worldSpace: true` so the resulting positions live in the
+  // same world-frame the InstancedMesh expects, and `includeNormals:
+  // false` because foliage rotates about world-Y rather than aligning
+  // to face normal (matches the original local behaviour).
+  const sampled = _commonScatterOnSurface(tgt, N, {
+    seed,
+    worldSpace: true,
+    includeNormals: false,
+  });
+  if (!sampled || !sampled.ok) {
+    return { ok: false, error: (sampled && sampled.error) || 'scatter failed' };
+  }
+  const sampledPositions = sampled.positions;
 
-  const rng = mulberry32(seed);
+  // Per-instance rotation + scale jitter uses a separate RNG stream
+  // seeded off the same seed so reruns reproduce. Position draws are
+  // owned by the common helper; this RNG only feeds yRot + scale.
+  const rng = mulberry32((seed ^ 0x9E3779B9) >>> 0);
   const dummy = new THREE.Object3D();
   const point = new THREE.Vector3();
   const inst = new THREE.InstancedMesh(src.geometry, src.material, N);
@@ -220,18 +124,13 @@ export function scatterOnSurface(sourceMeshUuid, targetMeshUuid, count, opts) {
   // Cache: world position [x,y,z] + base Y-rotation + uniform scale, per
   // instance. Wind / LOD / paint all consume this snapshot.
   const positions = new Float32Array(N * 3);
+  positions.set(sampledPositions);
   const baseRot = new Float32Array(N);
   const baseScale = new Float32Array(N);
   const baseMatrices = new Array(N);
 
   for (let i = 0; i < N; i++) {
-    const u = rng();
-    const ti = pickTri(sampler, u);
-    const r1 = rng(), r2 = rng();
-    samplePointInTri(sampler, ti, r1, r2, point);
-    positions[i * 3]     = point.x;
-    positions[i * 3 + 1] = point.y;
-    positions[i * 3 + 2] = point.z;
+    point.set(positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2]);
 
     const yRot = randY ? (rng() * Math.PI * 2) : 0;
     baseRot[i] = yRot;
@@ -319,9 +218,6 @@ export function deleteFoliage(uuid) {
 
 export const __internal = {
   FOLIAGE_TAG,
-  buildSampler,
-  pickTri,
-  samplePointInTri,
   mulberry32,
   scene,
   viewport,

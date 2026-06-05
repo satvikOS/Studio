@@ -31,6 +31,7 @@
 
 import * as THREE from 'three';
 import { sampleMaterialCentroid, sampleTextureAtUV, firstTriangleCentroidUV } from './sampler.js';
+import { chainIntoAnimTick, unchainFromAnimTick, isChained } from '../common/anim-tick.js';
 
 let _enabled = false;
 let _tickInstalled = false;
@@ -303,57 +304,20 @@ function _tick() {
 
 function _installTick() {
   if (_tickInstalled) return true;
-  const vp = _viewport();
-  if (!vp) return false;
-  const prev = vp.__studioAnimTick;
-  const fn = (now) => {
+  // Slice 695: chain helper preserves the wrap-prev pattern via
+  // common/anim-tick.js. Label 'shaderPTBridge' matches the prior
+  // wrapper's `__shaderPTBridge` tag exactly.
+  const r = chainIntoAnimTick('shaderPTBridge', () => {
     try { _tick(); } catch (_) { /* never break the host loop */ }
-    if (prev) {
-      try { prev(now); } catch (_) {}
-    }
-  };
-  fn.__shaderPTBridge = true;
-  fn.__prev = prev;
-  vp.__studioAnimTick = fn;
+  });
+  if (!r || !r.ok) return false;
   _tickInstalled = true;
   return true;
 }
 
 function _uninstallTick() {
   if (!_tickInstalled) return;
-  const vp = _viewport();
-  if (!vp) { _tickInstalled = false; return; }
-  // Unlink the chain — find the bridge link and splice it out by
-  // restoring its __prev as the new __studioAnimTick.
-  let cur = vp.__studioAnimTick;
-  let parent = null;
-  while (cur) {
-    if (cur.__shaderPTBridge) {
-      if (!parent) {
-        vp.__studioAnimTick = cur.__prev || null;
-      } else {
-        parent.__prev = cur.__prev || null;
-        // Rewire the parent so calls forward to the spliced chain.
-        const grandPrev = cur.__prev || null;
-        const parentFn = parent;
-        const oldFn = parentFn.__inner || parentFn;
-        const wrap = (n) => {
-          try { oldFn(n); } catch (_) {}
-          if (grandPrev) { try { grandPrev(n); } catch (_) {} }
-        };
-        wrap.__inner = oldFn;
-        wrap.__prev = grandPrev;
-        // Restoring the wrapper in-place is awkward; the simpler
-        // contract is: when the bridge is the top-of-chain (the
-        // overwhelmingly common case), unlink directly.
-        // For mid-chain we leave the link in but disable tinting via
-        // `_enabled = false`, which is already set by the caller.
-      }
-      break;
-    }
-    parent = cur;
-    cur = cur.__prev;
-  }
+  unchainFromAnimTick('shaderPTBridge');
   _tickInstalled = false;
 }
 

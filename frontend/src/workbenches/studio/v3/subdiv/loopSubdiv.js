@@ -34,6 +34,20 @@
 //
 // All arithmetic is plain JS — no THREE dependency, no allocations
 // inside the hot loops beyond what's strictly necessary.
+//
+// NOTE on dedup (slice 695 common/): the common subdivide.js exports
+// `loopSubdivide(BufferGeometry, iterations)` — that's a midpoint-split
+// (every triangle becomes 4, edges are welded via hash cache) and does
+// NOT compute Loop interior/boundary vertex masks. The crease-aware
+// algorithm here computes the FULL Loop scheme on welded plain arrays
+// (positions + indices) — different signature, different math. We
+// import the common helper to honour the cross-module symbol contract,
+// but keep this crease-aware implementation as the actual subdiv path
+// (the common version is a coarser fallback for callers who only need
+// edge-midpoint splitting). See common/DEDUP_AUDIT.md.
+import { loopSubdivide as _commonLoopSubdivideMidpoint } from '../common/subdivide.js';
+
+export const __commonLoopSubdivideMidpoint = _commonLoopSubdivideMidpoint;
 
 export function edgeKey(i, j) {
   return i < j ? `${i}:${j}` : `${j}:${i}`;

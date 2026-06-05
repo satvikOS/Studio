@@ -17,7 +17,6 @@
 // jsm/postprocessing tree if no composer exists yet.
 
 import React from 'react';
-import { createRoot } from 'react-dom/client';
 
 import EeveePanel from './EeveePanel.jsx';
 import {
@@ -26,27 +25,23 @@ import {
   setIntensity, setSSRMaxDistance,
   getState, resetDefaults, teardown,
 } from './renderer.js';
+import { mountPanel, unmountPanel } from '../common/panel.js';
+import { registerOp, unregisterOps } from '../common/registry.js';
 
 let _installed = false;
-let _host = null;
-let _root = null;
+let _panel = null;
 let _open = false;
 
 // ── Panel lifecycle ──────────────────────────────────────────────────────
 function _mountHost() {
-  if (typeof document === 'undefined') return null;
-  if (_host) return _host;
-  _host = document.createElement('div');
-  _host.setAttribute('data-studio-v3-eevee-host', '');
-  document.body.appendChild(_host);
-  _root = createRoot(_host);
-  return _host;
+  if (!_panel) _panel = mountPanel('eevee');
+  return _panel;
 }
 
 function _renderPanel() {
-  if (!_root) return;
-  if (!_open) { _root.render(null); return; }
-  _root.render(
+  if (!_panel) return;
+  if (!_open) { _panel.render(null); return; }
+  _panel.render(
     React.createElement(EeveePanel, {
       getState,
       toggleSSGI:        async () => { await __studioEeveeToggleSSGI(); _renderPanel(); },
@@ -101,26 +96,9 @@ function __studioEeveeReset() {
 }
 
 // ── Op registration helper ───────────────────────────────────────────────
-// Mirrors the retry pattern used in rtgpu/index.js + snap2/index.js: if
-// __studioCommandRegister isn't ready yet (autoload may run before
-// registerV3Api), poll every 100ms for ~5s.
+// Slice 695: retry-on-cold-start pattern lives in common/registry.js.
 function _reg(name, fn, description) {
-  if (typeof window === 'undefined') return;
-  window[name] = fn;
-  const tryReg = () => {
-    if (typeof window.__studioCommandRegister !== 'function') return false;
-    try {
-      window.__studioCommandRegister(name, fn, { category: 'rt', description });
-      return true;
-    } catch (_) { return false; }
-  };
-  if (!tryReg()) {
-    let tries = 0;
-    const id = setInterval(() => {
-      tries++;
-      if (tryReg() || tries > 50) clearInterval(id);
-    }, 100);
-  }
+  registerOp(name, fn, 'rt', description);
 }
 
 const OP_NAMES = [
@@ -176,15 +154,9 @@ export function uninstallEevee() {
   if (typeof window === 'undefined') return { ok: false };
   if (!_installed) return { ok: true };
   try { teardown(); } catch (_) {}
-  for (const n of OP_NAMES) {
-    try { delete window[n]; } catch (_) {}
-    if (typeof window.__studioCommandUnregister === 'function') {
-      try { window.__studioCommandUnregister(n); } catch (_) {}
-    }
-  }
-  if (_root) { try { _root.unmount(); } catch (_) {} _root = null; }
-  if (_host && _host.parentNode) _host.parentNode.removeChild(_host);
-  _host = null;
+  unregisterOps(OP_NAMES);
+  unmountPanel('eevee');
+  _panel = null;
   _open = false;
   _installed = false;
   return { ok: true };
