@@ -531,6 +531,96 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 677 — Spline / curve-follow pack. Splines are CatmullRomCurve3
+  // visualised as Lines in-scene; a mesh can ride a spline driven by
+  // the same AnimTick chain that powers physics / constraints.
+  if (!window.__studioSplines) window.__studioSplines = [];
+  if (!window.__studioSplineRides) window.__studioSplineRides = [];
+
+  window.__studioSplineCreate = (points, opts) => {
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    if (!Array.isArray(points) || points.length < 2) return { ok: false, error: 'need ≥2 points' };
+    const pts = points.map((p) => new THREE.Vector3(p[0], p[1], p[2]));
+    const curve = new THREE.CatmullRomCurve3(pts, !!opts?.closed);
+    const samples = curve.getPoints(Math.max(20, points.length * 16));
+    const geo = new THREE.BufferGeometry().setFromPoints(samples);
+    const mat = new THREE.LineBasicMaterial({ color: opts?.color ?? 0xff88aa });
+    const line = new THREE.Line(geo, mat);
+    line.userData.archdiscStudioSpline = true;
+    line.name = opts?.name || `spline_${window.__studioSplines.length + 1}`;
+    scene.add(line);
+    const rec = { uuid: line.uuid, curve, line, length: curve.getLength() };
+    window.__studioSplines.push(rec);
+    return { ok: true, uuid: line.uuid, length: rec.length };
+  };
+
+  window.__studioSplineSampleAt = (uuid, t) => {
+    const rec = window.__studioSplines.find((s) => s.uuid === uuid);
+    if (!rec) return { ok: false };
+    const clamped = Math.max(0, Math.min(1, Number(t) || 0));
+    const p = rec.curve.getPointAt(clamped);
+    return { ok: true, position: [p.x, p.y, p.z], t: clamped };
+  };
+
+  window.__studioSplineList = () => ({
+    ok: true,
+    count: window.__studioSplines.length,
+    splines: window.__studioSplines.map((s) => ({ uuid: s.uuid, length: s.length, name: s.line.name })),
+  });
+
+  window.__studioSplineLength = (uuid) => {
+    const rec = window.__studioSplines.find((s) => s.uuid === uuid);
+    if (!rec) return { ok: false };
+    return { ok: true, length: rec.length };
+  };
+
+  window.__studioSplineDelete = (uuid) => {
+    const idx = window.__studioSplines.findIndex((s) => s.uuid === uuid);
+    if (idx < 0) return { ok: false };
+    const r = window.__studioSplines[idx];
+    r.line.parent?.remove(r.line);
+    r.line.geometry?.dispose();
+    r.line.material?.dispose();
+    window.__studioSplines.splice(idx, 1);
+    // also drop rides referencing this spline
+    window.__studioSplineRides = window.__studioSplineRides.filter((x) => x.splineUuid !== uuid);
+    return { ok: true, remaining: window.__studioSplines.length };
+  };
+
+  window.__studioSplineAttachMesh = (meshUuid, splineUuid, durationSec) => {
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    const mesh = scene.getObjectByProperty('uuid', meshUuid);
+    const sp = window.__studioSplines.find((s) => s.uuid === splineUuid);
+    if (!mesh || !sp) return { ok: false };
+    window.__studioSplineRides.push({
+      meshUuid, splineUuid,
+      duration: Math.max(0.1, Number(durationSec) || 4),
+      startMs: performance.now(),
+    });
+    _ensureSplineTick();
+    return { ok: true, count: window.__studioSplineRides.length };
+  };
+
+  const _ensureSplineTick = () => {
+    const v = window.__archdiscViewport; if (!v) return;
+    if (v.__studioAnimTick && v.__studioAnimTick.__splines) return;
+    const prev = v.__studioAnimTick;
+    const fn = (now) => {
+      for (const r of window.__studioSplineRides) {
+        const sp = window.__studioSplines.find((x) => x.uuid === r.splineUuid);
+        const mesh = window.__archdiscScene?.getObjectByProperty('uuid', r.meshUuid);
+        if (!sp || !mesh) continue;
+        const t = ((now - r.startMs) / 1000 / r.duration) % 1;
+        const p = sp.curve.getPointAt(t);
+        mesh.position.copy(p);
+        mesh.updateMatrixWorld(true);
+      }
+      if (prev) prev(now);
+    };
+    fn.__splines = true; fn.__prev = prev;
+    v.__studioAnimTick = fn;
+  };
+
   // Slice 676 — Vertex groups / weight maps stored on mesh.userData
   // .archdiscStudioVertexGroups as { [name]: Float32Array(weights) }.
   // Foundation for skeleton skinning + smooth-selection weighting.
