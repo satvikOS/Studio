@@ -531,6 +531,111 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 679 — Time-of-day / weather pack. Drives the existing key
+  // light + ambient + fog to simulate sun arc and atmospheric haze.
+  window.__studioSetTimeOfDay = (hour) => {
+    const v = window.__archdiscViewport; if (!v || !v.keyLight) return { ok: false };
+    const h = ((Number(hour) || 12) % 24 + 24) % 24;
+    // Map hour → elevation: 6h=horizon east, 12h=zenith, 18h=horizon west, 0h=below
+    const t = (h - 6) / 12; // 0 at 06:00, 1 at 18:00
+    const elev = Math.sin(t * Math.PI); // -1..1
+    const azim = -Math.PI / 2 + t * Math.PI; // east → west
+    const r = 6;
+    v.keyLight.position.set(
+      r * Math.cos(elev * Math.PI / 2) * Math.cos(azim),
+      r * Math.sin(elev * Math.PI / 2),
+      r * Math.cos(elev * Math.PI / 2) * Math.sin(azim),
+    );
+    v.keyLight.intensity = Math.max(0.05, 0.8 * Math.max(0, elev) + 0.1);
+    // Warm sunset hues when low
+    const dayCol = new THREE.Color(0xffeec8);
+    const sunsetCol = new THREE.Color(0xff8855);
+    const night = new THREE.Color(0x222840);
+    let blend;
+    if (h < 5 || h > 19) blend = night;
+    else if (h < 7 || h > 17) blend = sunsetCol;
+    else blend = dayCol;
+    v.keyLight.color.copy(blend);
+    if (v.ambient || v.ambientLight) {
+      const amb = v.ambient || v.ambientLight;
+      amb.intensity = Math.max(0.05, 0.4 * Math.max(0, elev) + 0.05);
+    }
+    return { ok: true, hour: h, elevation: elev };
+  };
+
+  window.__studioSetWeatherFog = (density, color) => {
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    const d = Math.max(0, Math.min(0.5, Number(density) ?? 0.02));
+    if (d <= 0) { scene.fog = null; return { ok: true, fog: null }; }
+    scene.fog = new THREE.FogExp2(color || 0xb6c4d2, d);
+    return { ok: true, density: d, color: '#' + scene.fog.color.getHexString() };
+  };
+
+  window.__studioSetWindStrength = (strength) => {
+    if (!window.__studioWind) window.__studioWind = { strength: 0, t: 0 };
+    window.__studioWind.strength = Math.max(0, Math.min(1, Number(strength) ?? 0));
+    _ensureWindTick();
+    return { ok: true, strength: window.__studioWind.strength };
+  };
+
+  const _ensureWindTick = () => {
+    const v = window.__archdiscViewport; if (!v) return;
+    if (v.__studioAnimTick && v.__studioAnimTick.__wind) return;
+    const prev = v.__studioAnimTick;
+    const fn = (now) => {
+      const s = window.__studioWind?.strength || 0;
+      if (s > 0 && window.__archdiscScene) {
+        window.__studioWind.t = now / 1000;
+        window.__archdiscScene.traverse((o) => {
+          if (!o.isMesh || !o.userData?.archdiscStudioWindAffected) return;
+          o.rotation.z = Math.sin(window.__studioWind.t * 1.4) * s * 0.05;
+          o.rotation.x = Math.cos(window.__studioWind.t * 1.0) * s * 0.03;
+        });
+      }
+      if (prev) prev(now);
+    };
+    fn.__wind = true; fn.__prev = prev;
+    v.__studioAnimTick = fn;
+  };
+
+  window.__studioCloudOverlay = (coverage) => {
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    const c = Math.max(0, Math.min(1, Number(coverage) ?? 0));
+    // Cheap "cloudy" feel: dim the env intensity proportionally and
+    // crank fog density slightly.
+    if (typeof window.__studioSetEnvIntensity === 'function') {
+      window.__studioSetEnvIntensity(1 - c * 0.6);
+    }
+    if (c > 0) {
+      scene.fog = new THREE.FogExp2(0xa8b0bc, 0.005 + c * 0.04);
+    } else {
+      scene.fog = null;
+    }
+    return { ok: true, coverage: c };
+  };
+
+  if (!window.__studioDayCycle) window.__studioDayCycle = { id: 0, speed: 1 };
+  window.__studioSetDayCycle = (hoursPerSecond) => {
+    if (window.__studioDayCycle.id) clearInterval(window.__studioDayCycle.id);
+    const sp = Math.max(0.01, Math.min(10, Number(hoursPerSecond) || 1));
+    window.__studioDayCycle.speed = sp;
+    let h = 6;
+    const tick = () => {
+      h = (h + sp * 0.5) % 24;
+      window.__studioSetTimeOfDay(h);
+    };
+    window.__studioDayCycle.id = setInterval(tick, 500);
+    return { ok: true, speed: sp };
+  };
+
+  window.__studioStopDayCycle = () => {
+    if (window.__studioDayCycle.id) {
+      clearInterval(window.__studioDayCycle.id);
+      window.__studioDayCycle.id = 0;
+    }
+    return { ok: true };
+  };
+
   // Slice 678 — Terrain / heightmap pack. A subdivided PlaneGeometry
   // whose Y component is treated as a heightmap so noise / per-vertex
   // edits / gradient colouring all work.
