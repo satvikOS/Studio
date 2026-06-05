@@ -7400,6 +7400,12 @@ export function registerV3Api() {
   import('./gpdraw/autoload.js').catch(() => {});
   // Slice 698 — Particle Flow event-driven particle graph.
   import('./pflow/autoload.js').catch(() => {});
+  // Slice 699 — Texture map baking (AO/curvature/normal/height/cavity).
+  import('./bakemaps/autoload.js').catch(() => {});
+  // Slice 699 — Maya MASH-style motion graphics.
+  import('./mash/autoload.js').catch(() => {});
+  // Slice 699 — Unreal Sequencer-style master timeline.
+  import('./uesequencer/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
