@@ -7406,6 +7406,10 @@ export function registerV3Api() {
   import('./mash/autoload.js').catch(() => {});
   // Slice 699 — Unreal Sequencer-style master timeline.
   import('./uesequencer/autoload.js').catch(() => {});
+  // Slice 700 — Houdini DOPs dynamics graph (objects + forces + constraints).
+  import('./dops/autoload.js').catch(() => {});
+  // Slice 700 — Grasshopper-style visual graph runner.
+  import('./ghgraph/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
