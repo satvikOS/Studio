@@ -531,6 +531,125 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 678 — Terrain / heightmap pack. A subdivided PlaneGeometry
+  // whose Y component is treated as a heightmap so noise / per-vertex
+  // edits / gradient colouring all work.
+  window.__studioCreateTerrain = (width, depth, segments, opts) => {
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    const W = Math.max(0.1, Number(width) || 10);
+    const D = Math.max(0.1, Number(depth) || 10);
+    const S = Math.max(1, Math.min(256, Number(segments) || 64));
+    const geo = new THREE.PlaneGeometry(W, D, S, S);
+    geo.rotateX(-Math.PI / 2); // lay flat
+    const mat = new THREE.MeshStandardMaterial({
+      color: opts?.color || 0x8aa089,
+      roughness: 0.85,
+      metalness: 0,
+      vertexColors: false,
+      side: THREE.DoubleSide,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.receiveShadow = true;
+    mesh.userData.archdiscStudioPrimitiveKind = 'terrain';
+    mesh.userData.archdiscStudioTerrain = { width: W, depth: D, segments: S };
+    mesh.name = opts?.name || 'terrain';
+    scene.add(mesh);
+    if (window.__studioSelectMesh) window.__studioSelectMesh(mesh);
+    return { ok: true, uuid: mesh.uuid, vertices: geo.attributes.position.count };
+  };
+
+  const _terrainOf = (uuid) => {
+    const scene = window.__archdiscScene; if (!scene) return null;
+    const m = uuid ? scene.getObjectByProperty('uuid', uuid) : (window.__studioSelectedMesh && window.__studioSelectedMesh());
+    if (!m || !m.userData?.archdiscStudioTerrain) return null;
+    return m;
+  };
+
+  window.__studioTerrainAddNoise = (amplitude, freq, uuid) => {
+    const m = _terrainOf(uuid); if (!m) return { ok: false };
+    const a = Number(amplitude) || 0.5;
+    const f = Number(freq) || 0.3;
+    const pos = m.geometry.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.array[i * 3];
+      const z = pos.array[i * 3 + 2];
+      // cheap layered sin-noise
+      const h = Math.sin(x * f) * Math.cos(z * f) * 0.5 + Math.sin(x * f * 2.7 + z * f * 1.3) * 0.3 + (Math.random() - 0.5) * 0.1;
+      pos.array[i * 3 + 1] += a * h;
+    }
+    pos.needsUpdate = true;
+    m.geometry.computeVertexNormals();
+    m.geometry.computeBoundingBox(); m.geometry.computeBoundingSphere();
+    return { ok: true, amplitude: a, freq: f };
+  };
+
+  // u/v in [0,1] over the terrain plane → vertex index.
+  const _terrainIdx = (m, u, v) => {
+    const S = m.userData.archdiscStudioTerrain.segments;
+    const cols = S + 1, rows = S + 1;
+    const x = Math.max(0, Math.min(cols - 1, Math.round(u * (cols - 1))));
+    const y = Math.max(0, Math.min(rows - 1, Math.round(v * (rows - 1))));
+    return y * cols + x;
+  };
+
+  window.__studioTerrainSetHeight = (uvU, uvV, h, uuid) => {
+    const m = _terrainOf(uuid); if (!m) return { ok: false };
+    const i = _terrainIdx(m, Number(uvU) || 0, Number(uvV) || 0);
+    m.geometry.attributes.position.array[i * 3 + 1] = Number(h) || 0;
+    m.geometry.attributes.position.needsUpdate = true;
+    m.geometry.computeVertexNormals();
+    return { ok: true, index: i, height: Number(h) };
+  };
+
+  window.__studioTerrainGetHeight = (uvU, uvV, uuid) => {
+    const m = _terrainOf(uuid); if (!m) return { ok: false };
+    const i = _terrainIdx(m, Number(uvU) || 0, Number(uvV) || 0);
+    return { ok: true, height: m.geometry.attributes.position.array[i * 3 + 1] };
+  };
+
+  window.__studioTerrainExportHeightmap = (uuid) => {
+    const m = _terrainOf(uuid); if (!m) return { ok: false };
+    const pos = m.geometry.attributes.position.array;
+    const S = m.userData.archdiscStudioTerrain.segments;
+    const cols = S + 1;
+    const heights = new Float32Array(cols * cols);
+    let min = Infinity, max = -Infinity;
+    for (let i = 0; i < cols * cols; i++) {
+      const h = pos[i * 3 + 1];
+      heights[i] = h;
+      if (h < min) min = h;
+      if (h > max) max = h;
+    }
+    return { ok: true, cols, rows: cols, heights: Array.from(heights), min, max };
+  };
+
+  window.__studioTerrainColorByHeight = (lowHex, highHex, uuid) => {
+    const m = _terrainOf(uuid); if (!m) return { ok: false };
+    const pos = m.geometry.attributes.position.array;
+    const N = pos.length / 3;
+    let min = Infinity, max = -Infinity;
+    for (let i = 0; i < N; i++) {
+      const h = pos[i * 3 + 1];
+      if (h < min) min = h;
+      if (h > max) max = h;
+    }
+    const range = max - min || 1;
+    const low = new THREE.Color(lowHex || 0x33553a);
+    const high = new THREE.Color(highHex || 0xefe6c8);
+    const colors = new Float32Array(N * 3);
+    for (let i = 0; i < N; i++) {
+      const t = (pos[i * 3 + 1] - min) / range;
+      colors[i * 3]     = low.r * (1 - t) + high.r * t;
+      colors[i * 3 + 1] = low.g * (1 - t) + high.g * t;
+      colors[i * 3 + 2] = low.b * (1 - t) + high.b * t;
+    }
+    m.geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    const mat = Array.isArray(m.material) ? m.material[0] : m.material;
+    mat.vertexColors = true;
+    mat.needsUpdate = true;
+    return { ok: true, min, max };
+  };
+
   // Slice 677 — Spline / curve-follow pack. Splines are CatmullRomCurve3
   // visualised as Lines in-scene; a mesh can ride a spline driven by
   // the same AnimTick chain that powers physics / constraints.
