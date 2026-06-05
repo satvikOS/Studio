@@ -84,3 +84,4 @@ tools/.video-thumbs/
 
 # AI-orchestration scratch / wakeup notes
 docs/superpowers/notes/custom-occt-build-recon.md
+.claude/worktrees/
