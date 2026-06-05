@@ -7388,6 +7388,12 @@ export function registerV3Api() {
   import('./surfaces/autoload.js').catch(() => {});
   // Slice 696 — Houdini HDA bundles + 15 more SOPs.
   import('./hda/autoload.js').catch(() => {});
+  // Slice 697 — Cycles full BRDF integration for the GPU path tracer.
+  import('./cyclesbrdf/autoload.js').catch(() => {});
+  // Slice 697 — SDF Volume Builder (analytic CSG + marching cubes).
+  import('./sdf/autoload.js').catch(() => {});
+  // Slice 697 — 25 more Geometry Node kinds (total inventory ≈100).
+  import('./geomelite/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
