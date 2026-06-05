@@ -531,6 +531,103 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 671 — Thumbnail generation pack. Renders one mesh (or the
+  // whole scene from above) into an offscreen canvas → dataURL → cache.
+  if (!window.__studioThumbnailCache) window.__studioThumbnailCache = new Map();
+
+  const _renderOnce = (objects, opts) => {
+    const w = Number(opts?.width) || 256;
+    const h = Number(opts?.height) || 256;
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+    renderer.setSize(w, h, false);
+    renderer.setPixelRatio(1);
+    const scene = new THREE.Scene();
+    scene.background = null;
+    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+    const key = new THREE.DirectionalLight(0xffffff, 1.0);
+    key.position.set(1, 1, 1);
+    scene.add(key);
+    for (const o of objects) {
+      const clone = o.clone();
+      clone.position.set(0, 0, 0); clone.quaternion.identity(); clone.scale.set(1, 1, 1);
+      scene.add(clone);
+    }
+    const box = new THREE.Box3();
+    scene.children.forEach((c) => { if (c.isMesh) box.expandByObject(c); });
+    const size = new THREE.Vector3(); box.getSize(size);
+    const center = new THREE.Vector3(); box.getCenter(center);
+    const r = Math.max(size.length() / 2, 0.5);
+    const cam = new THREE.PerspectiveCamera(45, w / h, 0.01, r * 20);
+    const dist = r * 2.6;
+    cam.position.set(center.x + dist, center.y + dist * 0.7, center.z + dist);
+    cam.lookAt(center);
+    renderer.render(scene, cam);
+    const url = renderer.domElement.toDataURL('image/png');
+    renderer.dispose();
+    return url;
+  };
+
+  window.__studioGenerateThumbnail = (uuid, width, height) => {
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    const m = uuid ? scene.getObjectByProperty('uuid', uuid) : (window.__studioSelectedMesh && window.__studioSelectedMesh());
+    if (!m) return { ok: false };
+    const url = _renderOnce([m], { width, height });
+    window.__studioThumbnailCache.set(m.uuid, url);
+    return { ok: true, uuid: m.uuid, dataUrl: url };
+  };
+
+  window.__studioGenerateSceneOverview = (width, height) => {
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    const meshes = [];
+    scene.traverse((o) => {
+      if (!o.isMesh) return;
+      const ud = o.userData || {};
+      if (ud.archdiscStudioGizmo || ud.archdiscStudioGrid || ud.archdiscStudioGround || ud.archdiscStudioCameraHelper) return;
+      meshes.push(o);
+    });
+    if (!meshes.length) return { ok: false, error: 'empty scene' };
+    const url = _renderOnce(meshes, { width: width || 640, height: height || 360 });
+    return { ok: true, dataUrl: url, meshes: meshes.length };
+  };
+
+  window.__studioGenerateAllThumbnails = (width, height) => {
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    const meshes = [];
+    scene.traverse((o) => {
+      if (!o.isMesh) return;
+      const ud = o.userData || {};
+      if (ud.archdiscStudioGizmo || ud.archdiscStudioGrid || ud.archdiscStudioGround || ud.archdiscStudioCameraHelper) return;
+      meshes.push(o);
+    });
+    let n = 0;
+    for (const m of meshes) {
+      const url = _renderOnce([m], { width: width || 128, height: height || 128 });
+      window.__studioThumbnailCache.set(m.uuid, url);
+      n++;
+    }
+    return { ok: true, generated: n };
+  };
+
+  window.__studioGetThumbnailCache = (uuid) => {
+    if (uuid) {
+      const dataUrl = window.__studioThumbnailCache.get(uuid);
+      return { ok: !!dataUrl, dataUrl };
+    }
+    return { ok: true, size: window.__studioThumbnailCache.size };
+  };
+
+  window.__studioListThumbnails = () => ({
+    ok: true,
+    count: window.__studioThumbnailCache.size,
+    uuids: Array.from(window.__studioThumbnailCache.keys()),
+  });
+
+  window.__studioClearThumbnailCache = () => {
+    const n = window.__studioThumbnailCache.size;
+    window.__studioThumbnailCache.clear();
+    return { ok: true, cleared: n };
+  };
+
   // Slice 670 — Version / diff pack. Scene fingerprints + named
   // snapshots so the user can branch / restore / diff like a tiny VCS.
   const _VERSION_PREFIX = 'studio.v3.versions.';
