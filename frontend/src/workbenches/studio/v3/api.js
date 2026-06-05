@@ -531,6 +531,105 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 670 — Version / diff pack. Scene fingerprints + named
+  // snapshots so the user can branch / restore / diff like a tiny VCS.
+  const _VERSION_PREFIX = 'studio.v3.versions.';
+
+  const _fingerprint = (json) => {
+    // Cheap FNV-1a 32-bit hash over the serialised JSON.
+    let h = 0x811c9dc5;
+    for (let i = 0; i < json.length; i++) {
+      h ^= json.charCodeAt(i);
+      h = (h * 0x01000193) >>> 0;
+    }
+    return ('00000000' + h.toString(16)).slice(-8);
+  };
+
+  window.__studioSceneFingerprint = () => {
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    const json = JSON.stringify(scene.toJSON());
+    return { ok: true, fingerprint: _fingerprint(json), bytes: json.length };
+  };
+
+  window.__studioVersionMark = (label) => {
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    const json = JSON.stringify(scene.toJSON());
+    const fp = _fingerprint(json);
+    const name = String(label || `v_${fp}`);
+    try {
+      localStorage.setItem(_VERSION_PREFIX + name, JSON.stringify({ json, fingerprint: fp, savedAt: new Date().toISOString() }));
+      return { ok: true, name, fingerprint: fp };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
+
+  window.__studioVersionList = () => {
+    const out = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k || !k.startsWith(_VERSION_PREFIX)) continue;
+      try {
+        const meta = JSON.parse(localStorage.getItem(k));
+        out.push({
+          name: k.slice(_VERSION_PREFIX.length),
+          fingerprint: meta.fingerprint,
+          savedAt: meta.savedAt,
+          bytes: (meta.json || '').length,
+        });
+      } catch (_) {}
+    }
+    out.sort((a, b) => (a.savedAt > b.savedAt ? -1 : 1));
+    return { ok: true, count: out.length, versions: out };
+  };
+
+  window.__studioVersionRestore = async (label) => {
+    const raw = localStorage.getItem(_VERSION_PREFIX + label);
+    if (!raw) return { ok: false };
+    const meta = JSON.parse(raw);
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    const parsed = JSON.parse(meta.json);
+    const loader = new THREE.ObjectLoader();
+    let loaded = null;
+    try { loaded = loader.parse(parsed); } catch (e) { return { ok: false, error: e.message }; }
+    const remove = [];
+    scene.traverse((o) => {
+      if (!o.isMesh) return;
+      const ud = o.userData || {};
+      if (ud.archdiscStudioGizmo || ud.archdiscStudioGrid || ud.archdiscStudioGround || ud.archdiscStudioCameraHelper) return;
+      remove.push(o);
+    });
+    for (const o of remove) o.parent?.remove(o);
+    let added = 0;
+    while (loaded.children.length > 0) {
+      const c = loaded.children[0]; loaded.remove(c); scene.add(c); added++;
+    }
+    return { ok: true, added };
+  };
+
+  window.__studioVersionDelete = (label) => {
+    const k = _VERSION_PREFIX + label;
+    const had = localStorage.getItem(k) != null;
+    localStorage.removeItem(k);
+    return { ok: true, removed: had };
+  };
+
+  window.__studioSceneDiff = (label) => {
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    const currentJson = JSON.stringify(scene.toJSON());
+    const currentFp = _fingerprint(currentJson);
+    const raw = label ? localStorage.getItem(_VERSION_PREFIX + label) : null;
+    if (!raw) return { ok: true, currentFingerprint: currentFp, matched: false };
+    const meta = JSON.parse(raw);
+    return {
+      ok: true,
+      currentFingerprint: currentFp,
+      versionFingerprint: meta.fingerprint,
+      matched: currentFp === meta.fingerprint,
+      bytesDelta: currentJson.length - (meta.json || '').length,
+    };
+  };
+
   // Slice 669 — Onboarding / help / version pack. The tour state is a
   // simple step counter in sessionStorage so reloads pick up where the
   // user left off.
