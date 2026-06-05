@@ -7416,6 +7416,12 @@ export function registerV3Api() {
   import('./plasticityhist/autoload.js').catch(() => {});
   // Slice 701 — Blendshape (morph target) animation system.
   import('./blendshape/autoload.js').catch(() => {});
+  // Slice 702 — Cycles-style offline CPU path-traced bake.
+  import('./cyclesbake/autoload.js').catch(() => {});
+  // Slice 702 — Substance Designer power tools (TileSampler/PixelProcessor/FXMap/Splatter/AnisoNoise).
+  import('./sdesignpro/autoload.js').catch(() => {});
+  // Slice 702 — HumanIK biped autorigger.
+  import('./humanik/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
