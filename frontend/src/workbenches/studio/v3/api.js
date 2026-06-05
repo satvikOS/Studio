@@ -7289,6 +7289,11 @@ export function registerV3Api() {
 
   // Scene count quick read.
   window.__studioCountPrimitives = () => countPrimitives(window.__archdiscScene);
+
+  // Real Blender-style edit-mode operators (bevel/inset/loop-cut/knife/
+  // bridge/edge-slide/dissolve/merge-by-distance/rip). Side-effect import
+  // installs window.__studioEdit* + auto-registers with the command palette.
+  import('./edit/index.js').then((m) => m.installEditOps && m.installEditOps()).catch(() => {});
 }
 
 export function unregisterV3Api() {
