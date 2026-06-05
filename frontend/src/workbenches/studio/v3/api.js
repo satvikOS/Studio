@@ -7352,6 +7352,18 @@ export function registerV3Api() {
   import('./multiview/autoload.js').catch(() => {});
   // Slice 692 — Audio loader + waveform + animation-sync transport.
   import('./audio/autoload.js').catch(() => {});
+  // Slice 693 — WebGL2 fragment-shader GPU path tracer (Cycles-GPU preview).
+  import('./rtgpu/autoload.js').catch(() => {});
+  // Slice 693 — 30 more Geometry Node kinds (geomnodes inventory ≈60).
+  import('./geomtotal/autoload.js').catch(() => {});
+  // Slice 693 — Real-time IK gizmo handles in the viewport.
+  import('./rigui/autoload.js').catch(() => {});
+  // Slice 693 — Live snap during drag + transform orientations + pivot.
+  import('./snap2/autoload.js').catch(() => {});
+  // Slice 693 — Particle / sim bake + cache + scrub.
+  import('./simbake/autoload.js').catch(() => {});
+  // Slice 693 — VSE transitions + effects (6 + 6).
+  import('./vsefx/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
