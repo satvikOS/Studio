@@ -7337,6 +7337,9 @@ export function registerV3Api() {
   // category so users don't only get the palette but a discoverable
   // menu hierarchy too. Lazy so all autoloads above register first.
   import('./menubar/autoload.js').catch(() => {});
+  // Slice 687 — right-click context menu over the viewport with
+  // selection-relevant ops + category subgroups.
+  import('./contextmenu/autoload.js').catch(() => {});
 }
 
 export function unregisterV3Api() {
