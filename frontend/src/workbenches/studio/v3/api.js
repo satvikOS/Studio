@@ -7299,6 +7299,22 @@ export function registerV3Api() {
   import('./shader/autoload.js').catch(() => {});
   // Rigging — armatures, SkinnedMesh bind, CCD IK. Installs window.__studioRig*.
   import('./rig/autoload.js').catch(() => {});
+  // Slice 684 — Geometry Nodes (procedural mesh DAG editor).
+  import('./geomnodes/autoload.js').catch(() => {});
+  // Slice 684 — Compositor (per-pixel post node graph).
+  import('./compositor/autoload.js').catch(() => {});
+  // Slice 684 — MoGraph cloners / effectors / fields.
+  import('./mograph/autoload.js').catch(() => {});
+  // Slice 684 — ZBrush sculpt depth: DynaMesh + masks + layers + alphas.
+  import('./sculpt/autoload.js').catch(() => {});
+  // Slice 684 — Substance-Painter style texture layer stack.
+  import('./texpaint/autoload.js').catch(() => {});
+  // Slice 684 — Real-time path-traced render preview.
+  import('./rt/autoload.js').catch(() => {});
+  // Slice 684 — Bezier animation graph editor.
+  import('./anim/autoload.js').catch(() => {});
+  // Slice 684 — Cloth + soft body + SPH-lite fluid simulation.
+  import('./sim/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
