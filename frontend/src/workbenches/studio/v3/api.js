@@ -531,6 +531,68 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 680 — Quality preset pack. Bundles pixelRatio + shadow
+  // quality + fps cap + post-fx toggles into named presets so the
+  // user can switch performance vs fidelity in one call.
+  const _QUALITY_PRESETS = {
+    low:    { pixelRatio: 0.5, shadows: 'off',    fpsCap: 30, postFx: false },
+    medium: { pixelRatio: 1.0, shadows: 'low',    fpsCap: 60, postFx: false },
+    high:   { pixelRatio: 1.5, shadows: 'medium', fpsCap: 0,  postFx: true  },
+    ultra:  { pixelRatio: Math.min(window.devicePixelRatio || 1, 2), shadows: 'high', fpsCap: 0, postFx: true },
+  };
+
+  const _applyPreset = (def) => {
+    if (window.__studioSetRendererPixelRatio) window.__studioSetRendererPixelRatio(def.pixelRatio);
+    if (window.__studioSetShadowQuality) window.__studioSetShadowQuality(def.shadows);
+    window.__studioFpsCap = def.fpsCap;
+    if (def.postFx && window.__studioToggleOutlinePass) {
+      const v = window.__archdiscViewport;
+      if (!v?.__studioComposer) try { window.__studioToggleOutlinePass(); } catch (_) {}
+    }
+    if (!def.postFx && window.__studioToggleOutlinePass) {
+      const v = window.__archdiscViewport;
+      if (v?.__studioComposer) try { window.__studioToggleOutlinePass(); } catch (_) {}
+    }
+  };
+
+  window.__studioQualityPreset = (name) => {
+    const def = _QUALITY_PRESETS[String(name)];
+    if (!def) return { ok: false, valid: Object.keys(_QUALITY_PRESETS) };
+    _applyPreset(def);
+    try { localStorage.setItem('studio.v3.quality', name); } catch (_) {}
+    if (!window.__studioCurrentQuality) window.__studioCurrentQuality = name; else window.__studioCurrentQuality = name;
+    return { ok: true, preset: name, ...def };
+  };
+
+  window.__studioQualityGetCurrent = () => {
+    const name = window.__studioCurrentQuality || localStorage.getItem('studio.v3.quality') || 'high';
+    return { ok: true, preset: name, def: _QUALITY_PRESETS[name] };
+  };
+
+  window.__studioQualityListPresets = () => ({
+    ok: true,
+    presets: Object.entries(_QUALITY_PRESETS).map(([name, def]) => ({ name, ...def })),
+  });
+
+  window.__studioQualitySetCustom = (opts) => {
+    const def = {
+      pixelRatio: opts?.pixelRatio ?? 1,
+      shadows: opts?.shadows || 'medium',
+      fpsCap: opts?.fpsCap ?? 60,
+      postFx: !!opts?.postFx,
+    };
+    _applyPreset(def);
+    window.__studioCurrentQuality = 'custom';
+    return { ok: true, def };
+  };
+
+  window.__studioQualityResetDefault = () => window.__studioQualityPreset('high');
+
+  window.__studioQualityExportPreset = () => {
+    const cur = window.__studioQualityGetCurrent();
+    return { ok: true, json: JSON.stringify(cur) };
+  };
+
   // Slice 679 — Time-of-day / weather pack. Drives the existing key
   // light + ambient + fog to simulate sun arc and atmospheric haze.
   window.__studioSetTimeOfDay = (hour) => {
