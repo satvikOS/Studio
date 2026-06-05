@@ -7315,6 +7315,19 @@ export function registerV3Api() {
   import('./anim/autoload.js').catch(() => {});
   // Slice 684 — Cloth + soft body + SPH-lite fluid simulation.
   import('./sim/autoload.js').catch(() => {});
+  // Slice 686 — More edit-mode ops (extrude-individual / fill / poke /
+  // splitEdge / collapseEdge / mergeCenter / separateBySelection / …).
+  import('./editmore/autoload.js').catch(() => {});
+  // Slice 686 — ASL — safe per-vertex script runner (Houdini VEX vibe).
+  import('./vex/autoload.js').catch(() => {});
+  // Slice 686 — Particle depth: hair / force fields / mesh emitter / collider.
+  import('./fx/autoload.js').catch(() => {});
+  // Slice 686 — Animation depth: Drivers + NLA strip stack.
+  import('./animadv/autoload.js').catch(() => {});
+  // Slice 686 — Grease Pencil 2D strokes in 3D with layers + frames.
+  import('./gp/autoload.js').catch(() => {});
+  // Slice 686 — Blueprints visual scripting graph (exec + data wires).
+  import('./bp/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
