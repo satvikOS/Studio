@@ -7364,6 +7364,18 @@ export function registerV3Api() {
   import('./simbake/autoload.js').catch(() => {});
   // Slice 693 — VSE transitions + effects (6 + 6).
   import('./vsefx/autoload.js').catch(() => {});
+  // Slice 694 — Mari-style projection painting.
+  import('./paintproj/autoload.js').catch(() => {});
+  // Slice 694 — MagicaVoxel-style native voxel editor.
+  import('./voxel/autoload.js').catch(() => {});
+  // Slice 694 — Plasticity-style subdivision-surface modeling.
+  import('./subdiv/autoload.js').catch(() => {});
+  // Slice 694 — Unreal-style instanced foliage + LOD.
+  import('./foliage/autoload.js').catch(() => {});
+  // Slice 694 — Shader graph → GPU path tracer integration bridge.
+  import('./shaderptbridge/autoload.js').catch(() => {});
+  // Slice 694 — EEVEE-like SSGI + SSR viewport passes.
+  import('./eevee/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
