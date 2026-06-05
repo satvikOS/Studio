@@ -73,6 +73,46 @@ function _albedoOf(material) {
   };
 }
 
+// Slice 689 — Sample the active material's `.map` (CanvasTexture from
+// slice-684 shader graph bake, slice-642 procedural textures, slice-688
+// matlib presets) at a given UV; returns null if no sampleable texture.
+// Result is multiplied into the per-tri albedo at soup-build time so
+// shader graphs visibly influence the rendered image without needing
+// per-hit UV interpolation (a fuller pass for the next iteration).
+function _sampleMaterialTextureAtUV(material, u, v) {
+  const m = Array.isArray(material) ? material[0] : material;
+  if (!m || !m.map) return null;
+  const tex = m.map;
+  const img = tex.image;
+  if (!img || !img.width || !img.height) return null;
+  // Wrap UV [0,1) then transform via tex.offset/repeat if set.
+  let uu = u, vv = v;
+  if (tex.offset) { uu = uu + tex.offset.x; vv = vv + tex.offset.y; }
+  if (tex.repeat) { uu *= tex.repeat.x; vv *= tex.repeat.y; }
+  uu = ((uu % 1) + 1) % 1;
+  vv = ((vv % 1) + 1) % 1;
+  // CanvasTexture (preferred) and HTMLImageElement both render to a
+  // throwaway canvas to extract a 1×1 pixel via getImageData.
+  try {
+    let canvas;
+    if (img instanceof HTMLCanvasElement) {
+      canvas = img;
+    } else if (img instanceof HTMLImageElement || (img.tagName === 'IMG' && img.complete)) {
+      canvas = document.createElement('canvas');
+      canvas.width = img.width; canvas.height = img.height;
+      canvas.getContext('2d').drawImage(img, 0, 0);
+    } else {
+      return null;
+    }
+    const px = Math.max(0, Math.min(canvas.width - 1, Math.floor(uu * canvas.width)));
+    const py = Math.max(0, Math.min(canvas.height - 1, Math.floor((1 - vv) * canvas.height)));
+    const data = canvas.getContext('2d').getImageData(px, py, 1, 1).data;
+    return { r: data[0] / 255, g: data[1] / 255, b: data[2] / 255 };
+  } catch (_) {
+    return null;
+  }
+}
+
 // ── Triangle soup builder ────────────────────────────────────────────────
 //
 // soup layout (per triangle, 21 floats):
@@ -100,10 +140,11 @@ export function buildSoup(scene) {
     if (!obj.geometry || !obj.geometry.attributes || !obj.geometry.attributes.position) return;
     const meshId = meshes.length;
     meshes.push(obj);
-    const albedo = _albedoOf(obj.material);
+    const baseAlbedo = _albedoOf(obj.material);
     obj.updateWorldMatrix(true, false);
     const mat = obj.matrixWorld;
     const pos = obj.geometry.attributes.position;
+    const uv = obj.geometry.attributes.uv;
     const idx = obj.geometry.index;
     const triCount = idx ? (idx.count / 3) : (pos.count / 3);
     for (let t = 0; t < triCount; t++) {
@@ -119,6 +160,22 @@ export function buildSoup(scene) {
       const area2 = nrm.length();
       if (area2 < EPS) continue;
       nrm.divideScalar(area2);
+      // Slice 689 — Tint the per-tri albedo with a sample of the active
+      // material's texture (if any) at this tri's centroid UV.
+      let albedo = baseAlbedo;
+      if (uv) {
+        const ux = (uv.getX(i0) + uv.getX(i1) + uv.getX(i2)) / 3;
+        const uy = (uv.getY(i0) + uv.getY(i1) + uv.getY(i2)) / 3;
+        const tex = _sampleMaterialTextureAtUV(obj.material, ux, uy);
+        if (tex) {
+          albedo = {
+            r: baseAlbedo.r * tex.r,
+            g: baseAlbedo.g * tex.g,
+            b: baseAlbedo.b * tex.b,
+            er: baseAlbedo.er, eg: baseAlbedo.eg, eb: baseAlbedo.eb,
+          };
+        }
+      }
       tris.push(
         a.x, a.y, a.z,
         b.x, b.y, b.z,
