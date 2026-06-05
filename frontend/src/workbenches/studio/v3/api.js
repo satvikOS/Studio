@@ -7299,6 +7299,10 @@ export function registerV3Api() {
   import('./shader/autoload.js').catch(() => {});
   // Rigging — armatures, SkinnedMesh bind, CCD IK. Installs window.__studioRig*.
   import('./rig/autoload.js').catch(() => {});
+
+  // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
+  // Lazy-imported so callers can pre-register their own ops first.
+  import('./cmdpalette/autoload.js').catch(() => {});
 }
 
 export function unregisterV3Api() {
