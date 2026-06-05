@@ -531,6 +531,61 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 674 — Post-process tuning pack. Walks the composer's pass
+  // list by constructor name, so we don't need to keep direct pass
+  // references in sync.
+  const _findPass = (name) => {
+    const vp = window.__archdiscViewport;
+    const composer = vp && vp.__studioComposer;
+    if (!composer || !composer.passes) return null;
+    return composer.passes.find((p) => p && p.constructor && p.constructor.name === name) || null;
+  };
+
+  window.__studioSetBloomStrength = (v) => {
+    const p = _findPass('UnrealBloomPass');
+    if (!p) return { ok: false, error: 'bloom off' };
+    p.strength = Math.max(0, Math.min(3, Number(v) || 0));
+    return { ok: true, strength: p.strength };
+  };
+
+  window.__studioSetBloomThreshold = (v) => {
+    const p = _findPass('UnrealBloomPass');
+    if (!p) return { ok: false, error: 'bloom off' };
+    p.threshold = Math.max(0, Math.min(1, Number(v) ?? 0.85));
+    return { ok: true, threshold: p.threshold };
+  };
+
+  window.__studioSetSSAORadius = (r) => {
+    const p = _findPass('SSAOPass');
+    if (!p) return { ok: false, error: 'ssao off' };
+    p.kernelRadius = Math.max(0.01, Math.min(2, Number(r) || 0.2));
+    return { ok: true, radius: p.kernelRadius };
+  };
+
+  window.__studioSetSSAOIntensity = (v) => {
+    const p = _findPass('SSAOPass');
+    if (!p) return { ok: false, error: 'ssao off' };
+    p.minDistance = Math.max(0.001, Math.min(0.5, Number(v) ?? 0.005));
+    return { ok: true, minDistance: p.minDistance };
+  };
+
+  window.__studioSetOutlineColor = (visibleHex, hiddenHex) => {
+    const p = _findPass('OutlinePass');
+    if (!p) return { ok: false, error: 'outline off' };
+    if (visibleHex != null) p.visibleEdgeColor = new THREE.Color(visibleHex);
+    if (hiddenHex != null) p.hiddenEdgeColor = new THREE.Color(hiddenHex);
+    return { ok: true, visible: '#' + p.visibleEdgeColor.getHexString(), hidden: '#' + p.hiddenEdgeColor.getHexString() };
+  };
+
+  window.__studioSetOutlineThickness = (thick, glow, strength) => {
+    const p = _findPass('OutlinePass');
+    if (!p) return { ok: false, error: 'outline off' };
+    if (thick != null) p.edgeThickness = Math.max(0.5, Math.min(10, Number(thick)));
+    if (glow != null) p.edgeGlow = Math.max(0, Math.min(2, Number(glow)));
+    if (strength != null) p.edgeStrength = Math.max(0, Math.min(10, Number(strength)));
+    return { ok: true, thickness: p.edgeThickness, glow: p.edgeGlow, strength: p.edgeStrength };
+  };
+
   // Slice 673 — Task scheduler / async helper pack. Lightweight wrappers
   // around setTimeout / setInterval with a single id-keyed registry so
   // callers can list / clear without bookkeeping.
