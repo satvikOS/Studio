@@ -531,6 +531,125 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 665 — Geometry health / repair pack. Stats and fixes for
+  // common mesh-quality issues.
+  const _activeGeoNonIdx = () => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel || !sel.geometry) return null;
+    return { sel, geo: sel.geometry.index ? sel.geometry.toNonIndexed() : sel.geometry };
+  };
+
+  window.__studioGeometryFindZeroAreaFaces = () => {
+    const a = _activeGeoNonIdx(); if (!a) return { ok: false };
+    const pos = a.geo.attributes.position.array;
+    const tris = pos.length / 9;
+    const va = new THREE.Vector3(), vb = new THREE.Vector3(), vc = new THREE.Vector3();
+    const ab = new THREE.Vector3(), ac = new THREE.Vector3(), cr = new THREE.Vector3();
+    let zero = 0;
+    for (let t = 0; t < tris; t++) {
+      va.fromArray(pos, t * 9); vb.fromArray(pos, t * 9 + 3); vc.fromArray(pos, t * 9 + 6);
+      ab.subVectors(vb, va); ac.subVectors(vc, va);
+      if (cr.crossVectors(ab, ac).length() / 2 < 1e-10) zero++;
+    }
+    return { ok: true, totalFaces: tris, zeroArea: zero };
+  };
+
+  window.__studioGeometryFindDuplicateVerts = (eps) => {
+    const a = _activeGeoNonIdx(); if (!a) return { ok: false };
+    const e = Number(eps) || 1e-4;
+    const pos = a.geo.attributes.position.array;
+    const seen = new Map();
+    let dupes = 0;
+    for (let i = 0; i < pos.length; i += 3) {
+      const key = `${Math.round(pos[i]/e)}:${Math.round(pos[i+1]/e)}:${Math.round(pos[i+2]/e)}`;
+      if (seen.has(key)) dupes++;
+      else seen.set(key, true);
+    }
+    return { ok: true, total: pos.length / 3, duplicates: dupes, eps: e };
+  };
+
+  window.__studioGeometryFindHoles = () => {
+    const a = _activeGeoNonIdx(); if (!a) return { ok: false };
+    const pos = a.geo.attributes.position.array;
+    const tris = pos.length / 9;
+    const edges = new Map();
+    const keyOf = (x, y, z) => `${Math.round(x*1e4)}:${Math.round(y*1e4)}:${Math.round(z*1e4)}`;
+    const addEdge = (k1, k2) => {
+      const key = k1 < k2 ? `${k1}|${k2}` : `${k2}|${k1}`;
+      edges.set(key, (edges.get(key) || 0) + 1);
+    };
+    for (let t = 0; t < tris; t++) {
+      const i = t * 9;
+      const a1 = keyOf(pos[i], pos[i+1], pos[i+2]);
+      const b1 = keyOf(pos[i+3], pos[i+4], pos[i+5]);
+      const c1 = keyOf(pos[i+6], pos[i+7], pos[i+8]);
+      addEdge(a1, b1); addEdge(b1, c1); addEdge(c1, a1);
+    }
+    let boundary = 0, nonManifold = 0;
+    edges.forEach((count) => {
+      if (count === 1) boundary++;
+      else if (count > 2) nonManifold++;
+    });
+    return { ok: true, totalEdges: edges.size, boundaryEdges: boundary, nonManifoldEdges: nonManifold };
+  };
+
+  window.__studioGeometryFindNonManifold = () => {
+    const r = window.__studioGeometryFindHoles();
+    return r.ok ? { ok: true, nonManifoldEdges: r.nonManifoldEdges, totalEdges: r.totalEdges } : r;
+  };
+
+  window.__studioGeometryRepairWeld = async (eps) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel || !sel.geometry) return { ok: false };
+    const { mergeVertices } = await import('three/examples/jsm/utils/BufferGeometryUtils.js');
+    const before = (sel.geometry.index ? sel.geometry.toNonIndexed() : sel.geometry).attributes.position.count;
+    const merged = mergeVertices(sel.geometry, Number(eps) || 1e-4);
+    sel.geometry.dispose();
+    sel.geometry = merged;
+    sel.geometry.computeVertexNormals();
+    sel.geometry.computeBoundingBox();
+    sel.geometry.computeBoundingSphere();
+    const after = merged.attributes.position.count;
+    return { ok: true, before, after, removed: before - after };
+  };
+
+  window.__studioGeometryFixOrientation = () => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel || !sel.geometry) return { ok: false };
+    sel.geometry.computeVertexNormals();
+    // Flip any tri whose normal points away from the bounding-box centre.
+    let g = sel.geometry.index ? sel.geometry.toNonIndexed() : sel.geometry;
+    g.computeBoundingBox();
+    const c = new THREE.Vector3();
+    g.boundingBox.getCenter(c);
+    const pos = g.attributes.position;
+    const arr = pos.array;
+    const tris = pos.count / 3;
+    const a = new THREE.Vector3(), b = new THREE.Vector3(), cv = new THREE.Vector3();
+    const ab = new THREE.Vector3(), ac = new THREE.Vector3(), n = new THREE.Vector3(), mid = new THREE.Vector3(), outward = new THREE.Vector3();
+    let flipped = 0;
+    for (let t = 0; t < tris; t++) {
+      a.fromArray(arr, t * 9); b.fromArray(arr, t * 9 + 3); cv.fromArray(arr, t * 9 + 6);
+      ab.subVectors(b, a); ac.subVectors(cv, a);
+      n.crossVectors(ab, ac).normalize();
+      mid.set((a.x + b.x + cv.x) / 3, (a.y + b.y + cv.y) / 3, (a.z + b.z + cv.z) / 3);
+      outward.subVectors(mid, c);
+      if (n.dot(outward) < 0) {
+        // swap b ↔ c
+        for (let k = 0; k < 3; k++) {
+          const i1 = (t * 3 + 1) * 3 + k;
+          const i2 = (t * 3 + 2) * 3 + k;
+          const tmp = arr[i1]; arr[i1] = arr[i2]; arr[i2] = tmp;
+        }
+        flipped++;
+      }
+    }
+    pos.needsUpdate = true;
+    g.computeVertexNormals();
+    if (sel.geometry !== g) { sel.geometry.dispose(); sel.geometry = g; }
+    return { ok: true, flipped, totalFaces: tris };
+  };
+
   // Slice 664 — Viewport HUD overlays: DOM elements pinned to the
   // viewport (fps badge, axis label, watermark…). Stored in a registry
   // so we can clear them in bulk.
