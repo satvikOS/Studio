@@ -7328,6 +7328,14 @@ export function registerV3Api() {
   import('./gp/autoload.js').catch(() => {});
   // Slice 686 — Blueprints visual scripting graph (exec + data wires).
   import('./bp/autoload.js').catch(() => {});
+  // Slice 688 — 106 KeyShot-style PBR material presets + browser.
+  import('./matlib/autoload.js').catch(() => {});
+  // Slice 688 — 20 deeper Houdini-SOP-style Geometry Node kinds.
+  import('./geomdeep/autoload.js').catch(() => {});
+  // Slice 688 — 20+ deeper Cycles-style shader node kinds.
+  import('./shaderdeep/autoload.js').catch(() => {});
+  // Slice 688 — SVG import + 3D text + logo extrude + path ops.
+  import('./vector/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
