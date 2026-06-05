@@ -7336,6 +7336,10 @@ export function registerV3Api() {
   import('./shaderdeep/autoload.js').catch(() => {});
   // Slice 688 — SVG import + 3D text + logo extrude + path ops.
   import('./vector/autoload.js').catch(() => {});
+  // Slice 690 — Real non-destructive modifier stack (replaces recipe-only slice 636).
+  import('./modstack/autoload.js').catch(() => {});
+  // Slice 690 — VSE (video sequence editor) timeline.
+  import('./vse/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
