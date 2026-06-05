@@ -531,6 +531,103 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 681 — Selection statistics / inspector helpers. Aggregate
+  // numbers the inspector panel can render without rolling its own
+  // traversal.
+  window.__studioSelectionStats = () => {
+    const list = (window.__studioSelectedMeshes && window.__studioSelectedMeshes())
+      || ((window.__studioSelectedMesh && window.__studioSelectedMesh()) ? [window.__studioSelectedMesh()] : []);
+    if (!list.length) return { ok: true, count: 0 };
+    let verts = 0, tris = 0, area = 0, volume = 0;
+    const bbox = new THREE.Box3();
+    for (const m of list) {
+      bbox.expandByObject(m);
+      const v = m.geometry?.attributes?.position?.count || 0;
+      verts += v;
+      tris += m.geometry?.index ? m.geometry.index.count / 3 : v / 3;
+      if (window.__studioMeasureSurfaceArea) {
+        const r = window.__studioMeasureSurfaceArea(m.uuid);
+        if (r.ok) area += r.scaledArea || r.area || 0;
+      }
+      if (window.__studioMeasureBoundingBoxVolume) {
+        const r = window.__studioMeasureBoundingBoxVolume(m.uuid);
+        if (r.ok) volume += r.volume;
+      }
+    }
+    const size = new THREE.Vector3(); bbox.getSize(size);
+    return {
+      ok: true,
+      count: list.length,
+      vertices: verts,
+      triangles: tris,
+      surfaceArea: area,
+      boundingVolume: volume,
+      bbox: { size: [size.x, size.y, size.z], min: [bbox.min.x, bbox.min.y, bbox.min.z], max: [bbox.max.x, bbox.max.y, bbox.max.z] },
+    };
+  };
+
+  window.__studioSelectionTransform = () => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel) return { ok: false };
+    return {
+      ok: true,
+      position: [sel.position.x, sel.position.y, sel.position.z],
+      rotation: [sel.rotation.x, sel.rotation.y, sel.rotation.z],
+      scale: [sel.scale.x, sel.scale.y, sel.scale.z],
+      quaternion: [sel.quaternion.x, sel.quaternion.y, sel.quaternion.z, sel.quaternion.w],
+      name: sel.name || '',
+      uuid: sel.uuid,
+    };
+  };
+
+  window.__studioSelectionApplyTransform = (patch) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel || !patch) return { ok: false };
+    if (Array.isArray(patch.position)) sel.position.fromArray(patch.position);
+    if (Array.isArray(patch.rotation)) sel.rotation.set(patch.rotation[0], patch.rotation[1], patch.rotation[2]);
+    if (Array.isArray(patch.scale)) sel.scale.fromArray(patch.scale);
+    sel.updateMatrixWorld(true);
+    return { ok: true };
+  };
+
+  window.__studioSelectionResetTransform = () => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel) return { ok: false };
+    sel.position.set(0, 0, 0);
+    sel.rotation.set(0, 0, 0);
+    sel.scale.set(1, 1, 1);
+    sel.updateMatrixWorld(true);
+    return { ok: true };
+  };
+
+  window.__studioSelectionGetMaterialInfo = () => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel) return { ok: false };
+    const mat = Array.isArray(sel.material) ? sel.material[0] : sel.material;
+    if (!mat) return { ok: false };
+    return {
+      ok: true,
+      type: mat.type,
+      name: mat.name || '',
+      color: mat.color ? '#' + mat.color.getHexString() : null,
+      roughness: mat.roughness ?? null,
+      metalness: mat.metalness ?? null,
+      transparent: !!mat.transparent,
+      opacity: mat.opacity ?? 1,
+      hasMap: !!mat.map,
+      hasNormalMap: !!mat.normalMap,
+    };
+  };
+
+  window.__studioSelectionSetVisible = (on) => {
+    const list = (window.__studioSelectedMeshes && window.__studioSelectedMeshes())
+      || ((window.__studioSelectedMesh && window.__studioSelectedMesh()) ? [window.__studioSelectedMesh()] : []);
+    if (!list.length) return { ok: false };
+    const want = on === undefined ? !list[0].visible : !!on;
+    for (const m of list) m.visible = want;
+    return { ok: true, count: list.length, visible: want };
+  };
+
   // Slice 680 — Quality preset pack. Bundles pixelRatio + shadow
   // quality + fps cap + post-fx toggles into named presets so the
   // user can switch performance vs fidelity in one call.
