@@ -7394,6 +7394,12 @@ export function registerV3Api() {
   import('./sdf/autoload.js').catch(() => {});
   // Slice 697 — 25 more Geometry Node kinds (total inventory ≈100).
   import('./geomelite/autoload.js').catch(() => {});
+  // Slice 698 — Volumetric smoke/fire rendering (Data3DTexture raymarched).
+  import('./volume/autoload.js').catch(() => {});
+  // Slice 698 — Grease pencil real-time mouse drawing input.
+  import('./gpdraw/autoload.js').catch(() => {});
+  // Slice 698 — Particle Flow event-driven particle graph.
+  import('./pflow/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
