@@ -531,6 +531,64 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 675 — Generic settings persistence over a namespaced
+  // localStorage prefix so user prefs don't collide with the rest of
+  // the V3 surface.
+  const _SET_PREFIX = 'studio.v3.settings.';
+
+  window.__studioSettingsGet = (key) => {
+    const raw = localStorage.getItem(_SET_PREFIX + key);
+    if (raw == null) return { ok: false };
+    try { return { ok: true, value: JSON.parse(raw) }; }
+    catch (_) { return { ok: true, value: raw }; }
+  };
+
+  window.__studioSettingsSet = (key, value) => {
+    if (!key) return { ok: false };
+    try {
+      localStorage.setItem(_SET_PREFIX + key, JSON.stringify(value));
+      return { ok: true, key, value };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
+
+  window.__studioSettingsDelete = (key) => {
+    const k = _SET_PREFIX + key;
+    const had = localStorage.getItem(k) != null;
+    localStorage.removeItem(k);
+    return { ok: true, removed: had };
+  };
+
+  window.__studioSettingsList = () => {
+    const out = {};
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(_SET_PREFIX)) {
+        try { out[k.slice(_SET_PREFIX.length)] = JSON.parse(localStorage.getItem(k)); }
+        catch (_) { out[k.slice(_SET_PREFIX.length)] = localStorage.getItem(k); }
+      }
+    }
+    return { ok: true, count: Object.keys(out).length, settings: out };
+  };
+
+  window.__studioSettingsExport = () => {
+    const r = window.__studioSettingsList();
+    return { ok: true, json: JSON.stringify(r.settings), count: r.count };
+  };
+
+  window.__studioSettingsImport = (json) => {
+    if (!json) return { ok: false };
+    let parsed;
+    try { parsed = typeof json === 'string' ? JSON.parse(json) : json; }
+    catch (e) { return { ok: false, error: 'bad json' }; }
+    let n = 0;
+    for (const [k, v] of Object.entries(parsed)) {
+      try { localStorage.setItem(_SET_PREFIX + k, JSON.stringify(v)); n++; } catch (_) {}
+    }
+    return { ok: true, imported: n };
+  };
+
   // Slice 674 — Post-process tuning pack. Walks the composer's pass
   // list by constructor name, so we don't need to keep direct pass
   // references in sync.
