@@ -531,6 +531,73 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 676 — Vertex groups / weight maps stored on mesh.userData
+  // .archdiscStudioVertexGroups as { [name]: Float32Array(weights) }.
+  // Foundation for skeleton skinning + smooth-selection weighting.
+  const _vgMap = (mesh) => {
+    if (!mesh.userData) mesh.userData = {};
+    if (!mesh.userData.archdiscStudioVertexGroups) mesh.userData.archdiscStudioVertexGroups = {};
+    return mesh.userData.archdiscStudioVertexGroups;
+  };
+
+  window.__studioVertexGroupCreate = (name, defaultWeight) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel || !sel.geometry || !sel.geometry.attributes.position) return { ok: false };
+    const n = sel.geometry.attributes.position.count;
+    const map = _vgMap(sel);
+    const w = Number(defaultWeight) || 0;
+    map[String(name || `vg_${Object.keys(map).length + 1}`)] = new Float32Array(n).fill(w);
+    return { ok: true, name, vertices: n };
+  };
+
+  window.__studioVertexGroupSetWeight = (name, idx, weight) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel) return { ok: false };
+    const map = _vgMap(sel);
+    const arr = map[String(name)];
+    if (!arr) return { ok: false, error: 'unknown group' };
+    const i = Number(idx);
+    if (i < 0 || i >= arr.length) return { ok: false, error: 'index out of range' };
+    arr[i] = Math.max(0, Math.min(1, Number(weight) || 0));
+    return { ok: true, name, index: i, weight: arr[i] };
+  };
+
+  window.__studioVertexGroupAddIndex = (name, idx, weight) => {
+    return window.__studioVertexGroupSetWeight(name, idx, weight ?? 1);
+  };
+
+  window.__studioVertexGroupGetWeights = (name) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel) return { ok: false };
+    const map = _vgMap(sel);
+    const arr = map[String(name)];
+    if (!arr) return { ok: false };
+    let sum = 0, nz = 0;
+    for (let i = 0; i < arr.length; i++) { sum += arr[i]; if (arr[i] > 0) nz++; }
+    return { ok: true, length: arr.length, nonZero: nz, sum, sample: Array.from(arr.slice(0, Math.min(8, arr.length))) };
+  };
+
+  window.__studioVertexGroupList = () => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel) return { ok: false };
+    const map = _vgMap(sel);
+    const names = Object.keys(map);
+    return {
+      ok: true,
+      count: names.length,
+      groups: names.map((n) => ({ name: n, vertices: map[n].length })),
+    };
+  };
+
+  window.__studioVertexGroupRemove = (name) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel) return { ok: false };
+    const map = _vgMap(sel);
+    const had = !!map[String(name)];
+    delete map[String(name)];
+    return { ok: true, removed: had };
+  };
+
   // Slice 675 — Generic settings persistence over a namespaced
   // localStorage prefix so user prefs don't collide with the rest of
   // the V3 surface.
