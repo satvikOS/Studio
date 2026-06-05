@@ -7422,6 +7422,12 @@ export function registerV3Api() {
   import('./sdesignpro/autoload.js').catch(() => {});
   // Slice 702 — HumanIK biped autorigger.
   import('./humanik/autoload.js').catch(() => {});
+  // Slice 703 — Niagara-style real-time particle systems.
+  import('./niagara/autoload.js').catch(() => {});
+  // Slice 703 — Freestyle NPR line-art overlay.
+  import('./freestyle/autoload.js').catch(() => {});
+  // Slice 703 — Substance Painter smart-mask generators.
+  import('./smartmask/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
