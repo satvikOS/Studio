@@ -531,6 +531,104 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 666 — Asset library / palette pack. Library entries are
+  // serialised mesh snapshots saved to localStorage; the user can
+  // browse, instantiate, and tag them.
+  const _ASSET_PREFIX = 'studio.v3.assets.';
+
+  const _readAssetNames = () => {
+    const out = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(_ASSET_PREFIX)) out.push(k.slice(_ASSET_PREFIX.length));
+    }
+    return out.sort();
+  };
+
+  window.__studioAssetSave = (name, tag) => {
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel) return { ok: false };
+    const snap = {
+      geometry: sel.geometry.toJSON ? sel.geometry.toJSON() : null,
+      material: (Array.isArray(sel.material) ? sel.material[0] : sel.material)?.toJSON ? (Array.isArray(sel.material) ? sel.material[0] : sel.material).toJSON() : null,
+      position: sel.position.toArray(),
+      scale: sel.scale.toArray(),
+      tag: String(tag || ''),
+      name: String(name || `asset_${Date.now()}`),
+      savedAt: new Date().toISOString(),
+    };
+    try {
+      localStorage.setItem(_ASSET_PREFIX + snap.name, JSON.stringify(snap));
+      return { ok: true, name: snap.name, tag: snap.tag };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
+
+  window.__studioAssetInstantiate = async (name, offset) => {
+    const raw = localStorage.getItem(_ASSET_PREFIX + name);
+    if (!raw) return { ok: false, error: 'not found' };
+    const snap = JSON.parse(raw);
+    const scene = window.__archdiscScene; if (!scene) return { ok: false };
+    const loader = new THREE.ObjectLoader();
+    const geo = new THREE.BufferGeometryLoader().parse(snap.geometry);
+    let mat;
+    try { mat = loader.parseMaterials([snap.material])[snap.material.uuid] || new THREE.MeshStandardMaterial(); }
+    catch (_) { mat = new THREE.MeshStandardMaterial({ color: 0xeeeeee }); }
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.fromArray(snap.position);
+    mesh.scale.fromArray(snap.scale);
+    const off = Array.isArray(offset) ? offset : [0.5, 0, 0];
+    mesh.position.x += off[0]; mesh.position.y += off[1]; mesh.position.z += off[2];
+    mesh.name = `${snap.name}_inst`;
+    mesh.userData.archdiscStudioPrimitiveKind = 'asset';
+    mesh.userData.archdiscStudioAssetName = snap.name;
+    if (snap.tag) mesh.userData.archdiscStudioAssetTag = snap.tag;
+    scene.add(mesh);
+    if (window.__studioSelectMesh) window.__studioSelectMesh(mesh);
+    return { ok: true, uuid: mesh.uuid };
+  };
+
+  window.__studioAssetList = (tagFilter) => {
+    const names = _readAssetNames();
+    const items = names.map((n) => {
+      try {
+        const meta = JSON.parse(localStorage.getItem(_ASSET_PREFIX + n));
+        return { name: n, tag: meta.tag || '', savedAt: meta.savedAt };
+      } catch (_) { return { name: n, tag: '', savedAt: null }; }
+    });
+    const filtered = tagFilter ? items.filter((i) => i.tag === tagFilter) : items;
+    return { ok: true, count: filtered.length, items: filtered };
+  };
+
+  window.__studioAssetDelete = (name) => {
+    const k = _ASSET_PREFIX + name;
+    const had = localStorage.getItem(k) != null;
+    localStorage.removeItem(k);
+    return { ok: true, removed: had };
+  };
+
+  window.__studioAssetRetag = (name, newTag) => {
+    const k = _ASSET_PREFIX + name;
+    const raw = localStorage.getItem(k);
+    if (!raw) return { ok: false };
+    const snap = JSON.parse(raw);
+    snap.tag = String(newTag || '');
+    localStorage.setItem(k, JSON.stringify(snap));
+    return { ok: true, name, tag: snap.tag };
+  };
+
+  window.__studioAssetListTags = () => {
+    const tags = new Set();
+    for (const n of _readAssetNames()) {
+      try {
+        const meta = JSON.parse(localStorage.getItem(_ASSET_PREFIX + n));
+        if (meta.tag) tags.add(meta.tag);
+      } catch (_) {}
+    }
+    return { ok: true, tags: Array.from(tags).sort() };
+  };
+
   // Slice 665 — Geometry health / repair pack. Stats and fixes for
   // common mesh-quality issues.
   const _activeGeoNonIdx = () => {
