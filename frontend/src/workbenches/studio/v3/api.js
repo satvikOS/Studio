@@ -531,6 +531,79 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 673 — Task scheduler / async helper pack. Lightweight wrappers
+  // around setTimeout / setInterval with a single id-keyed registry so
+  // callers can list / clear without bookkeeping.
+  if (!window.__studioScheduled) window.__studioScheduled = new Map();
+  let _scheduleSeq = 1;
+  const _sched = window.__studioScheduled;
+
+  window.__studioScheduleEvery = (ms, fn) => {
+    const ms_ = Math.max(16, Number(ms) || 1000);
+    if (typeof fn !== 'function' && typeof fn !== 'string') return { ok: false, error: 'fn required' };
+    const action = typeof fn === 'function' ? fn : (typeof window[fn] === 'function' ? window[fn] : null);
+    if (!action) return { ok: false, error: 'fn not callable' };
+    const id = _scheduleSeq++;
+    const handle = setInterval(() => { try { action(); } catch (_) {} }, ms_);
+    _sched.set(id, { id, kind: 'interval', ms: ms_, handle, createdAt: Date.now() });
+    return { ok: true, id, ms: ms_ };
+  };
+
+  window.__studioScheduleOnce = (ms, fn) => {
+    const ms_ = Math.max(0, Number(ms) || 0);
+    if (typeof fn !== 'function' && typeof fn !== 'string') return { ok: false };
+    const action = typeof fn === 'function' ? fn : (typeof window[fn] === 'function' ? window[fn] : null);
+    if (!action) return { ok: false };
+    const id = _scheduleSeq++;
+    const handle = setTimeout(() => {
+      try { action(); } catch (_) {}
+      _sched.delete(id);
+    }, ms_);
+    _sched.set(id, { id, kind: 'timeout', ms: ms_, handle, createdAt: Date.now() });
+    return { ok: true, id, ms: ms_ };
+  };
+
+  window.__studioScheduleClear = (id) => {
+    const r = _sched.get(id);
+    if (!r) return { ok: false };
+    if (r.kind === 'interval') clearInterval(r.handle); else clearTimeout(r.handle);
+    _sched.delete(id);
+    return { ok: true, removed: true };
+  };
+
+  window.__studioScheduleList = () => ({
+    ok: true,
+    count: _sched.size,
+    items: Array.from(_sched.values()).map((r) => ({ id: r.id, kind: r.kind, ms: r.ms, createdAt: r.createdAt })),
+  });
+
+  window.__studioScheduleClearAll = () => {
+    let n = 0;
+    for (const r of _sched.values()) {
+      if (r.kind === 'interval') clearInterval(r.handle); else clearTimeout(r.handle);
+      n++;
+    }
+    _sched.clear();
+    return { ok: true, cleared: n };
+  };
+
+  window.__studioWaitForCondition = (predicate, timeoutMs, intervalMs) => new Promise((resolve) => {
+    const fn = typeof predicate === 'function' ? predicate
+      : (typeof predicate === 'string' && typeof window[predicate] === 'function' ? window[predicate] : null);
+    if (!fn) { resolve({ ok: false, error: 'predicate required' }); return; }
+    const start = Date.now();
+    const timeout = Math.max(10, Number(timeoutMs) || 5000);
+    const interval = Math.max(10, Number(intervalMs) || 100);
+    const tick = () => {
+      let v = false;
+      try { v = !!fn(); } catch (_) { v = false; }
+      if (v) { resolve({ ok: true, elapsedMs: Date.now() - start }); return; }
+      if (Date.now() - start >= timeout) { resolve({ ok: false, error: 'timeout', elapsedMs: Date.now() - start }); return; }
+      setTimeout(tick, interval);
+    };
+    tick();
+  });
+
   // Slice 672 — Color palette pack. Stores swatches in localStorage
   // and can apply them to the active material or extract dominant
   // colours from an image data URL.
