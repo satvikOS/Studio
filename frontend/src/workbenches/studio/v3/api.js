@@ -7294,6 +7294,11 @@ export function registerV3Api() {
   // bridge/edge-slide/dissolve/merge-by-distance/rip). Side-effect import
   // installs window.__studioEdit* + auto-registers with the command palette.
   import('./edit/index.js').then((m) => m.installEditOps && m.installEditOps()).catch(() => {});
+  // Real shader node graph editor — installs window.__studioShader* +
+  // mounts the React ShaderEditor when toggled open.
+  import('./shader/autoload.js').catch(() => {});
+  // Rigging — armatures, SkinnedMesh bind, CCD IK. Installs window.__studioRig*.
+  import('./rig/autoload.js').catch(() => {});
 }
 
 export function unregisterV3Api() {
