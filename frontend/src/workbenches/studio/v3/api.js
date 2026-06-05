@@ -531,6 +531,111 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 672 — Color palette pack. Stores swatches in localStorage
+  // and can apply them to the active material or extract dominant
+  // colours from an image data URL.
+  const _PAL_KEY = 'studio.v3.palette';
+  const _readPalette = () => {
+    try { return JSON.parse(localStorage.getItem(_PAL_KEY) || '{}'); }
+    catch (_) { return {}; }
+  };
+  const _writePalette = (p) => {
+    try { localStorage.setItem(_PAL_KEY, JSON.stringify(p)); return true; }
+    catch (_) { return false; }
+  };
+
+  window.__studioPaletteAdd = (name, hex) => {
+    if (!name) return { ok: false };
+    const p = _readPalette();
+    const c = new THREE.Color(hex || 0x888888);
+    p[String(name)] = '#' + c.getHexString();
+    _writePalette(p);
+    return { ok: true, name, hex: p[name], total: Object.keys(p).length };
+  };
+
+  window.__studioPaletteList = () => {
+    const p = _readPalette();
+    const names = Object.keys(p).sort();
+    return { ok: true, count: names.length, entries: names.map((n) => ({ name: n, hex: p[n] })) };
+  };
+
+  window.__studioPaletteApplyToSelection = (name) => {
+    const p = _readPalette();
+    const hex = p[String(name)];
+    if (!hex) return { ok: false };
+    const sel = window.__studioSelectedMesh && window.__studioSelectedMesh();
+    if (!sel) return { ok: false };
+    const mat = Array.isArray(sel.material) ? sel.material[0] : sel.material;
+    if (!mat || !mat.color) return { ok: false };
+    mat.color.set(hex);
+    mat.needsUpdate = true;
+    return { ok: true, hex };
+  };
+
+  window.__studioPaletteDelete = (name) => {
+    const p = _readPalette();
+    const had = !!p[String(name)];
+    delete p[String(name)];
+    _writePalette(p);
+    return { ok: true, removed: had, total: Object.keys(p).length };
+  };
+
+  window.__studioPaletteImportFromImage = (dataUrl, sampleCount) => new Promise((resolve) => {
+    if (!dataUrl) { resolve({ ok: false }); return; }
+    const img = new Image();
+    img.onload = () => {
+      const N = Math.max(1, Math.min(16, Number(sampleCount) || 8));
+      const w = 64, h = 64;
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      const data = ctx.getImageData(0, 0, w, h).data;
+      // simple k-means in RGB
+      const samples = [];
+      for (let i = 0; i < data.length; i += 4 * 16) {
+        samples.push([data[i], data[i + 1], data[i + 2]]);
+      }
+      // init centroids by spreading evenly through samples
+      const centroids = [];
+      for (let k = 0; k < N; k++) centroids.push(samples[Math.floor(k * samples.length / N)] || [127, 127, 127]);
+      for (let iter = 0; iter < 6; iter++) {
+        const buckets = Array.from({ length: N }, () => ({ sum: [0, 0, 0], n: 0 }));
+        for (const s of samples) {
+          let best = 0, bestD = Infinity;
+          for (let k = 0; k < N; k++) {
+            const c = centroids[k];
+            const d = (c[0]-s[0])**2 + (c[1]-s[1])**2 + (c[2]-s[2])**2;
+            if (d < bestD) { bestD = d; best = k; }
+          }
+          buckets[best].sum[0] += s[0]; buckets[best].sum[1] += s[1]; buckets[best].sum[2] += s[2];
+          buckets[best].n++;
+        }
+        for (let k = 0; k < N; k++) {
+          if (buckets[k].n) centroids[k] = [buckets[k].sum[0] / buckets[k].n, buckets[k].sum[1] / buckets[k].n, buckets[k].sum[2] / buckets[k].n];
+        }
+      }
+      const palette = _readPalette();
+      const added = [];
+      for (let k = 0; k < N; k++) {
+        const r = Math.round(centroids[k][0]), g = Math.round(centroids[k][1]), b = Math.round(centroids[k][2]);
+        const hex = '#' + ((r << 16) | (g << 8) | b).toString(16).padStart(6, '0');
+        const name = `auto_${Date.now()}_${k}`;
+        palette[name] = hex;
+        added.push({ name, hex });
+      }
+      _writePalette(palette);
+      resolve({ ok: true, added });
+    };
+    img.onerror = () => resolve({ ok: false, error: 'load failed' });
+    img.src = dataUrl;
+  });
+
+  window.__studioPaletteExport = () => {
+    const p = _readPalette();
+    return { ok: true, json: JSON.stringify(p), count: Object.keys(p).length };
+  };
+
   // Slice 671 — Thumbnail generation pack. Renders one mesh (or the
   // whole scene from above) into an offscreen canvas → dataURL → cache.
   if (!window.__studioThumbnailCache) window.__studioThumbnailCache = new Map();
