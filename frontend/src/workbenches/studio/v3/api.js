@@ -7410,6 +7410,12 @@ export function registerV3Api() {
   import('./dops/autoload.js').catch(() => {});
   // Slice 700 — Grasshopper-style visual graph runner.
   import('./ghgraph/autoload.js').catch(() => {});
+  // Slice 701 — Architectural prefabs (stairs/railings/terrain/sections).
+  import('./archextra/autoload.js').catch(() => {});
+  // Slice 701 — Plasticity-style parametric history stack.
+  import('./plasticityhist/autoload.js').catch(() => {});
+  // Slice 701 — Blendshape (morph target) animation system.
+  import('./blendshape/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
