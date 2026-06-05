@@ -6,7 +6,8 @@
 
 import * as THREE from 'three';
 import { chainIntoAnimTick, unchainFromAnimTick } from '../common/anim-tick.js';
-import { perlin3 } from '../common/noise.js';
+import { valueNoise3D } from '../common/noise.js';
+const perlin3 = (x, y, z) => valueNoise3D(x, y, z, 0) * 2 - 1;
 
 const _systems = new Map();
 let _seq = 1;
