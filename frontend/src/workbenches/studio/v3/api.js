@@ -531,6 +531,79 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 669 — Onboarding / help / version pack. The tour state is a
+  // simple step counter in sessionStorage so reloads pick up where the
+  // user left off.
+  const _TOUR_STEPS = [
+    { id: 'welcome', text: 'Welcome to ArchDisc Studio. Use the toolbar to add primitives.' },
+    { id: 'cube', text: 'Click the cube icon, then drag in the viewport to create one.' },
+    { id: 'select', text: 'Single-click selects a mesh; Cmd/Ctrl+click multi-selects.' },
+    { id: 'gizmo', text: 'G translates, R rotates, S scales. The TransformControls gizmo follows the selection.' },
+    { id: 'inspector', text: 'The right panel shows numeric inputs for the current selection.' },
+    { id: 'commands', text: 'Cmd/Ctrl+Shift+P opens the command palette over every Studio op.' },
+    { id: 'done', text: 'You are done. The tour replays via __studioTourReset() then __studioTourStart().' },
+  ];
+
+  window.__studioTourStart = () => {
+    sessionStorage.setItem('studio.v3.tour-idx', '0');
+    return { ok: true, total: _TOUR_STEPS.length, step: _TOUR_STEPS[0] };
+  };
+
+  window.__studioTourNext = () => {
+    const idx = Number(sessionStorage.getItem('studio.v3.tour-idx') || -1) + 1;
+    if (idx >= _TOUR_STEPS.length) {
+      try { localStorage.setItem('studio.v3.tour-seen', '1'); } catch (_) {}
+      sessionStorage.removeItem('studio.v3.tour-idx');
+      return { ok: true, finished: true };
+    }
+    sessionStorage.setItem('studio.v3.tour-idx', String(idx));
+    return { ok: true, idx, step: _TOUR_STEPS[idx] };
+  };
+
+  window.__studioTourSkip = () => {
+    try { localStorage.setItem('studio.v3.tour-seen', '1'); } catch (_) {}
+    sessionStorage.removeItem('studio.v3.tour-idx');
+    return { ok: true, skipped: true };
+  };
+
+  window.__studioTourReset = () => {
+    try { localStorage.removeItem('studio.v3.tour-seen'); } catch (_) {}
+    sessionStorage.removeItem('studio.v3.tour-idx');
+    return { ok: true };
+  };
+
+  window.__studioHelpFor = (opName) => {
+    if (!opName) return { ok: false };
+    if (window.__studioCommandRegistry?.has?.(opName)) {
+      const c = window.__studioCommandRegistry.get(opName);
+      return {
+        ok: true,
+        name: c.name,
+        category: c.category,
+        description: c.description,
+        shortcut: c.shortcut || '',
+      };
+    }
+    const fn = window[opName];
+    if (typeof fn !== 'function') return { ok: false, error: 'unknown' };
+    return {
+      ok: true,
+      name: opName,
+      category: 'auto',
+      description: '',
+      length: fn.length,
+    };
+  };
+
+  window.__studioGetVersion = () => ({
+    ok: true,
+    app: 'ArchDisc Studio',
+    v3: true,
+    schema: 1,
+    commands: window.__studioCommandRegistry?.size || 0,
+    builtAt: window.__studioBuiltAt || null,
+  });
+
   // Slice 668 — Command palette registry. A central Map of commands
   // that any palette UI can read; auto-seeds with every existing
   // __studio* function so the registry is useful out of the box.
