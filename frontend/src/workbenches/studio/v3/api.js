@@ -531,6 +531,112 @@ export function registerV3Api() {
     return { ok: true, brush: window.__studioSculptBrush };
   };
 
+  // Slice 664 — Viewport HUD overlays: DOM elements pinned to the
+  // viewport (fps badge, axis label, watermark…). Stored in a registry
+  // so we can clear them in bulk.
+  if (!window.__studioHudOverlays) window.__studioHudOverlays = [];
+
+  const _ensureHudHost = () => {
+    let host = document.querySelector('[data-studio-v3-hud-host]');
+    if (host) return host;
+    const v = document.querySelector('.studio-viewport') || document.body;
+    host = document.createElement('div');
+    host.setAttribute('data-studio-v3-hud-host', '');
+    host.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:50';
+    v.appendChild(host);
+    return host;
+  };
+
+  const _addHud = (el, kind) => {
+    const host = _ensureHudHost();
+    host.appendChild(el);
+    window.__studioHudOverlays.push({ el, kind });
+    return el;
+  };
+
+  window.__studioHudAddBadge = (text, opts) => {
+    const o = opts || {};
+    const el = document.createElement('div');
+    el.textContent = String(text || '');
+    el.style.cssText = `position:absolute;top:${o.top ?? 8}px;left:${o.left ?? 8}px;` +
+      `padding:6px 10px;font:600 12px/1.1 ui-sans-serif,system-ui;` +
+      `color:${o.color || '#ecf3fb'};background:${o.background || 'rgba(15,20,28,0.78)'};` +
+      `border:1px solid ${o.border || '#26334a'};border-radius:6px;` +
+      `pointer-events:none;letter-spacing:0.02em`;
+    el.dataset.studioHud = 'badge';
+    _addHud(el, 'badge');
+    return { ok: true, el: el.outerHTML.slice(0, 80) };
+  };
+
+  window.__studioHudFlashMessage = (text, durationMs) => {
+    const el = document.createElement('div');
+    el.textContent = String(text || '');
+    el.style.cssText = `position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);` +
+      `padding:14px 22px;font:600 16px/1.2 ui-sans-serif,system-ui;` +
+      `color:#ecf3fb;background:rgba(15,20,28,0.85);border:1px solid #3a4a5c;` +
+      `border-radius:12px;opacity:1;transition:opacity 0.3s ease;pointer-events:none`;
+    _addHud(el, 'flash');
+    setTimeout(() => {
+      el.style.opacity = '0';
+      setTimeout(() => { el.remove(); window.__studioHudOverlays = window.__studioHudOverlays.filter((x) => x.el !== el); }, 400);
+    }, Number(durationMs) || 1500);
+    return { ok: true };
+  };
+
+  window.__studioHudWatermark = (text, opacity) => {
+    const el = document.createElement('div');
+    el.textContent = String(text || 'archdisc Studio');
+    el.style.cssText = `position:absolute;bottom:6px;right:8px;` +
+      `font:500 10px/1 ui-sans-serif,system-ui;color:rgba(236,243,251,${opacity ?? 0.4});` +
+      `letter-spacing:0.08em;pointer-events:none;text-transform:uppercase`;
+    _addHud(el, 'watermark');
+    return { ok: true };
+  };
+
+  window.__studioHudCornerStats = () => {
+    let el = document.querySelector('[data-studio-hud-stats]');
+    if (!el) {
+      el = document.createElement('div');
+      el.dataset.studioHudStats = '';
+      el.style.cssText = `position:absolute;top:8px;right:8px;` +
+        `padding:6px 10px;font:500 11px/1.4 ui-monospace,Menlo,monospace;color:#ecf3fb;` +
+        `background:rgba(15,20,28,0.78);border:1px solid #26334a;border-radius:6px;` +
+        `pointer-events:none;text-align:right`;
+      _addHud(el, 'stats');
+    }
+    const tick = () => {
+      const stats = window.__studioGetSceneStats?.();
+      const fps = window.__studioGetFps?.();
+      if (!stats?.ok) { el._timer = setTimeout(tick, 500); return; }
+      el.innerHTML =
+        `${stats.meshes} mesh · ${stats.verts} v · ${stats.triangles} t<br>` +
+        `${fps?.fps ? fps.fps.toFixed(0) + ' fps' : '—'}` +
+        (stats.drawCalls != null ? ` · ${stats.drawCalls} dc` : '');
+      el._timer = setTimeout(tick, 500);
+    };
+    tick();
+    return { ok: true };
+  };
+
+  window.__studioHudClearAll = () => {
+    let n = 0;
+    for (const r of window.__studioHudOverlays.slice()) {
+      if (r.el?.parentNode) { r.el.parentNode.removeChild(r.el); n++; }
+      if (r.el?._timer) clearTimeout(r.el._timer);
+    }
+    window.__studioHudOverlays.length = 0;
+    // also drop the corner-stats poll if attached
+    const cs = document.querySelector('[data-studio-hud-stats]');
+    if (cs?._timer) clearTimeout(cs._timer);
+    return { ok: true, removed: n };
+  };
+
+  window.__studioHudList = () => ({
+    ok: true,
+    count: window.__studioHudOverlays.length,
+    items: window.__studioHudOverlays.map((r) => ({ kind: r.kind, text: r.el.textContent?.slice(0, 60) })),
+  });
+
   // Slice 663 — Debug visualisers. Each helper is tagged so the
   // bulk-clear op can scrub them without touching real geometry.
   if (!window.__studioDebugHelpers) window.__studioDebugHelpers = [];
