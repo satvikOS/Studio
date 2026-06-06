@@ -52,8 +52,15 @@ function _ensureSim(uuid) {
     vx0: _f32(n), vy0: _f32(n), vz0: _f32(n),
     dens: _f32(n), dens0: _f32(n),
     temp: _f32(n), temp0: _f32(n),
+    // Slice 731 — combustion: a fuel field (gas/vapour) that ignites above
+    // the ignition temperature, releasing heat + producing smoke + a
+    // volumetric expansion (divergence source), then is consumed. `flame`
+    // tracks the per-cell reaction rate this step (Houdini Pyro 'flame'
+    // field / Blender Mantaflow fire) for stats + future flame shading.
+    fuel: _f32(n), fuel0: _f32(n), flame: _f32(n),
     p: _f32(n), div: _f32(n), curl: _f32(n),
     emitters: [],
+    fuelEmitters: [],
     frame: 0,
     // Tunables (Houdini Pyro shelf defaults, scaled to cell units).
     params: {
@@ -63,8 +70,16 @@ function _ensureSim(uuid) {
       dissipation: 0.04,  // density fade per second
       cooling: 0.6,       // temperature cooling per second
       iters: 12,          // Gauss-Seidel projection iterations
+      // ── combustion (slice 731) ──
+      ignitionTemp: 0.18, // fuel ignites once temperature exceeds this
+      burnRate: 2.2,      // fraction of available fuel burnt per second
+      heatRelease: 3.0,   // temperature added per unit fuel burnt
+      smokeRelease: 1.4,  // density (soot) added per unit fuel burnt
+      expansion: 2.0,     // volumetric expansion (divergence) per unit burn
     },
   };
+  // Per-cell combustion divergence source injected into the next project().
+  sim.burnDiv = _f32(n);
   _sims.set(uuid, sim);
   return sim;
 }
@@ -123,7 +138,7 @@ function project(s) {
           vx[i + 1] - vx[i - 1] +
           vy[i + sx] - vy[i - sx] +
           vz[i + sx * sy] - vz[i - sx * sy]
-        );
+        ) + (s.burnDiv ? s.burnDiv[i] : 0); // combustion expansion source
         p[i] = 0;
       }
   setBnd(s, 0, div);
@@ -245,6 +260,63 @@ function applyEmitters(s, dt) {
   }
 }
 
+// Slice 731 — inject fuel + a pilot heat (the ignition spark) from every
+// registered fuel emitter (a gas burner / jet). Fuel accumulates; the
+// pilot heat seeds the ignition so combustion can self-sustain.
+function applyFuelEmitters(s, dt) {
+  const { sx, sy, sz } = s;
+  for (const e of s.fuelEmitters) {
+    const cx = e.x, cy = e.y, cz = e.z, r = e.radius;
+    const r2 = r * r;
+    const x0 = Math.max(1, Math.floor(cx - r)), x1 = Math.min(sx - 2, Math.ceil(cx + r));
+    const y0 = Math.max(1, Math.floor(cy - r)), y1 = Math.min(sy - 2, Math.ceil(cy + r));
+    const z0 = Math.max(1, Math.floor(cz - r)), z1 = Math.min(sz - 2, Math.ceil(cz + r));
+    for (let z = z0; z <= z1; z++)
+      for (let y = y0; y <= y1; y++)
+        for (let x = x0; x <= x1; x++) {
+          const dx = x - cx, dy = y - cy, dz = z - cz;
+          const dist2 = dx * dx + dy * dy + dz * dz;
+          if (dist2 > r2) continue;
+          const fall = 1 - Math.sqrt(dist2) / r;
+          const i = IX(s, x, y, z);
+          s.fuel[i] = Math.min(3.0, s.fuel[i] + e.fuel * fall * dt);
+          // Pilot light: keep the emitter core hot enough to ignite.
+          if (e.pilot) s.temp[i] = Math.max(s.temp[i], s.params.ignitionTemp * 1.6 * fall);
+          s.vy[i] += e.velocity * fall * dt;
+        }
+  }
+}
+
+// Slice 731 — combustion step. Any cell whose temperature exceeds the
+// ignition threshold burns a fraction of its fuel this step, releasing
+// heat (fire), soot (smoke density), and a volumetric expansion that
+// feeds the next pressure-projection as a divergence source (burning gas
+// expands and pushes outward — the upward fire-jet impulse). Mirrors the
+// Houdini Pyro combustion model / Blender Mantaflow fire reaction.
+function combust(s, dt) {
+  const { n, temp, fuel, dens, flame, burnDiv, vy } = s;
+  const { ignitionTemp, burnRate, heatRelease, smokeRelease, expansion } = s.params;
+  let totalBurn = 0;
+  const rate = Math.min(1, burnRate * dt);
+  for (let i = 0; i < n; i++) {
+    const f = fuel[i];
+    burnDiv[i] = 0;
+    if (f <= 1e-4 || temp[i] < ignitionTemp) { flame[i] = 0; continue; }
+    const burnt = f * rate;            // fuel consumed this step
+    fuel[i] = f - burnt;
+    temp[i] = Math.min(3.0, temp[i] + heatRelease * burnt);
+    dens[i] = Math.min(3.0, dens[i] + smokeRelease * burnt);
+    flame[i] = burnt / Math.max(dt, 1e-3); // reaction rate (flame field)
+    // Expansion: a negative-divergence (outflow) source so project() adds
+    // outward velocity. Scaled small so the solver stays stable.
+    burnDiv[i] = -expansion * burnt;
+    // A little extra upward kick at the reaction front (fire licks up).
+    vy[i] += heatRelease * burnt * 0.5;
+    totalBurn += burnt;
+  }
+  return totalBurn;
+}
+
 // Write the float density+temperature fields back into the volume's Uint8
 // RGBA buffer (R=density, G=temperature) and flag the texture dirty so the
 // raymarch proxy re-renders.
@@ -252,14 +324,19 @@ function writeBack(s) {
   const v = getVolume(s.uuid);
   if (!v) return;
   const data = v.data;
-  const { n, dens, temp } = s;
+  const { n, dens, temp, flame } = s;
   for (let i = 0; i < n; i++) {
     const di = i * 4;
     let d = dens[i]; if (d < 0) d = 0; if (d > 1) d = 1;
     let t = temp[i]; if (t < 0) t = 0; if (t > 1) t = 1;
+    // B channel = flame / reaction intensity (slice 731) so the raymarch
+    // proxy can emit incandescent fire colour at burning cells. Normalised
+    // by a reference reaction rate so the flame ramp (red→orange→yellow→
+    // white) spreads across its range instead of saturating to white.
+    let fl = flame ? flame[i] / 4.0 : 0; if (fl < 0) fl = 0; if (fl > 1) fl = 1;
     data[di]     = (d * 255) | 0;
     data[di + 1] = (t * 255) | 0;
-    data[di + 2] = 0;
+    data[di + 2] = (fl * 255) | 0;
     data[di + 3] = 255;
   }
   if (v.tex) v.tex.needsUpdate = true;
@@ -296,6 +373,33 @@ export function clearEmitters(uuid) {
   return { ok: true };
 }
 
+// Slice 731 — register a fuel jet / gas burner. Fuel accumulates in the
+// grid; with `pilot` true the emitter core stays hot enough to ignite,
+// so the fire self-sustains (a pilot light). Without a pilot the fuel
+// only burns when an external heat source reaches it.
+export function addFuelEmitter(uuid, x, y, z, radius, fuel, velocity, pilot) {
+  const sim = _ensureSim(uuid);
+  if (!sim) return { ok: false, error: 'no sim' };
+  const e = {
+    x: Number(x) || sim.sx / 2,
+    y: Number.isFinite(y) ? Number(y) : sim.sy * 0.14,
+    z: Number(z) || sim.sz / 2,
+    radius: Math.max(1, Number(radius) || Math.max(2, sim.sx * 0.1)),
+    fuel: Number.isFinite(fuel) ? Number(fuel) : 6.0,
+    velocity: Number.isFinite(velocity) ? Number(velocity) : 6.0,
+    pilot: pilot === undefined ? true : !!pilot,
+  };
+  sim.fuelEmitters.push(e);
+  return { ok: true, count: sim.fuelEmitters.length, emitter: e };
+}
+
+export function clearFuelEmitters(uuid) {
+  const sim = _sims.get(uuid);
+  if (!sim) return { ok: false };
+  sim.fuelEmitters.length = 0;
+  return { ok: true };
+}
+
 export function setPyroParam(uuid, key, value) {
   const sim = _ensureSim(uuid);
   if (!sim) return { ok: false };
@@ -312,10 +416,13 @@ export function stepPyro(uuid, dt, steps) {
   const ns = Math.max(1, Math.min(60, Math.floor(steps) || 1));
   for (let it = 0; it < ns; it++) {
     applyEmitters(sim, h);
+    applyFuelEmitters(sim, h);        // slice 731 — inject fuel + pilot heat
+    // combustion: burn fuel where hot → heat + smoke + expansion source
+    combust(sim, h);
     // velocity step
     buoyancy(sim, h);
     vorticityConfinement(sim, h);
-    project(sim);
+    project(sim);                     // burnDiv expansion folded in here
     sim.vx0.set(sim.vx); sim.vy0.set(sim.vy); sim.vz0.set(sim.vz);
     advect(sim, 1, sim.vx, sim.vx0, sim.vx0, sim.vy0, sim.vz0, h);
     advect(sim, 2, sim.vy, sim.vy0, sim.vx0, sim.vy0, sim.vz0, h);
@@ -324,8 +431,10 @@ export function stepPyro(uuid, dt, steps) {
     // scalar step
     sim.dens0.set(sim.dens);
     sim.temp0.set(sim.temp);
+    sim.fuel0.set(sim.fuel);
     advect(sim, 0, sim.dens, sim.dens0, sim.vx, sim.vy, sim.vz, h);
     advect(sim, 0, sim.temp, sim.temp0, sim.vx, sim.vy, sim.vz, h);
+    advect(sim, 0, sim.fuel, sim.fuel0, sim.vx, sim.vy, sim.vz, h);
     // dissipation + cooling
     const dDecay = Math.max(0, 1 - sim.params.dissipation * h);
     const tDecay = Math.max(0, 1 - sim.params.cooling * h);
@@ -340,6 +449,7 @@ export function pyroStats(uuid) {
   const sim = _sims.get(uuid);
   if (!sim) return { ok: false };
   let totalDens = 0, maxTemp = 0, maxSpeed = 0, active = 0;
+  let totalFuel = 0, burningCells = 0, maxFlame = 0;
   for (let i = 0; i < sim.n; i++) {
     const d = sim.dens[i];
     totalDens += d;
@@ -347,6 +457,10 @@ export function pyroStats(uuid) {
     if (sim.temp[i] > maxTemp) maxTemp = sim.temp[i];
     const sp = Math.abs(sim.vx[i]) + Math.abs(sim.vy[i]) + Math.abs(sim.vz[i]);
     if (sp > maxSpeed) maxSpeed = sp;
+    totalFuel += sim.fuel[i];
+    const fl = sim.flame[i];
+    if (fl > 1e-3) burningCells++;
+    if (fl > maxFlame) maxFlame = fl;
   }
   return {
     ok: true,
@@ -357,6 +471,11 @@ export function pyroStats(uuid) {
       maxTemperature: maxTemp,
       maxSpeed,
       emitters: sim.emitters.length,
+      // slice 731 — combustion
+      totalFuel,
+      fuelEmitters: sim.fuelEmitters.length,
+      burningCells,
+      maxFlame,
     },
   };
 }
@@ -366,6 +485,7 @@ export function resetPyro(uuid) {
   if (!sim) return { ok: false };
   sim.vx.fill(0); sim.vy.fill(0); sim.vz.fill(0);
   sim.dens.fill(0); sim.temp.fill(0);
+  sim.fuel.fill(0); sim.flame.fill(0); sim.burnDiv.fill(0);
   sim.frame = 0;
   writeBack(sim);
   return { ok: true };

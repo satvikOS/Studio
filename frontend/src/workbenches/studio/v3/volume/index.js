@@ -11,6 +11,7 @@ import { cloudPuff, firePlume, groundFog, plasma } from './generators.js';
 import {
   initPyro, addEmitter, clearEmitters, setPyroParam, stepPyro,
   pyroStats, resetPyro, deletePyro, listPyro,
+  addFuelEmitter, clearFuelEmitters,
 } from './pyro.js';
 
 let _installed = false;
@@ -66,6 +67,10 @@ export function installVolume() {
     __studioPyroAddEmitter: (x, y, z, radius, density, temperature, velocity) =>
       addEmitter(_activeUuid, x, y, z, radius, density, temperature, velocity),
     __studioPyroClearEmitters: () => clearEmitters(_activeUuid),
+    // Slice 731 — combustion: fuel jets / gas burners.
+    __studioPyroAddFuelEmitter: (x, y, z, radius, fuel, velocity, pilot) =>
+      addFuelEmitter(_activeUuid, x, y, z, radius, fuel, velocity, pilot),
+    __studioPyroClearFuelEmitters: () => clearFuelEmitters(_activeUuid),
     __studioPyroSetParam: (key, value) => setPyroParam(_activeUuid, key, value),
     __studioPyroStep: (dt, steps) => stepPyro(_activeUuid, dt, steps),
     __studioPyroStats: () => pyroStats(_activeUuid),
@@ -84,6 +89,24 @@ export function installVolume() {
       clearEmitters(_activeUuid);
       addEmitter(_activeUuid, 32, 10, 32, 7, 5.0, 1.0, 9.0);
       const n = Math.max(1, Math.min(240, Math.floor(frames) || 30));
+      let last = null;
+      for (let i = 0; i < n; i++) last = stepPyro(_activeUuid, 0.1, 1);
+      return { ok: true, uuid: _activeUuid, frames: n, stats: last };
+    },
+
+    // Slice 731 — one-shot combustion demo (Houdini Pyro 'Campfire' /
+    // Blender 'Fire' quick-effect): a fuel jet with a pilot light that
+    // self-ignites into a sustained flame, producing fire + rising smoke.
+    __studioPyroCampfire: (frames) => {
+      const r = _create(64, 64, 64, 0.05);
+      if (!r.ok) return r;
+      const init = initPyro(_activeUuid);
+      if (!init.ok) return init;
+      clearEmitters(_activeUuid);
+      clearFuelEmitters(_activeUuid);
+      // Pilot-lit fuel jet at the base → ignites and sustains.
+      addFuelEmitter(_activeUuid, 32, 8, 32, 6, 7.0, 7.0, true);
+      const n = Math.max(1, Math.min(240, Math.floor(frames) || 40));
       let last = null;
       for (let i = 0; i < n; i++) last = stepPyro(_activeUuid, 0.1, 1);
       return { ok: true, uuid: _activeUuid, frames: n, stats: last };

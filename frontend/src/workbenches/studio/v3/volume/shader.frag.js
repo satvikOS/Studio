@@ -49,6 +49,22 @@ vec3 _blackbody(float t) {
   return vec3(t * 1.7, t * 0.8, t * 0.3);
 }
 
+// Slice 731 — incandescent flame colour ramp from the combustion 'flame'
+// field (B channel). Cool reaction → deep red, hotter → orange → yellow →
+// white-hot core, the classic fire gradient. This is EMISSIVE (adds light)
+// so burning cells glow rather than merely tint the smoke.
+vec3 _flameColor(float f) {
+  f = clamp(f, 0.0, 1.0);
+  vec3 red    = vec3(0.85, 0.12, 0.02);
+  vec3 orange = vec3(1.0,  0.45, 0.05);
+  vec3 yellow = vec3(1.0,  0.9,  0.35);
+  vec3 white  = vec3(1.0,  1.0,  0.92);
+  vec3 c = mix(red, orange, smoothstep(0.0, 0.35, f));
+  c = mix(c, yellow, smoothstep(0.35, 0.7, f));
+  c = mix(c, white, smoothstep(0.7, 1.0, f));
+  return c;
+}
+
 void main() {
   vec3 ro = uCameraPos;
   vec3 rd = normalize(vWorldPos - uCameraPos);
@@ -69,6 +85,15 @@ void main() {
     vec4 sample_ = texture(uVolume, uvw);
     float density = sample_.r * uDensityScale;
     float temperature = sample_.g * uTempScale;
+    float flame = sample_.b; // slice 731 — combustion reaction intensity
+    // Fire is emissive: burning cells contribute light + opacity even when
+    // the smoke density there is still low (the flame front leads the soot).
+    if (flame > 0.004) {
+      vec3 fcol = _flameColor(flame) * (1.5 + flame * 3.0);
+      float falpha = clamp(flame * step * 9.0, 0.0, 1.0);
+      acc.rgb += (1.0 - acc.a) * falpha * fcol;
+      acc.a += (1.0 - acc.a) * falpha;
+    }
     if (density > 0.001) {
       // Phong-ish self-shadowing along the light direction.
       vec3 lightStep = uLightDir * 0.05;
