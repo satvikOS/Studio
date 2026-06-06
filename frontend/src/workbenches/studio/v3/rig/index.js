@@ -17,7 +17,12 @@ import {
   setBoneRotation,
   removeArmature,
 } from './armature.js';
-import { bindMeshToArmature } from './skin.js';
+import {
+  bindMeshToArmature,
+  autoWeight,
+  poseByName,
+  unbindMesh,
+} from './skin.js';
 import { solveIK } from './ik.js';
 import { showSkeletonHelper, hideSkeletonHelper } from './helpers.js';
 import { registerOp } from '../common/registry.js';
@@ -56,6 +61,20 @@ export function installRigging() {
     solveIK(effectorBoneUuid, targetWorldPos, iters, chain),
     'CCD IK: rotate the chain so the effector bone reaches a world-space target.');
 
+  // Slice 754 — Maya skinning ops.
+  reg('__studioSkinAutoWeight', (meshUuid, armUuid, opts) =>
+    autoWeight(meshUuid, armUuid, opts || {}),
+    'Auto-weight a Mesh against an armature (segment-distance falloff, quadratic dropoff, top-4 per vert, 2-pass Laplacian smoothing). Stamps skinIndex/skinWeight on the geometry; does NOT bind.');
+  reg('__studioSkinBindMesh', (meshUuid, armUuid, opts) =>
+    bindMeshToArmature(meshUuid, armUuid, opts || {}),
+    'Auto-weight (if needed) then bind: swap Mesh → SkinnedMesh and bind to skeleton in mesh world matrix.');
+  reg('__studioSkinPose', (armUuid, poses) =>
+    poseByName(armUuid, poses || {}),
+    'Maya-style bulk pose: set bone local Euler rotations by NAME ({Spine:[0,0,1.2], LeftArm:[0,1.5,0]}).');
+  reg('__studioSkinUnbind', (skinnedMeshUuid) =>
+    unbindMesh(skinnedMeshUuid),
+    'Unbind a SkinnedMesh: revert to a plain Mesh, strip skin attrs, keep armature alive.');
+
   return { ok: true, alreadyInstalled: false };
 }
 
@@ -66,6 +85,8 @@ export function uninstallRigging() {
     '__studioRigGetBone', '__studioRigSetBoneRotation', '__studioRigRemoveArmature',
     '__studioRigBindMesh', '__studioRigShowSkeleton', '__studioRigHideSkeleton',
     '__studioRigSolveIK',
+    // Slice 754 — Maya skinning ops.
+    '__studioSkinAutoWeight', '__studioSkinBindMesh', '__studioSkinPose', '__studioSkinUnbind',
   ]) {
     try { delete window[k]; } catch (_) {}
     if (typeof window.__studioCommandUnregister === 'function') {
