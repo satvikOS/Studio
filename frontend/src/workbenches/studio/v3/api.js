@@ -7444,6 +7444,10 @@ export function registerV3Api() {
   import('./rhinosurf/autoload.js').catch(() => {});
   // Slice 706 — Hair-shell fur (Maya / Blender XGen parity).
   import('./fur/autoload.js').catch(() => {});
+  // Slice 707 — Cycles Light Groups (per-group gain + isolated passes).
+  import('./lightgroups/autoload.js').catch(() => {});
+  // Slice 707 — Real B-spline NURBS surface evaluator.
+  import('./nurbs/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
