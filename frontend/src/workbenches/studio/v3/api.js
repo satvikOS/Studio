@@ -7478,6 +7478,12 @@ export function registerV3Api() {
   import('./mdfit/autoload.js').catch(() => {});
   // Slice 712 — Universal mesh import (STL/PLY/OFF/3MF).
   import('./uniconvert/autoload.js').catch(() => {});
+  // Slice 713 — KeyShot-style stage lighting setups.
+  import('./stagelighting/autoload.js').catch(() => {});
+  // Slice 713 — Unreal Sequencer cinematic tracks.
+  import('./cinetracks/autoload.js').catch(() => {});
+  // Slice 713 — Cinema 4D XPresso visual scripting.
+  import('./xpresso/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
