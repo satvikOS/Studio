@@ -1,9 +1,11 @@
 // Slice 699 — Maya MASH-style motion graphics.
+// Slice 753 — wires the arrange / distribute / effector pipeline.
 
 import { registerOps } from '../common/registry.js';
 import {
   createNetwork, addNode, clearNodes, evaluate, listNetworks, deleteNetwork,
 } from './cloner.js';
+import { installMASHArrange } from './ops.js';
 
 let _installed = false;
 
@@ -23,4 +25,8 @@ export function installMASH() {
     window[name] = fn;
   }
   registerOps(ops, 'mograph', 'Maya MASH motion graphics — distribute/random/bend/twist/falloff/signal nodes');
+
+  // Slice 753: layered uppercase __studioMASH* ops for arrange +
+  // distribute + effector pipeline (real Maya MASH parity).
+  installMASHArrange();
 }
