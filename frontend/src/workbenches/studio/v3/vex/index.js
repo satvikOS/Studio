@@ -23,6 +23,17 @@ import {
 } from './runner.js';
 import { mountPanel, unmountPanel } from '../common/panel.js';
 import { registerOp, unregisterOps } from '../common/registry.js';
+// Real Houdini-VEX flavour wrangle (slice 745) — distinct from the ASL
+// ops above. Capitalised `__studioVEX*` namespace.
+import {
+  compileVex as _vexCompile,
+  runWrangleOnGeometry as _vexRunOnGeom,
+  runWrangleOnMesh as _vexRunOnMesh,
+  getActiveMesh as _vexActive,
+  findMeshByUuid as _vexFindUuid,
+  BUILTIN_NAMES as _VEX_BUILTINS,
+  attrNames as _vexAttrNames,
+} from './vexwrangle.js';
 
 let _installed = false;
 let _panel = null;
@@ -130,6 +141,36 @@ export function installVex() {
   reg('__studioVexLimits', () => ({ ok: true, maxVertices: MAX_VERTS }),
     'Return runtime limits (vertex cap, etc).');
 
+  // ── Real Houdini VEX-flavour wrangle (slice 745) ───────────────────
+  // Distinct from the ASL ops above: typed locals (float/int/vec3),
+  // @P/@N/@Cd/@id/@pt/@npt attribute model, {x,y,z} vec3 literal,
+  // += -= *= /=, if/else/return, swizzle, full built-in set.
+  reg('__studioVEXCompile', (source) => {
+    const r = _vexCompile(source);
+    if (r.ok) return { ok: true };
+    return { ok: false, error: r.error, line: r.line, col: r.col };
+  }, 'Parse-only check for a real-VEX wrangle source.');
+
+  reg('__studioVEXRun', (source) => {
+    const mesh = _vexActive();
+    if (!mesh) return { ok: false, error: 'no selection' };
+    return _vexRunOnMesh(mesh, source);
+  }, 'Run a real-VEX wrangle against the active selection.');
+
+  reg('__studioVEXRunOnMesh', (uuid, source) => {
+    const mesh = _vexFindUuid(uuid);
+    if (!mesh) return { ok: false, error: `mesh ${uuid} not found` };
+    return _vexRunOnMesh(mesh, source);
+  }, 'Run a real-VEX wrangle against a mesh by uuid.');
+
+  reg('__studioVEXBuiltins',
+    () => ({ ok: true, names: _VEX_BUILTINS.slice() }),
+    'List the real-VEX built-in function names.');
+
+  reg('__studioVEXAttrs',
+    () => ({ ok: true, attrs: _vexAttrNames() }),
+    'List the real-VEX attribute references.');
+
   return { ok: true, alreadyInstalled: false };
 }
 
@@ -142,6 +183,8 @@ export function uninstallVex() {
     '__studioVexEditorIsOpen',
     '__studioVexSetScript', '__studioVexGetScript',
     '__studioVexExamples', '__studioVexLoadExample', '__studioVexLimits',
+    '__studioVEXCompile', '__studioVEXRun', '__studioVEXRunOnMesh',
+    '__studioVEXBuiltins', '__studioVEXAttrs',
   ]);
   if (_panel) { unmountPanel('vex-editor'); _panel = null; }
   _editorOpen = false;
