@@ -7556,6 +7556,12 @@ export function registerV3Api() {
   import('./spsmartmat/autoload.js').catch(() => {});
   // Slice 726 — Workbench tab strip.
   import('./uiworkbenches/autoload.js').catch(() => {});
+  // Slice 727 — Maya constraint system.
+  import('./mayaconst/autoload.js').catch(() => {});
+  // Slice 727 — Houdini POP chain.
+  import('./houdinipop/autoload.js').catch(() => {});
+  // Slice 727 — HDRI/IBL environment presets.
+  import('./iblpresets/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
