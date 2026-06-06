@@ -7566,6 +7566,12 @@ export function registerV3Api() {
   import('./udimpaint/autoload.js').catch(() => {});
   // Slice 728 — Arch engineering: footings / joist / studs / rafters.
   import('./archeng/autoload.js').catch(() => {});
+  // Slice 729 — C4D Volume Builder + Volume Mesher.
+  import('./c4dvolume/autoload.js').catch(() => {});
+  // Slice 729 — Marvelous Designer real-time fitting.
+  import('./mdfit2/autoload.js').catch(() => {});
+  // Slice 729 — Unreal Sequencer canvas recording (webm/mp4 export).
+  import('./ueexport/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
