@@ -7524,6 +7524,12 @@ export function registerV3Api() {
   import('./skbom/autoload.js').catch(() => {});
   // Slice 720 — Marvelous Designer wear & fray events.
   import('./mdwear/autoload.js').catch(() => {});
+  // Slice 721 — Keyboard shortcuts manager.
+  import('./shortcuts/autoload.js').catch(() => {});
+  // Slice 721 — Bottom status bar.
+  import('./uistatusbar/autoload.js').catch(() => {});
+  // Slice 721 — ZBrush UV Master.
+  import('./zuvmaster/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
