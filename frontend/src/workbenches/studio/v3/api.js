@@ -7538,6 +7538,12 @@ export function registerV3Api() {
   import('./niagaraui/autoload.js').catch(() => {});
   // Slice 723 — Substance Designer function graphs.
   import('./sdfuncs/autoload.js').catch(() => {});
+  // Slice 724 — C4D MoGraph Tracer (motion trails).
+  import('./c4dtracer/autoload.js').catch(() => {});
+  // Slice 724 — Cascadeur trajectory editor.
+  import('./castrajectory/autoload.js').catch(() => {});
+  // Slice 724 — F1 help panel.
+  import('./uihelp/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
