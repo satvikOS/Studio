@@ -7611,6 +7611,8 @@ export function registerV3Api() {
   import('./gltfx/autoload.js').catch(() => {});
   // Slice 769 — Substance Painter smart-material library (30+ presets).
   import('./smatlib/autoload.js').catch(() => {});
+  // Slice 770 — HDRI environment library (20 procedural presets + custom URL).
+  import('./hdrlib/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
