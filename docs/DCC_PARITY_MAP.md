@@ -39,7 +39,7 @@ tooltips, mirror the tool's algorithm + UX, and update this table.
 | Scatter / distribute points | PARTIAL | `geometryNodesDistributePoints` + foliage instancing |
 | Cell fracture / explode | DONE | `MOD_explode` cell fracture |
 | Rigid body dynamics (RBD) | DONE | real rigid-body solver (slice 166) — semi-implicit Euler, 3D momentum + gravity, sphere-proxy pairwise collision with impulse resolution + positional correction (bodies stack/settle, no interpenetration), mass-by-volume, ground + contact friction. Drives the VFX/Sim "Drop" tool; `__studioPhysicsStep`/`__studioPhysicsState` (also Unreal Chaos / Unity PhysX / Blender Rigid Body World). Sphere-proxy collision is the honest scope (not full convex) |
-| Volume / VDB | ABSENT | — |
+| Volume / VDB | PARTIAL | slice 730 — Eulerian GAS SIMULATION (Houdini Pyro FX / Blender Mantaflow / FumeFX / EmberGen): Stam stable-fluids solver on the slice-698 volume grid (`volume/pyro.js`) — semi-Lagrangian advect + Gauss-Seidel pressure-projection + buoyancy (hot rises, smoke mass sinks) + vorticity confinement (rolling/billowing detail) + dissipation/cooling; sphere emitters inject density+heat+updraft; float fields write back to the Data3DTexture the raymarch proxy renders. `__studioPyro*` ops + one-shot `__studioPyroIgnite`. Headed e2e proves the plume RISES (density centre-of-mass climbs above the emitter). Honest scope: container-bounded single-grid solver; sparse VDB tiles + fuel/combustion are the next frontier |
 
 ## Maya
 

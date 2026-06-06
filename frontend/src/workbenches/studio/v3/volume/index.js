@@ -6,6 +6,12 @@ import {
 } from './grid.js';
 import { buildProxyMesh, updateProxyParams } from './proxy.js';
 import { cloudPuff, firePlume, groundFog, plasma } from './generators.js';
+// Slice 730 — Pyro / gas simulation (Houdini Pyro FX, Blender Mantaflow,
+// FumeFX, EmberGen). Stam stable-fluids solver on the volume grid.
+import {
+  initPyro, addEmitter, clearEmitters, setPyroParam, stepPyro,
+  pyroStats, resetPyro, deletePyro, listPyro,
+} from './pyro.js';
 
 let _installed = false;
 let _params = { densityScale: 1.0, tempScale: 1.0, steps: 64, lightDir: [0.4, 0.7, 0.5] };
@@ -52,9 +58,39 @@ export function installVolume() {
     __studioVolumeSetSteps: _setSteps,
     __studioVolumeSetLightDir: _setLightDir,
     __studioVolumeGetActive: () => ({ ok: true, uuid: _activeUuid, params: { ..._params } }),
+
+    // ── Slice 730 — Pyro / gas simulation ──────────────────────────
+    // Eulerian stable-fluids solver. These operate on the active volume
+    // by default; pass an explicit uuid to target another.
+    __studioPyroInit: (uuid) => initPyro(uuid || _activeUuid),
+    __studioPyroAddEmitter: (x, y, z, radius, density, temperature, velocity) =>
+      addEmitter(_activeUuid, x, y, z, radius, density, temperature, velocity),
+    __studioPyroClearEmitters: () => clearEmitters(_activeUuid),
+    __studioPyroSetParam: (key, value) => setPyroParam(_activeUuid, key, value),
+    __studioPyroStep: (dt, steps) => stepPyro(_activeUuid, dt, steps),
+    __studioPyroStats: () => pyroStats(_activeUuid),
+    __studioPyroReset: () => resetPyro(_activeUuid),
+    __studioPyroDelete: (uuid) => deletePyro(uuid || _activeUuid),
+    __studioPyroList: () => ({ ok: true, sims: listPyro() }),
+
+    // Convenience: create a fresh smoke volume with a bottom-centre
+    // emitter and pre-roll N frames so a rising plume is immediately
+    // visible in the viewport (Houdini "Pyro Burst" shelf tool).
+    __studioPyroIgnite: (frames) => {
+      const r = _create(64, 64, 64, 0.05);
+      if (!r.ok) return r;
+      const init = initPyro(_activeUuid);
+      if (!init.ok) return init;
+      clearEmitters(_activeUuid);
+      addEmitter(_activeUuid, 32, 10, 32, 7, 5.0, 1.0, 9.0);
+      const n = Math.max(1, Math.min(240, Math.floor(frames) || 30));
+      let last = null;
+      for (let i = 0; i < n; i++) last = stepPyro(_activeUuid, 0.1, 1);
+      return { ok: true, uuid: _activeUuid, frames: n, stats: last };
+    },
   };
   for (const [name, fn] of Object.entries(ops)) {
     window[name] = fn;
   }
-  registerOps(ops, 'volume', 'Volumetric smoke/fire rendering');
+  registerOps(ops, 'volume', 'Volumetric smoke/fire rendering + Pyro gas simulation (Houdini Pyro / Blender Mantaflow)');
 }
