@@ -356,6 +356,99 @@ export const NODE_KINDS = {
     },
   },
 
+  // ─── Transform (translate / rotate / scale) ───────────────────────────
+  // Repositions a layer — the workhorse of any VFX comp (Nuke Transform,
+  // Fusion Transform, AE position/rotation/scale). Maps each OUTPUT pixel
+  // back through the inverse transform into the source and BILINEARLY
+  // samples, so edges stay smooth under sub-pixel motion and rotation.
+  // Pivot is the image centre. Outside-source samples are transparent.
+  transform: {
+    title: 'Transform',
+    category: 'transform',
+    defaultParams: () => ({ tx: 0, ty: 0, rotate: 0, scale: 1 }),
+    inputs: [{ name: 'image', type: 'image' }],
+    outputs: [{ name: 'image', type: 'image' }],
+    eval(ctx, ins) {
+      const src = resolveInput(ins, 'image', ctx);
+      const W = src.width, H = src.height;
+      const out = makeBuffer(W, H);
+      const p = this.params;
+      const tx = +p.tx || 0, ty = +p.ty || 0;
+      const ang = (+p.rotate || 0) * Math.PI / 180;
+      const sc = Math.abs(+p.scale) > 1e-4 ? +p.scale : 1e-4;
+      const cx = (W - 1) / 2, cy = (H - 1) / 2;
+      // Inverse transform: undo translate, then rotate by −ang, then /scale.
+      const cosA = Math.cos(-ang), sinA = Math.sin(-ang);
+      const sample = (fx, fy, ch) => {
+        const x0 = Math.floor(fx), y0 = Math.floor(fy);
+        const x1 = x0 + 1, y1 = y0 + 1;
+        const dx = fx - x0, dy = fy - y0;
+        const at = (xx, yy) => {
+          if (xx < 0 || xx >= W || yy < 0 || yy >= H) return 0;
+          return src.data[(yy * W + xx) * 4 + ch];
+        };
+        const top = at(x0, y0) * (1 - dx) + at(x1, y0) * dx;
+        const bot = at(x0, y1) * (1 - dx) + at(x1, y1) * dx;
+        return top * (1 - dy) + bot * dy;
+      };
+      const inBounds = (fx, fy) => fx >= -0.5 && fx <= W - 0.5 && fy >= -0.5 && fy <= H - 0.5;
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          // shift to pivot, undo translate
+          let px = x - cx - tx, py = y - cy - ty;
+          // undo rotation
+          let rx = px * cosA - py * sinA;
+          let ry = px * sinA + py * cosA;
+          // undo scale, back to source coords
+          const fx = rx / sc + cx, fy = ry / sc + cy;
+          const di = (y * W + x) * 4;
+          if (!inBounds(fx, fy)) { out.data[di + 3] = 0; continue; }
+          out.data[di]     = clamp8(Math.round(sample(fx, fy, 0)));
+          out.data[di + 1] = clamp8(Math.round(sample(fx, fy, 1)));
+          out.data[di + 2] = clamp8(Math.round(sample(fx, fy, 2)));
+          out.data[di + 3] = clamp8(Math.round(sample(fx, fy, 3)));
+        }
+      }
+      return out;
+    },
+  },
+
+  // ─── Crop ──────────────────────────────────────────────────────────────
+  // Keeps a rectangular region (left/top/right/bottom insets in pixels);
+  // everything outside is made transparent. Same output dimensions so the
+  // rest of the graph runs lock-step (Nuke Crop with "reformat" off).
+  crop: {
+    title: 'Crop',
+    category: 'transform',
+    defaultParams: () => ({ left: 0, top: 0, right: 0, bottom: 0 }),
+    inputs: [{ name: 'image', type: 'image' }],
+    outputs: [{ name: 'image', type: 'image' }],
+    eval(ctx, ins) {
+      const src = resolveInput(ins, 'image', ctx);
+      const W = src.width, H = src.height;
+      const out = makeBuffer(W, H);
+      const p = this.params;
+      const l = Math.max(0, Math.floor(+p.left || 0));
+      const t = Math.max(0, Math.floor(+p.top || 0));
+      const r = Math.max(0, Math.floor(+p.right || 0));
+      const b = Math.max(0, Math.floor(+p.bottom || 0));
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          const di = (y * W + x) * 4;
+          if (x < l || x >= W - r || y < t || y >= H - b) {
+            out.data[di + 3] = 0; // transparent outside crop
+            continue;
+          }
+          out.data[di]     = src.data[di];
+          out.data[di + 1] = src.data[di + 1];
+          out.data[di + 2] = src.data[di + 2];
+          out.data[di + 3] = src.data[di + 3];
+        }
+      }
+      return out;
+    },
+  },
+
   // ─── Chroma Keyer (green/blue-screen) ─────────────────────────────────
   // The flagship VFX compositing node (Nuke Keylight / Fusion Primatte /
   // OBS Chroma Key / Blender Keying node). Pulls a matte by measuring how

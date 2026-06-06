@@ -76,6 +76,8 @@ This map catalogs every Studio feature with its game-engine counterpart.
 | Chromatic Aberration  | Chromatic Aberration (PP Vol)  | Chromatic Aberration       |
 | Node compositor: Chroma Keyer | Composure keyer / OCIO | n/a (external) — slice 737: real green/blue-screen keyer in the node compositor (`compositor/nodes.js` `keyer`): screen-balance matte (keyChannel − max(others), normalised vs key colour, smoothstep clip-black/white) + DESPILL (suppress the key channel where it dominates the avg of the other two). Nuke Keylight / Fusion Primatte / OBS Chroma Key. e2e: green→alpha 0, subject→alpha 255, green-spill 200→115. `__studioCompositorNodeAdd('keyer')` + `NodeSetParam` + `EvaluateWith`. |
 | Node compositor: Glow / Bloom | Bloom (PostProcess) | Bloom | slice 737 — `compositor/nodes.js` `glow`: luminance bright-pass → separable box blur → screen-blend back (Nuke Glow / Fusion SoftGlow / Blender Glare). |
+| Node compositor: Transform | Composure transform | n/a — slice 738: `compositor/nodes.js` `transform`: inverse-mapped, BILINEARLY sampled translate/rotate/scale about the image centre; out-of-source → transparent (Nuke Transform / Fusion Transform / AE position-rotation-scale). e2e: tx=1 moves a pixel one column, scale=2 keeps centre bright. |
+| Node compositor: Crop | n/a | n/a — slice 738: `compositor/nodes.js` `crop`: keep an l/t/r/b inset rect, outside → transparent, same output dims (Nuke Crop reformat-off). e2e: crop(left=1,right=1) zeroes edge columns, keeps centre. |
 
 ## Geometry Nodes / procedural
 
