@@ -142,18 +142,11 @@ export function refresh() { if (_host) _render(); return { ok: true }; }
 export function install() {
   if (window.__studioMenuBarInstalled) return;
   window.__studioMenuBarInstalled = true;
-  // Wait a beat for autoloads to register, then mount + start auto-refreshing.
-  setTimeout(() => {
-    show();
-    // Periodically re-render so newly registered ops appear (e.g.,
-    // late dynamic-imports). Cheap — only touches DOM when count changed.
-    let prevCount = 0;
-    setInterval(() => {
-      const n = window.__studioCommandRegistry?.size || 0;
-      if (n !== prevCount) { prevCount = n; _render(); }
-    }, 1500);
-  }, 800);
-
+  // Slice 742 (UI fix): do NOT auto-show this fixed top:0 category menubar.
+  // The Forge-style V3 shell renders its own top bar (File/Edit/Select/
+  // View/Window/Help); auto-showing this produced a SECOND top bar
+  // (File…Geometry…Blueprints…All) overlapping the shell. The show/hide
+  // ops stay registered so it can be summoned deliberately if ever needed.
   window.__studioMenuBarShow = show;
   window.__studioMenuBarHide = hide;
   window.__studioMenuBarRefresh = refresh;

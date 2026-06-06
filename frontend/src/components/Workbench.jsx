@@ -15,6 +15,23 @@ import { ViewportProvider } from '../contexts/ViewportContext';
 import apiService from '../services/api';
 import '../styles/workbench.css';
 
+// Slice 742 (UI fix): the Studio V3 shell (Forge-style) owns its OWN
+// top bar, status bar, and Archie command bar. When V3 is active we must
+// NOT also render the legacy global chrome (AIConsole / StatusBarPro),
+// or the user sees a duplicated old Archie Chat/Code/Parametric panel and
+// a second status bar stacked under the clean shell.
+function isStudioV3Active() {
+  if (typeof window === 'undefined') return true;
+  try {
+    // Mirror WorkbenchStudio's gate: V3 is default-ON; only ?v3=0 or
+    // localStorage studioV3='0' opts back to the legacy V2 monolith.
+    const qp = new URLSearchParams(window.location.search).get('v3');
+    if (qp === '0') return false;
+    if (qp === '1') return true;
+    return window.localStorage.getItem('studioV3') !== '0';
+  } catch (_) { return true; }
+}
+
 /**
  * Main Workbench Container
  * Layout: Header (menus + actions) | Toolbar + Viewport + Properties | Footer (AI Console)
@@ -33,6 +50,9 @@ function WorkbenchContainer() {
     const [redoStack, setRedoStack] = useState([]);
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
     const [activeProjectId, setActiveProjectId] = useState(null);
+    // Slice 742: when the Forge-style V3 shell is active, suppress the
+    // legacy global chrome that the shell already provides itself.
+    const v3Active = isStudioV3Active();
     // Rollback column visibility — driven by the live kernel HistoryLog.
     // The RollbackBar component returns null when the log is empty so we
     // collapse the grid column to 0 width to avoid an empty gap between
@@ -167,7 +187,12 @@ function WorkbenchContainer() {
     return (
         <ViewportProvider>
             <div className="workbench-container">
-                {/* TOP HEADER - Application menus + utility actions */}
+                {/* TOP HEADER - Application menus + utility actions.
+                    Suppressed under V3: the Forge-style shell renders its
+                    own top bar (brand + File/Edit/View menus + search +
+                    undo/redo/save/export), so showing this too would stack
+                    two header rows. */}
+                {!v3Active && (
                 <header className="workbench-header">
                     <div className="header-brand">
                         <h1 className="workbench-title">ArchDisc Studio</h1>
@@ -228,6 +253,7 @@ function WorkbenchContainer() {
                         </button>
                     </div>
                 </header>
+                )}
 
                 {/*
                  * STAGE — the fixed-viewport area. The 3D viewport occupies
@@ -265,11 +291,14 @@ function WorkbenchContainer() {
                     </aside>
                 </div>
 
-                {/* STATUS BAR */}
-                <StatusBarPro />
+                {/* STATUS BAR — suppressed under V3 (the shell has its own). */}
+                {!v3Active && <StatusBarPro />}
 
-                {/* BOTTOM FOOTER - AI CONSOLE (Chat/Code Terminal) */}
-                <AIConsole />
+                {/* BOTTOM FOOTER - AI CONSOLE (legacy Archie Chat/Code/
+                    Parametric). Suppressed under V3: the Forge-style shell
+                    renders its own single Archie command bar, so mounting
+                    this too produced the duplicated "old + new" Archie bars. */}
+                {!v3Active && <AIConsole />}
 
                 {/* Command Palette Overlay */}
                 {commandPaletteOpen && (

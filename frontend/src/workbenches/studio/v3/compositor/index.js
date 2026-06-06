@@ -117,6 +117,11 @@ function mountOutputCanvas() {
     'image-rendering:pixelated',
     'pointer-events:none',
     'box-shadow:0 6px 24px rgba(0,0,0,0.45)',
+    // Slice 742 (UI fix): hidden until the compositor actually paints a
+    // frame. Previously it mounted as an opaque black box pinned to the
+    // bottom-right of every Studio session even when no compositing was
+    // happening. paintOutput() reveals it; clearOutput() hides it again.
+    'display:none',
   ].join(';');
   document.body.appendChild(_outputCanvas);
   return _outputCanvas;
@@ -135,6 +140,7 @@ function paintOutput(buf) {
   const id = ctx.createImageData(buf.width, buf.height);
   id.data.set(buf.data);
   ctx.putImageData(id, 0, 0);
+  _outputCanvas.style.display = 'block'; // reveal now that we have a frame
   let dataUrl = null;
   try { dataUrl = _outputCanvas.toDataURL('image/png'); } catch (_) { dataUrl = null; }
   return { ok: true, dataUrl, width: buf.width, height: buf.height };
@@ -144,6 +150,7 @@ function clearOutput() {
   if (!_outputCanvas) return { ok: true };
   const ctx = _outputCanvas.getContext('2d');
   ctx.clearRect(0, 0, _outputCanvas.width, _outputCanvas.height);
+  _outputCanvas.style.display = 'none'; // hide the empty overlay again
   return { ok: true };
 }
 

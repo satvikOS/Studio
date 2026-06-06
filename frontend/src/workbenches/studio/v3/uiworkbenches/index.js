@@ -23,5 +23,10 @@ export function installUIWorkbenches() {
     window[name] = fn;
   }
   registerOps(ops, 'multiview', 'Workbench tab strip — Modeling / Sculpt / Anim / Render / Sim / Compositing');
-  setTimeout(() => enable(), 600);
+  // Slice 742 (UI fix): do NOT auto-mount the floating tab strip. The V3
+  // shell already owns top-level navigation (the discipline rail + the
+  // horizontal discipline buttons), so auto-enabling this legacy strip
+  // produced a second, non-Forge-styled tab row overlapping the shell.
+  // The ops remain registered so it can still be toggled on deliberately
+  // via __studioWorkbenchesEnable for the V2 monolith / debugging.
 }

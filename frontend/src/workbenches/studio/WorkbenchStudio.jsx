@@ -19539,11 +19539,19 @@ function WorkbenchStudioV2({ headless = false } = {}) {
 // hooks rules intact (no early return inside a hook-using component).
 function WorkbenchStudio() {
   const [v3Enabled] = useState(() => {
-    if (typeof window === 'undefined') return false;
+    if (typeof window === 'undefined') return true;
     try {
-      return new URLSearchParams(window.location.search).get('v3') === '1'
-        || window.localStorage.getItem('studioV3') === '1';
-    } catch (_) { return false; }
+      // Slice 742 (UI fix): the Forge-style V3 shell is now the DEFAULT.
+      // Only an explicit opt-out (?v3=0 or localStorage studioV3='0') falls
+      // back to the legacy V2 monolith. Previously V3 required an explicit
+      // opt-IN, so users launching normally saw the messy V2 Blender-clone
+      // (old centred welcome card + old Archie Chat/Code/Parametric bar)
+      // instead of the clean Forge-style shell.
+      const qp = new URLSearchParams(window.location.search).get('v3');
+      if (qp === '0') return false;
+      if (qp === '1') return true;
+      return window.localStorage.getItem('studioV3') !== '0';
+    } catch (_) { return true; }
   });
   if (v3Enabled) {
     const mode = (() => {
