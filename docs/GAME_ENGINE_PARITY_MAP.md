@@ -74,6 +74,8 @@ This map catalogs every Studio feature with its game-engine counterpart.
 | Pixelate              | Custom material PostProcess    | Pixelate shader             |
 | Lens Distortion       | Lens Distortion (PP Volume)    | Camera Lens Distortion     |
 | Chromatic Aberration  | Chromatic Aberration (PP Vol)  | Chromatic Aberration       |
+| Node compositor: Chroma Keyer | Composure keyer / OCIO | n/a (external) — slice 737: real green/blue-screen keyer in the node compositor (`compositor/nodes.js` `keyer`): screen-balance matte (keyChannel − max(others), normalised vs key colour, smoothstep clip-black/white) + DESPILL (suppress the key channel where it dominates the avg of the other two). Nuke Keylight / Fusion Primatte / OBS Chroma Key. e2e: green→alpha 0, subject→alpha 255, green-spill 200→115. `__studioCompositorNodeAdd('keyer')` + `NodeSetParam` + `EvaluateWith`. |
+| Node compositor: Glow / Bloom | Bloom (PostProcess) | Bloom | slice 737 — `compositor/nodes.js` `glow`: luminance bright-pass → separable box blur → screen-blend back (Nuke Glow / Fusion SoftGlow / Blender Glare). |
 
 ## Geometry Nodes / procedural
 

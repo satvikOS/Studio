@@ -25,6 +25,7 @@ import {
   createGraph, addNode, removeNode, connect, disconnect,
   evaluate as evalGraph, toJSON, fromJSON,
 } from './graph.js';
+import { listKinds as nodeKinds } from './nodes.js';
 import CompositorEditor from './CompositorEditor.jsx';
 import { mountPanel, unmountPanel } from '../common/panel.js';
 import { registerOp } from '../common/registry.js';
@@ -304,6 +305,35 @@ export function installCompositor() {
 
   // Eval
   window.__studioCompositorEvaluate = () => evaluateSync();
+  // Slice 737 — set a parameter on a node (keyer thresholds, blur radius,
+  // glow intensity, …) and re-render. Mirrors the editor's param sliders.
+  window.__studioCompositorNodeSetParam = (uuid, key, value) => {
+    const n = _graph.nodes.get(uuid);
+    if (!n) return { ok: false, error: 'no such node' };
+    n.params[key] = value;
+    renderEditor();
+    return { ok: true, uuid, key, value: n.params[key] };
+  };
+  // Slice 737 — evaluate the graph against a CALLER-SUPPLIED source image
+  // ({ width, height, data:[...] }) instead of the viewport capture. Lets
+  // tools (and tests) push a known frame through the node graph and read
+  // back the processed result deterministically. Returns the output
+  // buffer's pixels so a keyer matte / glow result can be inspected.
+  window.__studioCompositorEvaluateWith = (src) => {
+    try {
+      if (!src || !src.data || !src.width || !src.height) return { ok: false, error: 'bad source' };
+      const buf = { width: src.width | 0, height: src.height | 0,
+        data: Uint8ClampedArray.from(src.data) };
+      const out = evalGraph(_graph, buf);
+      if (!out) return { ok: false, error: 'no output node' };
+      try { paintOutput(out); } catch (_) {}
+      return { ok: true, width: out.width, height: out.height, data: Array.from(out.data) };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
+  // Slice 737 — list every available node KIND (palette discovery).
+  window.__studioCompositorListKinds = () => ({ ok: true, kinds: nodeKinds() });
   // Async capture variant for callers that want to await a real frame.
   window.__studioCompositorCaptureViewport = async () => {
     const buf = await captureViewport();
@@ -357,6 +387,10 @@ export function installCompositor() {
     ['__studioCompositorEditorClose', 'Close the compositor graph editor'],
     ['__studioCompositorEditorToggle', 'Toggle the compositor graph editor'],
     ['__studioCompositorListNodes', 'List compositor nodes currently in the graph'],
+    // Slice 737 — Keyer/Glow params, deterministic eval, kind discovery.
+    ['__studioCompositorNodeSetParam', 'Set a parameter on a compositor node (keyer thresholds, glow intensity, …)'],
+    ['__studioCompositorEvaluateWith', 'Evaluate the compositor graph against a supplied source image'],
+    ['__studioCompositorListKinds', 'List every available compositor node kind (image/keyer/glow/blur/…)'],
   ];
   for (const [name, desc] of cmds) {
     regCommand(name, window[name], desc);
@@ -376,6 +410,8 @@ export function uninstallCompositor() {
     '__studioCompositorGraphSerialize', '__studioCompositorGraphDeserialize',
     '__studioCompositorEditorOpen', '__studioCompositorEditorClose', '__studioCompositorEditorToggle',
     '__studioCompositorListNodes', '__studioCompositorGraph',
+    '__studioCompositorNodeSetParam', '__studioCompositorEvaluateWith',
+    '__studioCompositorListKinds',
   ]) { try { delete window[k]; } catch (_) {} }
   if (_panel) { unmountPanel('compositor-editor'); _panel = null; }
   _editorOpen = false;
