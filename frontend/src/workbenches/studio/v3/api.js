@@ -7472,6 +7472,12 @@ export function registerV3Api() {
   import('./reactor/autoload.js').catch(() => {});
   // Slice 711 — Houdini TOPs task-operator graph.
   import('./tops/autoload.js').catch(() => {});
+  // Slice 712 — Plasticity implicit (SDF) sculpt brushes.
+  import('./implicitsculpt/autoload.js').catch(() => {});
+  // Slice 712 — Marvelous Designer fit-map.
+  import('./mdfit/autoload.js').catch(() => {});
+  // Slice 712 — Universal mesh import (STL/PLY/OFF/3MF).
+  import('./uniconvert/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
