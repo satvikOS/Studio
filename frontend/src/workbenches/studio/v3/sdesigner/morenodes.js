@@ -747,6 +747,76 @@ export const SDESIGNER_NODE_KINDS = {
       ];
     },
   },
+
+  // 26 — Normal from Height: the flagship Substance Designer material-
+  // builder node. Computes a tangent-space normal by running a SOBEL
+  // gradient over the sampled height neighbourhood (nineTaps), then
+  //   n = normalize( -dHdx*strength, -dHdy*strength, 1 )
+  // encoded into RGB as n*0.5+0.5 (OpenGL/+Y convention; flipY swaps to
+  // DirectX/−Y). A flat region → (0.5,0.5,1) i.e. straight-up normal.
+  normalfromheight: {
+    title: 'Normal (from Height)',
+    category: 'filter',
+    defaultParams: () => ({ scale: 8, eps: 0.01, strength: 4, flipY: false }),
+    inputs: [
+      { name: 'uv', type: 'vec2' },
+      { name: 'height', type: 'float' },
+    ],
+    outputs: [{ name: 'color', type: 'color' }],
+    eval(ctx, ins) {
+      const uv = ins.has('uv') ? toVec2(ins.get('uv')) : [ctx.u, ctx.v];
+      const s = Math.max(0.001, +this.params.scale || 8);
+      const eps = clampR(+this.params.eps ?? 0.01, 0.0001, 0.5);
+      const str = clampR(+this.params.strength ?? 4, 0, 50);
+      const flipY = !!this.params.flipY;
+      const t = nineTaps(uv[0], uv[1], s, eps);
+      // Sobel: X = (tr+2r+br) − (tl+2l+bl); Y = (bl+2b+br) − (tl+2t+tr).
+      const sx = (t[2] + 2 * t[5] + t[8]) - (t[0] + 2 * t[3] + t[6]);
+      let sy = (t[6] + 2 * t[7] + t[8]) - (t[0] + 2 * t[1] + t[2]);
+      if (flipY) sy = -sy;
+      // Gradient → normal. eps normalises the finite-difference spacing.
+      const nx = -sx * str;
+      const ny = -sy * str;
+      const nz = 1;
+      const len = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
+      return [
+        clamp01((nx / len) * 0.5 + 0.5),
+        clamp01((ny / len) * 0.5 + 0.5),
+        clamp01((nz / len) * 0.5 + 0.5),
+      ];
+    },
+  },
+
+  // 27 — Ambient Occlusion from Height: darkens crevices. Compares the
+  // centre height to the average of its 8 neighbours; where neighbours
+  // sit HIGHER than the centre (a pit / concave region) occlusion rises.
+  //   ao = 1 − clamp01( (avgNeighbour − centre) * strength )
+  // A flat or convex region → ~1 (unoccluded, white).
+  aofromheight: {
+    title: 'Ambient Occlusion (from Height)',
+    category: 'filter',
+    defaultParams: () => ({ scale: 8, eps: 0.01, strength: 8 }),
+    inputs: [
+      { name: 'uv', type: 'vec2' },
+      { name: 'height', type: 'float' },
+    ],
+    outputs: [
+      { name: 'color', type: 'color' },
+      { name: 'fac',   type: 'float' },
+    ],
+    multiOutput: true,
+    eval(ctx, ins) {
+      const uv = ins.has('uv') ? toVec2(ins.get('uv')) : [ctx.u, ctx.v];
+      const s = Math.max(0.001, +this.params.scale || 8);
+      const eps = clampR(+this.params.eps ?? 0.01, 0.0001, 0.5);
+      const str = clampR(+this.params.strength ?? 8, 0, 50);
+      const t = nineTaps(uv[0], uv[1], s, eps);
+      const centre = t[4];
+      const avgN = (t[0] + t[1] + t[2] + t[3] + t[5] + t[6] + t[7] + t[8]) / 8;
+      const ao = clamp01(1 - clamp01((avgN - centre) * str));
+      return { color: [ao, ao, ao], fac: ao };
+    },
+  },
 };
 
 // Convenience list of kind names.
