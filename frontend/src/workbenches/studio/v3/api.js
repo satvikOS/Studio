@@ -7601,6 +7601,8 @@ export function registerV3Api() {
   import('./anretarget/autoload.js').catch(() => {});
   // Slice 765 — Marvelous Designer / Chaos Cloth Verlet+PBD cloth solver.
   import('./cloth2/autoload.js').catch(() => {});
+  // Slice 766 — Unreal Sequencer cinematic cameras (record + playback).
+  import('./cinecam/autoload.js').catch(() => {});
   // Slice 768 — glTF export polish: KHR_lights_punctual / unlit / clearcoat / emissive_strength.
   import('./gltfx/autoload.js').catch(() => {});
   // Slice 769 — Substance Painter smart-material library (30+ presets).
