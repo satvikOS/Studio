@@ -7602,6 +7602,8 @@ export function registerV3Api() {
   // Slice 768 — glTF export polish: KHR_lights_punctual,
   // KHR_materials_unlit, KHR_materials_clearcoat, KHR_materials_emissive_strength.
   import('./gltfx/autoload.js').catch(() => {});
+  // Slice 769 — Substance Painter smart-material library (30+ presets).
+  import('./smatlib/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
