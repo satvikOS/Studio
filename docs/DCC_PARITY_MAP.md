@@ -92,6 +92,13 @@ tooltips, mirror the tool's algorithm + UX, and update this table.
 | Push/Pull face extrude | PARTIAL | `extrudeFaces` pushes all faces along normals; need interactive single-face push/pull |
 | Inference snapping | PARTIAL | grid + vertex snap exist; no live inference engine |
 
+## MagicaVoxel (voxel modelling)
+
+| Capability | Status | Notes / next |
+|------------|--------|--------------|
+| Single-voxel paint | DONE | `voxel/` volume (Uint8 grid + palette) with set/get/clear, greedy-merged scene mesh, OBJ/PLY/JSON export, paint-on-click. |
+| Bulk shape brushes (box/line/sphere/fill) | DONE | slice 741 — `voxel/index.js` gains four MagicaVoxel/Goxel-style bulk ops, each rebuilding the merged mesh once: `__studioVoxelBox` (axis-aligned filled box between corners, idx 0 erases), `__studioVoxelLine` (3-D Bresenham), `__studioVoxelSphere` (solid (r+0.5)² ball), `__studioVoxelFill` (6-connected flood-fill bucket). e2e: box=64, line=11, sphere=389 centred/symmetric, fill=32768, scene mesh 432 tris. |
+
 ## Interop (all tools)
 
 | Capability | Status | Notes / next |

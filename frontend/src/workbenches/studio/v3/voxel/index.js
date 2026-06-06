@@ -99,6 +99,107 @@ function opSet(x, y, z, paletteIdx) {
   return { ok: true, changed, x, y, z, idx };
 }
 
+// ─── Slice 741 — MagicaVoxel-style bulk shape tools ───────────────────
+// Every voxel editor (MagicaVoxel, Goxel, Qubicle) edits in bulk: box,
+// line, sphere brushes and a flood-fill bucket. These iterate the grid
+// and call volume.set(), then rebuild the merged mesh ONCE at the end.
+
+// Axis-aligned filled box between two corners (inclusive). idx 0 erases.
+function opBox(x0, y0, z0, x1, y1, z1, paletteIdx) {
+  if (!_vox.volume) ensureVolume();
+  const idx = (paletteIdx == null) ? getActiveIdx() : paletteIdx;
+  const ax = Math.min(x0, x1) | 0, bx = Math.max(x0, x1) | 0;
+  const ay = Math.min(y0, y1) | 0, by = Math.max(y0, y1) | 0;
+  const az = Math.min(z0, z1) | 0, bz = Math.max(z0, z1) | 0;
+  let changed = 0;
+  for (let y = ay; y <= by; y++)
+    for (let z = az; z <= bz; z++)
+      for (let x = ax; x <= bx; x++)
+        if (_vox.volume.set(x, y, z, idx)) changed++;
+  rebuildMeshInScene();
+  return { ok: true, changed };
+}
+
+// 3-D Bresenham line between two cells (inclusive).
+function opLine(x0, y0, z0, x1, y1, z1, paletteIdx) {
+  if (!_vox.volume) ensureVolume();
+  const idx = (paletteIdx == null) ? getActiveIdx() : paletteIdx;
+  let x = x0 | 0, y = y0 | 0, z = z0 | 0;
+  const xe = x1 | 0, ye = y1 | 0, ze = z1 | 0;
+  const dx = Math.abs(xe - x), dy = Math.abs(ye - y), dz = Math.abs(ze - z);
+  const sx = x < xe ? 1 : -1, sy = y < ye ? 1 : -1, sz = z < ze ? 1 : -1;
+  let changed = 0;
+  const dm = Math.max(dx, dy, dz);
+  let p1 = dm / 2, p2 = dm / 2;
+  if (_vox.volume.set(x, y, z, idx)) changed++;
+  if (dm === dx) {
+    for (let i = 0; i < dm; i++) {
+      p1 -= dy; if (p1 < 0) { y += sy; p1 += dm; }
+      p2 -= dz; if (p2 < 0) { z += sz; p2 += dm; }
+      x += sx;
+      if (_vox.volume.set(x, y, z, idx)) changed++;
+    }
+  } else if (dm === dy) {
+    for (let i = 0; i < dm; i++) {
+      p1 -= dx; if (p1 < 0) { x += sx; p1 += dm; }
+      p2 -= dz; if (p2 < 0) { z += sz; p2 += dm; }
+      y += sy;
+      if (_vox.volume.set(x, y, z, idx)) changed++;
+    }
+  } else {
+    for (let i = 0; i < dm; i++) {
+      p1 -= dx; if (p1 < 0) { x += sx; p1 += dm; }
+      p2 -= dy; if (p2 < 0) { y += sy; p2 += dm; }
+      z += sz;
+      if (_vox.volume.set(x, y, z, idx)) changed++;
+    }
+  }
+  rebuildMeshInScene();
+  return { ok: true, changed };
+}
+
+// Solid sphere of given radius centred on (cx,cy,cz).
+function opSphere(cx, cy, cz, radius, paletteIdx) {
+  if (!_vox.volume) ensureVolume();
+  const idx = (paletteIdx == null) ? getActiveIdx() : paletteIdx;
+  const r = Math.max(0, radius | 0);
+  const r2 = (r + 0.5) * (r + 0.5);
+  let changed = 0;
+  for (let dy = -r; dy <= r; dy++)
+    for (let dz = -r; dz <= r; dz++)
+      for (let dx = -r; dx <= r; dx++)
+        if (dx * dx + dy * dy + dz * dz <= r2)
+          if (_vox.volume.set((cx | 0) + dx, (cy | 0) + dy, (cz | 0) + dz, idx)) changed++;
+  rebuildMeshInScene();
+  return { ok: true, changed };
+}
+
+// Flood-fill bucket: replace the connected region of cells sharing the
+// seed's value with paletteIdx (6-connected). Bounded by the grid.
+function opFill(sx, sy, sz, paletteIdx) {
+  if (!_vox.volume) ensureVolume();
+  const vol = _vox.volume;
+  const idx = (paletteIdx == null) ? getActiveIdx() : paletteIdx;
+  const seed = vol.get(sx | 0, sy | 0, sz | 0);
+  if (seed === idx) return { ok: true, changed: 0, note: 'seed already target' };
+  const stack = [[sx | 0, sy | 0, sz | 0]];
+  let changed = 0;
+  const seen = new Set();
+  const key = (x, y, z) => x + ',' + y + ',' + z;
+  while (stack.length) {
+    const [x, y, z] = stack.pop();
+    if (x < 0 || y < 0 || z < 0 || x >= vol.sizeX || y >= vol.sizeY || z >= vol.sizeZ) continue;
+    const k = key(x, y, z);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    if (vol.get(x, y, z) !== seed) continue;
+    if (vol.set(x, y, z, idx)) changed++;
+    stack.push([x + 1, y, z], [x - 1, y, z], [x, y + 1, z], [x, y - 1, z], [x, y, z + 1], [x, y, z - 1]);
+  }
+  rebuildMeshInScene();
+  return { ok: true, changed, seed };
+}
+
 function opGet(x, y, z) {
   if (!_vox.volume) return { ok: false, error: 'no volume', idx: 0 };
   return { ok: true, idx: _vox.volume.get(x, y, z) };
@@ -255,6 +356,10 @@ function reg(name, fn, description) {
 const OP_NAMES = [
   '__studioVoxelCreate',
   '__studioVoxelSet',
+  '__studioVoxelBox',
+  '__studioVoxelLine',
+  '__studioVoxelSphere',
+  '__studioVoxelFill',
   '__studioVoxelGet',
   '__studioVoxelClear',
   '__studioVoxelSetActivePaletteIdx',
@@ -300,6 +405,14 @@ export function installVoxel() {
     'Create a fresh voxel volume (sizeX, sizeY, sizeZ, cellSize) and place an empty mesh in the scene.');
   reg('__studioVoxelSet', (x, y, z, idx) => opSet(x, y, z, idx),
     'Set the palette index at cell (x,y,z). Pass 0 to clear; omit idx to use the active palette colour.');
+  reg('__studioVoxelBox', (x0, y0, z0, x1, y1, z1, idx) => opBox(x0, y0, z0, x1, y1, z1, idx),
+    'Fill an axis-aligned box of voxels between two corners (MagicaVoxel box brush). idx 0 erases.');
+  reg('__studioVoxelLine', (x0, y0, z0, x1, y1, z1, idx) => opLine(x0, y0, z0, x1, y1, z1, idx),
+    'Draw a 3-D Bresenham line of voxels between two cells (MagicaVoxel line brush).');
+  reg('__studioVoxelSphere', (cx, cy, cz, r, idx) => opSphere(cx, cy, cz, r, idx),
+    'Fill a solid sphere of voxels of radius r centred on (cx,cy,cz) (MagicaVoxel sphere brush).');
+  reg('__studioVoxelFill', (x, y, z, idx) => opFill(x, y, z, idx),
+    'Flood-fill the connected region sharing the seed cell\'s value with the given palette index (paint bucket).');
   reg('__studioVoxelGet', (x, y, z) => opGet(x, y, z),
     'Read the palette index at cell (x,y,z); 0 = empty.');
   reg('__studioVoxelClear', () => opClear(), 'Clear every cell in the current voxel volume.');
