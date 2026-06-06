@@ -7460,6 +7460,12 @@ export function registerV3Api() {
   import('./c4dfields/autoload.js').catch(() => {});
   // Slice 709 — Plasticity X-NURB depth.
   import('./plasticityx/autoload.js').catch(() => {});
+  // Slice 710 — Marvelous Designer clothing templates.
+  import('./mdtemplates/autoload.js').catch(() => {});
+  // Slice 710 — DXF 3D entity export (AutoCAD parity).
+  import('./dxf3d/autoload.js').catch(() => {});
+  // Slice 710 — Cascadeur physics-pose solver.
+  import('./casphys/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
