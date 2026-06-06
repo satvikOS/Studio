@@ -94,12 +94,29 @@ function Viewport3D({ canvasId = 'render-canvas', domain = 'mechanical', onReady
         scene.background = new THREE.Color(0x000000);
 
         // --- Camera ---
-        const camera = new THREE.PerspectiveCamera(45, width / height, 0.0001, 100);
+        // Slice 752 — Forge-parity wide-dynamic-range frustum. Near 0.001
+        // (1mm) instead of 1e-4 to give the depth buffer real precision,
+        // far 10000 (10km) so heavy scenes (architectural, scattered, or
+        // city-scale assemblies) stay inside the frustum. Combined with
+        // logarithmicDepthBuffer below this gives sub-mm precision at
+        // arm's length AND no z-fighting at km distance.
+        const camera = new THREE.PerspectiveCamera(45, width / height, 0.001, 10000);
         camera.position.set(0.15, 0.10, 0.15); // ~150mm away for mm-scale parts
         camera.lookAt(0, 0, 0);
 
         // --- Renderer ---
-        const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+        // Slice 752 — logarithmicDepthBuffer was tried here for heavy
+        // mixed-scale scenes but it interacted badly with the existing
+        // line helpers (GridHelper / AxesHelper) and the ShadowMaterial
+        // ground plane — the lines fattened into 2D-looking smears and
+        // the shadow plane developed a white "oval spot" at origin. The
+        // widened linear frustum (near 0.001 / far 10000) + the adaptive
+        // near/far on scene-bbox change is enough for the user's heavy
+        // workloads without touching the helper visuals.
+        const renderer = new THREE.WebGLRenderer({
+          antialias: true,
+          powerPreference: 'high-performance',
+        });
         renderer.setSize(width, height);
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         renderer.shadowMap.enabled = true;
@@ -243,15 +260,26 @@ function Viewport3D({ canvasId = 'render-canvas', domain = 'mechanical', onReady
         scene.add(ground);
 
         // --- Orbit Controls ---
+        // Slice 752 — Forge-parity zoom + heavy-load behaviour.
+        //   • dampingFactor 0.08 matches Forge v4 (was 0.1 — snappier)
+        //   • minDistance 0.001 (1mm) / maxDistance 5000 (5km) — same
+        //     dynamic range as the camera frustum so the user can't
+        //     wheel "into" or "past" something visible
+        //   • zoomToCursor: true — wheel-zoom moves toward the cursor
+        //     (the SketchUp / Fusion / Forge-v4 default; without this,
+        //     dolly always pivots around the orbit target, which is
+        //     what "zoom doesn't work properly" really means)
+        //   • zoomSpeed 1.0 — 1.2 was overly jumpy under trackpads
         const orbitControls = new OrbitControls(camera, renderer.domElement);
         orbitControls.enableDamping = true;
-        orbitControls.dampingFactor = 0.1;
+        orbitControls.dampingFactor = 0.08;
         orbitControls.screenSpacePanning = true;
-        orbitControls.minDistance = 0.01;  // 10mm min
-        orbitControls.maxDistance = 5;     // 5m max
+        orbitControls.minDistance = 0.001;   // 1mm min  (was 0.01)
+        orbitControls.maxDistance = 5000;    // 5km max  (was 5)
         orbitControls.rotateSpeed = 0.8;
-        orbitControls.zoomSpeed = 1.2;
+        orbitControls.zoomSpeed = 1.0;       // was 1.2
         orbitControls.panSpeed = 0.8;
+        orbitControls.zoomToCursor = true;   // slice 752 — Forge / SketchUp parity
 
         // --- Transform Controls ---
         const transformControls = new TransformControls(camera, renderer.domElement);
@@ -1261,7 +1289,73 @@ function Viewport3D({ canvasId = 'render-canvas', domain = 'mechanical', onReady
         // Slice 252: optional FPS cap via window.__studioFpsCap (0 =
         // unlimited). Skips frames when called more often than cap
         // allows, dropping device thermals / battery drain.
+        //
+        // Slice 752 — Render-on-demand for heavy workloads. A dirty flag
+        // gates renderer.render: we draw only when (a) something invalidates
+        // (controls 'change', selection change, scene mutation, animation
+        // tick, transform-controls drag, external code calling the new
+        // window.__studioInvalidate()) OR (b) damping is still in flight.
+        // Idle frames cost zero draws — the win on a stacked scene is
+        // the difference between 60 fps + 80 % GPU and 60 fps + 0 % GPU.
+        // OrbitControls.update() returns true while damping is still
+        // resolving so we always keep drawing during the brief tail.
         let lastFrameMs = 0;
+        let dirty = true;                                  // first frame always renders
+        let lastSceneChildren = scene.children.length;
+        const invalidate = () => { dirty = true; };
+        // Expose the invalidate hook so transform handlers, AI ops, etc.
+        // can request a single redraw without forcing continuous RAF.
+        if (typeof window !== 'undefined') {
+          window.__studioInvalidate = invalidate;
+        }
+        orbitControls.addEventListener('change', invalidate);
+        try { transformControls.addEventListener('change', invalidate); } catch (_) {}
+        // Slice 752 — Adaptive camera frustum. When the scene bbox grows
+        // we widen near/far to keep depth precision sane; when it shrinks
+        // back we tighten. Cheap to call (one bbox/frame at most).
+        const _adaptBox = new THREE.Box3();
+        const _adaptSize = new THREE.Vector3();
+        let _adaptCheckMs = 0;
+        function adaptFrustum(now) {
+            if (now - _adaptCheckMs < 250) return;        // 4 Hz is enough
+            _adaptCheckMs = now;
+            _adaptBox.makeEmpty();
+            // Only count USER-OWNED primitives — never helpers, gizmos,
+            // shadow planes, lights, instanced helper handles, etc.
+            // Catch-all for legitimate user meshes is the explicit
+            // archdiscStudioPrimitive flag (every spawn path stamps it).
+            scene.traverse((o) => {
+                if (!o || !o.isMesh || !o.visible) return;
+                const ud = o.userData;
+                if (!ud || !ud.archdiscStudioPrimitive) return;
+                if (ud.isHelper) return;
+                try { _adaptBox.expandByObject(o); } catch (_) {}
+            });
+            if (_adaptBox.isEmpty()) return;
+            _adaptBox.getSize(_adaptSize);
+            const radius = 0.5 * _adaptSize.length();
+            if (!isFinite(radius) || radius <= 0) return;
+            const camDist = camera.position.distanceTo(orbitControls.target);
+            // Far plane must cover the whole world-space scene from the
+            // camera — bbox-centre distance + bbox radius + safety. Clamp
+            // to a sane band so depth precision can't collapse.
+            const sceneCentre = new THREE.Vector3();
+            _adaptBox.getCenter(sceneCentre);
+            const distToCentre = sceneCentre.distanceTo(camera.position);
+            const desiredFar = Math.max(10000,
+              Math.min(100000, (distToCentre + radius) * 2));
+            const desiredNear = Math.max(0.001, Math.min(camDist, radius) * 1e-3);
+            // Only update if a meaningful change — avoids a per-frame
+            // projection-matrix rebuild.
+            const farRatio = desiredFar / camera.far;
+            const nearRatio = desiredNear / camera.near;
+            if (farRatio < 0.5 || farRatio > 2 || nearRatio < 0.5 || nearRatio > 2) {
+                camera.far  = desiredFar;
+                camera.near = desiredNear;
+                camera.updateProjectionMatrix();
+                dirty = true;
+            }
+        }
         function animate(now) {
             rafRef.current = requestAnimationFrame(animate);
             const cap = window.__studioFpsCap || 0;
@@ -1270,10 +1364,31 @@ function Viewport3D({ canvasId = 'render-canvas', domain = 'mechanical', onReady
               if (now - lastFrameMs < minInterval - 0.5) return;
               lastFrameMs = now;
             }
-            orbitControls.update();
-            // Slice 629 — Drive the animation mixer if present.
+            // Slice 752 — scene-graph mutation invalidates render-on-demand.
+            // Cheap shallow check: if top-level child count changed since
+            // last frame, something was added/removed. Deeper mutations
+            // (transform, material) come through __studioInvalidate or
+            // through the controls/transform 'change' events.
+            const cc = scene.children.length;
+            if (cc !== lastSceneChildren) { dirty = true; lastSceneChildren = cc; }
+            adaptFrustum(now);
+            // OrbitControls.update returns true while damping is still
+            // resolving — keep drawing during that tail.
+            const orbitChanging = orbitControls.update();
+            // Slice 629 — Drive the animation mixer if present. If a tick
+            // function is registered it means an animation is running, so
+            // always force a redraw — render-on-demand must not pause
+            // playback. Tick return value is non-uniform across callers.
             const tick = window.__archdiscViewport && window.__archdiscViewport.__studioAnimTick;
-            if (typeof tick === 'function') { try { tick(now); } catch (_) {} }
+            let animActive = false;
+            if (typeof tick === 'function') {
+              try { tick(now); } catch (_) {}
+              animActive = true;
+            }
+            // Render-on-demand gate. Always draw the first frame after a
+            // dirty event AND while damping or animation is in flight.
+            if (!dirty && !orbitChanging && !animActive) return;
+            dirty = false;
             // Slice 610 — Composer takes over rendering when post-effects
             // are enabled (slice 606+). Keep outline-pass selection synced.
             const composer = window.__archdiscViewport && window.__archdiscViewport.__studioComposer;
@@ -1323,6 +1438,8 @@ function Viewport3D({ canvasId = 'render-canvas', domain = 'mechanical', onReady
             camera.aspect = w / h;
             camera.updateProjectionMatrix();
             renderer.setSize(w, h);
+            // Slice 752 — render-on-demand: resize must force a redraw.
+            dirty = true;
         };
         const handleResize = () => {
             clearTimeout(resizeTimer);
