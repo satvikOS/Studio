@@ -7530,6 +7530,10 @@ export function registerV3Api() {
   import('./uistatusbar/autoload.js').catch(() => {});
   // Slice 721 — ZBrush UV Master.
   import('./zuvmaster/autoload.js').catch(() => {});
+  // Slice 722 — Project autosave to IndexedDB.
+  import('./autosave/autoload.js').catch(() => {});
+  // Slice 722 — Scene templates / starter scenes.
+  import('./scenetpl/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
