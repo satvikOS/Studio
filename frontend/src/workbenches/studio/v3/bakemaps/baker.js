@@ -1,7 +1,87 @@
 // Slice 699 — Texture map baking: AO, curvature, cavity, height,
 // per-vertex normal → texture. Substance Painter / Mari workflow gap.
+//
+// Slice 746 — bakeAOMap / bakeNormalMap / bakePositionMap now delegate
+// to the REAL per-texel bakers in `bake/aoTexture.js`,
+// `bake/normalTexture.js`, `bake/positionTexture.js` (UV-grid +
+// barycentric resolve + hemisphere ray-trace / world-normal encode /
+// bbox-normalised position encode). The slice-699 proxies are kept for
+// the legacy `curvature`, `height`, `cavity` ops; the AO + Normal
+// signatures stay identical so callers see only the upgrade.
 
 import * as THREE from 'three';
+import { bakeAOToTexture as _bakeAORealImpl } from '../../bake/aoTexture.js';
+import { bakeNormalToTexture as _bakeNormalRealImpl } from '../../bake/normalTexture.js';
+import { bakePositionToTexture as _bakePositionRealImpl } from '../../bake/positionTexture.js';
+
+// Resolve a mesh from an optional uuid arg, falling back to the active
+// selection. Returns null if nothing's selected.
+function _resolveMesh(meshUuid) {
+  const scene = window.__archdiscScene;
+  if (!scene) return null;
+  if (meshUuid) return scene.getObjectByProperty('uuid', meshUuid) || null;
+  if (typeof window.__studioSelectedMesh === 'function') {
+    try { return window.__studioSelectedMesh() || null; } catch (_) { return null; }
+  }
+  return null;
+}
+
+// Real per-texel UV-grid AO bake (slice 284). Wraps the original
+// signature so callers can pass either (size, rays) or (meshUuid).
+export function bakeAOMap(meshUuidOrSize, raysOrSize) {
+  // Two call shapes for back-compat:
+  //   bakeAOMap(meshUuid)            ← original slice-699 shape
+  //   bakeAOMap(size, rays)          ← Substance / WorkbenchStudio shape
+  let mesh, size = 256, rays;
+  if (typeof meshUuidOrSize === 'string') {
+    mesh = _resolveMesh(meshUuidOrSize);
+  } else {
+    size = (meshUuidOrSize | 0) || 256;
+    rays = raysOrSize;
+    mesh = _resolveMesh(null);
+  }
+  if (!mesh || !mesh.geometry) return { ok: false, error: 'no mesh selected' };
+  // Use sibling scene primitives as occluders so a real
+  // inter-object shadow shows up; fall back to self for the lone case.
+  const scene = window.__archdiscScene;
+  const occluders = [];
+  scene.traverse((o) => {
+    if (o && o.isMesh && o.userData && o.userData.archdiscStudioPrimitive) occluders.push(o);
+  });
+  const opts = { size };
+  if (rays) opts.rays = rays;
+  const r = _bakeAORealImpl(mesh, occluders.length ? occluders : [mesh], opts);
+  if (!r || r.ok === false) return r || { ok: false };
+  return { ok: true, size: r.size, pixelsCovered: r.pixelsCovered, mean: r.mean };
+}
+
+// Real per-texel UV-grid OBJECT-space normal bake.
+export function bakeNormalMap(meshUuidOrSize) {
+  let mesh, size = 256;
+  if (typeof meshUuidOrSize === 'string') {
+    mesh = _resolveMesh(meshUuidOrSize);
+  } else {
+    size = (meshUuidOrSize | 0) || 256;
+    mesh = _resolveMesh(null);
+  }
+  if (!mesh || !mesh.geometry) return { ok: false, error: 'no mesh selected' };
+  return _bakeNormalRealImpl(mesh, { size });
+}
+
+// Real per-texel UV-grid world-space position bake. Position is debug /
+// source data, not a shader channel — the texture is stored on
+// `userData.archdiscStudioPositionMap` with the decode bbox.
+export function bakePositionMap(meshUuidOrSize) {
+  let mesh, size = 256;
+  if (typeof meshUuidOrSize === 'string') {
+    mesh = _resolveMesh(meshUuidOrSize);
+  } else {
+    size = (meshUuidOrSize | 0) || 256;
+    mesh = _resolveMesh(null);
+  }
+  if (!mesh || !mesh.geometry) return { ok: false, error: 'no mesh selected' };
+  return _bakePositionRealImpl(mesh, { size });
+}
 
 const SIZE = 512;
 
@@ -48,7 +128,9 @@ function _sampleAO(geo, vertIdx, pos, nrm) {
   return 1 - occ / N;
 }
 
-export function bakeAOMap(meshUuid) {
+// Slice 746 — superseded by the real `bakeAOMap` above (delegates to
+// bake/aoTexture.js). Kept for reference only; not exported.
+function _legacyBakeAOMap(meshUuid) {
   const scene = window.__archdiscScene;
   if (!scene) return { ok: false };
   const mesh = meshUuid ? scene.getObjectByProperty('uuid', meshUuid) : window.__studioSelectedMesh?.();
@@ -117,7 +199,10 @@ export function bakeCurvatureMap(meshUuid) {
   return { ok: true, dataUrl: canvas.toDataURL() };
 }
 
-export function bakeNormalMap(meshUuid) {
+// Slice 746 — superseded by the real `bakeNormalMap` above (delegates
+// to bake/normalTexture.js, object-space encode). Kept for reference;
+// not exported.
+function _legacyBakeNormalMap(meshUuid) {
   const scene = window.__archdiscScene;
   if (!scene) return { ok: false };
   const mesh = meshUuid ? scene.getObjectByProperty('uuid', meshUuid) : window.__studioSelectedMesh?.();
