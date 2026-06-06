@@ -7544,6 +7544,12 @@ export function registerV3Api() {
   import('./castrajectory/autoload.js').catch(() => {});
   // Slice 724 — F1 help panel.
   import('./uihelp/autoload.js').catch(() => {});
+  // Slice 725 — Forest Pack procedural scatter.
+  import('./forestpack/autoload.js').catch(() => {});
+  // Slice 725 — Maya marking menu.
+  import('./markmenu/autoload.js').catch(() => {});
+  // Slice 725 — KeyShot Hero Shot animation preset.
+  import('./kshero/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
