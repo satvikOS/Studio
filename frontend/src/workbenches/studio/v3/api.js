@@ -7562,6 +7562,10 @@ export function registerV3Api() {
   import('./houdinipop/autoload.js').catch(() => {});
   // Slice 727 — HDRI/IBL environment presets.
   import('./iblpresets/autoload.js').catch(() => {});
+  // Slice 728 — UDIM-aware painting.
+  import('./udimpaint/autoload.js').catch(() => {});
+  // Slice 728 — Arch engineering: footings / joist / studs / rafters.
+  import('./archeng/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
