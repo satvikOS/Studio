@@ -76,7 +76,13 @@ function createWindow() {
   const isDev = process.argv.includes('--dev');
   if (isDev) {
     mainWindow.loadURL('http://localhost:3000');
-    mainWindow.webContents.openDevTools();
+    // Slice 742 (UI fix): do NOT auto-open DevTools on --dev. It popped the
+    // Elements/Console panel over the app every launch (and was the source
+    // of the e2e DevTools-window boot race). Opt in explicitly with
+    // --devtools, or just press Cmd+Alt+I / F12 at runtime.
+    if (process.argv.includes('--devtools')) {
+      mainWindow.webContents.openDevTools();
+    }
   } else {
     mainWindow.loadFile(path.join(__dirname, '..', 'frontend', 'dist', 'index.html'));
   }
