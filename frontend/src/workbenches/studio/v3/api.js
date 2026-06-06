@@ -7500,6 +7500,12 @@ export function registerV3Api() {
   import('./substancegraph/autoload.js').catch(() => {});
   // Slice 716 — AutoCAD layout sheets + viewports + title block.
   import('./dwgsheets/autoload.js').catch(() => {});
+  // Slice 717 — SketchUp Sandbox terrain tools.
+  import('./sksandbox/autoload.js').catch(() => {});
+  // Slice 717 — Marvelous Designer pressure inflation.
+  import('./mdpressure/autoload.js').catch(() => {});
+  // Slice 717 — Cascadeur animation layers.
+  import('./caslayers/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
