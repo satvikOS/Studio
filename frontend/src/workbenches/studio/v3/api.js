@@ -7593,6 +7593,8 @@ export function registerV3Api() {
   import('./zbrushdetail/autoload.js').catch(() => {});
   // Slice 759 — Rhino Grasshopper-specific NURBS node palette.
   import('./ghnurbs/autoload.js').catch(() => {});
+  // Slice 760 — Unreal Groom / Maya XGen / Blender Hair grooming module.
+  import('./groom/autoload.js').catch(() => {});
   // Slice 761 — Pixar USD layer composition + USDA serializer.
   import('./usdlayer/autoload.js').catch(() => {});
 
