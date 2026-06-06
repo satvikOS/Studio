@@ -58,7 +58,7 @@ tooltips, mirror the tool's algorithm + UX, and update this table.
 |------------|--------|--------------|
 | Modifier stack (non-destructive, reorderable) | DONE | real live stack re-evaluated from a clean base every edit (reuses the node engine); add/remove/reorder/toggle; removing a mid-stack modifier truly reverts it (slice 154) |
 | Spline → Loft / sweep along path | DONE | Loft/Sweep (slice 170, 3ds Max Loft / Rhino Sweep1) — sweeps an arbitrary polygonal profile (square/L/star/n-gon) along a path curve (helix/arc/S-curve/closed ring) via Frenet frames into a swept surface; "Loft/Sweep" primitive + `__studioSweepLoft`. (Path drives a built-in curve set; sweep along a user-drawn curve is the next step.) |
-| Parametric primitives (re-editable) | PARTIAL | primitives added, not re-editable parametrically |
+| Parametric primitives (re-editable) | DONE | real re-editable parametric primitives (slice 750) — every primitive carries userData.archdiscStudioPrimitiveParams + archdiscStudioPrimitiveParamSchema; rebuild() swaps mesh.geometry from a fresh BufferGeometry while preserving transform/material/userData/selection. 20 primitive kinds covered (cube/sphere/plane/cylinder/cone/torus/icosahedron/dodecahedron/tetrahedron/torus-knot + voxel/suzanne/teapot/color-cube/arch/ogee/spline-* bag kinds). Ops: __studioPrimitive{Get,Set,Reset,GetSchema}Params. |
 
 ## Cinema 4D
 

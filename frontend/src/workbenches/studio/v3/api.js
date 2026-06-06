@@ -7410,6 +7410,8 @@ export function registerV3Api() {
   import('./snap/autoload.js').catch(() => {});
   // Slice 749 — Real Catmull-Clark SubD with Hoppe-94 creases.
   import('./catmullclark/autoload.js').catch(() => {});
+  // Slice 750 — 3ds Max-style re-editable parametric primitives.
+  import('./paramprim/autoload.js').catch(() => {});
   // Slice 699 — Maya MASH-style motion graphics.
   import('./mash/autoload.js').catch(() => {});
   // Slice 699 — Unreal Sequencer-style master timeline.
