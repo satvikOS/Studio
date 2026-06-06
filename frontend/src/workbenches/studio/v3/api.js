@@ -7550,6 +7550,12 @@ export function registerV3Api() {
   import('./markmenu/autoload.js').catch(() => {});
   // Slice 725 — KeyShot Hero Shot animation preset.
   import('./kshero/autoload.js').catch(() => {});
+  // Slice 726 — Plasticity smart tools (push/pull/drag).
+  import('./plastsmart/autoload.js').catch(() => {});
+  // Slice 726 — Substance Painter Smart Materials.
+  import('./spsmartmat/autoload.js').catch(() => {});
+  // Slice 726 — Workbench tab strip.
+  import('./uiworkbenches/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
