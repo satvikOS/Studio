@@ -120,6 +120,30 @@ This map catalogs every Studio feature with its game-engine counterpart.
   Velocity / Force / Colour-over-Life -> Emitter Output) on the shared node-graph
   engine, simulated as a deterministic THREE.Points burst (pos = o + v*age +
   0.5*F*age^2); "Niagara FX" ribbon toggle + `__studioEvalNiagara`/`__studioNiagaraStep`.
+  Slice 764 ships the matching REAL-TIME EMITTER class (`v3/nia2/`) that
+  steps a population of particles forward in actual game-loop time
+  (Unreal Niagara `Emitter Update` + `Particle Update` parity). `emitter.js`
+  hosts an `Emitter` with pre-allocated Float32Array state pools
+  (positions / velocities / ages / lives / sizes / colors + an Uint8
+  alive bitmap), a seeded mulberry32 RNG (NO `Math.random` — deterministic
+  re-runs are mandatory), spawn-rate driven slot recycling (round-robin
+  scan from a `_nextFreeHint`), semi-implicit Euler integration with
+  gravity + linear drag, and per-particle piecewise-linear `colorOverLife`
+  + `sizeOverLife` curves sampled at `t = age / life` every frame.
+  `render.js` ships `buildParticleMesh(emitter)` → a `THREE.InstancedMesh`
+  of a unit quad with one instance per slot, billboard-aligned in the
+  vertex shader (camera-space recomposition from instanceMatrix
+  translation + diagonal scale), per-instance colour via an
+  `InstancedBufferAttribute`, additive blending, soft round falloff in
+  the fragment shader (dead slots collapse to zero scale so they
+  disappear without paying for a separate live buffer).
+  `updateParticleMesh(mesh, emitter)` writes the freshly-integrated
+  positions + sizes + colours into the instance matrix + colour buffers
+  each tick. Ops: `__studioNia2Create(opts)` /
+  `Tick({uuid, dt})` (returns `aliveCount + particleSamples[0..5]`) /
+  `Stop({uuid})` (reset all slots to dead, RNG re-seeded, accumulator
+  cleared, mesh stays in scene) / `List()` / `Remove({uuid})`. Pure JS,
+  zero new deps.
 - Behaviour Tree + Blackboard (Unreal Behavior Tree / Unity Behavior Designer) —
   DONE (slice 174). Tickable AI tree on the shared node-graph engine (Root ->
   Selector/Sequence -> Condition/Action, children ordered left-to-right); the seed
