@@ -7518,6 +7518,12 @@ export function registerV3Api() {
   import('./uemacros/autoload.js').catch(() => {});
   // Slice 719 — UV island packing.
   import('./uvpack/autoload.js').catch(() => {});
+  // Slice 720 — Rhino SubD (Catmull-Clark) subdivision surfaces.
+  import('./rhinosubd/autoload.js').catch(() => {});
+  // Slice 720 — SketchUp Bill of Materials report.
+  import('./skbom/autoload.js').catch(() => {});
+  // Slice 720 — Marvelous Designer wear & fray events.
+  import('./mdwear/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
