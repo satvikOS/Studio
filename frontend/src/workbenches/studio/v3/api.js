@@ -7582,6 +7582,8 @@ export function registerV3Api() {
   import('./mdfit2/autoload.js').catch(() => {});
   // Slice 729 — Unreal Sequencer canvas recording (webm/mp4 export).
   import('./ueexport/autoload.js').catch(() => {});
+  // Slice 755 — Bridson Poisson-disk + density-mask surface scatter (Houdini Scatter SOP parity).
+  import('./scatter/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
