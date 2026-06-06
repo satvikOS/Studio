@@ -37,6 +37,11 @@ import {
 } from './crease.js';
 import { setCageVertex, nudgeCageVertex, getCageVertex } from './cageEdit.js';
 import SubdivPanel from './SubdivPanel.jsx';
+// Slice 733 — multi-resolution sculpting levels.
+import {
+  multiresInit, multiresSubdivide, multiresSetLevel,
+  multiresBake, multiresStats, multiresDelete,
+} from './multires.js';
 import { mountPanel, unmountPanel } from '../common/panel.js';
 import { registerOp, unregisterOps } from '../common/registry.js';
 
@@ -227,6 +232,9 @@ const OP_NAMES = [
   '__studioSubdivPanelOpen',
   '__studioSubdivPanelClose',
   '__studioSubdivPanelToggle',
+  // Slice 733 — multi-resolution sculpting levels.
+  '__studioMultiresInit', '__studioMultiresSubdivide', '__studioMultiresSetLevel',
+  '__studioMultiresBake', '__studioMultiresStats', '__studioMultiresDelete',
 ];
 
 export function installSubdiv() {
@@ -322,6 +330,20 @@ export function installSubdiv() {
   reg('__studioSubdivPanelOpen',   panelOpen,   'Open the Subdivision Surface side panel.');
   reg('__studioSubdivPanelClose',  panelClose,  'Close the Subdivision Surface side panel.');
   reg('__studioSubdivPanelToggle', panelToggle, 'Toggle the Subdivision Surface side panel.');
+
+  // ── Multires (slice 733) — ZBrush SubDiv / Mudbox levels / Blender Multires ──
+  reg('__studioMultiresInit', (uuid) => multiresInit(uuid),
+    'Start a multi-resolution stack on the active mesh (level 0 = base cage).');
+  reg('__studioMultiresSubdivide', (uuid) => multiresSubdivide(uuid),
+    'Subdivide the top level into a new finer sculpt level (ZBrush Divide / Ctrl+D).');
+  reg('__studioMultiresSetLevel', (uuid, L) => multiresSetLevel(uuid, L),
+    'Switch to a subdivision level — edits low-level form, fine detail rides along.');
+  reg('__studioMultiresBake', (uuid) => multiresBake(uuid),
+    'Capture the current sculpt into the active level (call after a stroke).');
+  reg('__studioMultiresStats', (uuid) => multiresStats(uuid),
+    'Per-level vertex counts + stored detail magnitude.');
+  reg('__studioMultiresDelete', (uuid) => multiresDelete(uuid),
+    'Drop the multires stack for the active mesh.');
 
   // Esc closes the panel.
   if (typeof window !== 'undefined') {
