@@ -151,7 +151,6 @@ export function autoRig(meshUuid, opts) {
     boneNames: boneList.map((b) => b.name),
   };
 }
-
 export function poseIKTarget(meshUuid, chainLabel, targetPos) {
   const scene = window.__archdiscScene;
   if (!scene) return { ok: false };
@@ -186,4 +185,88 @@ export function poseIKTarget(meshUuid, chainLabel, targetPos) {
   const fwd = new THREE.Vector3(0, -1, 0);
   upper.quaternion.setFromUnitVectors(fwd, aim);
   return { ok: true };
+}
+
+// ─── Slice 740 — pose utilities (mirror + reset to bind) ────────────────
+//
+// Every HumanIK / MotionBuilder / Maya rigger leans on two daily pose ops
+// that this rig was missing: mirror a pose across the body's sagittal
+// plane, and snap back to the bind/T-pose. Both operate on bone LOCAL
+// rotations (the bind pose is identity rotation, since autoRig builds the
+// skeleton with only translations).
+
+// Helper: resolve the skeleton root + bone-name map for a rigged mesh.
+function _resolveRig(meshUuid) {
+  const scene = window.__archdiscScene;
+  if (!scene) return null;
+  const mesh = scene.getObjectByProperty('uuid', meshUuid);
+  if (!mesh || !mesh.userData || !mesh.userData.archdiscStudioHumanIK) return null;
+  const root = scene.getObjectByProperty('uuid', mesh.userData.archdiscStudioHumanIK.skeletonRoot);
+  if (!root) return null;
+  const names = mesh.userData.archdiscStudioHumanIK.boneNames || [];
+  const byName = {};
+  for (const n of names) {
+    const b = root.getObjectByName(n) || (root.name === n ? root : null);
+    if (b) byName[n] = b;
+  }
+  return { mesh, root, byName, names };
+}
+
+// Reset every bone to its bind rotation (identity) → T-pose.
+export function resetToBind(meshUuid) {
+  const rig = _resolveRig(meshUuid);
+  if (!rig) return { ok: false, error: 'not rigged' };
+  let n = 0;
+  for (const name of rig.names) {
+    const b = rig.byName[name];
+    if (b) { b.rotation.set(0, 0, 0); b.quaternion.set(0, 0, 0, 1); n++; }
+  }
+  return { ok: true, reset: n };
+}
+
+// Mirror the current pose across the sagittal (YZ) plane. For each
+// Left<->Right bone pair the local quaternion is reflected: a mirror
+// across the X-axis plane negates the y and z imaginary components
+// (q = (x,y,z,w) → (x,−y,−z,w)) and swaps the two sides. Centre bones
+// (Hips/Spine/Neck/Head — no Left/Right prefix) self-mirror in place.
+function _mirrorQuat(b, target) {
+  target.quaternion.set(b.quaternion.x, -b.quaternion.y, -b.quaternion.z, b.quaternion.w);
+}
+export function mirrorPose(meshUuid) {
+  const rig = _resolveRig(meshUuid);
+  if (!rig) return { ok: false, error: 'not rigged' };
+  // Snapshot quaternions first so swaps read pre-mirror values.
+  const snap = {};
+  for (const name of rig.names) {
+    const b = rig.byName[name];
+    if (b) snap[name] = b.quaternion.clone();
+  }
+  let pairs = 0, centres = 0;
+  const done = new Set();
+  for (const name of rig.names) {
+    if (done.has(name)) continue;
+    const b = rig.byName[name];
+    if (!b) continue;
+    if (name.startsWith('Left')) {
+      const other = 'Right' + name.slice(4);
+      const ob = rig.byName[other];
+      if (ob) {
+        const sa = snap[name], sb = snap[other];
+        // Reflected swap: Left gets mirror(Right), Right gets mirror(Left).
+        b.quaternion.set(sb.x, -sb.y, -sb.z, sb.w);
+        ob.quaternion.set(sa.x, -sa.y, -sa.z, sa.w);
+        done.add(name); done.add(other);
+        pairs++;
+        continue;
+      }
+    } else if (name.startsWith('Right')) {
+      continue; // handled by its Left partner
+    } else {
+      // Centre bone: self-reflect.
+      _mirrorQuat({ quaternion: snap[name] }, b);
+      done.add(name);
+      centres++;
+    }
+  }
+  return { ok: true, pairs, centres };
 }
