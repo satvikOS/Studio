@@ -20,6 +20,12 @@ import {
 import {
   alphaList, alphaSet, alphaSample, alphaWeightAt,
 } from './alpha.js';
+// Slice 732 — ZBrush Subtools / subtool hierarchy.
+import {
+  listSubtools, getActiveSubtool, setActiveSubtool, renameSubtool,
+  setSubtoolVisible, soloSubtool, appendSubtool, duplicateSubtool,
+  deleteSubtool, mergeDownSubtool, mergeVisibleSubtools, moveSubtool,
+} from './subtools.js';
 import { registerOp } from '../common/registry.js';
 
 function getSelectedMesh() {
@@ -153,6 +159,11 @@ const OP_NAMES = [
   '__studioSculptLayerSetActive',     '__studioSculptLayerDelete',
   '__studioSculptAlphaList', '__studioSculptAlphaSet',   '__studioSculptAlphaSample',
   '__studioSculptActiveAlpha',
+  // Slice 732 — Subtools.
+  '__studioSubtoolList', '__studioSubtoolActive', '__studioSubtoolSetActive',
+  '__studioSubtoolRename', '__studioSubtoolSetVisible', '__studioSubtoolSolo',
+  '__studioSubtoolAppend', '__studioSubtoolDuplicate', '__studioSubtoolDelete',
+  '__studioSubtoolMergeDown', '__studioSubtoolMergeVisible', '__studioSubtoolMove',
 ];
 
 export function installSculpt() {
@@ -267,6 +278,32 @@ export function installSculpt() {
     'Sample the active alpha at fractional UV (bilinear).');
   reg('__studioSculptActiveAlpha', () => (alphaList().active || null),
     'Return the active alpha brush name (or null).');
+
+  // ── Subtools (slice 732) — ZBrush SubTool hierarchy ─────────────────
+  reg('__studioSubtoolList', () => listSubtools(),
+    'List all subtools (active/visible/solo/triangles) — ZBrush SubTool palette.');
+  reg('__studioSubtoolActive', () => getActiveSubtool(),
+    'Return the active subtool (and select its mesh).');
+  reg('__studioSubtoolSetActive', (idxOrUuid) => setActiveSubtool(idxOrUuid),
+    'Make a subtool active by index or uuid (ZBrush: click a SubTool).');
+  reg('__studioSubtoolRename', (idxOrUuid, name) => renameSubtool(idxOrUuid, name),
+    'Rename a subtool.');
+  reg('__studioSubtoolSetVisible', (idxOrUuid, on) => setSubtoolVisible(idxOrUuid, on),
+    'Show/hide a subtool (the eye toggle).');
+  reg('__studioSubtoolSolo', (idxOrUuid) => soloSubtool(idxOrUuid),
+    'Solo a subtool (hide all others); pass null to clear solo.');
+  reg('__studioSubtoolAppend', (kind, name) => appendSubtool(kind, name),
+    'Append a new subtool (fresh primitive) — ZBrush SubTool > Append.');
+  reg('__studioSubtoolDuplicate', (idxOrUuid) => duplicateSubtool(idxOrUuid),
+    'Duplicate a subtool (geometry + transform) — SubTool > Duplicate.');
+  reg('__studioSubtoolDelete', (idxOrUuid) => deleteSubtool(idxOrUuid),
+    'Delete a subtool — SubTool > Delete.');
+  reg('__studioSubtoolMergeDown', (idxOrUuid) => mergeDownSubtool(idxOrUuid),
+    'Merge a subtool down into the one below it — SubTool > Merge Down.');
+  reg('__studioSubtoolMergeVisible', () => mergeVisibleSubtools(),
+    'Merge every visible subtool into one mesh — SubTool > Merge Visible.');
+  reg('__studioSubtoolMove', (idxOrUuid, delta) => moveSubtool(idxOrUuid, delta),
+    'Reorder a subtool up (-1) or down (+1) in the list.');
 
   // ── Brush patch ─────────────────────────────────────────────────────
   // The slice 621 brush apply is registered during registerV3Api.
