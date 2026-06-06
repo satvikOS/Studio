@@ -7466,6 +7466,12 @@ export function registerV3Api() {
   import('./dxf3d/autoload.js').catch(() => {});
   // Slice 710 — Cascadeur physics-pose solver.
   import('./casphys/autoload.js').catch(() => {});
+  // Slice 711 — Substance material atlas (24 procedural PBR materials).
+  import('./substancepack/autoload.js').catch(() => {});
+  // Slice 711 — 3ds Max Reactor rigid body + chain.
+  import('./reactor/autoload.js').catch(() => {});
+  // Slice 711 — Houdini TOPs task-operator graph.
+  import('./tops/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
