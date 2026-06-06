@@ -7412,6 +7412,8 @@ export function registerV3Api() {
   import('./catmullclark/autoload.js').catch(() => {});
   // Slice 750 — 3ds Max-style re-editable parametric primitives.
   import('./paramprim/autoload.js').catch(() => {});
+  // Slice 756 — Maya MultiCut + Bridge edges + Bevel edges mesh-edit trio.
+  import('./meshedit/autoload.js').catch(() => {});
   // Slice 699 — Maya MASH-style motion graphics.
   import('./mash/autoload.js').catch(() => {});
   // Slice 699 — Unreal Sequencer-style master timeline.
