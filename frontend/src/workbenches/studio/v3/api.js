@@ -7490,6 +7490,10 @@ export function registerV3Api() {
   import('./polypaint/autoload.js').catch(() => {});
   // Slice 714 — Houdini ocean simulator.
   import('./oceansim/autoload.js').catch(() => {});
+  // Slice 715 — SketchUp Tag Manager (layers / visibility / lock).
+  import('./sktagmgr/autoload.js').catch(() => {});
+  // Slice 715 — AutoCAD Dynamic Block library (define / place / overrides).
+  import('./dwgblocks/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
