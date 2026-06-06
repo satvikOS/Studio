@@ -7589,6 +7589,10 @@ export function registerV3Api() {
   // Slice 757 — Blender Geometry-Nodes batch (InstanceOnPoints / RealizeInstances /
   // MergeByDistance / TransformGeometry / SubdivisionSurface).
   import('./geomnodes2/autoload.js').catch(() => {});
+  // Slice 758 — ZBrush localized brush sculpt: per-mode kernels
+  // (draw/inflate/crease/pinch/flatten/grab/smooth) + 5 falloff curves
+  // (linear/smooth/sphere/sharp/constant) + verifyAll smoke op.
+  import('./zbrushdetail/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
