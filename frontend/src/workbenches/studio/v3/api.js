@@ -7599,6 +7599,9 @@ export function registerV3Api() {
   import('./usdlayer/autoload.js').catch(() => {});
   // Slice 762 — Maya HumanIK animation retargeting.
   import('./anretarget/autoload.js').catch(() => {});
+  // Slice 768 — glTF export polish: KHR_lights_punctual,
+  // KHR_materials_unlit, KHR_materials_clearcoat, KHR_materials_emissive_strength.
+  import('./gltfx/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
