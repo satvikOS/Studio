@@ -7512,6 +7512,12 @@ export function registerV3Api() {
   import('./kslabels/autoload.js').catch(() => {});
   // Slice 718 — Plasticity continuity check + G3 fillet.
   import('./plastcont/autoload.js').catch(() => {});
+  // Slice 719 — Substance Painter mask generators.
+  import('./spgens/autoload.js').catch(() => {});
+  // Slice 719 — Unreal Blueprint macros library.
+  import('./uemacros/autoload.js').catch(() => {});
+  // Slice 719 — UV island packing.
+  import('./uvpack/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
