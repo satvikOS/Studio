@@ -7534,6 +7534,10 @@ export function registerV3Api() {
   import('./autosave/autoload.js').catch(() => {});
   // Slice 722 — Scene templates / starter scenes.
   import('./scenetpl/autoload.js').catch(() => {});
+  // Slice 723 — Unreal Niagara visual node editor.
+  import('./niagaraui/autoload.js').catch(() => {});
+  // Slice 723 — Substance Designer function graphs.
+  import('./sdfuncs/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
