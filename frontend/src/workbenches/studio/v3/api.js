@@ -7438,6 +7438,12 @@ export function registerV3Api() {
   import('./garment/autoload.js').catch(() => {});
   // Slice 705 — Houdini VOPs visual VEX graph.
   import('./vops/autoload.js').catch(() => {});
+  // Slice 706 — Unreal Lumen-style real-time GI surface cache.
+  import('./lumen/autoload.js').catch(() => {});
+  // Slice 706 — Rhino 3-rail sweep + variable fillet surface ops.
+  import('./rhinosurf/autoload.js').catch(() => {});
+  // Slice 706 — Hair-shell fur (Maya / Blender XGen parity).
+  import('./fur/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
