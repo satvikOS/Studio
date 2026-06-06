@@ -18,6 +18,10 @@ export function installUIStatusBar() {
     window[name] = fn;
   }
   registerOps(ops, 'multiview', 'Bottom status bar — FPS / verts / tris / camera / selection / save state');
-  // Auto-enable.
-  setTimeout(() => enable(), 800);
+  // Slice 743 (UI polish): do NOT auto-enable this injected absolute
+  // bottom:0 debug strip. The Forge-style V3 shell renders its OWN polished
+  // status bar (discipline · mode · prim/vert/tri counts · fps · snap ·
+  // save state); auto-enabling this stacked a second raw "FPS V T cam Sel"
+  // strip (plus a debug tick-ruler) under it at the very bottom edge. The
+  // enable/disable ops stay registered for the V2 monolith / debugging.
 }
