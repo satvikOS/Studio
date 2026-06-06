@@ -5,6 +5,7 @@
 
 import * as THREE from 'three';
 import { lscmUnwrap, uvAngleDistortion } from './lscm.js';
+import { autoSeamUnwrap, segmentCharts } from './seams.js';
 
 function _vec(p, i) { return new THREE.Vector3(p[i * 3], p[i * 3 + 1], p[i * 3 + 2]); }
 
@@ -138,4 +139,43 @@ export function unwrapDistortion(meshUuid) {
   const idx = mesh.geometry.index?.array;
   const deg = uvAngleDistortion(pos, idx, uv.array);
   return { ok: true, meanAngleDistortionDeg: deg };
+}
+
+// Slice 736 — automatic SEAM-CUT unwrap: detect sharp-edge seams, segment
+// the mesh into developable charts, LSCM-flatten each, and lay them out.
+// Required for CLOSED meshes (a box, a character) that a single-chart
+// LSCM can't flatten without massive distortion. (Blender Smart UV
+// Project / Maya Automatic / ZBrush UV Master auto-seam.)
+export function unwrapWithSeams(meshUuid, opts) {
+  const scene = window.__archdiscScene;
+  const mesh = scene?.getObjectByProperty('uuid', meshUuid);
+  if (!mesh?.geometry?.attributes?.position) return { ok: false };
+  const pos = mesh.geometry.attributes.position.array;
+  const idx = mesh.geometry.index?.array
+    || (() => { const n = pos.length / 3; const a = new Uint32Array(n); for (let i = 0; i < n; i++) a[i] = i; return a; })();
+  const r = autoSeamUnwrap(pos, idx, { seamAngleDeg: Number(opts?.seamAngleDeg) || 40 });
+  if (!r.ok) return r;
+  // The seam unwrap returns an EXPANDED geometry (per-chart vertex copies)
+  // so charts don't share UVs across seams — rebuild the mesh from it.
+  const g = mesh.geometry;
+  g.setAttribute('position', new THREE.BufferAttribute(r.positions, 3));
+  g.setAttribute('uv', new THREE.BufferAttribute(r.uv, 2));
+  g.setIndex(new THREE.BufferAttribute(r.indices, 1));
+  if (g.attributes.normal) g.deleteAttribute('normal');
+  g.computeVertexNormals();
+  g.computeBoundingSphere();
+  return { ok: true, method: 'seam-lscm', charts: r.charts, seamCount: r.seamCount, flattenedCharts: r.flattenedCharts };
+}
+
+// Slice 736 — report how many seam-bounded charts a mesh would segment
+// into at a given dihedral-angle threshold (no UV write).
+export function chartCount(meshUuid, seamAngleDeg) {
+  const scene = window.__archdiscScene;
+  const mesh = scene?.getObjectByProperty('uuid', meshUuid);
+  if (!mesh?.geometry?.attributes?.position) return { ok: false };
+  const pos = mesh.geometry.attributes.position.array;
+  const idx = mesh.geometry.index?.array
+    || (() => { const n = pos.length / 3; const a = new Uint32Array(n); for (let i = 0; i < n; i++) a[i] = i; return a; })();
+  const seg = segmentCharts(pos, idx, Number(seamAngleDeg) || 40);
+  return { ok: true, charts: seg.charts.length, seamCount: seg.seamCount };
 }
