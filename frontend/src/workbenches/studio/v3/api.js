@@ -7432,6 +7432,12 @@ export function registerV3Api() {
   import('./mgeffect/autoload.js').catch(() => {});
   // Slice 704 — HDRI image-based lighting (KeyShot / Cycles parity).
   import('./hdri/autoload.js').catch(() => {});
+  // Slice 705 — ZBrush ZSphere skeleton + Adaptive Skin.
+  import('./zspheres/autoload.js').catch(() => {});
+  // Slice 705 — Marvelous Designer 2D pattern + drape garment.
+  import('./garment/autoload.js').catch(() => {});
+  // Slice 705 — Houdini VOPs visual VEX graph.
+  import('./vops/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
