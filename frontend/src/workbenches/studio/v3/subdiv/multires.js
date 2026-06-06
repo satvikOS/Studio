@@ -84,15 +84,68 @@ function ensureStack(mesh) {
   s = {
     uuid: mesh.uuid,
     levels: [base],          // levels[0] = base cage
-    detail: [null],          // detail[L] = Float32 displacement at level L (null at base)
+    detail: [null],          // detail[L] = Float32 tangent-space coeffs (n,t,b) at level L
     current: 0,
+    tangent: true,           // slice 735 — store detail in tangent space (rides the surface)
   };
   _stacks.set(mesh.uuid, s);
   return s;
 }
 
+// Compute per-vertex normals (area-weighted) for a positions+indices mesh.
+function computeNormals(positions, indices) {
+  const n = positions.length / 3;
+  const nrm = new Float32Array(n * 3);
+  const triCount = indices.length / 3;
+  for (let t = 0; t < triCount; t++) {
+    const a = indices[t * 3], b = indices[t * 3 + 1], c = indices[t * 3 + 2];
+    const ax = positions[a * 3], ay = positions[a * 3 + 1], az = positions[a * 3 + 2];
+    const bx = positions[b * 3], by = positions[b * 3 + 1], bz = positions[b * 3 + 2];
+    const cx = positions[c * 3], cy = positions[c * 3 + 1], cz = positions[c * 3 + 2];
+    const e1x = bx - ax, e1y = by - ay, e1z = bz - az;
+    const e2x = cx - ax, e2y = cy - ay, e2z = cz - az;
+    // cross(e1,e2) — magnitude ∝ 2×area, so this is area-weighted.
+    const nx = e1y * e2z - e1z * e2y;
+    const ny = e1z * e2x - e1x * e2z;
+    const nz = e1x * e2y - e1y * e2x;
+    nrm[a * 3] += nx; nrm[a * 3 + 1] += ny; nrm[a * 3 + 2] += nz;
+    nrm[b * 3] += nx; nrm[b * 3 + 1] += ny; nrm[b * 3 + 2] += nz;
+    nrm[c * 3] += nx; nrm[c * 3 + 1] += ny; nrm[c * 3 + 2] += nz;
+  }
+  for (let i = 0; i < n; i++) {
+    let x = nrm[i * 3], y = nrm[i * 3 + 1], z = nrm[i * 3 + 2];
+    const len = Math.hypot(x, y, z) || 1;
+    nrm[i * 3] = x / len; nrm[i * 3 + 1] = y / len; nrm[i * 3 + 2] = z / len;
+  }
+  return nrm;
+}
+
+// Deterministic orthonormal tangent frame from a unit normal N. The choice
+// of reference axis is fixed (avoids per-call drift) so bake and composite
+// build the SAME frame for a given normal.
+function frameFromNormal(nx, ny, nz) {
+  // Reference axis: world X unless N is nearly parallel to it, then world Y.
+  let rx = 1, ry = 0, rz = 0;
+  if (Math.abs(nx) > 0.9) { rx = 0; ry = 1; rz = 0; }
+  // T = normalize(ref - N (N·ref))
+  const d = nx * rx + ny * ry + nz * rz;
+  let tx = rx - nx * d, ty = ry - ny * d, tz = rz - nz * d;
+  const tl = Math.hypot(tx, ty, tz) || 1;
+  tx /= tl; ty /= tl; tz /= tl;
+  // B = N × T
+  const bx = ny * tz - nz * ty;
+  const by = nz * tx - nx * tz;
+  const bz = nx * ty - ny * tx;
+  return [tx, ty, tz, bx, by, bz];
+}
+
 // Re-derive the displayed geometry for level L by subdividing from the
-// base, re-adding each level's stored detail. Returns { positions, indices }.
+// base, re-adding each level's stored detail. Detail is stored in
+// TANGENT SPACE (coefficients along the surface normal / tangent /
+// bitangent of the smooth prediction) so when a LOWER level deforms or
+// rotates, the high-frequency detail rides the surface instead of
+// shearing off it (Mudbox/ZBrush/Blender Multires behaviour).
+// Returns { positions, indices }.
 function composite(s, L) {
   let positions = Float32Array.from(s.levels[0].positions);
   let indices = s.levels[0].indices;
@@ -102,7 +155,19 @@ function composite(s, L) {
     indices = sub.indices;
     const det = s.detail[lvl];
     if (det && det.length === positions.length) {
-      for (let i = 0; i < positions.length; i++) positions[i] += det[i];
+      if (s.tangent) {
+        const nrm = computeNormals(positions, indices);
+        for (let i = 0; i < positions.length / 3; i++) {
+          const nx = nrm[i * 3], ny = nrm[i * 3 + 1], nz = nrm[i * 3 + 2];
+          const [tx, ty, tz, bx, by, bz] = frameFromNormal(nx, ny, nz);
+          const cn = det[i * 3], ct = det[i * 3 + 1], cb = det[i * 3 + 2];
+          positions[i * 3]     += cn * nx + ct * tx + cb * bx;
+          positions[i * 3 + 1] += cn * ny + ct * ty + cb * by;
+          positions[i * 3 + 2] += cn * nz + ct * tz + cb * bz;
+        }
+      } else {
+        for (let i = 0; i < positions.length; i++) positions[i] += det[i];
+      }
     }
   }
   return { positions, indices };
@@ -194,7 +259,8 @@ export function multiresBake(uuid) {
   // Prediction = composite up to L with this level's detail zeroed.
   const savedDetail = s.detail[L];
   s.detail[L] = new Float32Array(cur.length);
-  const pred = composite(s, L).positions;
+  const predC = composite(s, L);
+  const pred = predC.positions;
   s.detail[L] = savedDetail || new Float32Array(cur.length);
   if (cur.length !== pred.length) {
     s.detail[L] = savedDetail;
@@ -202,12 +268,31 @@ export function multiresBake(uuid) {
   }
   const det = new Float32Array(cur.length);
   let maxDisp = 0;
-  for (let i = 0; i < cur.length; i++) {
-    det[i] = cur[i] - pred[i];
-    const a = Math.abs(det[i]); if (a > maxDisp) maxDisp = a;
+  if (s.tangent) {
+    // Project the object-space displacement (cur − pred) into the tangent
+    // frame of the PREDICTION surface so the stored detail (n,t,b
+    // coefficients) rides the surface when lower levels later deform.
+    const nrm = computeNormals(pred, predC.indices);
+    for (let i = 0; i < cur.length / 3; i++) {
+      const dx = cur[i * 3] - pred[i * 3];
+      const dy = cur[i * 3 + 1] - pred[i * 3 + 1];
+      const dz = cur[i * 3 + 2] - pred[i * 3 + 2];
+      const nx = nrm[i * 3], ny = nrm[i * 3 + 1], nz = nrm[i * 3 + 2];
+      const [tx, ty, tz, bx, by, bz] = frameFromNormal(nx, ny, nz);
+      const cn = dx * nx + dy * ny + dz * nz; // along normal
+      const ct = dx * tx + dy * ty + dz * tz; // along tangent
+      const cb = dx * bx + dy * by + dz * bz; // along bitangent
+      det[i * 3] = cn; det[i * 3 + 1] = ct; det[i * 3 + 2] = cb;
+      const mag = Math.hypot(dx, dy, dz); if (mag > maxDisp) maxDisp = mag;
+    }
+  } else {
+    for (let i = 0; i < cur.length; i++) {
+      det[i] = cur[i] - pred[i];
+      const a = Math.abs(det[i]); if (a > maxDisp) maxDisp = a;
+    }
   }
   s.detail[L] = det;
-  return { ok: true, level: L, stored: 'detail', maxDisplacement: maxDisp };
+  return { ok: true, level: L, stored: 'detail', maxDisplacement: maxDisp, space: s.tangent ? 'tangent' : 'object' };
 }
 
 export function multiresStats(uuid) {
