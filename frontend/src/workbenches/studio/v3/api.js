@@ -7599,6 +7599,8 @@ export function registerV3Api() {
   import('./usdlayer/autoload.js').catch(() => {});
   // Slice 762 — Maya HumanIK animation retargeting.
   import('./anretarget/autoload.js').catch(() => {});
+  // Slice 763 — real-time UV editor (per-island move/rotate/scale/mirror, pack, relax).
+  import('./uveditor/autoload.js').catch(() => {});
   // Slice 764 — Unreal Niagara real-time particle emitter.
   import('./nia2/autoload.js').catch(() => {});
   // Slice 765 — Marvelous Designer / Chaos Cloth Verlet+PBD cloth solver.
