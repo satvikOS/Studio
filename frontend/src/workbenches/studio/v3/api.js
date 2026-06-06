@@ -7448,6 +7448,12 @@ export function registerV3Api() {
   import('./lightgroups/autoload.js').catch(() => {});
   // Slice 707 — Real B-spline NURBS surface evaluator.
   import('./nurbs/autoload.js').catch(() => {});
+  // Slice 708 — Maya muscle deformer.
+  import('./muscle/autoload.js').catch(() => {});
+  // Slice 708 — Niagara extras: mesh-surface emitter + collider.
+  import('./niagaramesh/autoload.js').catch(() => {});
+  // Slice 708 — Substance Painter texture-set baker.
+  import('./sbaker/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
