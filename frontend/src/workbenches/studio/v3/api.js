@@ -7597,6 +7597,8 @@ export function registerV3Api() {
   import('./groom/autoload.js').catch(() => {});
   // Slice 761 — Pixar USD layer composition + USDA serializer.
   import('./usdlayer/autoload.js').catch(() => {});
+  // Slice 762 — Maya HumanIK animation retargeting.
+  import('./anretarget/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
