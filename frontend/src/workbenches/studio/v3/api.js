@@ -7428,6 +7428,10 @@ export function registerV3Api() {
   import('./freestyle/autoload.js').catch(() => {});
   // Slice 703 — Substance Painter smart-mask generators.
   import('./smartmask/autoload.js').catch(() => {});
+  // Slice 704 — Additional C4D MoGraph effectors.
+  import('./mgeffect/autoload.js').catch(() => {});
+  // Slice 704 — HDRI image-based lighting (KeyShot / Cycles parity).
+  import('./hdri/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
