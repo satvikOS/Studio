@@ -108,22 +108,24 @@
   color-scheme: light;
 }
 
-/* Geometry — consistent everywhere */
+/* Geometry — matched 1:1 to Forge (forge-v4/tokens.css) so the Studio
+   shell reads identically: same zone heights, rail/panel widths, and tool
+   grid metrics. See docs/FORGE_UI_SPEC.md. */
 :root {
-  --studio-topbar-h:    36px;
-  --studio-qat-h:       28px;
-  --studio-toolbar-h:   40px;
-  --studio-statusbar-h: 24px;
-  --studio-cmdbar-h:    44px;
+  --studio-topbar-h:    40px;
+  --studio-qat-h:       32px;
+  --studio-toolbar-h:   48px;
+  --studio-statusbar-h: 26px;
+  --studio-cmdbar-h:    52px;
 
-  --studio-wb-rail-w:   60px;          /* left workbench rail */
-  --studio-right-w:     320px;         /* right panel */
-  --studio-right-collapsed-w: 32px;
-  --studio-archie-w:    360px;         /* archie dock when open */
+  --studio-wb-rail-w:   72px;          /* left workbench rail (Forge: 72) */
+  --studio-right-w:     340px;         /* right panel (Forge: 340) */
+  --studio-right-collapsed-w: 36px;
+  --studio-archie-w:    380px;         /* archie dock when open (Forge: 380) */
 
-  --studio-tool-row-h:  32px;
-  --studio-tool-size:   28px;
-  --studio-tool-gap:    2px;
+  --studio-tool-row-h:  36px;
+  --studio-tool-size:   32px;
+  --studio-tool-gap:    3px;
 
   --studio-radius:      4px;
   --studio-radius-lg:   8px;

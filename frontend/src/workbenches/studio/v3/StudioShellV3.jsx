@@ -730,12 +730,30 @@ function SettingsModal() {
   const [bg, setBg] = useState('#000000');
   const [shading, setShading] = useState('solid');
   const [accent, setAccent] = useState(() => {
-    try { return window.localStorage.getItem('studio.v3.accent') || '#1de9b6'; } catch (_) { return '#1de9b6'; }
+    // Forge is fully MONOCHROME — the accent is the monochrome token
+    // (white in dark / graphite in light), never a chromatic colour. We
+    // default to '' which means "inherit --studio-accent from tokens.css".
+    // Migrate away the old teal default (#1de9b6 / #0fd4a6) that earlier
+    // builds persisted so existing users also go monochrome.
+    try {
+      const v = window.localStorage.getItem('studio.v3.accent');
+      if (!v || v === '#1de9b6' || v === '#0fd4a6') return '';
+      return v;
+    } catch (_) { return ''; }
   });
-  // Slice 523 — apply accent to :root --studio-accent on mount + change.
+  // Slice 744 — apply a CUSTOM accent only when the user explicitly set one.
+  // Empty string = inherit the monochrome token (Forge parity), so we clear
+  // any prior inline override instead of forcing teal.
   useEffect(() => {
-    document.documentElement.style.setProperty('--studio-accent', accent);
-    try { window.localStorage.setItem('studio.v3.accent', accent); } catch (_) {}
+    if (accent) {
+      document.documentElement.style.setProperty('--studio-accent', accent);
+    } else {
+      document.documentElement.style.removeProperty('--studio-accent');
+    }
+    try {
+      if (accent) window.localStorage.setItem('studio.v3.accent', accent);
+      else window.localStorage.removeItem('studio.v3.accent');
+    } catch (_) {}
   }, [accent]);
   useEffect(() => {
     const onToggle = () => setOpen((v) => !v);
