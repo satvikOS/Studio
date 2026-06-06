@@ -28,7 +28,17 @@ test('Studio V3 — compositor transform + crop', async () => {
     args: [path.join(__dirname, '..', 'electron', 'main.js'), '--dev'],
     slowMo: Number(process.env.STUDIO_SLOWMO) || 140,
   });
-  const win = await app.firstWindow();
+  // --dev may auto-open a DevTools window; app.firstWindow() can race onto
+  // it. Pick the real app window (url() not devtools://).
+  let win = null;
+  for (let i = 0; i < 30 && !win; i++) {
+    win = app.windows().find((w) => {
+      const u = (() => { try { return w.url(); } catch (_) { return ''; } })();
+      return u && !u.startsWith('devtools://');
+    }) || null;
+    if (!win) { await new Promise((r) => setTimeout(r, 500)); }
+  }
+  if (!win) win = await app.firstWindow();
   win.on('dialog', (d) => { d.dismiss().catch(() => {}); });
   await win.waitForLoadState('domcontentloaded');
 
