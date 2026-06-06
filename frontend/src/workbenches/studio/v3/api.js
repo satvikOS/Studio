@@ -7454,6 +7454,12 @@ export function registerV3Api() {
   import('./niagaramesh/autoload.js').catch(() => {});
   // Slice 708 — Substance Painter texture-set baker.
   import('./sbaker/autoload.js').catch(() => {});
+  // Slice 709 — SketchUp depth: scenes + schematic floor + solar path.
+  import('./skstairs/autoload.js').catch(() => {});
+  // Slice 709 — Cinema 4D Field system (8 field kinds).
+  import('./c4dfields/autoload.js').catch(() => {});
+  // Slice 709 — Plasticity X-NURB depth.
+  import('./plasticityx/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
