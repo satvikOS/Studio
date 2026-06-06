@@ -7396,6 +7396,8 @@ export function registerV3Api() {
   import('./geomelite/autoload.js').catch(() => {});
   // Slice 698 — Volumetric smoke/fire rendering (Data3DTexture raymarched).
   import('./volume/autoload.js').catch(() => {});
+  // Slice 751 — Sparse VDB-style tile bookkeeping (Houdini VDB / OpenVDB-style sparse grid).
+  import('./volume/autoload-vdb.js').catch(() => {});
   // Slice 698 — Grease pencil real-time mouse drawing input.
   import('./gpdraw/autoload.js').catch(() => {});
   // Slice 698 — Particle Flow event-driven particle graph.
