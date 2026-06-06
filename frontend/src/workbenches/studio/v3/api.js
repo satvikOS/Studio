@@ -7506,6 +7506,12 @@ export function registerV3Api() {
   import('./mdpressure/autoload.js').catch(() => {});
   // Slice 717 — Cascadeur animation layers.
   import('./caslayers/autoload.js').catch(() => {});
+  // Slice 718 — 3ds Max Hair & Fur with guide curves.
+  import('./maxhair/autoload.js').catch(() => {});
+  // Slice 718 — KeyShot Labels + Decals.
+  import('./kslabels/autoload.js').catch(() => {});
+  // Slice 718 — Plasticity continuity check + G3 fillet.
+  import('./plastcont/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
