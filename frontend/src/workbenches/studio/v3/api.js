@@ -7494,6 +7494,12 @@ export function registerV3Api() {
   import('./sktagmgr/autoload.js').catch(() => {});
   // Slice 715 — AutoCAD Dynamic Block library (define / place / overrides).
   import('./dwgblocks/autoload.js').catch(() => {});
+  // Slice 716 — C4D Spline Wrap + Spline Rail deformer.
+  import('./splinewrap/autoload.js').catch(() => {});
+  // Slice 716 — Substance Designer node graph.
+  import('./substancegraph/autoload.js').catch(() => {});
+  // Slice 716 — AutoCAD layout sheets + viewports + title block.
+  import('./dwgsheets/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
