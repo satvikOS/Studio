@@ -7402,6 +7402,12 @@ export function registerV3Api() {
   import('./pflow/autoload.js').catch(() => {});
   // Slice 699 — Texture map baking (AO/curvature/normal/height/cavity).
   import('./bakemaps/autoload.js').catch(() => {});
+  // Slice 747 — SketchUp interactive single-face Push/Pull.
+  import('./pushpull/autoload.js').catch(() => {});
+  // Slice 748 — SketchUp live inference snap engine.
+  import('./snap/autoload.js').catch(() => {});
+  // Slice 749 — Real Catmull-Clark SubD with Hoppe-94 creases.
+  import('./catmullclark/autoload.js').catch(() => {});
   // Slice 699 — Maya MASH-style motion graphics.
   import('./mash/autoload.js').catch(() => {});
   // Slice 699 — Unreal Sequencer-style master timeline.
