@@ -4,6 +4,7 @@
 // Mirrors ZBrush UV Master's "Unwrap All" button.
 
 import * as THREE from 'three';
+import { lscmUnwrap, uvAngleDistortion } from './lscm.js';
 
 function _vec(p, i) { return new THREE.Vector3(p[i * 3], p[i * 3 + 1], p[i * 3 + 2]); }
 
@@ -80,15 +81,27 @@ export function unwrapAll(meshUuid, opts) {
   if (!mesh?.geometry?.attributes?.position) return { ok: false };
   const pos = mesh.geometry.attributes.position.array;
   const idx = mesh.geometry.index?.array;
-  let uv = _greedyUnwrap(pos, idx);
-  const iterations = Math.max(0, Math.min(20, Number(opts?.relax) || 5));
-  if (iterations > 0) uv = _angleBasedRelax(pos, idx, uv, iterations);
+  // Slice 734 — real LSCM (Least Squares Conformal Maps) is the primary
+  // unwrap: it minimises ANGLE distortion (Blender/Maya 'Unwrap'). Fall
+  // back to spherical projection only if the conformal solve fails
+  // (degenerate / collapsed mesh).
+  let uv = null;
+  let method = 'lscm';
+  const lscm = lscmUnwrap(pos, idx);
+  if (lscm.ok) {
+    uv = lscm.uv;
+  } else {
+    method = 'projection';
+    uv = _greedyUnwrap(pos, idx);
+    const iterations = Math.max(0, Math.min(20, Number(opts?.relax) || 5));
+    if (iterations > 0) uv = _angleBasedRelax(pos, idx, uv, iterations);
+  }
   mesh.geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
   // Pack the result via slice-719 uvpack if installed.
   if (typeof window.__studioUVPackIslands === 'function') {
     try { window.__studioUVPackIslands(meshUuid, { margin: 0.01 }); } catch (_) {}
   }
-  return { ok: true, vertices: uv.length / 2 };
+  return { ok: true, vertices: uv.length / 2, method, fallbackReason: lscm.ok ? undefined : lscm.reason };
 }
 
 export function setControlPainting(meshUuid, opts) {
@@ -110,4 +123,19 @@ export function pickPole(meshUuid) {
   const mesh = scene?.getObjectByProperty('uuid', meshUuid);
   if (!mesh?.geometry?.attributes?.position) return { ok: false };
   return { ok: true, vertex: _pickPoleVertex(mesh.geometry.attributes.position.array) };
+}
+
+// Slice 734 — report the mean angle distortion (degrees) of a mesh's
+// CURRENT UVs. 0 = perfectly conformal. Lets users + tests quantify
+// unwrap quality (LSCM should be near-zero on developable surfaces).
+export function unwrapDistortion(meshUuid) {
+  const scene = window.__archdiscScene;
+  const mesh = scene?.getObjectByProperty('uuid', meshUuid);
+  if (!mesh?.geometry?.attributes?.position) return { ok: false };
+  const uv = mesh.geometry.attributes.uv;
+  if (!uv) return { ok: false, reason: 'mesh has no UVs — unwrap first' };
+  const pos = mesh.geometry.attributes.position.array;
+  const idx = mesh.geometry.index?.array;
+  const deg = uvAngleDistortion(pos, idx, uv.array);
+  return { ok: true, meanAngleDistortionDeg: deg };
 }
