@@ -7484,6 +7484,12 @@ export function registerV3Api() {
   import('./cinetracks/autoload.js').catch(() => {});
   // Slice 713 — Cinema 4D XPresso visual scripting.
   import('./xpresso/autoload.js').catch(() => {});
+  // Slice 714 — Rhino drape + N-rail loft + Coons boundary surface.
+  import('./rhinodrape/autoload.js').catch(() => {});
+  // Slice 714 — ZBrush Polypaint vertex color brush + layer stack.
+  import('./polypaint/autoload.js').catch(() => {});
+  // Slice 714 — Houdini ocean simulator.
+  import('./oceansim/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
