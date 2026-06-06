@@ -7615,6 +7615,9 @@ export function registerV3Api() {
   import('./smatlib/autoload.js').catch(() => {});
   // Slice 770 — HDRI environment library (20 procedural presets + custom URL).
   import('./hdrlib/autoload.js').catch(() => {});
+  // Slice 771 — Asset browser library (catalog + search + tag/category + drag-spawn).
+  import('./assetlib/autoload.js').catch(() => {});
+
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
