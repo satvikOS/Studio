@@ -7586,6 +7586,9 @@ export function registerV3Api() {
   import('./ueexport/autoload.js').catch(() => {});
   // Slice 755 — Bridson Poisson-disk + density-mask surface scatter (Houdini Scatter SOP parity).
   import('./scatter/autoload.js').catch(() => {});
+  // Slice 757 — Blender Geometry-Nodes batch (InstanceOnPoints / RealizeInstances /
+  // MergeByDistance / TransformGeometry / SubdivisionSurface).
+  import('./geomnodes2/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
