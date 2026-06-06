@@ -7589,9 +7589,10 @@ export function registerV3Api() {
   // Slice 757 — Blender Geometry-Nodes batch (InstanceOnPoints / RealizeInstances /
   // MergeByDistance / TransformGeometry / SubdivisionSurface).
   import('./geomnodes2/autoload.js').catch(() => {});
-  // Slice 758 — ZBrush localized brush sculpt: per-mode kernels
-  // (draw/inflate/crease/pinch/flatten/grab/smooth) + 5 falloff curves.
+  // Slice 758 — ZBrush localized brush sculpt: per-mode kernels.
   import('./zbrushdetail/autoload.js').catch(() => {});
+  // Slice 759 — Rhino Grasshopper-specific NURBS node palette.
+  import('./ghnurbs/autoload.js').catch(() => {});
   // Slice 761 — Pixar USD layer composition + USDA serializer.
   import('./usdlayer/autoload.js').catch(() => {});
 
