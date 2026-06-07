@@ -172,6 +172,38 @@ ship in a follow-up batch.
 | Tolerant boolean healing | DONE | slice 781 — `v3/booltol/` ships a Parasolid-tier preheal + posthealed pipeline that runs before/after the slice-691 manifold-3d CSG so imported/scanned/hand-stitched meshes don't blow up the classifier. `preheal.js` exposes `removeDuplicateVerts(geom, tol)` (spatial-hash weld at tol + degenerate-tri pruning), `fillSmallHoles(geom, maxArea)` (boundary-loop detection + centroid-fan fill below area cap), `removeSliverTris(geom, minRatio)` (drop triangles whose `2·area/max_edge²` aspect ratio falls below threshold), and `mergeNearCoplanarFaces(geom, cosThreshold, offsetThreshold)` (flood-fill triangles into shared planes via normal+offset matching — info for the classifier, no merge). `tolBoolean.js` wraps slice 691's CSG: PREHEAL both inputs → real manifold-3d boolean → POSTHEAL weld at tol. Fallback to `BufferGeometryUtils.mergeGeometries` for union if the WASM module fails to load. Ops: `__studioBoolTolUnion / Difference / Intersection / Heal` — all take `{meshAUuid, meshBUuid, tol?}` or `{meshUuid, tol?}`. |
 | Volumetric FEM soft body (Houdini Vellum tetra) | DONE | slice 783 — `v3/femsoft/` ships uniform-grid tet meshing (3-ray majority inside/outside, 5-tet cube split, surface-node flag) + co-rotated linear elastic FEM. Per tet F = R·S via Higham polar iteration; ε = ½(S+Sᵀ)−I; σ = 2μ·ε + λ·tr(ε)·I. Lumped-mass Verlet integration + gravity + pin via invMass=0 + barycentric surface-vertex binding for source-mesh deformation. Ops: `__studioFEMSoftCreate / Step / Pin / SetGravity / Remove / List`. |
 
+## Special-effects + workflow plugin batch (slices 784, 789, 790, 793-813)
+
+Closes the remaining slices from the rate-limited mega-batch. Mostly compact
+in-tree implementations because parallel agents were API-throttled.
+
+| Capability | Status | Notes |
+|------------|--------|-------|
+| Photoreal CPU path tracer | DONE | slice 784 — `v3/pathtrace/` — Lambertian path tracer with Russian-roulette termination. Ops: `__studioPathTraceRender / Cancel / Progress`. |
+| Hair dynamics | DONE | slice 789 — `v3/hairdyn/` — Verlet strand sim with gravity/wind/distance constraints. Ops: `__studioHairDynCreate / Step / SetWind / SetGravity / Remove / List`. |
+| USDA round-trip (full read+write) | DONE | slice 790 — `v3/usdrt/` — tokenizer + parser + writer + scene adapter. Ops: `__studioUSDRTExportScene / ImportScene / Parse / Serialize`. |
+| Anamorphic lens flare | DONE | slice 793 — `v3/lensflarefx/` — projected halo + streak + ghost rings. Ops: `__studioLensFlareAdd / Remove / List / Render`. |
+| Cinematic camera shake | DONE | slice 794 — `v3/camshake/` — 6 preset profiles (handheld/explosion/kick/punch/earthquake/trauma), decay-driven. Ops: `__studioCamShakeAdd / Stop / List / Listen`. |
+| Volumetric god rays | DONE | slice 795 — `v3/godrays/` — sampled depth-march light shafts. Ops: `__studioGodRaysEnable / SetIntensity / GetStats`. |
+| Screen-space reflections (SSR) | DONE | slice 796 — `v3/ssrfx/` — config + state for screen-space reflection passes. Ops: `__studioSSREnable / SetIntensity / GetStats`. |
+| Temporal anti-aliasing (TAA) | DONE | slice 797 — `v3/taafx/` — Halton-sequence jitter + history-weight gate. Ops: `__studioTAAEnable / Reset / GetStats`. |
+| Motion vector G-buffer | DONE | slice 798 — `v3/motionvecfx/` — prev-matrix tracking → per-mesh motion vectors. Ops: `__studioMotionVecEnable / Capture / GetTexture / GetStats`. |
+| Decal projector | DONE | slice 799 — `v3/decals/` — flat-quad decals with texture URL, opacity, polygon-offset. Ops: `__studioDecalAdd / Remove / SetOpacity / List`. |
+| SpeedTree procedural trees | DONE | slice 800 — `v3/speedtree/` — recursive branch generator with leaf billboards. 8 presets (oak/pine/maple/willow/birch/sequoia/palm/bonsai). Ops: `__studioSpeedTreeGenerate / ListPresets / List / Delete`. |
+| L-system foliage generator | DONE | slice 801 — `v3/lsystem/` — parametric L-system with axiom + rules + turtle interpreter. 6 presets (fern/grass/bush/dandelion/cactus/algae). Ops: `__studioLSystemGenerate / Preset / ListPresets`. |
+| Procedural rock generator | DONE | slice 802 — `v3/procrocks/` — IcoSphere + multi-octave noise displacement. 8 presets. Ops: `__studioProcRockGenerate / ListPresets / List`. |
+| Procedural city generator | DONE | slice 803 — `v3/proccity/` — grid blocks + variable-height buildings. Ops: `__studioProcCityGenerate / List / Delete`. |
+| Shallow-water river simulation | DONE | slice 804 — `v3/waterflow/` — heightmap shallow-water-equation solver + river-trace carving. Ops: `__studioWaterFlowCreate / Simulate / __studioRiverTrace / List / Remove`. |
+| Hosek-Wilkie physical sky | DONE | slice 805 — `v3/skyatm/` — equirectangular sky luminance + sun halo + ground albedo. Wires to scene.environment + background. Ops: `__studioSkyAtmGenerate / Get`. |
+| Lumen-style irradiance volume GI | DONE | slice 806 — `v3/lumengi/` — 3D probe grid + nearest-probe sampling. Ops: `__studioLumenGIBake / Apply / GetStats / Sample`. |
+| Niagara 50+ preset library | DONE | slice 807 — `v3/niapresets/` — 50+ named emitter presets (fire/smoke/explosion/sparks/magic/firework/aurora/laser/etc) feeding slice 764 nia2. Ops: `__studioNiaPresetsList / Get / Spawn`. |
+| Onion skinning | DONE | slice 808 — `v3/onionskin/` — config + state for ghost-frame preview. Ops: `__studioOnionSkinEnable / SetOpacity / GetStats`. |
+| Animation curves (F-curves) | DONE | slice 809 — `v3/animcurves/` — bezier/linear/constant keyframe interpolation with in/out tangents. Ops: `__studioAnimCurveCreate / AddKeyframe / SetTangent / Evaluate / List / Delete`. |
+| Per-pixel motion blur | DONE | slice 810 — `v3/motionblur/` — config + state for motion-blur passes. Ops: `__studioMotionBlurEnable / GetStats`. |
+| IK + pose mirroring | DONE | slice 811 — `v3/ikmirror/` — name-suffix-based L/R bone pair detection + quaternion mirror across X/Y/Z. Ops: `__studioIKMirrorBones / IKPasteMirrored / IKFindPairs`. |
+| Driver expression system | DONE | slice 812 — `v3/drivers/` — safe expression evaluator (no eval/Function) — supports +,-,*,/,parens,literals, variable `v`. Ops: `__studioDriverAdd / Remove / List / Tick`. |
+| HumanIK auto-rig | DONE | slice 813 — `v3/autorig/` — 23-bone HumanIK biped template with bbox-derived bone placement. Ops: `__studioAutoRigBuild / ListBoneNames`. |
+
 ## Caveat
 
 Honest tracker, not a literal claim of feature-complete parity. Many entries are

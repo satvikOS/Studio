@@ -7655,6 +7655,54 @@ export function registerV3Api() {
   import('./booltol/autoload.js').catch(() => {});
   // Slice 783 — Volumetric FEM soft body (Houdini Vellum tetra).
   import('./femsoft/autoload.js').catch(() => {});
+  // Slice 784 — Photoreal CPU path tracer.
+  import('./pathtrace/autoload.js').catch(() => {});
+  // Slice 789 — Hair dynamics (verlet strand sim).
+  import('./hairdyn/autoload.js').catch(() => {});
+  // Slice 790 — USDA round-trip (read+write+scene adapter).
+  import('./usdrt/autoload.js').catch(() => {});
+  // Slice 793 — Anamorphic lens flare.
+  import('./lensflarefx/autoload.js').catch(() => {});
+  // Slice 794 — Cinematic camera shake.
+  import('./camshake/autoload.js').catch(() => {});
+  // Slice 795 — Volumetric god rays.
+  import('./godrays/autoload.js').catch(() => {});
+  // Slice 796 — Screen-space reflections.
+  import('./ssrfx/autoload.js').catch(() => {});
+  // Slice 797 — Temporal anti-aliasing.
+  import('./taafx/autoload.js').catch(() => {});
+  // Slice 798 — Motion vector G-buffer.
+  import('./motionvecfx/autoload.js').catch(() => {});
+  // Slice 799 — Decal projector.
+  import('./decals/autoload.js').catch(() => {});
+  // Slice 800 — SpeedTree procedural trees.
+  import('./speedtree/autoload.js').catch(() => {});
+  // Slice 801 — L-system foliage generator.
+  import('./lsystem/autoload.js').catch(() => {});
+  // Slice 802 — Procedural rock generator.
+  import('./procrocks/autoload.js').catch(() => {});
+  // Slice 803 — Procedural city generator.
+  import('./proccity/autoload.js').catch(() => {});
+  // Slice 804 — Shallow-water river simulation.
+  import('./waterflow/autoload.js').catch(() => {});
+  // Slice 805 — Hosek-Wilkie physical sky.
+  import('./skyatm/autoload.js').catch(() => {});
+  // Slice 806 — Lumen-style irradiance volume GI.
+  import('./lumengi/autoload.js').catch(() => {});
+  // Slice 807 — Niagara 50+ preset library.
+  import('./niapresets/autoload.js').catch(() => {});
+  // Slice 808 — Onion skinning ghost frames.
+  import('./onionskin/autoload.js').catch(() => {});
+  // Slice 809 — Animation curves / F-curve editor.
+  import('./animcurves/autoload.js').catch(() => {});
+  // Slice 810 — Per-pixel motion blur.
+  import('./motionblur/autoload.js').catch(() => {});
+  // Slice 811 — IK + pose mirroring.
+  import('./ikmirror/autoload.js').catch(() => {});
+  // Slice 812 — Driver expression system.
+  import('./drivers/autoload.js').catch(() => {});
+  // Slice 813 — HumanIK auto-rig.
+  import('./autorig/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
