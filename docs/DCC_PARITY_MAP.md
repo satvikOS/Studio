@@ -168,6 +168,7 @@ ship in a follow-up batch.
 | Archie Tool Registry V2 (auto-introspected manifest) | DONE | slice 787 — `frontend/src/ai/ToolRegistryV2.js` + `archieIntrospect.js` walks the v3 `registerOps` chain and exposes every `__studio*` op as a JSON-serialisable manifest. Closes the slice-184 schema gap so Archie can naturally call all slices 745-786 ops. `window.__archieToolList` / `__archieGetTool` / `__archieGetCategories`. |
 | 4K scene stress harness | DONE | slice 788 — `v3/stress/` ships scene generators, FPS sampler, arbitrary-resolution PNG render, memory profile. Ops: `__studioStressGenScene / MeasureFPS / Render4K / MemoryProfile`. |
 | Substance Designer visual graph editor | DONE | slice 791 — `v3/sdgraphedit/` exposes slice 775's 12 generators + 8 filters through a graph editor. Ops: `__studioSDGraphCreate / AddNode / Connect / Evaluate / List / Delete`. |
+| Real-time ReSTIR path tracer | DONE | slice 792 — `v3/restir/` ships full Bitterli 2020 Reservoir Spatio-Temporal Importance Resampling: per-pixel reservoir of M=8 light candidates via streaming weighted reservoir sampling (Chao A-Res), unshadowed target-pdf p̂ = BRDF·G·L_e, visibility test, temporal reuse with M-cap=20, spatial reuse with K=5 neighbour combines × N passes, depth + normal similarity gates. Reuses slice 684 triangle soup + adds dir/point/emissive-tri light table. Ops: `__studioReSTIREnable / Render / GetStats`. |
 
 ## Caveat
 

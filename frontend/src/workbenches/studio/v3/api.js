@@ -7647,6 +7647,10 @@ export function registerV3Api() {
   import('./stress/autoload.js').catch(() => {});
   // Slice 791 — Substance Designer visual graph editor (generators × filters).
   import('./sdgraphedit/autoload.js').catch(() => {});
+  // Slice 792 — Real-time ReSTIR (Reservoir Spatio-Temporal Importance
+  // Resampling) direct-lighting path tracer — extends slice 684 path tracer
+  // with weighted reservoir sampling + temporal + spatial reuse.
+  import('./restir/autoload.js').catch(() => {});
 
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
