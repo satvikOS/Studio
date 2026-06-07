@@ -7653,7 +7653,8 @@ export function registerV3Api() {
   import('./restir/autoload.js').catch(() => {});
   // Slice 781 — Parasolid-tier tolerant boolean healing (weld + slivers + hole fill before CSG).
   import('./booltol/autoload.js').catch(() => {});
-
+  // Slice 783 — Volumetric FEM soft body (Houdini Vellum tetra).
+  import('./femsoft/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
