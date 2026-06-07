@@ -120,26 +120,25 @@
    and a noticeably compact top chrome. Heights drop to 30 / 24 / 38
    (total 92 px) with proportionally smaller tool buttons. */
 :root {
-  --studio-topbar-h:    30px;
-  /* Slice 951c — collapse the QAT row entirely. The user reported "lot
-     of empty space above the ribbon"; the QAT row's icons (new/open/
-     save/export/undo/redo/play/pause/settings) all duplicate menubar
-     entries (File > New, Edit > Undo, …) so the row was visual noise
-     more than affordance. Setting the height to 0 + hiding the
-     element via .studio-qat { display: none } below collapses the
-     band cleanly while keeping the grid template stable. */
+  /* Slice 951i — top chrome tightened further. The slice-951f drop
+     from 40/32/48 to 30/24/38 still left visible empty vertical space
+     above + below the toolbar group labels. Now 26/0/32 (total top
+     chrome 58 px vs the old 120 px), with tool buttons at 22 px so
+     the icon+border fits the new 32 px row without dead margin. */
+  --studio-topbar-h:    26px;
+  /* Slice 951c — collapse the QAT row entirely. */
   --studio-qat-h:       0px;
-  --studio-toolbar-h:   38px;
-  --studio-statusbar-h: 22px;
-  --studio-cmdbar-h:    44px;
+  --studio-toolbar-h:   32px;
+  --studio-statusbar-h: 20px;
+  --studio-cmdbar-h:    40px;
 
-  --studio-wb-rail-w:   64px;          /* left workbench rail */
-  --studio-right-w:     320px;         /* right panel */
-  --studio-right-collapsed-w: 32px;
+  --studio-wb-rail-w:   56px;          /* left workbench rail */
+  --studio-right-w:     300px;         /* right panel */
+  --studio-right-collapsed-w: 28px;
   --studio-archie-w:    380px;         /* archie dock when open */
 
-  --studio-tool-row-h:  30px;
-  --studio-tool-size:   26px;
+  --studio-tool-row-h:  26px;
+  --studio-tool-size:   22px;
   --studio-tool-gap:    2px;
 
   --studio-radius:      4px;

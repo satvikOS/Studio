@@ -1583,7 +1583,16 @@ function PresentationBanner() {
 // 3-axis cross. Updates every animation frame; the X/Y/Z labels are
 // coloured Blender-style red/green/blue. Click an axis label to snap
 // the camera to that view.
+//
+// Slice 951i — REMOVED. The Forge-mirror viewport rewrite (slice 951g)
+// added drei's <GizmoHelper> + <GizmoViewport> at bottom-right, which
+// is the canonical Forge navigation cube. This legacy SVG was stacking
+// underneath it producing a second smaller coloured gizmo the user
+// asked to remove. The component identity stays so any holdover mount
+// renders zero DOM.
 function AxisGizmo() {
+  return null;
+  // eslint-disable-next-line no-unreachable
   const ref = React.useRef(null);
   React.useEffect(() => {
     let raf = 0;

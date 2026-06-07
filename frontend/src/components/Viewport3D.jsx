@@ -36,9 +36,25 @@
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { Canvas, useThree, useFrame } from '@react-three/fiber';
 import { Grid, OrbitControls, TransformControls as DreiTransformControls,
-         GizmoHelper, GizmoViewport } from '@react-three/drei';
+         GizmoHelper, GizmoViewport, Line } from '@react-three/drei';
 import * as THREE from 'three';
 import { useViewport } from '../contexts/ViewportContext';
+
+// Slice 951i — XYZ origin triad. Three orthogonal axis lines at world
+// (0,0,0) plus tiny direction-cone markers. Studio is monochrome
+// elsewhere but axes use the universal R/G/B (X red, Y green, Z blue)
+// convention — they're informational, like compass colours, not brand.
+// 50 mm long so they're legible at the default camera (300 mm orbit).
+function OriginAxes() {
+  const L = 0.05;
+  return (
+    <group renderOrder={2}>
+      <Line points={[[0, 0, 0], [L, 0, 0]]} color="#e26a6a" lineWidth={1.5} />
+      <Line points={[[0, 0, 0], [0, L, 0]]} color="#5cc88f" lineWidth={1.5} />
+      <Line points={[[0, 0, 0], [0, 0, L]]} color="#4aa0e1" lineWidth={1.5} />
+    </group>
+  );
+}
 
 // -----------------------------------------------------------------------
 // Studio-bridge: publishes the r3f Three.js objects on window so the
@@ -264,17 +280,25 @@ function SceneStaticsLayer({ theme }) {
       <ambientLight intensity={theme === 'light' ? 0.7 : 0.35} />
       <directionalLight position={[10, 20, 10]} intensity={0.6} castShadow={false} />
       <directionalLight position={[-10, 5, -10]} intensity={0.2} />
+      {/* Slice 951i — grid tuned for visibility across the full
+          viewport. Was 0.6 thick / #2a2a2a (almost invisible on
+          #181818 canvas) and fadeDistance:30 (faded inside one
+          screen-height). Now 1.0 / #4a4a4a cells + 1.2 / #6a6a6a
+          section lines on a 1 m section so the rhythm reads at any
+          camera distance, and fadeDistance:200 / fadeStrength:0.6
+          keeps the grid clearly readable from horizon to camera
+          without abruptly clipping. */}
       <Grid
         args={[10, 10]}
         cellSize={0.1}
-        cellThickness={0.6}
-        cellColor={theme === 'light' ? '#c0c0c0' : '#2a2a2a'}
+        cellThickness={1.0}
+        cellColor={theme === 'light' ? '#a0a0a0' : '#4a4a4a'}
         sectionSize={1}
-        sectionThickness={1.0}
-        sectionColor={theme === 'light' ? '#8a8a8a' : '#3a3a3a'}
+        sectionThickness={1.2}
+        sectionColor={theme === 'light' ? '#707070' : '#6a6a6a'}
         position={[0, -0.001, 0]}
-        fadeDistance={30}
-        fadeStrength={1.6}
+        fadeDistance={200}
+        fadeStrength={0.6}
         infiniteGrid
       />
     </>
@@ -314,20 +338,73 @@ function Viewport3D() {
       >
         <color attach="background" args={[theme === 'light' ? '#ebebeb' : '#181818']} />
         <SceneStaticsLayer theme={theme} />
+        <OriginAxes />
         <StudioBridge
           selectedRef={selectedRef}
           setSelected={setSelectedAndRef}
         />
         <SelectionLayer selectedRef={selectedRef} setSelected={setSelectedAndRef} />
         <TransformLayer selected={selected} mode={gizmoMode} />
-        <GizmoHelper alignment="bottom-right" margin={[64, 64]}>
+        <GizmoHelper alignment="bottom-right" margin={[56, 56]}>
           <GizmoViewport
-            axisColors={['#a0a0a0', '#c8c8c8', '#888888']}
-            labelColor="#dddddd"
+            axisColors={['#e26a6a', '#5cc88f', '#4aa0e1']}
+            labelColor="#f0eee6"
           />
         </GizmoHelper>
       </Canvas>
+      {/* Slice 951i — Frame-All centre button. Pinned to viewport
+          bottom-right just above the navigation cube. Click reframes
+          the camera on the union of all primitive bboxes (or recenters
+          on world origin when the scene is empty). Pure CSS overlay so
+          it doesn't fight the Canvas pointer-events. */}
+      <CenterCameraButton />
     </div>
+  );
+}
+
+function CenterCameraButton() {
+  const onClick = () => {
+    if (typeof window === 'undefined') return;
+    if (window.__studioFrameAll) {
+      const r = window.__studioFrameAll();
+      if (r && r.ok) return;
+    }
+    // Fallback: recentre orbit + reset camera to default position.
+    const vp = window.__archdiscViewport;
+    if (!vp || !vp.camera) return;
+    vp.camera.position.set(0.3, 0.2, 0.3);
+    vp.camera.lookAt(0, 0, 0);
+    vp.camera.updateProjectionMatrix();
+    const c = vp.controls && vp.controls();
+    if (c) { c.target.set(0, 0, 0); c.update(); }
+  };
+  return (
+    <button
+      type="button"
+      data-studio-v3-frame-all
+      onClick={onClick}
+      title="Frame all (recenter camera)"
+      style={{
+        position: 'absolute', right: 14, bottom: 130, zIndex: 6,
+        width: 32, height: 32, padding: 0,
+        background: 'rgba(20, 20, 20, 0.78)',
+        border: '1px solid rgba(255, 255, 255, 0.12)',
+        borderRadius: 4,
+        cursor: 'pointer',
+        backdropFilter: 'blur(6px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}
+    >
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+           stroke="#dddddd" strokeWidth="1.6" strokeLinecap="square">
+        {/* corner-bracket frame icon */}
+        <path d="M4 9 V4 H9" />
+        <path d="M20 9 V4 H15" />
+        <path d="M4 15 V20 H9" />
+        <path d="M20 15 V20 H15" />
+        <circle cx="12" cy="12" r="1.6" fill="#dddddd" />
+      </svg>
+    </button>
   );
 }
 
