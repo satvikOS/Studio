@@ -7619,10 +7619,11 @@ export function registerV3Api() {
   import('./assetlib/autoload.js').catch(() => {});
   // Slice 772 — KeyShot studio environments + render quality presets.
   import('./keyshot/autoload.js').catch(() => {});
-  // Slice 774 — AutoCAD-style 2D drawing layer (Line/Polyline/Arc/Circle/
-  // Rectangle/Dimension/Text + layers + SVG export).
+  // Slice 773 — Cinema 4D MoGraph Matrix object + Plain/Delay/Inheritance/Random effectors.
+  import('./c4dmograph/autoload.js').catch(() => {});
+  // Slice 774 — AutoCAD-style 2D drawing layer (Line/Polyline/Arc/Circle/Rectangle/Dimension/Text + SVG).
   import('./cad2d/autoload.js').catch(() => {});
-  // Slice 777 — Houdini POPs (Particle Operators) — gravity/wind/turbulence/curl/vortex/attractor + collision.
+  // Slice 777 — Houdini POPs (Particle Operators) — gravity/wind/turbulence/curl/vortex/attractor.
   import('./popfx/autoload.js').catch(() => {});
 
 
