@@ -1385,9 +1385,20 @@ function Viewport3D({ canvasId = 'render-canvas', domain = 'mechanical', onReady
               try { tick(now); } catch (_) {}
               animActive = true;
             }
+            // Slice 919 — Cascaded Shadow Maps (real CSM via the three.js
+            // addon). When v3/shadowcasc/ is enabled it installs a per-frame
+            // update slot here; CSM MUST run before renderer.render() to
+            // align its per-cascade light projections to the current camera
+            // matrix. Returning true marks the scene dirty (sun lights move
+            // every frame, so render-on-demand must not skip).
+            const csmUpdate = window.__archdiscViewport && window.__archdiscViewport.__studioCSMUpdate;
+            let csmActive = false;
+            if (typeof csmUpdate === 'function') {
+              try { csmActive = !!csmUpdate(now); } catch (_) {}
+            }
             // Render-on-demand gate. Always draw the first frame after a
             // dirty event AND while damping or animation is in flight.
-            if (!dirty && !orbitChanging && !animActive) return;
+            if (!dirty && !orbitChanging && !animActive && !csmActive) return;
             dirty = false;
             // Slice 610 — Composer takes over rendering when post-effects
             // are enabled (slice 606+). Keep outline-pass selection synced.
