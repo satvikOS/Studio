@@ -7320,6 +7320,114 @@ function _synthFromPlan(plan, activeWb) {
   return calls;
 }
 
+// Slice 951l — humanize the raw model reply for chat display. The user
+// asked for the overlay to read naturally instead of dumping XML-ish
+// <plan> / <tool_call> tags. When calls ARE dispatched, we lead with
+// a natural summary of what just happened (the user cares about what
+// got built, not what the model rambled) and only fall back to the
+// stripped prose when no dispatch landed. The dispatch itself runs
+// against the raw output; this only changes the chat-window text.
+function _humanizeReply(rawReply, dispatchedCalls) {
+  // When dispatch produced calls, the truthful answer is "here's what I
+  // just did". That reads as a natural assistant turn ("Switched to
+  // Modeling, added a cube and four cylinders.") regardless of how
+  // disjointed the underlying model prose was.
+  if (Array.isArray(dispatchedCalls) && dispatchedCalls.length > 0) {
+    const summary = _summariseDispatch(dispatchedCalls);
+    if (summary) return summary;
+  }
+  let s = String(rawReply || '').trim();
+  // 1. Drop protocol envelopes — <think>, <plan>, <tool_call>, <clarify>
+  s = s.replace(/<think>[\s\S]*?<\/think>/gi, '');
+  s = s.replace(/<plan>[\s\S]*?<\/plan>/gi, '');
+  s = s.replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, '');
+  s = s.replace(/<clarify>[\s\S]*?<\/clarify>/gi, '');
+  // 2. Drop "Step-by-Step" and "Final Plan" markdown headers — they
+  //    bleed protocol energy into the chat window.
+  s = s.replace(/^[#*\-_\s]*step[- ]?by[- ]?step[\s\S]*?$/gim, '');
+  s = s.replace(/^[#*\-_\s]*final plan[\s\S]*?$/gim, '');
+  // 3. Collapse remaining markdown bullets / numbered lists / bold into
+  //    plain text — one bullet per sentence.
+  s = s.replace(/^\s*[*\-+•]\s+/gm, '');
+  s = s.replace(/^\s*\d+[.)]\s+/gm, '');
+  s = s.replace(/\*\*([^*]+)\*\*/g, '$1');
+  s = s.replace(/_([^_\n]+)_/g, '$1');
+  s = s.replace(/`([^`\n]+)`/g, '$1');
+  // 4. Squash whitespace.
+  s = s.replace(/[\t ]+/g, ' ').replace(/\n{2,}/g, '\n').trim();
+  // 5. If nothing useful remains, synthesise a friendly line from the
+  //    dispatched calls so the chat window never reads as silent or
+  //    fragmentary.
+  if (!s || s.length < 12) {
+    const summary = _summariseDispatch(dispatchedCalls);
+    return summary || 'On it.';
+  }
+  // 6. Cap length — long prose reads as a wall.
+  if (s.length > 500) s = s.slice(0, 500).replace(/\s+\S*$/, '') + '…';
+  return s;
+}
+
+// Helper: turn a list of tool calls into a one-line natural summary
+// (e.g. "Switched to Modeling, spawned a cube and 4 cylinders.").
+const _PRIMITIVE_LABEL = {
+  cube: 'cube', sphere: 'sphere', plane: 'plane', cylinder: 'cylinder',
+  cone: 'cone', torus: 'torus', icosahedron: 'icosahedron',
+  text: 'text body', curve: 'curve', empty: 'empty group',
+};
+function _summariseDispatch(calls) {
+  if (!Array.isArray(calls) || calls.length === 0) return '';
+  const primCount = {};
+  let discipline = null;
+  const actions = [];
+  for (const c of calls) {
+    const name = (c && c.name) || '';
+    const id = (c && c.arguments && c.arguments.id) || '';
+    if (name === 'click-discipline' && id) discipline = id.replace('-', ' ');
+    else if (name === 'click-primitive' && id) primCount[id] = (primCount[id] || 0) + 1;
+    else if (name === 'click-action' && id) actions.push(id.replace(/-/g, ' '));
+  }
+  const parts = [];
+  if (discipline) parts.push(`Switched to the ${discipline} discipline`);
+  for (const id of Object.keys(primCount)) {
+    const n = primCount[id];
+    const label = _PRIMITIVE_LABEL[id] || id;
+    parts.push(n === 1 ? `spawned a ${label}` : `spawned ${n} ${label}s`);
+  }
+  for (const a of actions.slice(0, 3)) parts.push(`applied ${a}`);
+  if (parts.length === 0) return '';
+  // Capitalise the first letter; join with ", " + a final " and ".
+  const head = parts[0][0].toUpperCase() + parts[0].slice(1);
+  if (parts.length === 1) return head + '.';
+  const last = parts[parts.length - 1];
+  const middle = parts.slice(1, -1).join(', ');
+  return middle
+    ? `${head}, ${middle}, and ${last}.`
+    : `${head} and ${last}.`;
+}
+
+// Natural label for a tool message in the chat window. Was raw
+// `click-primitive({"id":"cube"}) → spawn cube`; now reads "Added a
+// cube." / "Switched to the modeling discipline." per the user's
+// "make output natural" request.
+function _humanizeCall(call, result) {
+  const name = (call && call.name) || '';
+  const args = (call && call.arguments) || {};
+  const id = args.id || '';
+  const ok = result && result.ok;
+  if (!ok) {
+    return `Couldn't ${name.replace(/-/g, ' ')}${id ? ` "${id}"` : ''}${result && result.summary ? ' — ' + result.summary : ''}.`;
+  }
+  if (name === 'click-discipline') return `Switched to the ${id.replace('-', ' ')} discipline.`;
+  if (name === 'click-primitive') {
+    const label = _PRIMITIVE_LABEL[id] || id;
+    return `Added a ${label}.`;
+  }
+  if (name === 'click-action') return `Applied ${id.replace(/-/g, ' ')}.`;
+  if (name === 'set-param') return `Set ${args.group || ''}.${args.knob || ''} = ${JSON.stringify(args.value)}.`;
+  if (name === 'fn') return `Called ${args.name || 'op'}.`;
+  return `${name}${id ? ' ' + id : ''}.`;
+}
+
 // Slice 951j — three-stage dispatch synthesis when the model emits
 // prose instead of clean <tool_call> tags. Stages:
 //
@@ -8499,17 +8607,9 @@ export function StudioShellV3({ mode = 'dark' }) {
     ]);
     try {
       const reply = await runArchie(text, activeWb);
-      setThread((t) => {
-        const next = t.slice();
-        for (let i = next.length - 1; i >= 0; i--) {
-          if (next[i] && next[i].pending) {
-            next[i] = { role: 'archie', text: reply || '(empty response)' };
-            return next;
-          }
-        }
-        next.push({ role: 'archie', text: reply || '(empty response)' });
-        return next;
-      });
+      // Slice 951l — defer the Archie chat message until AFTER we've
+      // synthesized the tool calls, so we can humanize the reply with
+      // the dispatch summary baked in.
       // Slice 951 — three-tier dispatch resolution. The studio_v16
       // LoRAs aren't fully fluent on the <tool_call> tag shape yet, so
       // we fall back gracefully:
@@ -8554,19 +8654,27 @@ export function StudioShellV3({ mode = 'dark' }) {
           dispatchSource = 'keyword';
         }
       }
-      if (calls.length > 0 && dispatchSource !== 'tool_calls') {
-        setThread((t) => [
-          ...t,
-          { role: 'tool', text: `dispatch source: ${dispatchSource} (synthesized ${calls.length} call${calls.length === 1 ? '' : 's'})` },
-        ]);
-      } else if (calls.length === 0) {
-        // Conversational fall-through: tell the user what to try. Keeps
-        // the thread alive so a follow-up prompt can refine.
-        setThread((t) => [
-          ...t,
-          { role: 'archie', text: 'I couldn\'t extract a buildable plan from that reply. Try naming the parts — e.g. "build a coffee table with a square top and 4 cylinder legs", or just "create a cube".' },
-        ]);
-      }
+      // Slice 951l — replace the "…thinking…" placeholder with a
+      // humanized version of the reply (tags stripped, markdown
+      // collapsed, dispatch summary appended when the raw text is
+      // empty or just protocol). The DISPATCH below still runs against
+      // the raw reply; only the chat-window text changes.
+      const humanized = calls.length
+        ? _humanizeReply(reply, calls)
+        : (reply && reply.trim()
+            ? _humanizeReply(reply, [])
+            : "I couldn't make sense of that — try naming the parts you want (e.g. \"a cube tabletop and four cylinder legs\") or refining what you mean.");
+      setThread((t) => {
+        const next = t.slice();
+        for (let i = next.length - 1; i >= 0; i--) {
+          if (next[i] && next[i].pending) {
+            next[i] = { role: 'archie', text: humanized };
+            return next;
+          }
+        }
+        next.push({ role: 'archie', text: humanized });
+        return next;
+      });
       for (const call of calls) {
         // eslint-disable-next-line no-await-in-loop
         const result = await executeToolCall(call);
@@ -8574,7 +8682,7 @@ export function StudioShellV3({ mode = 'dark' }) {
           ...t,
           {
             role: 'tool',
-            text: `${call.name}(${JSON.stringify(call.arguments || {})}) → ${result.ok ? result.summary : 'FAIL — ' + result.summary}`,
+            text: _humanizeCall(call, result),
           },
         ]);
       }
