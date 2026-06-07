@@ -692,12 +692,12 @@ function ContextMenu() {
       onMouseDown={(e) => e.stopPropagation()}
       style={{
         position: 'fixed', left: pos.x, top: pos.y, zIndex: 8000,
-        background: 'var(--studio-bg, #0d1117)',
-        border: '1px solid var(--studio-ink-mute, #1f2733)',
+        background: 'var(--studio-canvas, #000000)',
+        border: '1px solid var(--studio-rail-edge, #1d2027)',
         borderRadius: 4, padding: '4px 0', minWidth: 140,
         boxShadow: '0 4px 16px rgba(0,0,0,0.45)',
         fontFamily: 'inherit', fontSize: 11,
-        color: 'var(--studio-ink, #e6edf3)',
+        color: 'var(--studio-ink, #f0eee6)',
       }}
     >
       {items.map((it) => (
@@ -706,8 +706,8 @@ function ContextMenu() {
           type="button"
           data-studio-v3-context-item={it.id}
           onClick={(e) => { e.stopPropagation(); it.call(); setPos(null); }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--studio-accent, #1de9b6)'; e.currentTarget.style.color = 'var(--studio-bg, #0d1117)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--studio-ink, #e6edf3)'; }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--studio-accent, #ebecef)'; e.currentTarget.style.color = 'var(--studio-canvas, #000000)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--studio-ink, #f0eee6)'; }}
           style={{
             display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
             width: '100%', padding: '4px 10px',
@@ -795,16 +795,16 @@ function SettingsModal() {
         onClick={(e) => e.stopPropagation()}
         style={{
           minWidth: 360, maxWidth: 480, width: '88vw',
-          background: 'var(--studio-bg, #0d1117)',
-          border: '1px solid var(--studio-ink-mute, #1f2733)',
+          background: 'var(--studio-canvas, #000000)',
+          border: '1px solid var(--studio-rail-edge, #1d2027)',
           borderRadius: 8, padding: '20px 24px',
-          color: 'var(--studio-ink, #e6edf3)',
+          color: 'var(--studio-ink, #f0eee6)',
           fontFamily: 'inherit', fontSize: 12,
           boxShadow: '0 16px 48px rgba(0, 0, 0, 0.55)',
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 16 }}>
-          <strong style={{ fontSize: 14, color: 'var(--studio-accent, #1de9b6)', letterSpacing: '0.04em' }}>Settings</strong>
+          <strong style={{ fontSize: 14, color: 'var(--studio-accent, #ebecef)', letterSpacing: '0.04em' }}>Settings</strong>
           <span style={{ opacity: 0.5, fontSize: 10, fontFamily: 'var(--studio-mono, ui-monospace)' }}>Esc to close</span>
         </div>
         {/* Slice 523 — accent color */}
@@ -819,18 +819,18 @@ function SettingsModal() {
               style={{
                 width: 38, height: 24, padding: 0,
                 background: 'transparent',
-                border: '1px solid var(--studio-ink-mute, #1f2733)',
+                border: '1px solid var(--studio-rail-edge, #1d2027)',
                 borderRadius: 3, cursor: 'pointer',
               }}
             />
             <span style={{ fontFamily: 'var(--studio-mono, ui-monospace)', fontSize: 11, opacity: 0.75 }}>{accent}</span>
             <button
               type="button"
-              onClick={() => setAccent('#1de9b6')}
+              onClick={() => setAccent('')}
               style={{
                 marginLeft: 'auto', padding: '2px 8px', fontSize: 10,
-                background: 'transparent', border: '1px solid var(--studio-ink-mute, #1f2733)',
-                color: 'var(--studio-ink, #e6edf3)', borderRadius: 3, cursor: 'pointer',
+                background: 'transparent', border: '1px solid var(--studio-rail-edge, #1d2027)',
+                color: 'var(--studio-ink, #f0eee6)', borderRadius: 3, cursor: 'pointer',
               }}
             >Reset</button>
           </div>
@@ -852,9 +852,9 @@ function SettingsModal() {
                 }}
                 style={{
                   flex: 1, padding: '4px 10px',
-                  background: t === theme ? 'var(--studio-accent, #1de9b6)' : 'var(--studio-bg-elev, #161b22)',
-                  color: t === theme ? 'var(--studio-bg, #0d1117)' : 'var(--studio-ink, #e6edf3)',
-                  border: '1px solid var(--studio-ink-mute, #1f2733)',
+                  background: t === theme ? 'var(--studio-accent, #ebecef)' : 'var(--studio-canvas-3, #141414)',
+                  color: t === theme ? 'var(--studio-canvas, #000000)' : 'var(--studio-ink, #f0eee6)',
+                  border: '1px solid var(--studio-rail-edge, #1d2027)',
                   borderRadius: 3, cursor: 'pointer',
                   textTransform: 'capitalize', fontSize: 11,
                 }}
@@ -878,9 +878,9 @@ function SettingsModal() {
                 }}
                 style={{
                   flex: 1, padding: '4px 10px',
-                  background: s === shading ? 'var(--studio-accent, #1de9b6)' : 'var(--studio-bg-elev, #161b22)',
-                  color: s === shading ? 'var(--studio-bg, #0d1117)' : 'var(--studio-ink, #e6edf3)',
-                  border: '1px solid var(--studio-ink-mute, #1f2733)',
+                  background: s === shading ? 'var(--studio-accent, #ebecef)' : 'var(--studio-canvas-3, #141414)',
+                  color: s === shading ? 'var(--studio-canvas, #000000)' : 'var(--studio-ink, #f0eee6)',
+                  border: '1px solid var(--studio-rail-edge, #1d2027)',
                   borderRadius: 3, cursor: 'pointer',
                   textTransform: 'capitalize', fontSize: 11,
                 }}
@@ -908,7 +908,7 @@ function SettingsModal() {
               setBg(hex);
               if (window.__studioSetBgColor) window.__studioSetBgColor(hex);
             }}
-            style={{ width: 60, height: 28, padding: 0, border: '1px solid var(--studio-ink-mute, #1f2733)', borderRadius: 3, background: 'transparent' }}
+            style={{ width: 60, height: 28, padding: 0, border: '1px solid var(--studio-rail-edge, #1d2027)', borderRadius: 3, background: 'transparent' }}
           />
         </div>
         <button
@@ -918,9 +918,9 @@ function SettingsModal() {
           style={{
             display: 'block', marginLeft: 'auto',
             padding: '6px 14px',
-            background: 'var(--studio-bg-elev, #161b22)',
-            color: 'var(--studio-ink, #e6edf3)',
-            border: '1px solid var(--studio-ink-mute, #1f2733)',
+            background: 'var(--studio-canvas-3, #141414)',
+            color: 'var(--studio-ink, #f0eee6)',
+            border: '1px solid var(--studio-rail-edge, #1d2027)',
             borderRadius: 3, cursor: 'pointer', fontSize: 11,
           }}
         >Done</button>
@@ -956,8 +956,8 @@ function RestoreAutosaveRow() {
           }}
           style={{
             padding: '4px 12px', fontSize: 11,
-            background: 'var(--studio-accent, #1de9b6)',
-            color: 'var(--studio-bg, #0d1117)',
+            background: 'var(--studio-accent, #ebecef)',
+            color: 'var(--studio-canvas, #000000)',
             border: 'none', borderRadius: 3, cursor: 'pointer',
             fontFamily: 'inherit', fontWeight: 600,
           }}
@@ -997,7 +997,7 @@ function RenderQualityRow() {
             onChange={(e) => { setSq(e.target.value); window.__studioSetShadowQuality(e.target.value); }}
             style={{
               flex: 1, padding: '2px 4px', fontSize: 11,
-              background: 'var(--studio-bg-elev, #1c1c20)',
+              background: 'var(--studio-canvas-3, #1f1f1f)',
               color: 'var(--studio-ink, #dfe5ea)',
               border: '1px solid var(--studio-ink-mute, #2c2c30)',
               borderRadius: 2, fontFamily: 'inherit',
@@ -1083,9 +1083,9 @@ function HDRIPickerRow() {
             }}
             style={{
               padding: '4px 10px', fontSize: 11,
-              background: p === current ? 'var(--studio-accent, #1de9b6)' : 'var(--studio-bg-elev, #161b22)',
-              color: p === current ? 'var(--studio-bg, #0d1117)' : 'var(--studio-ink, #e6edf3)',
-              border: '1px solid var(--studio-ink-mute, #1f2733)',
+              background: p === current ? 'var(--studio-accent, #ebecef)' : 'var(--studio-canvas-3, #141414)',
+              color: p === current ? 'var(--studio-canvas, #000000)' : 'var(--studio-ink, #f0eee6)',
+              border: '1px solid var(--studio-rail-edge, #1d2027)',
               borderRadius: 3, cursor: 'pointer',
               textTransform: 'capitalize', fontFamily: 'inherit',
             }}
@@ -1192,12 +1192,12 @@ function CommandPalette() {
         onClick={(e) => e.stopPropagation()}
         style={{
           width: '60vw', maxWidth: 560,
-          background: 'var(--studio-bg, #0d1117)',
-          border: '1px solid var(--studio-ink-mute, #1f2733)',
+          background: 'var(--studio-canvas, #000000)',
+          border: '1px solid var(--studio-rail-edge, #1d2027)',
           borderRadius: 6,
           boxShadow: '0 20px 60px rgba(0,0,0,0.55)',
           fontFamily: 'inherit',
-          color: 'var(--studio-ink, #e6edf3)',
+          color: 'var(--studio-ink, #f0eee6)',
           overflow: 'hidden',
         }}
       >
@@ -1212,7 +1212,7 @@ function CommandPalette() {
           style={{
             width: '100%', padding: '12px 14px',
             background: 'transparent', color: 'inherit',
-            border: 'none', borderBottom: '1px solid var(--studio-ink-mute, #1f2733)',
+            border: 'none', borderBottom: '1px solid var(--studio-rail-edge, #1d2027)',
             fontFamily: 'inherit', fontSize: 13, outline: 'none',
           }}
         />
@@ -1231,10 +1231,10 @@ function CommandPalette() {
               style={{
                 display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
                 width: '100%', padding: '6px 16px', textAlign: 'left',
-                background: i === active ? 'var(--studio-bg-elev, #161b22)' : 'transparent',
-                color: i === active ? 'var(--studio-accent, #1de9b6)' : 'var(--studio-ink, #e6edf3)',
+                background: i === active ? 'var(--studio-canvas-3, #141414)' : 'transparent',
+                color: i === active ? 'var(--studio-accent, #ebecef)' : 'var(--studio-ink, #f0eee6)',
                 border: 'none', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit',
-                borderLeft: '3px solid ' + (i === active ? 'var(--studio-accent, #1de9b6)' : 'transparent'),
+                borderLeft: '3px solid ' + (i === active ? 'var(--studio-accent, #ebecef)' : 'transparent'),
               }}
             >
               <span>{it.label}</span>
@@ -1363,17 +1363,17 @@ function KeymapCheatsheet() {
         onClick={(e) => e.stopPropagation()}
         style={{
           maxWidth: 540, width: '88vw',
-          background: 'var(--studio-bg, #0d1117)',
-          border: '1px solid var(--studio-ink-mute, #1f2733)',
+          background: 'var(--studio-canvas, #000000)',
+          border: '1px solid var(--studio-rail-edge, #1d2027)',
           borderRadius: 8,
           padding: '20px 24px',
-          color: 'var(--studio-ink, #e6edf3)',
+          color: 'var(--studio-ink, #f0eee6)',
           fontFamily: 'inherit', fontSize: 12,
           boxShadow: '0 16px 48px rgba(0, 0, 0, 0.55)',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 14 }}>
-          <strong style={{ fontSize: 14, color: 'var(--studio-accent, #1de9b6)', letterSpacing: '0.04em' }}>Keymap</strong>
+          <strong style={{ fontSize: 14, color: 'var(--studio-accent, #ebecef)', letterSpacing: '0.04em' }}>Keymap</strong>
           <span style={{ opacity: 0.6, fontSize: 11, fontFamily: 'var(--studio-mono, ui-monospace)' }}>F1 · ? · Esc</span>
         </div>
         <input
@@ -1385,9 +1385,9 @@ function KeymapCheatsheet() {
           placeholder="Filter…  (e.g. ‘group’, ‘export’, ‘snap’)"
           style={{
             width: '100%', marginBottom: 14, padding: '6px 10px',
-            background: 'var(--studio-bg-elev, #161b22)',
-            border: '1px solid var(--studio-ink-mute, #1f2733)',
-            color: 'var(--studio-ink, #e6edf3)', borderRadius: 4,
+            background: 'var(--studio-canvas-3, #141414)',
+            border: '1px solid var(--studio-rail-edge, #1d2027)',
+            color: 'var(--studio-ink, #f0eee6)', borderRadius: 4,
             fontFamily: 'inherit', fontSize: 12, outline: 'none',
           }}
         />
@@ -1404,7 +1404,7 @@ function KeymapCheatsheet() {
                 <div key={key} data-studio-v3-cheatsheet-row style={{ display: 'flex', gap: 12, padding: '2px 0', alignItems: 'baseline' }}>
                   <code style={{
                     minWidth: 70, fontFamily: 'var(--studio-mono, ui-monospace)',
-                    color: 'var(--studio-accent, #1de9b6)', fontSize: 11,
+                    color: 'var(--studio-accent, #ebecef)', fontSize: 11,
                   }}>{key}</code>
                   <span style={{ opacity: 0.85 }}>{desc}</span>
                 </div>
@@ -1469,8 +1469,8 @@ function AutosaveRestorePrompt() {
         position: 'absolute', top: 16, left: '50%',
         transform: 'translateX(-50%)', zIndex: 30,
         background: 'rgba(13, 17, 23, 0.92)',
-        color: 'var(--studio-ink, #e6edf3)',
-        border: '1px solid var(--studio-accent, #1de9b6)',
+        color: 'var(--studio-ink, #f0eee6)',
+        border: '1px solid var(--studio-accent, #ebecef)',
         borderRadius: 4, padding: '8px 14px',
         fontFamily: 'inherit', fontSize: 11,
         boxShadow: '0 4px 16px rgba(0,0,0,0.45)',
@@ -1490,8 +1490,8 @@ function AutosaveRestorePrompt() {
         }}
         style={{
           padding: '3px 10px', fontSize: 11,
-          background: 'var(--studio-accent, #1de9b6)',
-          color: 'var(--studio-bg, #0d1117)',
+          background: 'var(--studio-accent, #ebecef)',
+          color: 'var(--studio-canvas, #000000)',
           border: 'none', borderRadius: 3, cursor: 'pointer',
           fontFamily: 'inherit', fontWeight: 600,
         }}
@@ -1504,7 +1504,7 @@ function AutosaveRestorePrompt() {
           padding: '3px 10px', fontSize: 11,
           background: 'transparent',
           color: 'var(--studio-ink-mute, #9aa6b2)',
-          border: '1px solid var(--studio-ink-mute, #1f2733)',
+          border: '1px solid var(--studio-rail-edge, #1d2027)',
           borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit',
         }}
       >Dismiss</button>
@@ -1532,8 +1532,8 @@ function AutosaveToast() {
       style={{
         position: 'absolute', bottom: 60, right: 16, zIndex: 25,
         background: 'rgba(13, 17, 23, 0.92)',
-        color: 'var(--studio-accent, #1de9b6)',
-        border: '1px solid var(--studio-ink-mute, #1f2733)',
+        color: 'var(--studio-accent, #ebecef)',
+        border: '1px solid var(--studio-rail-edge, #1d2027)',
         borderRadius: 4, padding: '6px 12px',
         fontFamily: 'inherit', fontSize: 11,
         pointerEvents: 'none',
@@ -1555,7 +1555,7 @@ function PresentationBanner() {
         transform: 'translateX(-50%)', zIndex: 22,
         background: 'rgba(13, 17, 23, 0.85)',
         color: 'var(--studio-ink-mute, #9aa6b2)',
-        border: '1px solid var(--studio-ink-mute, #1f2733)',
+        border: '1px solid var(--studio-rail-edge, #1d2027)',
         borderRadius: 3, padding: '4px 12px',
         fontFamily: 'var(--studio-mono, ui-monospace)', fontSize: 10,
         pointerEvents: 'none',
@@ -1766,13 +1766,13 @@ function SaveAsModal() {
       onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}
     >
       <div style={{
-        background: 'var(--studio-bg-elev, #161b22)',
-        border: '1px solid var(--studio-accent, #1de9b6)',
+        background: 'var(--studio-canvas-3, #141414)',
+        border: '1px solid var(--studio-accent, #ebecef)',
         borderRadius: 8, padding: '18px 22px', minWidth: 340,
         boxShadow: '0 14px 40px rgba(0,0,0,0.6)',
       }}>
         <div style={{
-          color: 'var(--studio-accent, #1de9b6)', fontWeight: 600, marginBottom: 10, fontSize: 13,
+          color: 'var(--studio-accent, #ebecef)', fontWeight: 600, marginBottom: 10, fontSize: 13,
         }}>Save scene as…</div>
         <input
           ref={inputRef}
@@ -1785,9 +1785,9 @@ function SaveAsModal() {
           }}
           data-studio-v3-save-as-input
           style={{
-            width: '100%', background: 'var(--studio-bg, #0d1117)',
-            border: '1px solid var(--studio-ink-mute, #1f2733)',
-            color: 'var(--studio-ink, #e6edf3)', padding: '7px 10px',
+            width: '100%', background: 'var(--studio-canvas, #000000)',
+            border: '1px solid var(--studio-rail-edge, #1d2027)',
+            color: 'var(--studio-ink, #f0eee6)', padding: '7px 10px',
             borderRadius: 4, fontFamily: 'var(--studio-mono, ui-monospace)',
             fontSize: 12, marginBottom: 12,
           }}
@@ -1797,8 +1797,8 @@ function SaveAsModal() {
             type="button"
             onClick={() => setOpen(false)}
             style={{
-              background: 'transparent', border: '1px solid var(--studio-ink-mute, #1f2733)',
-              color: 'var(--studio-ink, #e6edf3)', padding: '5px 14px', borderRadius: 4,
+              background: 'transparent', border: '1px solid var(--studio-rail-edge, #1d2027)',
+              color: 'var(--studio-ink, #f0eee6)', padding: '5px 14px', borderRadius: 4,
               fontSize: 11, cursor: 'pointer',
             }}
           >Cancel</button>
@@ -1807,7 +1807,7 @@ function SaveAsModal() {
             data-studio-v3-save-as-commit
             onClick={commit}
             style={{
-              background: 'var(--studio-accent, #1de9b6)', border: 0, color: '#0d1117',
+              background: 'var(--studio-accent, #ebecef)', border: 0, color: '#000000',
               fontWeight: 600, padding: '5px 14px', borderRadius: 4, fontSize: 11, cursor: 'pointer',
             }}
           >Save</button>
@@ -1894,7 +1894,7 @@ function MarqueeOverlay() {
           style={{
             position: 'absolute', left: (rect.x), top: (rect.y),
             width: rect.w, height: rect.h,
-            border: '1px dashed var(--studio-accent, #1de9b6)',
+            border: '1px dashed var(--studio-accent, #ebecef)',
             background: 'rgba(29, 233, 182, 0.08)',
             pointerEvents: 'none',
           }}
@@ -1933,15 +1933,15 @@ function AboutModal() {
       }}
     >
       <div style={{
-        background: 'var(--studio-bg-elev, #161b22)',
-        border: '1px solid var(--studio-accent, #1de9b6)',
+        background: 'var(--studio-canvas-3, #141414)',
+        border: '1px solid var(--studio-accent, #ebecef)',
         borderRadius: 8, padding: '28px 32px', minWidth: 420, maxWidth: 520,
         boxShadow: '0 14px 40px rgba(0,0,0,0.6)',
-        color: 'var(--studio-ink, #e6edf3)',
+        color: 'var(--studio-ink, #f0eee6)',
       }}>
         <div style={{
           fontSize: 18, fontWeight: 700, letterSpacing: '0.04em',
-          color: 'var(--studio-accent, #1de9b6)', marginBottom: 4,
+          color: 'var(--studio-accent, #ebecef)', marginBottom: 4,
         }}>ArchDisc Studio</div>
         <div style={{
           fontSize: 11, opacity: 0.65, marginBottom: 18, letterSpacing: '0.03em',
@@ -1964,7 +1964,7 @@ function AboutModal() {
             data-studio-v3-about-close
             onClick={() => setOpen(false)}
             style={{
-              background: 'var(--studio-accent, #1de9b6)', border: 0, color: '#0d1117',
+              background: 'var(--studio-accent, #ebecef)', border: 0, color: '#000000',
               fontWeight: 600, padding: '6px 18px', borderRadius: 4, fontSize: 11, cursor: 'pointer',
             }}
           >Close</button>
@@ -1993,7 +1993,7 @@ function SplashScreen() {
       data-studio-v3-splash
       style={{
         position: 'fixed', inset: 0, zIndex: 99999,
-        background: 'var(--studio-bg, #0d1117)',
+        background: 'var(--studio-canvas, #000000)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         flexDirection: 'column',
         animation: 'studio-splash-fade 1.6s ease-in forwards',
@@ -2001,11 +2001,11 @@ function SplashScreen() {
     >
       <div style={{
         fontSize: 32, fontWeight: 700, letterSpacing: '0.06em',
-        color: 'var(--studio-accent, #1de9b6)',
+        color: 'var(--studio-accent, #ebecef)',
         textShadow: '0 0 24px rgba(29, 233, 182, 0.4)',
       }}>ArchDisc</div>
       <div style={{
-        fontSize: 14, marginTop: 4, color: 'var(--studio-ink, #e6edf3)',
+        fontSize: 14, marginTop: 4, color: 'var(--studio-ink, #f0eee6)',
         letterSpacing: '0.18em', textTransform: 'uppercase',
       }}>Studio</div>
       <div style={{
@@ -2052,8 +2052,10 @@ function ViewportMinimap() {
             if (!(o.userData && o.userData.archdiscStudioPrimitive)) return;
             const px = cx + o.position.x * SCALE;
             const py = cy + o.position.z * SCALE;
-            ctx.fillStyle = (o.userData && o.userData.archdiscStudioLocked) ? '#ff7a59' : 'var(--studio-accent, #1de9b6)';
-            ctx.fillStyle = (o.userData && o.userData.archdiscStudioLocked) ? '#ff7a59' : '#1de9b6';
+            // Slice 948 — outliner minimap dots are monochrome warm-white
+            // for unlocked primitives, half-bright grey for locked. The
+            // user reads the lock state via dot brightness, not hue.
+            ctx.fillStyle = (o.userData && o.userData.archdiscStudioLocked) ? '#5a5a5a' : '#f0eee6';
             ctx.beginPath();
             ctx.arc(px, py, 3, 0, Math.PI * 2);
             ctx.fill();
@@ -2063,7 +2065,7 @@ function ViewportMinimap() {
       const vp = window.__archdiscViewport;
       if (vp && vp.camera) {
         const cp = vp.camera.position;
-        ctx.fillStyle = '#e6edf3';
+        ctx.fillStyle = '#f0eee6';
         ctx.beginPath();
         ctx.arc(cx + cp.x * SCALE, cy + cp.z * SCALE, 2.5, 0, Math.PI * 2);
         ctx.fill();
@@ -2126,15 +2128,15 @@ function MeasurementChip() {
       data-studio-v3-measure-mm={info.mm.toFixed(2)}
       style={{
         position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)',
-        background: 'var(--studio-bg-elev, #161b22)',
-        border: '1px solid var(--studio-accent, #1de9b6)',
-        color: 'var(--studio-ink, #e6edf3)',
+        background: 'var(--studio-canvas-3, #141414)',
+        border: '1px solid var(--studio-accent, #ebecef)',
+        color: 'var(--studio-ink, #f0eee6)',
         padding: '6px 14px', borderRadius: 4, fontSize: 12, zIndex: 22,
         pointerEvents: 'none', fontFamily: 'var(--studio-mono, ui-monospace)',
         boxShadow: '0 6px 18px rgba(0, 0, 0, 0.45)',
       }}
     >
-      <span style={{ color: 'var(--studio-accent, #1de9b6)' }}>📏</span>
+      <span style={{ color: 'var(--studio-accent, #ebecef)' }}>📏</span>
       {' '}
       {info.mm.toFixed(1)} mm
       <span style={{ opacity: 0.6, marginLeft: 8 }}>({info.distance.toFixed(4)} m)</span>
@@ -2194,8 +2196,8 @@ function QuadViewOverlay() {
     <div
       data-studio-v3-quad-cell={key}
       style={{
-        background: 'var(--studio-bg, #0d1117)',
-        border: '1px solid var(--studio-accent, #1de9b6)',
+        background: 'var(--studio-canvas, #000000)',
+        border: '1px solid var(--studio-accent, #ebecef)',
         position: 'relative', overflow: 'hidden',
       }}
     >
@@ -2207,7 +2209,7 @@ function QuadViewOverlay() {
       />
       <span style={{
         position: 'absolute', top: 4, left: 6, fontSize: 9, letterSpacing: '0.06em',
-        color: 'var(--studio-accent, #1de9b6)', textTransform: 'uppercase',
+        color: 'var(--studio-accent, #ebecef)', textTransform: 'uppercase',
         fontFamily: 'var(--studio-mono, ui-monospace)',
       }}>{label}</span>
     </div>
@@ -2227,13 +2229,13 @@ function QuadViewOverlay() {
         data-studio-v3-quad-cell="persp"
         style={{
           background: 'transparent',
-          border: '1px solid var(--studio-accent, #1de9b6)',
+          border: '1px solid var(--studio-accent, #ebecef)',
           position: 'relative', overflow: 'hidden',
         }}
       >
         <span style={{
           position: 'absolute', top: 4, left: 6, fontSize: 9, letterSpacing: '0.06em',
-          color: 'var(--studio-accent, #1de9b6)', textTransform: 'uppercase',
+          color: 'var(--studio-accent, #ebecef)', textTransform: 'uppercase',
           fontFamily: 'var(--studio-mono, ui-monospace)',
         }}>Persp · live</span>
       </div>
@@ -2363,11 +2365,11 @@ function FileMenu() {
       style={{
         position: 'fixed', top: 36, left: 96, zIndex: 9300,
         minWidth: 260,
-        background: 'var(--studio-bg-elev, #161b22)',
-        border: '1px solid var(--studio-ink-mute, #1f2733)',
+        background: 'var(--studio-canvas-3, #141414)',
+        border: '1px solid var(--studio-rail-edge, #1d2027)',
         borderRadius: 6,
         boxShadow: '0 20px 50px rgba(0,0,0,0.55)',
-        color: 'var(--studio-ink, #e6edf3)',
+        color: 'var(--studio-ink, #f0eee6)',
         fontFamily: 'inherit', fontSize: 12,
         padding: '6px 0',
       }}
@@ -2382,7 +2384,7 @@ function FileMenu() {
             display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
             width: '100%', padding: '5px 14px', textAlign: 'left',
             background: 'transparent', border: 0,
-            color: 'var(--studio-ink, #e6edf3)', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit',
+            color: 'var(--studio-ink, #f0eee6)', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit',
           }}
           onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(29, 233, 182, 0.08)'; }}
           onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
@@ -2393,7 +2395,7 @@ function FileMenu() {
       ))}
       {recent.length > 0 && (
         <>
-          <div style={{ borderTop: '1px solid var(--studio-ink-mute, #1f2733)', margin: '4px 0' }} />
+          <div style={{ borderTop: '1px solid var(--studio-rail-edge, #1d2027)', margin: '4px 0' }} />
           <div style={{
             padding: '4px 14px 2px', fontSize: 10, opacity: 0.55,
             textTransform: 'uppercase', letterSpacing: '0.05em',
@@ -2407,7 +2409,7 @@ function FileMenu() {
               style={{
                 display: 'block', width: '100%', padding: '4px 14px', textAlign: 'left',
                 background: 'transparent', border: 0,
-                color: 'var(--studio-ink, #e6edf3)', cursor: 'pointer', fontSize: 11, fontFamily: 'var(--studio-mono, ui-monospace)',
+                color: 'var(--studio-ink, #f0eee6)', cursor: 'pointer', fontSize: 11, fontFamily: 'var(--studio-mono, ui-monospace)',
                 whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
               }}
               onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(29, 233, 182, 0.08)'; }}
@@ -2459,11 +2461,11 @@ function EditMenu() {
       style={{
         position: 'fixed', top: 36, left: 158, zIndex: 9300,
         minWidth: 260,
-        background: 'var(--studio-bg-elev, #161b22)',
-        border: '1px solid var(--studio-ink-mute, #1f2733)',
+        background: 'var(--studio-canvas-3, #141414)',
+        border: '1px solid var(--studio-rail-edge, #1d2027)',
         borderRadius: 6,
         boxShadow: '0 20px 50px rgba(0,0,0,0.55)',
-        color: 'var(--studio-ink, #e6edf3)',
+        color: 'var(--studio-ink, #f0eee6)',
         fontFamily: 'inherit', fontSize: 12,
         padding: '6px 0',
       }}
@@ -2478,7 +2480,7 @@ function EditMenu() {
             display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
             width: '100%', padding: '5px 14px', textAlign: 'left',
             background: 'transparent', border: 0,
-            color: 'var(--studio-ink, #e6edf3)', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit',
+            color: 'var(--studio-ink, #f0eee6)', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit',
           }}
           onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(29, 233, 182, 0.08)'; }}
           onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
@@ -2538,11 +2540,11 @@ function SelectMenu() {
       style={{
         position: 'fixed', top: 36, left: 220, zIndex: 9300,
         minWidth: 240,
-        background: 'var(--studio-bg-elev, #161b22)',
-        border: '1px solid var(--studio-ink-mute, #1f2733)',
+        background: 'var(--studio-canvas-3, #141414)',
+        border: '1px solid var(--studio-rail-edge, #1d2027)',
         borderRadius: 6,
         boxShadow: '0 20px 50px rgba(0,0,0,0.55)',
-        color: 'var(--studio-ink, #e6edf3)',
+        color: 'var(--studio-ink, #f0eee6)',
         fontFamily: 'inherit', fontSize: 12,
         padding: '6px 0',
       }}
@@ -2557,7 +2559,7 @@ function SelectMenu() {
             display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
             width: '100%', padding: '5px 14px', textAlign: 'left',
             background: 'transparent', border: 0,
-            color: 'var(--studio-ink, #e6edf3)', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit',
+            color: 'var(--studio-ink, #f0eee6)', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit',
           }}
           onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(29, 233, 182, 0.08)'; }}
           onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
@@ -2608,11 +2610,11 @@ function ViewMenu() {
       style={{
         position: 'fixed', top: 36, left: 280, zIndex: 9300,
         minWidth: 240,
-        background: 'var(--studio-bg-elev, #161b22)',
-        border: '1px solid var(--studio-ink-mute, #1f2733)',
+        background: 'var(--studio-canvas-3, #141414)',
+        border: '1px solid var(--studio-rail-edge, #1d2027)',
         borderRadius: 6,
         boxShadow: '0 20px 50px rgba(0,0,0,0.55)',
-        color: 'var(--studio-ink, #e6edf3)',
+        color: 'var(--studio-ink, #f0eee6)',
         fontFamily: 'inherit', fontSize: 12,
         padding: '6px 0',
       }}
@@ -2627,7 +2629,7 @@ function ViewMenu() {
             display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
             width: '100%', padding: '5px 14px', textAlign: 'left',
             background: 'transparent', border: 0,
-            color: 'var(--studio-ink, #e6edf3)', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit',
+            color: 'var(--studio-ink, #f0eee6)', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit',
           }}
           onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(29, 233, 182, 0.08)'; }}
           onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
@@ -2691,11 +2693,11 @@ function WindowMenu() {
       style={{
         position: 'fixed', top: 36, left: 332, zIndex: 9300,
         minWidth: 260,
-        background: 'var(--studio-bg-elev, #161b22)',
-        border: '1px solid var(--studio-ink-mute, #1f2733)',
+        background: 'var(--studio-canvas-3, #141414)',
+        border: '1px solid var(--studio-rail-edge, #1d2027)',
         borderRadius: 6,
         boxShadow: '0 20px 50px rgba(0,0,0,0.55)',
-        color: 'var(--studio-ink, #e6edf3)',
+        color: 'var(--studio-ink, #f0eee6)',
         fontFamily: 'inherit', fontSize: 12,
         padding: '6px 0',
       }}
@@ -2710,7 +2712,7 @@ function WindowMenu() {
             display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
             width: '100%', padding: '5px 14px', textAlign: 'left',
             background: 'transparent', border: 0,
-            color: 'var(--studio-ink, #e6edf3)', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit',
+            color: 'var(--studio-ink, #f0eee6)', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit',
           }}
           onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(29, 233, 182, 0.08)'; }}
           onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
@@ -2772,9 +2774,9 @@ function KeypressFlash() {
       style={{
         position: 'fixed', bottom: 64, left: '50%', transform: 'translateX(-50%)',
         zIndex: 9100, pointerEvents: 'none',
-        background: 'var(--studio-bg-elev, #161b22)',
-        border: '1px solid var(--studio-accent, #1de9b6)',
-        color: 'var(--studio-ink, #e6edf3)',
+        background: 'var(--studio-canvas-3, #141414)',
+        border: '1px solid var(--studio-accent, #ebecef)',
+        color: 'var(--studio-ink, #f0eee6)',
         fontFamily: 'var(--studio-mono, ui-monospace)',
         fontSize: 13, padding: '6px 14px', borderRadius: 4,
         boxShadow: '0 6px 18px rgba(0, 0, 0, 0.5)',
@@ -2852,10 +2854,10 @@ function CurveEditor() {
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: 'var(--studio-bg-elev, #161b22)',
-          border: '1px solid var(--studio-accent, #1de9b6)',
+          background: 'var(--studio-canvas-3, #141414)',
+          border: '1px solid var(--studio-accent, #ebecef)',
           borderRadius: 8, padding: '18px 22px',
-          color: 'var(--studio-ink, #e6edf3)',
+          color: 'var(--studio-ink, #f0eee6)',
           fontFamily: 'inherit',
           boxShadow: '0 14px 40px rgba(0,0,0,0.55)',
         }}
@@ -2864,7 +2866,7 @@ function CurveEditor() {
           display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
           marginBottom: 10,
         }}>
-          <strong style={{ color: 'var(--studio-accent, #1de9b6)', fontSize: 13, letterSpacing: '0.04em' }}>Curve editor · position.x</strong>
+          <strong style={{ color: 'var(--studio-accent, #ebecef)', fontSize: 13, letterSpacing: '0.04em' }}>Curve editor · position.x</strong>
           <span style={{ opacity: 0.55, fontSize: 11, fontFamily: 'var(--studio-mono, ui-monospace)' }}>{kfs.length} keys · Esc</span>
         </div>
         <svg
@@ -2888,14 +2890,14 @@ function CurveEditor() {
             </g>
           ))}
           {/* Curve */}
-          {path && <path d={path} stroke="var(--studio-accent, #1de9b6)" strokeWidth="1.5" fill="none" />}
+          {path && <path d={path} stroke="var(--studio-accent, #ebecef)" strokeWidth="1.5" fill="none" />}
           {/* Keyframe dots */}
           {pts.map((p, i) => (
             <circle
               key={i}
               data-studio-v3-curve-key={p.f}
               cx={fxToPx(p.f)} cy={yToPx(p.y)} r="4"
-              fill="var(--studio-accent, #1de9b6)" stroke="#0d1117" strokeWidth="1"
+              fill="var(--studio-accent, #ebecef)" stroke="#000000" strokeWidth="1"
             />
           ))}
         </svg>
@@ -2951,17 +2953,17 @@ function PluginManager() {
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: 'var(--studio-bg-elev, #161b22)',
-          border: '1px solid var(--studio-accent, #1de9b6)',
+          background: 'var(--studio-canvas-3, #141414)',
+          border: '1px solid var(--studio-accent, #ebecef)',
           borderRadius: 8, padding: '18px 22px', minWidth: 520, maxWidth: 640,
-          color: 'var(--studio-ink, #e6edf3)', fontFamily: 'inherit',
+          color: 'var(--studio-ink, #f0eee6)', fontFamily: 'inherit',
         }}
       >
         <div style={{
           display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
           marginBottom: 12,
         }}>
-          <strong style={{ color: 'var(--studio-accent, #1de9b6)', fontSize: 13, letterSpacing: '0.04em' }}>Plugin manager</strong>
+          <strong style={{ color: 'var(--studio-accent, #ebecef)', fontSize: 13, letterSpacing: '0.04em' }}>Plugin manager</strong>
           <span style={{ opacity: 0.55, fontSize: 11, fontFamily: 'var(--studio-mono, ui-monospace)' }}>{list.length} installed · Esc</span>
         </div>
         <input
@@ -2972,9 +2974,9 @@ function PluginManager() {
           data-studio-v3-plugin-name
           style={{
             width: '100%', marginBottom: 6,
-            padding: '6px 10px', background: 'var(--studio-bg, #0d1117)',
-            border: '1px solid var(--studio-ink-mute, #1f2733)',
-            color: 'var(--studio-ink, #e6edf3)', borderRadius: 3,
+            padding: '6px 10px', background: 'var(--studio-canvas, #000000)',
+            border: '1px solid var(--studio-rail-edge, #1d2027)',
+            color: 'var(--studio-ink, #f0eee6)', borderRadius: 3,
             fontFamily: 'var(--studio-mono, ui-monospace)', fontSize: 11,
           }}
         />
@@ -2986,9 +2988,9 @@ function PluginManager() {
           rows={5}
           style={{
             width: '100%', marginBottom: 10,
-            padding: '6px 10px', background: 'var(--studio-bg, #0d1117)',
-            border: '1px solid var(--studio-ink-mute, #1f2733)',
-            color: 'var(--studio-ink, #e6edf3)', borderRadius: 3,
+            padding: '6px 10px', background: 'var(--studio-canvas, #000000)',
+            border: '1px solid var(--studio-rail-edge, #1d2027)',
+            color: 'var(--studio-ink, #f0eee6)', borderRadius: 3,
             fontFamily: 'var(--studio-mono, ui-monospace)', fontSize: 11, resize: 'vertical',
           }}
         />
@@ -2998,12 +3000,12 @@ function PluginManager() {
             onClick={install}
             data-studio-v3-plugin-install
             style={{
-              background: 'var(--studio-accent, #1de9b6)', border: 0, color: '#0d1117',
+              background: 'var(--studio-accent, #ebecef)', border: 0, color: '#000000',
               fontWeight: 600, padding: '6px 18px', borderRadius: 4, fontSize: 11, cursor: 'pointer',
             }}
           >Install</button>
         </div>
-        <div style={{ borderTop: '1px solid var(--studio-ink-mute, #1f2733)', paddingTop: 12 }}>
+        <div style={{ borderTop: '1px solid var(--studio-rail-edge, #1d2027)', paddingTop: 12 }}>
           {list.length === 0 && <div style={{ opacity: 0.5, fontSize: 11 }}>No plugins installed.</div>}
           {list.map((p) => (
             <div
@@ -3012,7 +3014,7 @@ function PluginManager() {
               style={{
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                 padding: '4px 0', fontSize: 11,
-                borderBottom: '1px dotted var(--studio-ink-mute, #1f2733)',
+                borderBottom: '1px dotted var(--studio-rail-edge, #1d2027)',
               }}
             >
               <span style={{ fontFamily: 'var(--studio-mono, ui-monospace)' }}>{p.name}</span>
@@ -3023,7 +3025,7 @@ function PluginManager() {
                 style={{
                   padding: '2px 8px', fontSize: 10,
                   background: 'transparent', color: 'var(--studio-ink-mute, #9aa6b2)',
-                  border: '1px solid var(--studio-ink-mute, #1f2733)', borderRadius: 2, cursor: 'pointer',
+                  border: '1px solid var(--studio-rail-edge, #1d2027)', borderRadius: 2, cursor: 'pointer',
                 }}
               >remove</button>
             </div>
@@ -3101,17 +3103,17 @@ function UVEditor() {
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: 'var(--studio-bg-elev, #161b22)',
-          border: '1px solid var(--studio-accent, #1de9b6)',
+          background: 'var(--studio-canvas-3, #141414)',
+          border: '1px solid var(--studio-accent, #ebecef)',
           borderRadius: 8, padding: '18px 22px',
-          color: 'var(--studio-ink, #e6edf3)', fontFamily: 'inherit',
+          color: 'var(--studio-ink, #f0eee6)', fontFamily: 'inherit',
         }}
       >
         <div style={{
           display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
           marginBottom: 10,
         }}>
-          <strong style={{ color: 'var(--studio-accent, #1de9b6)', fontSize: 13, letterSpacing: '0.04em' }}>UV editor</strong>
+          <strong style={{ color: 'var(--studio-accent, #ebecef)', fontSize: 13, letterSpacing: '0.04em' }}>UV editor</strong>
           <span style={{ opacity: 0.55, fontSize: 11, fontFamily: 'var(--studio-mono, ui-monospace)' }}>{data.verts.length} verts · Esc</span>
         </div>
         <svg
@@ -3136,7 +3138,7 @@ function UVEditor() {
               key={i}
               data-studio-v3-uv-vert={i}
               cx={px(p.u)} cy={py(p.v)} r="2"
-              fill="var(--studio-accent, #1de9b6)"
+              fill="var(--studio-accent, #ebecef)"
             />
           ))}
         </svg>
@@ -3189,17 +3191,17 @@ function AssetBrowser() {
       onClick={onClick}
       style={{
         width: 90, height: 90,
-        background: 'var(--studio-bg, #0d1117)',
-        border: '1px solid var(--studio-ink-mute, #1f2733)',
-        color: 'var(--studio-ink, #e6edf3)', borderRadius: 4, cursor: 'pointer',
+        background: 'var(--studio-canvas, #000000)',
+        border: '1px solid var(--studio-rail-edge, #1d2027)',
+        color: 'var(--studio-ink, #f0eee6)', borderRadius: 4, cursor: 'pointer',
         fontFamily: 'inherit', fontSize: 11,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         textAlign: 'center', textTransform: 'capitalize',
         whiteSpace: 'normal', overflow: 'hidden', textOverflow: 'ellipsis',
         padding: 6,
       }}
-      onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--studio-accent, #1de9b6)'; e.currentTarget.style.color = 'var(--studio-accent, #1de9b6)'; }}
-      onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--studio-ink-mute, #1f2733)'; e.currentTarget.style.color = 'var(--studio-ink, #e6edf3)'; }}
+      onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--studio-accent, #ebecef)'; e.currentTarget.style.color = 'var(--studio-accent, #ebecef)'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--studio-rail-edge, #1d2027)'; e.currentTarget.style.color = 'var(--studio-ink, #f0eee6)'; }}
     >{label}</button>
   );
   return (
@@ -3215,10 +3217,10 @@ function AssetBrowser() {
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: 'var(--studio-bg-elev, #161b22)',
-          border: '1px solid var(--studio-accent, #1de9b6)',
+          background: 'var(--studio-canvas-3, #141414)',
+          border: '1px solid var(--studio-accent, #ebecef)',
           borderRadius: 8, padding: '18px 22px',
-          color: 'var(--studio-ink, #e6edf3)', fontFamily: 'inherit',
+          color: 'var(--studio-ink, #f0eee6)', fontFamily: 'inherit',
           minWidth: 540, maxWidth: 720,
         }}
       >
@@ -3226,7 +3228,7 @@ function AssetBrowser() {
           display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
           marginBottom: 14,
         }}>
-          <strong style={{ color: 'var(--studio-accent, #1de9b6)', fontSize: 13, letterSpacing: '0.04em' }}>Asset browser</strong>
+          <strong style={{ color: 'var(--studio-accent, #ebecef)', fontSize: 13, letterSpacing: '0.04em' }}>Asset browser</strong>
           <span style={{ opacity: 0.55, fontSize: 11, fontFamily: 'var(--studio-mono, ui-monospace)' }}>Esc to close</span>
         </div>
         <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
@@ -3239,9 +3241,9 @@ function AssetBrowser() {
               onClick={() => setTab(t)}
               style={{
                 padding: '4px 12px',
-                background: t === tab ? 'var(--studio-accent, #1de9b6)' : 'var(--studio-bg, #0d1117)',
-                color: t === tab ? '#0d1117' : 'var(--studio-ink, #e6edf3)',
-                border: '1px solid var(--studio-ink-mute, #1f2733)',
+                background: t === tab ? 'var(--studio-accent, #ebecef)' : 'var(--studio-canvas, #000000)',
+                color: t === tab ? '#000000' : 'var(--studio-ink, #f0eee6)',
+                border: '1px solid var(--studio-rail-edge, #1d2027)',
                 borderRadius: 3, fontSize: 11, fontFamily: 'inherit',
                 cursor: 'pointer', textTransform: 'capitalize',
               }}
@@ -3312,17 +3314,17 @@ function RenderQueueModal() {
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: 'var(--studio-bg-elev, #161b22)',
-          border: '1px solid var(--studio-accent, #1de9b6)',
+          background: 'var(--studio-canvas-3, #141414)',
+          border: '1px solid var(--studio-accent, #ebecef)',
           borderRadius: 8, padding: '18px 22px', minWidth: 480, maxWidth: 600,
-          color: 'var(--studio-ink, #e6edf3)', fontFamily: 'inherit',
+          color: 'var(--studio-ink, #f0eee6)', fontFamily: 'inherit',
         }}
       >
         <div style={{
           display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
           marginBottom: 12,
         }}>
-          <strong style={{ color: 'var(--studio-accent, #1de9b6)', fontSize: 13, letterSpacing: '0.04em' }}>Render queue · {jobs.length}</strong>
+          <strong style={{ color: 'var(--studio-accent, #ebecef)', fontSize: 13, letterSpacing: '0.04em' }}>Render queue · {jobs.length}</strong>
           <span style={{ opacity: 0.55, fontSize: 11, fontFamily: 'var(--studio-mono, ui-monospace)' }}>Esc</span>
         </div>
         <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
@@ -3336,10 +3338,10 @@ function RenderQueueModal() {
             style={btnStyle}
           >Clear</button>
           <button type="button" data-studio-v3-render-queue-run onClick={() => window.__studioRunRenderQueue && window.__studioRunRenderQueue()}
-            style={{ ...btnStyle, background: 'var(--studio-accent, #1de9b6)', color: '#0d1117', fontWeight: 600 }}
+            style={{ ...btnStyle, background: 'var(--studio-accent, #ebecef)', color: '#000000', fontWeight: 600 }}
           >Render all</button>
         </div>
-        <div style={{ borderTop: '1px solid var(--studio-ink-mute, #1f2733)', paddingTop: 8 }}>
+        <div style={{ borderTop: '1px solid var(--studio-rail-edge, #1d2027)', paddingTop: 8 }}>
           {jobs.length === 0 && <div style={{ opacity: 0.5, fontSize: 11 }}>Queue empty.</div>}
           {jobs.map((j, i) => (
             <div
@@ -3348,7 +3350,7 @@ function RenderQueueModal() {
               style={{
                 display: 'flex', justifyContent: 'space-between',
                 padding: '4px 0', fontSize: 11,
-                borderBottom: '1px dotted var(--studio-ink-mute, #1f2733)',
+                borderBottom: '1px dotted var(--studio-rail-edge, #1d2027)',
               }}
             >
               <span style={{ fontFamily: 'var(--studio-mono, ui-monospace)' }}>{j.name}</span>
@@ -3362,9 +3364,9 @@ function RenderQueueModal() {
 }
 const btnStyle = {
   padding: '4px 12px', fontSize: 11,
-  background: 'var(--studio-bg, #0d1117)',
-  color: 'var(--studio-ink, #e6edf3)',
-  border: '1px solid var(--studio-ink-mute, #1f2733)',
+  background: 'var(--studio-canvas, #000000)',
+  color: 'var(--studio-ink, #f0eee6)',
+  border: '1px solid var(--studio-rail-edge, #1d2027)',
   borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit',
 };
 
@@ -3421,17 +3423,17 @@ function ScriptEditor() {
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: 'var(--studio-bg-elev, #161b22)',
-          border: '1px solid var(--studio-accent, #1de9b6)',
+          background: 'var(--studio-canvas-3, #141414)',
+          border: '1px solid var(--studio-accent, #ebecef)',
           borderRadius: 8, padding: '18px 22px', minWidth: 560, maxWidth: 720,
-          color: 'var(--studio-ink, #e6edf3)', fontFamily: 'inherit',
+          color: 'var(--studio-ink, #f0eee6)', fontFamily: 'inherit',
         }}
       >
         <div style={{
           display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
           marginBottom: 10,
         }}>
-          <strong style={{ color: 'var(--studio-accent, #1de9b6)', fontSize: 13, letterSpacing: '0.04em' }}>Script editor</strong>
+          <strong style={{ color: 'var(--studio-accent, #ebecef)', fontSize: 13, letterSpacing: '0.04em' }}>Script editor</strong>
           <span style={{ opacity: 0.55, fontSize: 11, fontFamily: 'var(--studio-mono, ui-monospace)' }}>Cmd+Shift+J · Esc</span>
         </div>
         <textarea
@@ -3442,9 +3444,9 @@ function ScriptEditor() {
           spellCheck={false}
           style={{
             width: '100%', marginBottom: 10,
-            padding: '6px 10px', background: 'var(--studio-bg, #0d1117)',
-            border: '1px solid var(--studio-ink-mute, #1f2733)',
-            color: 'var(--studio-ink, #e6edf3)', borderRadius: 3,
+            padding: '6px 10px', background: 'var(--studio-canvas, #000000)',
+            border: '1px solid var(--studio-rail-edge, #1d2027)',
+            color: 'var(--studio-ink, #f0eee6)', borderRadius: 3,
             fontFamily: 'var(--studio-mono, ui-monospace)', fontSize: 12, resize: 'vertical',
           }}
         />
@@ -3454,15 +3456,15 @@ function ScriptEditor() {
             data-studio-v3-script-run
             onClick={run}
             style={{
-              background: 'var(--studio-accent, #1de9b6)', border: 0, color: '#0d1117',
+              background: 'var(--studio-accent, #ebecef)', border: 0, color: '#000000',
               fontWeight: 600, padding: '6px 18px', borderRadius: 4, fontSize: 11, cursor: 'pointer',
             }}
           >Run</button>
         </div>
         <div data-studio-v3-script-output style={{
           fontFamily: 'var(--studio-mono, ui-monospace)', fontSize: 11,
-          background: 'var(--studio-bg, #0d1117)',
-          border: '1px solid var(--studio-ink-mute, #1f2733)',
+          background: 'var(--studio-canvas, #000000)',
+          border: '1px solid var(--studio-rail-edge, #1d2027)',
           borderRadius: 3, padding: '6px 10px',
           maxHeight: 160, overflowY: 'auto',
         }}>
@@ -3473,7 +3475,7 @@ function ScriptEditor() {
               data-studio-v3-script-result={i}
               style={{
                 padding: '3px 0',
-                borderBottom: i < log.length - 1 ? '1px dotted var(--studio-ink-mute, #1f2733)' : 'none',
+                borderBottom: i < log.length - 1 ? '1px dotted var(--studio-rail-edge, #1d2027)' : 'none',
               }}
             >{l.result}</div>
           ))}
@@ -3519,9 +3521,9 @@ function ToastBus() {
           data-studio-v3-toast
           data-studio-v3-toast-kind={it.kind}
           style={{
-            background: 'var(--studio-bg-elev, #161b22)',
-            borderLeft: `3px solid ${it.kind === 'warn' ? '#f1c40f' : 'var(--studio-accent, #1de9b6)'}`,
-            color: 'var(--studio-ink, #e6edf3)',
+            background: 'var(--studio-canvas-3, #141414)',
+            borderLeft: `3px solid ${it.kind === 'warn' ? '#f1c40f' : 'var(--studio-accent, #ebecef)'}`,
+            color: 'var(--studio-ink, #f0eee6)',
             fontSize: 11.5,
             padding: '6px 12px',
             borderRadius: 4,
@@ -3591,11 +3593,11 @@ function OnboardingTour() {
       data-studio-v3-tour-step={step}
       style={{
         ...pos,
-        background: 'var(--studio-bg-elev, #161b22)',
-        border: '1px solid var(--studio-accent, #1de9b6)',
+        background: 'var(--studio-canvas-3, #141414)',
+        border: '1px solid var(--studio-accent, #ebecef)',
         borderRadius: 8,
         padding: '14px 16px',
-        color: 'var(--studio-ink, #e6edf3)',
+        color: 'var(--studio-ink, #f0eee6)',
         fontSize: 12,
         boxShadow: '0 10px 30px rgba(0,0,0,0.55)',
       }}
@@ -3604,7 +3606,7 @@ function OnboardingTour() {
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         marginBottom: 8,
       }}>
-        <span style={{ color: 'var(--studio-accent, #1de9b6)', fontWeight: 600, letterSpacing: '0.04em' }}>
+        <span style={{ color: 'var(--studio-accent, #ebecef)', fontWeight: 600, letterSpacing: '0.04em' }}>
           {step + 1}/{TOUR_STEPS.length} · {cur.title}
         </span>
         <button
@@ -3624,8 +3626,8 @@ function OnboardingTour() {
           data-studio-v3-tour-next
           onClick={next}
           style={{
-            background: 'var(--studio-accent, #1de9b6)',
-            border: 0, color: '#0d1117', fontSize: 11, fontWeight: 600,
+            background: 'var(--studio-accent, #ebecef)',
+            border: 0, color: '#000000', fontSize: 11, fontWeight: 600,
             padding: '6px 14px', borderRadius: 4, cursor: 'pointer',
           }}
         >{step < TOUR_STEPS.length - 1 ? 'Next →' : 'Got it'}</button>
@@ -3662,10 +3664,10 @@ function WelcomeCard() {
         position: 'absolute', top: '50%', left: '50%',
         transform: 'translate(-50%, -50%)', zIndex: 21,
         background: 'rgba(13, 17, 23, 0.78)',
-        border: '1px solid var(--studio-ink-mute, #1f2733)',
+        border: '1px solid var(--studio-rail-edge, #1d2027)',
         borderRadius: 6,
         padding: '18px 22px',
-        color: 'var(--studio-ink, #e6edf3)',
+        color: 'var(--studio-ink, #f0eee6)',
         fontFamily: 'inherit', fontSize: 12,
         boxShadow: '0 8px 24px rgba(0, 0, 0, 0.45)',
         minWidth: 280, maxWidth: 360, textAlign: 'center',
@@ -3673,7 +3675,7 @@ function WelcomeCard() {
     >
       <div style={{
         fontSize: 13, fontWeight: 600, marginBottom: 8,
-        color: 'var(--studio-accent, #1de9b6)', letterSpacing: '0.03em',
+        color: 'var(--studio-accent, #ebecef)', letterSpacing: '0.03em',
       }}>ArchDisc Studio</div>
       <div style={{ marginBottom: 10, opacity: 0.8 }}>
         Pick a primitive in the toolbar to start.
@@ -3685,7 +3687,7 @@ function WelcomeCard() {
       </div>
       {recent.length > 0 && (
         <div data-studio-v3-welcome-recent style={{
-          borderTop: '1px solid var(--studio-ink-mute, #1f2733)',
+          borderTop: '1px solid var(--studio-rail-edge, #1d2027)',
           paddingTop: 10, textAlign: 'left',
         }}>
           <div style={{
@@ -3703,8 +3705,8 @@ function WelcomeCard() {
               style={{
                 display: 'block', width: '100%', marginBottom: 3,
                 padding: '4px 6px',
-                background: 'transparent', border: '1px solid var(--studio-ink-mute, #1f2733)',
-                color: 'var(--studio-ink, #e6edf3)', borderRadius: 3,
+                background: 'transparent', border: '1px solid var(--studio-rail-edge, #1d2027)',
+                color: 'var(--studio-ink, #f0eee6)', borderRadius: 3,
                 cursor: 'pointer', fontSize: 10, fontFamily: 'var(--studio-mono, ui-monospace)',
                 textAlign: 'left', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
               }}
@@ -4048,7 +4050,7 @@ function TransformRows() {
   const inStyle = {
     width: 60, padding: '2px 4px', fontSize: 11,
     fontFamily: 'var(--studio-mono, ui-monospace)',
-    background: 'var(--studio-bg-elev, #1c1c20)',
+    background: 'var(--studio-canvas-3, #1f1f1f)',
     color: 'var(--studio-ink, #dfe5ea)',
     border: '1px solid var(--studio-ink-mute, #2c2c30)',
     borderRadius: 2,
@@ -4138,9 +4140,9 @@ function VertexPaintPanel() {
         style={{
           display: 'block', width: '100%', marginBottom: 3,
           padding: '3px 8px', textAlign: 'left',
-          background: 'var(--studio-bg-elev, #161b22)',
-          color: 'var(--studio-ink, #e6edf3)',
-          border: '1px solid var(--studio-ink-mute, #1f2733)',
+          background: 'var(--studio-canvas-3, #141414)',
+          color: 'var(--studio-ink, #f0eee6)',
+          border: '1px solid var(--studio-rail-edge, #1d2027)',
           borderRadius: 3, cursor: 'pointer',
           fontSize: 11, fontFamily: 'inherit',
         }}
@@ -4152,9 +4154,9 @@ function VertexPaintPanel() {
         style={{
           display: 'block', width: '100%',
           padding: '3px 8px', textAlign: 'left',
-          background: 'var(--studio-bg-elev, #161b22)',
-          color: 'var(--studio-ink, #e6edf3)',
-          border: '1px solid var(--studio-ink-mute, #1f2733)',
+          background: 'var(--studio-canvas-3, #141414)',
+          color: 'var(--studio-ink, #f0eee6)',
+          border: '1px solid var(--studio-rail-edge, #1d2027)',
           borderRadius: 3, cursor: 'pointer',
           fontSize: 11, fontFamily: 'inherit',
         }}
@@ -4190,9 +4192,9 @@ function SculptBrushPanel() {
             style={{
               flex: '1 1 calc(33% - 4px)', minWidth: 56,
               padding: '3px 4px', fontSize: 10,
-              background: brush.kind === k ? 'var(--studio-accent, #1de9b6)' : 'var(--studio-bg-elev, #161b22)',
-              color: brush.kind === k ? '#0d1117' : 'var(--studio-ink, #e6edf3)',
-              border: '1px solid var(--studio-ink-mute, #1f2733)',
+              background: brush.kind === k ? 'var(--studio-accent, #ebecef)' : 'var(--studio-canvas-3, #141414)',
+              color: brush.kind === k ? '#000000' : 'var(--studio-ink, #f0eee6)',
+              border: '1px solid var(--studio-rail-edge, #1d2027)',
               borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit',
               textTransform: 'capitalize', fontWeight: brush.kind === k ? 600 : 400,
             }}
@@ -4260,10 +4262,10 @@ function ModifierStackSection() {
           style={{
             display: 'flex', justifyContent: 'space-between',
             padding: '3px 6px', fontSize: 11,
-            borderLeft: '2px solid var(--studio-accent, #1de9b6)',
+            borderLeft: '2px solid var(--studio-accent, #ebecef)',
           }}
         >
-          <span style={{ color: 'var(--studio-ink, #e6edf3)' }}>{m.label}</span>
+          <span style={{ color: 'var(--studio-ink, #f0eee6)' }}>{m.label}</span>
           {m.params && (
             <span style={{ opacity: 0.55, fontFamily: 'var(--studio-mono, ui-monospace)', fontSize: 10 }}>
               {Object.entries(m.params).map(([k, v]) => `${k}=${v}`).join(' · ')}
@@ -4278,7 +4280,7 @@ function ModifierStackSection() {
         style={{
           width: '100%', marginTop: 6, padding: '3px 8px',
           background: 'transparent', color: 'var(--studio-ink-mute, #9aa6b2)',
-          border: '1px solid var(--studio-ink-mute, #1f2733)', borderRadius: 3,
+          border: '1px solid var(--studio-rail-edge, #1d2027)', borderRadius: 3,
           fontSize: 10, cursor: 'pointer', fontFamily: 'inherit',
         }}
       >Clear history</button>
@@ -4334,9 +4336,9 @@ function GeometryTools() {
           style={{
             display: 'block', width: '100%', marginBottom: 3,
             padding: '3px 8px', textAlign: 'left',
-            background: 'var(--studio-bg-elev, #161b22)',
-            color: 'var(--studio-ink, #e6edf3)',
-            border: '1px solid var(--studio-ink-mute, #1f2733)',
+            background: 'var(--studio-canvas-3, #141414)',
+            color: 'var(--studio-ink, #f0eee6)',
+            border: '1px solid var(--studio-rail-edge, #1d2027)',
             borderRadius: 3, cursor: 'pointer',
             fontSize: 11, fontFamily: 'inherit',
           }}
@@ -4390,9 +4392,9 @@ function ConstraintsSection() {
           data-studio-v3-lookat-target
           style={{
             flex: 1, marginLeft: 8, padding: '2px 6px',
-            background: 'var(--studio-bg, #0d1117)',
-            border: '1px solid var(--studio-ink-mute, #1f2733)',
-            color: 'var(--studio-ink, #e6edf3)', borderRadius: 3,
+            background: 'var(--studio-canvas, #000000)',
+            border: '1px solid var(--studio-rail-edge, #1d2027)',
+            color: 'var(--studio-ink, #f0eee6)', borderRadius: 3,
             fontFamily: 'inherit', fontSize: 11,
           }}
         >
@@ -4488,9 +4490,9 @@ function RenameSection() {
           onKeyDown={(e) => { if (e.key === 'Enter') { commit(e.currentTarget.value); e.currentTarget.blur(); } }}
           style={{
             flex: 1, padding: '2px 6px', fontSize: 11,
-            background: 'var(--studio-bg, #0d1117)',
-            border: '1px solid var(--studio-ink-mute, #1f2733)',
-            color: 'var(--studio-ink, #e6edf3)', borderRadius: 3,
+            background: 'var(--studio-canvas, #000000)',
+            border: '1px solid var(--studio-rail-edge, #1d2027)',
+            color: 'var(--studio-ink, #f0eee6)', borderRadius: 3,
             fontFamily: 'var(--studio-mono, ui-monospace)',
           }}
         />
@@ -4512,7 +4514,7 @@ function TransformLabelRow({ label, kind }) {
         style={{
           padding: '0 6px', fontSize: 9, letterSpacing: '0.05em',
           background: 'transparent', color: 'var(--studio-ink-mute, #9aa6b2)',
-          border: '1px solid var(--studio-ink-mute, #1f2733)', borderRadius: 2,
+          border: '1px solid var(--studio-rail-edge, #1d2027)', borderRadius: 2,
           cursor: 'pointer', textTransform: 'uppercase',
         }}
       >reset</button>
@@ -4540,9 +4542,9 @@ function PivotActions() {
           style={{
             display: 'block', width: '100%', marginBottom: 3,
             padding: '3px 8px', textAlign: 'left',
-            background: 'var(--studio-bg-elev, #161b22)',
-            color: 'var(--studio-ink, #e6edf3)',
-            border: '1px solid var(--studio-ink-mute, #1f2733)',
+            background: 'var(--studio-canvas-3, #141414)',
+            color: 'var(--studio-ink, #f0eee6)',
+            border: '1px solid var(--studio-rail-edge, #1d2027)',
             borderRadius: 3, cursor: 'pointer',
             fontSize: 11, fontFamily: 'inherit',
           }}
@@ -4592,8 +4594,8 @@ function CameraSection() {
           onChange={onFov}
           data-studio-v3-camera-fov
           style={{
-            width: 60, background: 'var(--studio-bg, #0d1117)', border: '1px solid var(--studio-ink-mute, #1f2733)',
-            color: 'var(--studio-ink, #e6edf3)', padding: '2px 6px', borderRadius: 3, fontFamily: 'var(--studio-mono, ui-monospace)',
+            width: 60, background: 'var(--studio-canvas, #000000)', border: '1px solid var(--studio-rail-edge, #1d2027)',
+            color: 'var(--studio-ink, #f0eee6)', padding: '2px 6px', borderRadius: 3, fontFamily: 'var(--studio-mono, ui-monospace)',
             fontSize: 11, textAlign: 'right',
           }}
         />
@@ -4606,8 +4608,8 @@ function CameraSection() {
           data-studio-v3-camera-proj-value={proj}
           onClick={toggle}
           style={{
-            background: 'transparent', border: '1px solid var(--studio-ink-mute, #1f2733)',
-            color: proj === 'ortho' ? 'var(--studio-accent, #1de9b6)' : 'var(--studio-ink, #e6edf3)',
+            background: 'transparent', border: '1px solid var(--studio-rail-edge, #1d2027)',
+            color: proj === 'ortho' ? 'var(--studio-accent, #ebecef)' : 'var(--studio-ink, #f0eee6)',
             padding: '2px 8px', borderRadius: 3, fontSize: 11, cursor: 'pointer', textTransform: 'capitalize',
           }}
         >{proj}</button>
@@ -4638,9 +4640,9 @@ function RenderSection() {
           onChange={(e) => setW(Number(e.target.value))}
           data-studio-v3-render-w
           style={{
-            width: 64, background: 'var(--studio-bg, #0d1117)',
-            border: '1px solid var(--studio-ink-mute, #1f2733)',
-            color: 'var(--studio-ink, #e6edf3)', padding: '2px 6px', borderRadius: 3,
+            width: 64, background: 'var(--studio-canvas, #000000)',
+            border: '1px solid var(--studio-rail-edge, #1d2027)',
+            color: 'var(--studio-ink, #f0eee6)', padding: '2px 6px', borderRadius: 3,
             fontFamily: 'var(--studio-mono, ui-monospace)', fontSize: 11, textAlign: 'right',
           }}
         />
@@ -4651,9 +4653,9 @@ function RenderSection() {
           onChange={(e) => setH(Number(e.target.value))}
           data-studio-v3-render-h
           style={{
-            width: 64, background: 'var(--studio-bg, #0d1117)',
-            border: '1px solid var(--studio-ink-mute, #1f2733)',
-            color: 'var(--studio-ink, #e6edf3)', padding: '2px 6px', borderRadius: 3,
+            width: 64, background: 'var(--studio-canvas, #000000)',
+            border: '1px solid var(--studio-rail-edge, #1d2027)',
+            color: 'var(--studio-ink, #f0eee6)', padding: '2px 6px', borderRadius: 3,
             fontFamily: 'var(--studio-mono, ui-monospace)', fontSize: 11, textAlign: 'right',
           }}
         />
@@ -4667,8 +4669,8 @@ function RenderSection() {
             onClick={() => { setW(pw); setH(ph); }}
             style={{
               flex: 1, padding: '2px 4px', fontSize: 10,
-              background: 'transparent', color: 'var(--studio-ink, #e6edf3)',
-              border: '1px solid var(--studio-ink-mute, #1f2733)', borderRadius: 3, cursor: 'pointer',
+              background: 'transparent', color: 'var(--studio-ink, #f0eee6)',
+              border: '1px solid var(--studio-rail-edge, #1d2027)', borderRadius: 3, cursor: 'pointer',
             }}
           >{lbl}</button>
         ))}
@@ -4679,7 +4681,7 @@ function RenderSection() {
         data-studio-v3-render-go
         style={{
           width: '100%', marginTop: 6,
-          background: 'var(--studio-accent, #1de9b6)', border: 0, color: '#0d1117',
+          background: 'var(--studio-accent, #ebecef)', border: 0, color: '#000000',
           fontWeight: 600, padding: '5px', borderRadius: 3, fontSize: 11, cursor: 'pointer',
         }}
       >Render → PNG</button>
@@ -4720,9 +4722,9 @@ function SelectionSetsSection() {
           data-studio-v3-selection-set-draft
           style={{
             flex: 1, padding: '2px 6px', fontSize: 11,
-            background: 'var(--studio-bg, #0d1117)',
-            border: '1px solid var(--studio-ink-mute, #1f2733)',
-            color: 'var(--studio-ink, #e6edf3)', borderRadius: 3, fontFamily: 'inherit',
+            background: 'var(--studio-canvas, #000000)',
+            border: '1px solid var(--studio-rail-edge, #1d2027)',
+            color: 'var(--studio-ink, #f0eee6)', borderRadius: 3, fontFamily: 'inherit',
           }}
         />
         <button
@@ -4730,7 +4732,7 @@ function SelectionSetsSection() {
           onClick={save}
           data-studio-v3-selection-set-save
           style={{
-            background: 'var(--studio-accent, #1de9b6)', border: 0, color: '#0d1117',
+            background: 'var(--studio-accent, #ebecef)', border: 0, color: '#000000',
             fontWeight: 600, padding: '2px 10px', borderRadius: 3, fontSize: 11, cursor: 'pointer',
           }}
         >+</button>
@@ -4744,9 +4746,9 @@ function SelectionSetsSection() {
           style={{
             display: 'block', width: '100%', marginTop: 3,
             padding: '3px 8px', textAlign: 'left',
-            background: 'var(--studio-bg-elev, #161b22)',
-            color: 'var(--studio-ink, #e6edf3)',
-            border: '1px solid var(--studio-ink-mute, #1f2733)',
+            background: 'var(--studio-canvas-3, #141414)',
+            color: 'var(--studio-ink, #f0eee6)',
+            border: '1px solid var(--studio-rail-edge, #1d2027)',
             borderRadius: 3, cursor: 'pointer', fontSize: 11, fontFamily: 'inherit',
           }}
         >{n}</button>
@@ -4791,9 +4793,9 @@ function TagsSection() {
           data-studio-v3-tag-draft
           style={{
             flex: 1, padding: '2px 6px', fontSize: 11,
-            background: 'var(--studio-bg, #0d1117)',
-            border: '1px solid var(--studio-ink-mute, #1f2733)',
-            color: 'var(--studio-ink, #e6edf3)', borderRadius: 3,
+            background: 'var(--studio-canvas, #000000)',
+            border: '1px solid var(--studio-rail-edge, #1d2027)',
+            color: 'var(--studio-ink, #f0eee6)', borderRadius: 3,
             fontFamily: 'inherit',
           }}
         />
@@ -4802,7 +4804,7 @@ function TagsSection() {
           onClick={add}
           data-studio-v3-tag-add
           style={{
-            background: 'var(--studio-accent, #1de9b6)', border: 0, color: '#0d1117',
+            background: 'var(--studio-accent, #ebecef)', border: 0, color: '#000000',
             fontWeight: 600, padding: '2px 10px', borderRadius: 3, fontSize: 11, cursor: 'pointer',
           }}
         >+</button>
@@ -4815,9 +4817,9 @@ function TagsSection() {
             data-studio-v3-tag={t}
             onClick={() => pick(t)}
             style={{
-              background: 'var(--studio-bg-elev, #161b22)',
-              color: 'var(--studio-accent, #1de9b6)',
-              border: '1px solid var(--studio-ink-mute, #1f2733)',
+              background: 'var(--studio-canvas-3, #141414)',
+              color: 'var(--studio-accent, #ebecef)',
+              border: '1px solid var(--studio-rail-edge, #1d2027)',
               borderRadius: 3, padding: '1px 8px', fontSize: 10,
               cursor: 'pointer', fontFamily: 'var(--studio-mono, ui-monospace)',
             }}
@@ -4875,7 +4877,7 @@ function ImagePlatesSection() {
           }}
           onClick={() => select(it.uuid)}
         >
-          <span style={{ flex: 1, color: 'var(--studio-ink, #e6edf3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <span style={{ flex: 1, color: 'var(--studio-ink, #f0eee6)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {it.name}
           </span>
           <button
@@ -4932,7 +4934,7 @@ function AnnotationsSection() {
             padding: '2px 6px', fontSize: 11, alignItems: 'center', gap: 6,
           }}
         >
-          <span style={{ flex: 1, color: 'var(--studio-ink, #e6edf3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <span style={{ flex: 1, color: 'var(--studio-ink, #f0eee6)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {it.text}
           </span>
           <button
@@ -4983,9 +4985,9 @@ function InspectorFilter() {
         data-studio-v3-inspector-filter
         style={{
           width: '100%', padding: '4px 8px',
-          background: 'var(--studio-bg, #0d1117)',
-          border: '1px solid var(--studio-ink-mute, #1f2733)',
-          color: 'var(--studio-ink, #e6edf3)', borderRadius: 3,
+          background: 'var(--studio-canvas, #000000)',
+          border: '1px solid var(--studio-rail-edge, #1d2027)',
+          color: 'var(--studio-ink, #f0eee6)', borderRadius: 3,
           fontFamily: 'inherit', fontSize: 11, outline: 'none',
         }}
       />
@@ -5028,16 +5030,16 @@ function AnimationSection() {
       <div className="studio-right-row" style={{ gap: 4, marginTop: 4 }}>
         <button type="button" data-studio-v3-anim-step-back onClick={() => step(-1)} style={animBtn}>−</button>
         <button type="button" data-studio-v3-anim-step-fwd  onClick={() => step(1)}  style={animBtn}>+</button>
-        <button type="button" data-studio-v3-anim-insert     onClick={insert}        style={{ ...animBtn, flex: 2, background: 'var(--studio-accent, #1de9b6)', color: '#0d1117', fontWeight: 600 }}>Insert key</button>
+        <button type="button" data-studio-v3-anim-insert     onClick={insert}        style={{ ...animBtn, flex: 2, background: 'var(--studio-accent, #ebecef)', color: '#000000', fontWeight: 600 }}>Insert key</button>
       </div>
     </div>
   );
 }
 const animBtn = {
   flex: 1, padding: '3px 6px', fontSize: 11,
-  background: 'var(--studio-bg-elev, #161b22)',
-  color: 'var(--studio-ink, #e6edf3)',
-  border: '1px solid var(--studio-ink-mute, #1f2733)',
+  background: 'var(--studio-canvas-3, #141414)',
+  color: 'var(--studio-ink, #f0eee6)',
+  border: '1px solid var(--studio-rail-edge, #1d2027)',
   borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit',
 };
 
@@ -5115,10 +5117,10 @@ function HistorySection() {
           style={{
             display: 'flex', justifyContent: 'space-between',
             padding: '2px 6px', fontSize: 11, color: 'var(--studio-ink-mute, #9aa6b2)',
-            borderLeft: i === 0 ? '2px solid var(--studio-accent, #1de9b6)' : '2px solid transparent',
+            borderLeft: i === 0 ? '2px solid var(--studio-accent, #ebecef)' : '2px solid transparent',
           }}
         >
-          <span style={{ color: i === 0 ? 'var(--studio-ink, #e6edf3)' : 'inherit' }}>{e.label || 'edit'}</span>
+          <span style={{ color: i === 0 ? 'var(--studio-ink, #f0eee6)' : 'inherit' }}>{e.label || 'edit'}</span>
           <span style={{ fontFamily: 'var(--studio-mono, ui-monospace)', fontSize: 10 }}>
             {((Date.now() - e.ts) / 1000).toFixed(0)}s
           </span>
@@ -5155,9 +5157,9 @@ function NotesSection({ activeWb }) {
         data-studio-v3-notes-input
         style={{
           width: '100%', minHeight: 70, padding: '6px 8px',
-          background: 'var(--studio-bg-elev, #161b22)',
-          border: '1px solid var(--studio-ink-mute, #1f2733)',
-          color: 'var(--studio-ink, #e6edf3)', borderRadius: 3,
+          background: 'var(--studio-canvas-3, #141414)',
+          border: '1px solid var(--studio-rail-edge, #1d2027)',
+          color: 'var(--studio-ink, #f0eee6)', borderRadius: 3,
           fontFamily: 'inherit', fontSize: 11, resize: 'vertical',
           outline: 'none',
         }}
@@ -5212,8 +5214,8 @@ function CameraFollowRow() {
         data-studio-v3-camera-follow-on={on ? 'true' : 'false'}
         onClick={() => { window.__studioToggleCameraFollow && window.__studioToggleCameraFollow(); setOn(!on); }}
         style={{
-          background: 'transparent', border: '1px solid var(--studio-ink-mute, #1f2733)',
-          color: on ? 'var(--studio-accent, #1de9b6)' : 'var(--studio-ink, #e6edf3)',
+          background: 'transparent', border: '1px solid var(--studio-rail-edge, #1d2027)',
+          color: on ? 'var(--studio-accent, #ebecef)' : 'var(--studio-ink, #f0eee6)',
           padding: '2px 8px', borderRadius: 3, fontSize: 11, cursor: 'pointer',
         }}
       >{on ? 'on' : 'off'}</button>
@@ -5312,9 +5314,9 @@ function CameraBookmarksSection() {
           data-studio-v3-camera-bookmark-draft
           style={{
             flex: 1, padding: '2px 6px', fontSize: 11,
-            background: 'var(--studio-bg, #0d1117)',
-            border: '1px solid var(--studio-ink-mute, #1f2733)',
-            color: 'var(--studio-ink, #e6edf3)', borderRadius: 3,
+            background: 'var(--studio-canvas, #000000)',
+            border: '1px solid var(--studio-rail-edge, #1d2027)',
+            color: 'var(--studio-ink, #f0eee6)', borderRadius: 3,
             fontFamily: 'inherit',
           }}
         />
@@ -5323,7 +5325,7 @@ function CameraBookmarksSection() {
           onClick={save}
           data-studio-v3-camera-bookmark-save
           style={{
-            background: 'var(--studio-accent, #1de9b6)', border: 0, color: '#0d1117',
+            background: 'var(--studio-accent, #ebecef)', border: 0, color: '#000000',
             fontWeight: 600, padding: '2px 10px', borderRadius: 3, fontSize: 11, cursor: 'pointer',
           }}
         >+</button>
@@ -5339,9 +5341,9 @@ function CameraBookmarksSection() {
             onClick={() => restore(n)}
             style={{
               flex: 1, padding: '3px 8px', textAlign: 'left',
-              background: 'var(--studio-bg-elev, #161b22)',
-              color: 'var(--studio-ink, #e6edf3)',
-              border: '1px solid var(--studio-ink-mute, #1f2733)',
+              background: 'var(--studio-canvas-3, #141414)',
+              color: 'var(--studio-ink, #f0eee6)',
+              border: '1px solid var(--studio-rail-edge, #1d2027)',
               borderRadius: 3, cursor: 'pointer', fontSize: 11, fontFamily: 'inherit',
             }}
           >{n}</button>
@@ -5563,7 +5565,7 @@ function StagePresets() {
   };
   const presets = [
     { id: 'workshop',  hdri: 'studio',  bg: '#1a1d22', amb: 0.6, key: 1.2, az: 35,  el: 50 },
-    { id: 'showroom',  hdri: 'neutral', bg: '#0d1117', amb: 0.8, key: 1.8, az: 25,  el: 70 },
+    { id: 'showroom',  hdri: 'neutral', bg: '#000000', amb: 0.8, key: 1.8, az: 25,  el: 70 },
     { id: 'sunset',    hdri: 'sunset',  bg: '#241010', amb: 0.4, key: 2.6, az: -50, el: 12 },
     { id: 'night',     hdri: 'off',     bg: '#04060a', amb: 0.15, key: 0.8, az: 90, el: 30 },
   ];
@@ -5580,9 +5582,9 @@ function StagePresets() {
             style={{
               flex: '1 1 calc(50% - 4px)', minWidth: 80,
               padding: '4px 6px', fontSize: 11,
-              background: 'var(--studio-bg-elev, #161b22)',
-              color: 'var(--studio-ink, #e6edf3)',
-              border: '1px solid var(--studio-ink-mute, #1f2733)',
+              background: 'var(--studio-canvas-3, #141414)',
+              color: 'var(--studio-ink, #f0eee6)',
+              border: '1px solid var(--studio-rail-edge, #1d2027)',
               borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit',
               textTransform: 'capitalize',
             }}
@@ -5622,9 +5624,9 @@ function PostFXSection() {
             style={{
               flex: '1 1 calc(50% - 4px)', minWidth: 70,
               padding: '4px 8px', fontSize: 11,
-              background: state[it.id] ? 'var(--studio-accent, #1de9b6)' : 'var(--studio-bg-elev, #161b22)',
-              color: state[it.id] ? '#0d1117' : 'var(--studio-ink, #e6edf3)',
-              border: '1px solid var(--studio-ink-mute, #1f2733)',
+              background: state[it.id] ? 'var(--studio-accent, #ebecef)' : 'var(--studio-canvas-3, #141414)',
+              color: state[it.id] ? '#000000' : 'var(--studio-ink, #f0eee6)',
+              border: '1px solid var(--studio-rail-edge, #1d2027)',
               borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit',
               fontWeight: state[it.id] ? 600 : 400,
             }}
@@ -5662,9 +5664,9 @@ function ToneMappingRows() {
           data-studio-v3-tone-mapping
           style={{
             flex: 1, marginLeft: 8, padding: '2px 6px',
-            background: 'var(--studio-bg, #0d1117)',
-            border: '1px solid var(--studio-ink-mute, #1f2733)',
-            color: 'var(--studio-ink, #e6edf3)', borderRadius: 3,
+            background: 'var(--studio-canvas, #000000)',
+            border: '1px solid var(--studio-rail-edge, #1d2027)',
+            color: 'var(--studio-ink, #f0eee6)', borderRadius: 3,
             fontFamily: 'inherit', fontSize: 11,
           }}
         >
@@ -5707,9 +5709,9 @@ function HDRIRow() {
         data-studio-v3-hdri-preset
         style={{
           flex: 1, marginLeft: 8, padding: '2px 6px',
-          background: 'var(--studio-bg, #0d1117)',
-          border: '1px solid var(--studio-ink-mute, #1f2733)',
-          color: 'var(--studio-ink, #e6edf3)', borderRadius: 3,
+          background: 'var(--studio-canvas, #000000)',
+          border: '1px solid var(--studio-rail-edge, #1d2027)',
+          color: 'var(--studio-ink, #f0eee6)', borderRadius: 3,
           fontFamily: 'inherit', fontSize: 11,
         }}
       >
@@ -5724,9 +5726,9 @@ function HDRIRow() {
 // Slice 605 — Sky gradient: top + bottom colours, single apply button.
 function SkyGradientSection() {
   const [top, setTop] = useState('#1a2438');
-  const [bot, setBot] = useState('#0d1117');
+  const [bot, setBot] = useState('#000000');
   const apply = () => { if (window.__studioSetSkyGradient) window.__studioSetSkyGradient(top, bot); };
-  const clear = () => { if (window.__studioClearSkyGradient) window.__studioClearSkyGradient('#0d1117'); };
+  const clear = () => { if (window.__studioClearSkyGradient) window.__studioClearSkyGradient('#000000'); };
   return (
     <div className="studio-right-section" data-studio-v3-sky-gradient>
       <div className="studio-right-section-title">Sky gradient</div>
@@ -5756,8 +5758,8 @@ function SkyGradientSection() {
           onClick={apply}
           data-studio-v3-sky-apply
           style={{
-            flex: 1, padding: '3px', background: 'var(--studio-accent, #1de9b6)',
-            color: '#0d1117', fontWeight: 600, border: 0, borderRadius: 3,
+            flex: 1, padding: '3px', background: 'var(--studio-accent, #ebecef)',
+            color: '#000000', fontWeight: 600, border: 0, borderRadius: 3,
             fontSize: 11, cursor: 'pointer',
           }}
         >Apply</button>
@@ -5767,8 +5769,8 @@ function SkyGradientSection() {
           data-studio-v3-sky-clear
           style={{
             flex: 1, padding: '3px', background: 'transparent',
-            color: 'var(--studio-ink, #e6edf3)',
-            border: '1px solid var(--studio-ink-mute, #1f2733)',
+            color: 'var(--studio-ink, #f0eee6)',
+            border: '1px solid var(--studio-rail-edge, #1d2027)',
             borderRadius: 3, fontSize: 11, cursor: 'pointer',
           }}
         >Solid</button>
@@ -5780,7 +5782,7 @@ function SkyGradientSection() {
 // Slice 604 — Fog section: color picker + near/far sliders + on/off button.
 function FogSection() {
   const [on, setOn] = useState(false);
-  const [hex, setHex] = useState('#0d1117');
+  const [hex, setHex] = useState('#000000');
   const [near, setNear] = useState(0.5);
   const [far, setFar] = useState(5);
   useEffect(() => {
@@ -5808,8 +5810,8 @@ function FogSection() {
           data-studio-v3-fog-on={on ? 'true' : 'false'}
           onClick={toggle}
           style={{
-            background: 'transparent', border: '1px solid var(--studio-ink-mute, #1f2733)',
-            color: on ? 'var(--studio-accent, #1de9b6)' : 'var(--studio-ink, #e6edf3)',
+            background: 'transparent', border: '1px solid var(--studio-rail-edge, #1d2027)',
+            color: on ? 'var(--studio-accent, #ebecef)' : 'var(--studio-ink, #f0eee6)',
             padding: '2px 8px', borderRadius: 3, fontSize: 11, cursor: 'pointer',
           }}
         >{on ? 'on' : 'off'}</button>
@@ -5853,7 +5855,7 @@ function FogSection() {
 // Slice 508 — World section. Edits grid extent + canvas background tint.
 function WorldSection() {
   const [grid, setGrid] = useState(1);
-  const [bg, setBg] = useState('#0d1117');
+  const [bg, setBg] = useState('#000000');
   useEffect(() => {
     const read = () => {
       if (typeof window.__studioGridSize === 'number') setGrid(window.__studioGridSize);
@@ -5899,8 +5901,8 @@ function WorldSection() {
           onChange={onGrid}
           data-studio-v3-world-grid
           style={{
-            width: 64, background: 'var(--studio-bg, #0d1117)', border: '1px solid var(--studio-ink-mute, #1f2733)',
-            color: 'var(--studio-ink, #e6edf3)', padding: '2px 6px', borderRadius: 3,
+            width: 64, background: 'var(--studio-canvas, #000000)', border: '1px solid var(--studio-rail-edge, #1d2027)',
+            color: 'var(--studio-ink, #f0eee6)', padding: '2px 6px', borderRadius: 3,
             fontFamily: 'var(--studio-mono, ui-monospace)', fontSize: 11, textAlign: 'right',
           }}
         />
@@ -5913,7 +5915,7 @@ function WorldSection() {
           onChange={onBg}
           data-studio-v3-world-bg
           style={{
-            width: 32, height: 18, padding: 0, border: '1px solid var(--studio-ink-mute, #1f2733)',
+            width: 32, height: 18, padding: 0, border: '1px solid var(--studio-rail-edge, #1d2027)',
             borderRadius: 3, cursor: 'pointer', background: 'transparent',
           }}
         />
@@ -5957,8 +5959,8 @@ function SnapSection() {
         onChange={(e) => onChange(Number(e.target.value))}
         data-studio-v3-snap-step={attr}
         style={{
-          width: 50, background: 'var(--studio-bg, #0d1117)', border: '1px solid var(--studio-ink-mute, #1f2733)',
-          color: 'var(--studio-ink, #e6edf3)', padding: '2px 5px', borderRadius: 3,
+          width: 50, background: 'var(--studio-canvas, #000000)', border: '1px solid var(--studio-rail-edge, #1d2027)',
+          color: 'var(--studio-ink, #f0eee6)', padding: '2px 5px', borderRadius: 3,
           fontFamily: 'var(--studio-mono, ui-monospace)', fontSize: 11, textAlign: 'right',
         }}
       />
@@ -5976,8 +5978,8 @@ function SnapSection() {
           data-studio-v3-snap-on={on ? 'true' : 'false'}
           onClick={() => window.__studioToggleSnap && window.__studioToggleSnap()}
           style={{
-            background: 'transparent', border: '1px solid var(--studio-ink-mute, #1f2733)',
-            color: on ? 'var(--studio-accent, #1de9b6)' : 'var(--studio-ink, #e6edf3)',
+            background: 'transparent', border: '1px solid var(--studio-rail-edge, #1d2027)',
+            color: on ? 'var(--studio-accent, #ebecef)' : 'var(--studio-ink, #f0eee6)',
             padding: '2px 8px', borderRadius: 3, fontSize: 11, cursor: 'pointer',
           }}
         >{on ? 'on' : 'off'}</button>
@@ -6169,9 +6171,9 @@ function SmartMaterialPresets({ onApply }) {
             }}
             style={{
               padding: '3px 8px', fontSize: 10,
-              background: 'var(--studio-bg-elev, #161b22)',
-              color: 'var(--studio-ink, #e6edf3)',
-              border: '1px solid var(--studio-ink-mute, #1f2733)',
+              background: 'var(--studio-canvas-3, #141414)',
+              color: 'var(--studio-ink, #f0eee6)',
+              border: '1px solid var(--studio-rail-edge, #1d2027)',
               borderRadius: 3, cursor: 'pointer',
               fontFamily: 'inherit', textTransform: 'capitalize',
             }}
@@ -6365,10 +6367,10 @@ function LayersRows() {
               flex: 1, padding: '1px 4px', fontSize: 11,
               background: 'transparent',
               border: '1px solid transparent',
-              color: 'var(--studio-ink, #e6edf3)', fontFamily: 'inherit',
+              color: 'var(--studio-ink, #f0eee6)', fontFamily: 'inherit',
               minWidth: 0,
             }}
-            onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--studio-ink-mute, #1f2733)'; }}
+            onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--studio-rail-edge, #1d2027)'; }}
             onMouseLeave={(e) => { if (document.activeElement !== e.currentTarget) e.currentTarget.style.borderColor = 'transparent'; }}
           />
           <button
@@ -6378,9 +6380,9 @@ function LayersRows() {
             title="Isolate (solo)"
             style={{
               padding: '1px 6px', fontSize: 10,
-              background: 'var(--studio-bg-elev, #161b22)',
-              color: 'var(--studio-ink, #e6edf3)',
-              border: '1px solid var(--studio-ink-mute, #1f2733)',
+              background: 'var(--studio-canvas-3, #141414)',
+              color: 'var(--studio-ink, #f0eee6)',
+              border: '1px solid var(--studio-rail-edge, #1d2027)',
               borderRadius: 2, cursor: 'pointer', fontFamily: 'inherit',
             }}
           >solo</button>
@@ -6393,9 +6395,9 @@ function LayersRows() {
           onClick={unsolo}
           style={{
             padding: '4px 10px', fontSize: 11,
-            background: 'var(--studio-bg-elev, #161b22)',
-            color: 'var(--studio-ink, #e6edf3)',
-            border: '1px solid var(--studio-ink-mute, #1f2733)',
+            background: 'var(--studio-canvas-3, #141414)',
+            color: 'var(--studio-ink, #f0eee6)',
+            border: '1px solid var(--studio-rail-edge, #1d2027)',
             borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit',
           }}
         >Reveal all layers</button>
@@ -6505,7 +6507,7 @@ function OutlinerRows() {
           onKeyDown={(e) => { if (e.key === 'Escape') setFilter(''); }}
           style={{
             flex: 1, padding: '2px 6px', fontSize: 11,
-            background: 'var(--studio-bg-elev, #1c1c20)',
+            background: 'var(--studio-canvas-3, #1f1f1f)',
             color: 'var(--studio-ink, #dfe5ea)',
             border: '1px solid var(--studio-ink-mute, #2c2c30)',
             borderRadius: 2, fontFamily: 'inherit',
@@ -6524,13 +6526,13 @@ function OutlinerRows() {
             onClick={(e) => { if (e.target.tagName !== 'BUTTON') onPick(it.uuid); }}
             style={{
               cursor: 'pointer', alignItems: 'center', gap: 4,
-              borderLeft: '2px solid ' + (active ? 'var(--studio-accent, #1de9b6)' : 'transparent'),
+              borderLeft: '2px solid ' + (active ? 'var(--studio-accent, #ebecef)' : 'transparent'),
               paddingLeft: 6 + (it.depth || 0) * 12,
             }}
           >
             <span style={{
               flex: 1, textTransform: 'capitalize',
-              color: it.kind === 'group' ? 'var(--studio-accent, #1de9b6)' : 'inherit',
+              color: it.kind === 'group' ? 'var(--studio-accent, #ebecef)' : 'inherit',
               fontWeight: it.kind === 'group' ? 600 : 400,
             }}>{it.kind === 'group' ? '▸ ' : ''}{it.name}</span>
             <button
@@ -6552,8 +6554,8 @@ function OutlinerRows() {
               style={{
                 padding: '0 4px', fontSize: 10,
                 background: 'transparent',
-                color: it.locked ? 'var(--studio-accent, #1de9b6)' : 'var(--studio-ink-mute)',
-                border: '1px solid ' + (it.locked ? 'var(--studio-accent, #1de9b6)' : 'var(--studio-ink-mute)'),
+                color: it.locked ? 'var(--studio-accent, #ebecef)' : 'var(--studio-ink-mute)',
+                border: '1px solid ' + (it.locked ? 'var(--studio-accent, #ebecef)' : 'var(--studio-ink-mute)'),
                 borderRadius: 2, cursor: 'pointer',
               }}
             >{it.locked ? '🔒' : '🔓'}</button>
@@ -6648,8 +6650,8 @@ function TimelineStrip() {
       style={{
         position: 'relative',
         height: 18,
-        background: 'var(--studio-bg-elev, #161b22)',
-        borderTop: '1px solid var(--studio-ink-mute, #1f2733)',
+        background: 'var(--studio-canvas-3, #141414)',
+        borderTop: '1px solid var(--studio-rail-edge, #1d2027)',
         cursor: 'crosshair',
         fontFamily: 'var(--studio-mono, ui-monospace)',
         fontSize: 9,
@@ -6696,7 +6698,7 @@ function TimelineStrip() {
           left: `${markerPct}%`, top: 0, bottom: 0,
           width: 2,
           transform: 'translateX(-1px)',
-          background: 'var(--studio-accent, #1de9b6)',
+          background: 'var(--studio-accent, #ebecef)',
           pointerEvents: 'none',
         }}
       />
@@ -6835,7 +6837,7 @@ function SelectedCount() {
       data-studio-v3-selected-count={n}
       title={`${n} selected`}
       style={{
-        color: n > 0 ? 'var(--studio-accent, #1de9b6)' : 'var(--studio-ink-mute, #9aa6b2)',
+        color: n > 0 ? 'var(--studio-accent, #ebecef)' : 'var(--studio-ink-mute, #9aa6b2)',
         fontVariantNumeric: 'tabular-nums',
       }}
     >sel:{n}</span>
@@ -6909,7 +6911,7 @@ function FpsSparkline({ fps }) {
       style={{ display: 'inline-flex', alignItems: 'center' }}
     >
       <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} aria-hidden="true">
-        <path d={path} fill="none" stroke="var(--studio-accent, #1de9b6)" strokeWidth="1" strokeLinejoin="round" />
+        <path d={path} fill="none" stroke="var(--studio-accent, #ebecef)" strokeWidth="1" strokeLinejoin="round" />
       </svg>
     </span>
   );
@@ -6935,7 +6937,7 @@ function SnapIndicator() {
       title={`Transform snap ${on ? 'ON' : 'OFF'} — Shift+; to toggle`}
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 4,
-        color: on ? 'var(--studio-accent, #1de9b6)' : 'var(--studio-ink-mute, #9aa6b2)',
+        color: on ? 'var(--studio-accent, #ebecef)' : 'var(--studio-ink-mute, #9aa6b2)',
       }}
     >snap:{on ? 'on' : 'off'}</span>
   );
@@ -6957,7 +6959,7 @@ function UndoDepth() {
       title={`Undo stack: ${depth} step(s) — Cmd+Z to undo`}
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 4,
-        color: depth > 0 ? 'var(--studio-accent, #1de9b6)' : 'var(--studio-ink-mute, #9aa6b2)',
+        color: depth > 0 ? 'var(--studio-accent, #ebecef)' : 'var(--studio-ink-mute, #9aa6b2)',
         fontVariantNumeric: 'tabular-nums',
       }}
     >u:{depth}</span>
@@ -6993,13 +6995,13 @@ function DirtyDot() {
       title={dirty ? 'Unsaved changes — Cmd+S to save' : 'All changes saved'}
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 4,
-        color: dirty ? 'var(--studio-accent, #1de9b6)' : 'var(--studio-ink-mute, #9aa6b2)',
+        color: dirty ? 'var(--studio-accent, #ebecef)' : 'var(--studio-ink-mute, #9aa6b2)',
       }}
     >
       <span style={{
         width: 6, height: 6, borderRadius: 3,
-        background: dirty ? 'var(--studio-accent, #1de9b6)' : 'transparent',
-        border: '1px solid ' + (dirty ? 'var(--studio-accent, #1de9b6)' : 'var(--studio-ink-mute, #9aa6b2)'),
+        background: dirty ? 'var(--studio-accent, #ebecef)' : 'transparent',
+        border: '1px solid ' + (dirty ? 'var(--studio-accent, #ebecef)' : 'var(--studio-ink-mute, #9aa6b2)'),
       }} />
       {dirty ? 'modified' : 'saved'}
     </span>

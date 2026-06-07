@@ -34,29 +34,33 @@
 
 :root[data-studio-theme="dark"],
 :root:not([data-studio-theme]) {
+  /* Slice 949 — every chrome token is pure greyscale (R = G = B). The
+     prior slice-946 values carried subtle warm/cool tints (#0a0b0e
+     had a slight cool cast, #1d2027 had a noticeable blue tilt) that
+     read as "near-monochrome" but fail a strict no-accent audit. The
+     warm-white #f0eee6 ink is retained — it's a perceptual grey under
+     dark mode and prevents the OLED feeling from going clinical-bright. */
   /* Canvas */
   --studio-canvas:      #000000;        /* OLED black — viewport background */
-  --studio-canvas-2:    #0a0b0e;        /* QAT, status, cmdbar */
-  --studio-canvas-3:    #14161b;        /* surfaces (right panel, popovers) */
-  --studio-rail:        #06070a;        /* workbench rail darker than canvas-2 */
-  --studio-rail-edge:   #1d2027;        /* divider line */
-  --studio-surface:     #14161b;
-  --studio-surface-2:   #1c1f26;        /* hover */
+  --studio-canvas-2:    #0a0a0a;        /* QAT, status, cmdbar */
+  --studio-canvas-3:    #141414;        /* surfaces (right panel, popovers) */
+  --studio-rail:        #060606;        /* workbench rail darker than canvas-2 */
+  --studio-rail-edge:   #1f1f1f;        /* divider line — pure grey hairline */
+  --studio-surface:     #141414;
+  --studio-surface-2:   #1f1f1f;        /* hover */
   --studio-overlay:     rgba(0,0,0,0.72);
 
-  /* Ink */
-  --studio-ink:         #ebecef;        /* primary text */
-  --studio-ink-2:       #b0b4bd;        /* secondary */
-  --studio-ink-mute:    #757a85;        /* tertiary / labels */
-  --studio-ink-faint:   #3d4250;        /* disabled / divider text */
+  /* Ink — pure greys, warm-white tolerated only for primary text. */
+  --studio-ink:         #f0eee6;        /* primary text — warm white */
+  --studio-ink-2:       #a8a8a8;        /* secondary */
+  --studio-ink-mute:    #777777;        /* tertiary / labels */
+  --studio-ink-faint:   #3d3d3d;        /* disabled / divider text */
 
-  /* Accent — monochrome white in dark mode. Reads as "active / now"
-     without breaking the OLED palette. Slice 399: V3 carries no chromatic
-     accent anywhere; the brand mark uses the same ink as everything else.
-     "Now / active" still reads via accent-mute background + accent-rim. */
-  --studio-accent:        #ebecef;
+  /* Accent — pure monochrome. Slice 949: no chromatic anywhere; state
+     reads via brightness shift + 1 px hairline at accent-rim. */
+  --studio-accent:        #f0eee6;
   --studio-accent-hover:  #ffffff;
-  --studio-accent-press:  #c0c5cf;
+  --studio-accent-press:  #c0c0c0;
   --studio-accent-mute:   rgba(255,255,255,0.08);
   --studio-accent-rim:    rgba(255,255,255,0.28);
 
