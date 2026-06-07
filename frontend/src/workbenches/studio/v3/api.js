@@ -7795,6 +7795,9 @@ export function registerV3Api() {
   // .obj parsers with vertex colours + point-cloud → mesh transform.
   import('./scanimport/autoload.js').catch(() => {});
 
+  // Slice 892 — Sebastian Lague / Horizon Zero Dawn volumetric clouds (3-octave Perlin+Worley + 64-step raymarch + Beer's law + HG phase).
+  import('./vclouds/autoload.js').catch(() => {});
+
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
   import('./cmdpalette/autoload.js').catch(() => {});
