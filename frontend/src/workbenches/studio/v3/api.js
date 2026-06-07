@@ -7625,6 +7625,8 @@ export function registerV3Api() {
   import('./cad2d/autoload.js').catch(() => {});
   // Slice 775 — Substance Designer noise generators + filters expansion.
   import('./sdgen/autoload.js').catch(() => {});
+  // Slice 776 — Plasticity solid history ops (revolve/sweep/loft/shell/chamfer).
+  import('./plasthist/autoload.js').catch(() => {});
   // Slice 777 — Houdini POPs (Particle Operators) — gravity/wind/turbulence/curl/vortex/attractor.
   import('./popfx/autoload.js').catch(() => {});
 
