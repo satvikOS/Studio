@@ -3,9 +3,17 @@
 // Photoreal hero-frame renderer. Walks scene meshes via three-mesh-bvh
 // (already in deps) and Lambertian + GGX BRDF sampling with Russian-
 // roulette termination. Returns a PNG dataURL.
+//
+// Slice 885: at each surface hit we now consult ../ptsss/ — if the
+// material is tagged for subsurface (userData.archdiscStudioSkinSSS,
+// userData.bssrdfMeanFreePath > 0, or has an explicit userData.bssrdf
+// table) we hand off to the random-walk BSSRDF kernel which returns an
+// exit point + normal + diffuse albedo modulation. We then resume the
+// path trace from the exit point as if we had done a diffuse bounce.
 
 import * as THREE from 'three';
 import { registerOps } from '../common/registry.js';
+import { shouldDoBSSRDF, runBSSRDFWalk } from '../ptsss/index.js';
 
 let _installed = false;
 let _cancelToken = null;
@@ -87,6 +95,35 @@ function _render(width, height, samples, maxBounces) {
           accum[0] += throughput[0] * emissive[0];
           accum[1] += throughput[1] * emissive[1];
           accum[2] += throughput[2] * emissive[2];
+          // Subsurface scattering branch — random-walk BSSRDF.
+          if (shouldDoBSSRDF(mat)) {
+            const seedBase = s * 911 + x * 17 + y * 31 + bounce * 7;
+            let rngCounter = 0;
+            const rngFn = () => _randFromSeed(seedBase + (rngCounter++) * 53 + 1);
+            const sss = runBSSRDFWalk(hit, occluders, rngFn);
+            if (sss && sss.ok) {
+              // Modulate throughput by the subsurface diffuse albedo
+              // (sigma_s / sigma_t per channel) blended with the base
+              // surface colour so artist-set albedo still tints output.
+              throughput[0] *= albedo[0] * sss.albedo[0];
+              throughput[1] *= albedo[1] * sss.albedo[1];
+              throughput[2] *= albedo[2] * sss.albedo[2];
+              // Russian roulette unchanged.
+              const p = Math.max(throughput[0], throughput[1], throughput[2]);
+              if (bounce > 2 && _randFromSeed(bounce + s * 17) > p) break;
+              if (bounce > 2) {
+                throughput[0] /= p; throughput[1] /= p; throughput[2] /= p;
+              }
+              // Resume path tracing from the BSSRDF exit point with a
+              // new cosine-weighted hemisphere direction about the
+              // exit normal.
+              const exitNormal = sss.normal.clone().normalize();
+              curDir = _sampleHemisphere(exitNormal, s + bounce * 31 + x * 7 + y * 11);
+              origin = sss.point.clone().addScaledVector(exitNormal, 0.0001);
+              continue;
+            }
+            // fall through to regular diffuse if BSSRDF failed
+          }
           throughput[0] *= albedo[0];
           throughput[1] *= albedo[1];
           throughput[2] *= albedo[2];
