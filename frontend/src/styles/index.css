@@ -17,32 +17,39 @@
   --bg-active: #2a2a2a;
   --bg-surface: #0d0d0d;
 
-  /* Accent - Maroon (primary brand) */
-  --accent-primary: #9b1b40;
-  --accent-hover: #b32050;
-  --accent-primary-muted: rgba(155, 27, 64, 0.15);
-  --accent-primary-border: rgba(155, 27, 64, 0.4);
+  /* Slice 950 — Pure monochrome. Every legacy chromatic accent token
+     (maroon brand / orange CTA / info blue / saturated semantic colors)
+     collapses to greyscale equivalents. Active / hover / focus state
+     reads via brightness + 1px hairline (Q3 lock-in from the redesign
+     run); semantic state (success / error / warn) reads via grey-tinted
+     dot brightness — never hue. The gizmo-btn.active background that
+     drove the visible pink in the viewport HUD now resolves to a
+     transparent white-alpha (matches studio-vp-hud-btn active state). */
+  --accent-primary: #ebebeb;
+  --accent-hover: #ffffff;
+  --accent-primary-muted: rgba(255, 255, 255, 0.08);
+  --accent-primary-border: rgba(255, 255, 255, 0.28);
 
-  /* Accent - Orange (highlights, CTA) */
-  --accent-orange: #ff6b35;
-  --accent-orange-hover: #ff8555;
-  --accent-orange-dark: #e55a2a;
-  --accent-orange-muted: rgba(255, 107, 53, 0.15);
-  --accent-orange-border: rgba(255, 107, 53, 0.4);
+  --accent-orange: #a0a0a0;
+  --accent-orange-hover: #bdbdbd;
+  --accent-orange-dark: #777777;
+  --accent-orange-muted: rgba(255, 255, 255, 0.08);
+  --accent-orange-border: rgba(255, 255, 255, 0.20);
 
-  /* Accent - Blue (info, links, active overlays) */
-  --accent-blue: #4a90e2;
-  --accent-blue-muted: rgba(74, 144, 226, 0.15);
-  --accent-blue-border: rgba(74, 144, 226, 0.35);
+  --accent-blue: #a0a0a0;
+  --accent-blue-muted: rgba(255, 255, 255, 0.08);
+  --accent-blue-border: rgba(255, 255, 255, 0.20);
 
-  /* Semantic colors */
-  --color-success: #43a047;
-  --color-success-muted: rgba(67, 160, 71, 0.15);
-  --color-error: #e53935;
-  --color-error-muted: rgba(229, 57, 53, 0.15);
-  --color-warning: #fb8c00;
-  --color-warning-muted: rgba(251, 140, 0, 0.15);
-  --color-info: #4a90e2;
+  /* Semantic — grey-tinted, no saturation. The dot brightness ladder
+     reads at-a-glance: success bright, info mid, warn dim-mid, error
+     dimmest. */
+  --color-success: #e8e8e8;
+  --color-success-muted: rgba(232, 232, 232, 0.15);
+  --color-error: #d9d9d9;
+  --color-error-muted: rgba(217, 217, 217, 0.15);
+  --color-warning: #bdbdbd;
+  --color-warning-muted: rgba(189, 189, 189, 0.15);
+  --color-info: #a0a0a0;
 
   /* Text */
   --text-primary: #c8c8c8;

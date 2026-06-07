@@ -7122,12 +7122,12 @@ export function registerV3Api() {
     const canvas = document.createElement('canvas');
     canvas.width = 256; canvas.height = 64;
     const ctx = canvas.getContext('2d');
-    ctx.fillStyle = 'rgba(13, 17, 23, 0.85)';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
     ctx.fillRect(0, 0, 256, 64);
-    ctx.strokeStyle = 'rgba(29, 233, 182, 0.9)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
     ctx.lineWidth = 2;
     ctx.strokeRect(1, 1, 254, 62);
-    ctx.fillStyle = '#e6edf3';
+    ctx.fillStyle = '#f0eee6';
     ctx.font = '20px ui-monospace, Menlo, monospace';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(txt, 128, 32);

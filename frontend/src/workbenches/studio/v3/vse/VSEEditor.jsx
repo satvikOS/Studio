@@ -16,9 +16,9 @@ const RULER_H = 24;
 const PX_PER_SEC = 80;             // initial zoom; user can scrub freely
 const MIN_DURATION = 5;            // ensure the ruler always shows a useful range
 const COLOURS = {
-  image:        'rgba(99, 179, 237, 0.85)',  // sky-blue
-  viewport:     'rgba(29, 233, 182, 0.85)',  // studio accent
-  colorcorrect: 'rgba(246, 173, 85, 0.85)',  // amber
+  image:        'rgba(200, 200, 200, 0.85)',  // sky-blue
+  viewport:     'rgba(255, 255, 255, 0.85)',  // studio accent
+  colorcorrect: 'rgba(170, 170, 170, 0.85)',  // amber
 };
 const TEXT_DARK = '#0d1117';
 

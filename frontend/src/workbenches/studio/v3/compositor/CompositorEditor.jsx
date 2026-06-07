@@ -222,7 +222,7 @@ export default function CompositorEditor({ getGraph, evaluate, onCloseRequest })
                 key={i}
                 data-studio-v3-compositor-wire={`${w.srcId}:${w.srcOut}->${w.dstId}:${w.dstIn}`}
                 d={wirePath(a, b)}
-                stroke="rgba(29, 233, 182, 0.55)" strokeWidth="1.4" fill="none"
+                stroke="rgba(255, 255, 255, 0.55)" strokeWidth="1.4" fill="none"
               />
             );
           })}
@@ -235,7 +235,7 @@ export default function CompositorEditor({ getGraph, evaluate, onCloseRequest })
             return (
               <path
                 d={wirePath(a, { x: dragRef.current.x, y: dragRef.current.y })}
-                stroke="rgba(29, 233, 182, 0.8)" strokeWidth="1.4" fill="none" strokeDasharray="4 3"
+                stroke="rgba(255, 255, 255, 0.8)" strokeWidth="1.4" fill="none" strokeDasharray="4 3"
               />
             );
           })()}

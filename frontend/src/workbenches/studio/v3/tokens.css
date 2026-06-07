@@ -71,10 +71,12 @@
   --studio-brand:         var(--studio-accent);
   --studio-brand-soft:    var(--studio-accent-mute);
 
-  /* Signal — grey-tinted, never primary saturation */
-  --studio-ok:    #5cc88f;
-  --studio-warn:  #e1b250;
-  --studio-err:   #e26a6a;
+  /* Signal — slice 950 full-monochrome. Functional state indicators
+     read via brightness ladder (ok bright, warn mid, err dim) without
+     any chromatic accent. */
+  --studio-ok:    #e8e8e8;
+  --studio-warn:  #bdbdbd;
+  --studio-err:   #d9d9d9;
 
   color-scheme: dark;
 }
@@ -105,9 +107,9 @@
   --studio-brand:         var(--studio-accent);
   --studio-brand-soft:    var(--studio-accent-mute);
 
-  --studio-ok:    #2d9b65;
-  --studio-warn:  #b8870a;
-  --studio-err:   #c14545;
+  --studio-ok:    #2a2a2a;
+  --studio-warn:  #5a5a5a;
+  --studio-err:   #3d3d3d;
 
   color-scheme: light;
 }

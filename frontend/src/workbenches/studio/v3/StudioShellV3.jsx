@@ -1885,7 +1885,7 @@ function MarqueeOverlay() {
       style={{
         position: 'fixed', inset: 0, zIndex: 60,
         cursor: 'crosshair', pointerEvents: 'none',
-        background: 'rgba(29, 233, 182, 0.04)',
+        background: 'rgba(255, 255, 255, 0.04)',
       }}
     >
       {rect && (
@@ -1895,7 +1895,7 @@ function MarqueeOverlay() {
             position: 'absolute', left: (rect.x), top: (rect.y),
             width: rect.w, height: rect.h,
             border: '1px dashed var(--studio-accent, #ebecef)',
-            background: 'rgba(29, 233, 182, 0.08)',
+            background: 'rgba(255, 255, 255, 0.08)',
             pointerEvents: 'none',
           }}
         />
@@ -2002,7 +2002,7 @@ function SplashScreen() {
       <div style={{
         fontSize: 32, fontWeight: 700, letterSpacing: '0.06em',
         color: 'var(--studio-accent, #ebecef)',
-        textShadow: '0 0 24px rgba(29, 233, 182, 0.4)',
+        textShadow: '0 0 24px rgba(255, 255, 255, 0.4)',
       }}>ArchDisc</div>
       <div style={{
         fontSize: 14, marginTop: 4, color: 'var(--studio-ink, #f0eee6)',
@@ -2386,7 +2386,7 @@ function FileMenu() {
             background: 'transparent', border: 0,
             color: 'var(--studio-ink, #f0eee6)', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit',
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(29, 233, 182, 0.08)'; }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'; }}
           onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
         >
           <span>{a.label}</span>
@@ -2412,7 +2412,7 @@ function FileMenu() {
                 color: 'var(--studio-ink, #f0eee6)', cursor: 'pointer', fontSize: 11, fontFamily: 'var(--studio-mono, ui-monospace)',
                 whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(29, 233, 182, 0.08)'; }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'; }}
               onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
             >{it.name}</button>
           ))}
@@ -2482,7 +2482,7 @@ function EditMenu() {
             background: 'transparent', border: 0,
             color: 'var(--studio-ink, #f0eee6)', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit',
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(29, 233, 182, 0.08)'; }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'; }}
           onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
         >
           <span>{a.label}</span>
@@ -2561,7 +2561,7 @@ function SelectMenu() {
             background: 'transparent', border: 0,
             color: 'var(--studio-ink, #f0eee6)', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit',
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(29, 233, 182, 0.08)'; }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'; }}
           onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
         >
           <span>{a.label}</span>
@@ -2631,7 +2631,7 @@ function ViewMenu() {
             background: 'transparent', border: 0,
             color: 'var(--studio-ink, #f0eee6)', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit',
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(29, 233, 182, 0.08)'; }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'; }}
           onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
         >
           <span>{a.label}</span>
@@ -2714,7 +2714,7 @@ function WindowMenu() {
             background: 'transparent', border: 0,
             color: 'var(--studio-ink, #f0eee6)', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit',
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(29, 233, 182, 0.08)'; }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'; }}
           onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
         >
           <span>{a.label}</span>
@@ -3129,7 +3129,7 @@ function UVEditor() {
               key={i}
               x1={px(data.verts[a].u)} y1={py(data.verts[a].v)}
               x2={px(data.verts[b].u)} y2={py(data.verts[b].v)}
-              stroke="rgba(29, 233, 182, 0.45)" strokeWidth="0.7"
+              stroke="rgba(255, 255, 255, 0.45)" strokeWidth="0.7"
             />
           ))}
           {/* UV vertices */}

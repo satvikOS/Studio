@@ -111,7 +111,7 @@ function mountOutputCanvas() {
     'width:320px',
     'height:180px',
     'z-index:9100',
-    'border:1px solid rgba(29,233,182,0.55)',
+    'border:1px solid rgba(255,255,255,0.28)',
     'border-radius:4px',
     'background:#000',
     'image-rendering:pixelated',
