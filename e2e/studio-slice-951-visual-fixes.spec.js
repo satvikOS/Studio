@@ -104,7 +104,8 @@ test('Studio slice 951 — viewport flat dark-gray + compact top chrome', async 
     };
   });
   expect(heights.topbar).toBe('30px');
-  expect(heights.qat).toBe('24px');
+  // Slice 951c — QAT row collapsed to 0 to remove the empty band.
+  expect(heights.qat).toBe('0px');
   expect(heights.toolbar).toBe('38px');
 
   // 4. Full reference screenshot.

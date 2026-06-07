@@ -121,7 +121,14 @@
    (total 92 px) with proportionally smaller tool buttons. */
 :root {
   --studio-topbar-h:    30px;
-  --studio-qat-h:       24px;
+  /* Slice 951c — collapse the QAT row entirely. The user reported "lot
+     of empty space above the ribbon"; the QAT row's icons (new/open/
+     save/export/undo/redo/play/pause/settings) all duplicate menubar
+     entries (File > New, Edit > Undo, …) so the row was visual noise
+     more than affordance. Setting the height to 0 + hiding the
+     element via .studio-qat { display: none } below collapses the
+     band cleanly while keeping the grid template stable. */
+  --studio-qat-h:       0px;
   --studio-toolbar-h:   38px;
   --studio-statusbar-h: 22px;
   --studio-cmdbar-h:    44px;
@@ -244,12 +251,14 @@
 }
 .studio-topbar-wb-chip strong { color: var(--studio-ink); font-weight: 500; }
 
-/* ============ Quick-Access Toolbar ============ */
+/* ============ Quick-Access Toolbar ============
+ * Slice 951c — collapsed. Was a 24 px row of icons (new/open/save/
+ * export/undo/redo/play/pause/settings) duplicating menubar entries.
+ * Now `display: none` so the slot reserves zero pixels even if the
+ * <QuickAccessBar> component renders. Re-enable by removing the rule.
+ */
 .studio-qat {
-  background: var(--studio-canvas);
-  border-bottom: 1px solid var(--studio-rail-edge);
-  display: flex; align-items: center;
-  padding: 0 12px; gap: 2px;
+  display: none;
 }
 .studio-qat-btn {
   width: 22px; height: 22px;

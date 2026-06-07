@@ -91,7 +91,11 @@ function Viewport3D({ canvasId = 'render-canvas', domain = 'mechanical', onReady
         // Fusion 360 dark mode) — pure #000 maximizes contrast for
         // shaded/translucent surfaces and saves OLED pixels.
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x000000);
+        // Slice 951c — match the CSS .studio-viewport-canvas matte
+        // dark-grey so the WebGL canvas blends seamlessly with the
+        // shell. Pure black here against #181818 chrome produced a
+        // visible boundary box around the viewport.
+        scene.background = new THREE.Color(0x181818);
 
         // --- Camera ---
         // Slice 752 — Forge-parity wide-dynamic-range frustum. Near 0.001
@@ -167,7 +171,11 @@ function Viewport3D({ canvasId = 'render-canvas', domain = 'mechanical', onReady
           });
         };
         renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        renderer.toneMappingExposure = 1.2;
+        // Slice 951c — exposure was 1.2 which baked the cube into a
+        // glowing halo against the matte black canvas. 0.85 keeps the
+        // film-curve roll-off intact without clipping near-camera
+        // primitives into highlights.
+        renderer.toneMappingExposure = 0.85;
         container.appendChild(renderer.domElement);
 
         // --- Axes triad + Blender-style ground grid (slice 203) ---
@@ -179,7 +187,13 @@ function Viewport3D({ canvasId = 'render-canvas', domain = 'mechanical', onReady
         {
           const ground = new THREE.Mesh(
             new THREE.PlaneGeometry(50, 50),
-            new THREE.ShadowMaterial({ opacity: 0.28 }),
+            // Slice 951c — opacity 0.28 produced a visible dark fan
+            // pattern radiating from the cube's shadow across the floor
+            // plane (the "2D grid line on top" the user kept reporting
+            // was actually PCF shadow banding stretched over 50 m of
+            // ground). 0.12 keeps the shadow grounded but eliminates
+            // the wide soft penumbra that read as a floor grid.
+            new THREE.ShadowMaterial({ opacity: 0.12 }),
           );
           ground.rotation.x = -Math.PI / 2;
           ground.position.y = -0.001;
@@ -242,10 +256,17 @@ function Viewport3D({ canvasId = 'render-canvas', domain = 'mechanical', onReady
         };
 
         // --- Lighting (studio setup) ---
-        const ambient = new THREE.AmbientLight(0xffffff, 0.4);
+        // Slice 951c — substantially dimmer than the earlier setup. The
+        // user's image.png showed the cube blooming into a white halo
+        // because ambient 0.4 + key 0.9 + exposure 1.2 (further down)
+        // pushed a near-camera 1 m cube into clipped highlights. Cutting
+        // every intensity by ~50% AND swapping the blue fill for a pure
+        // neutral grey delivers a clean monochrome readout of the scene
+        // without losing definition.
+        const ambient = new THREE.AmbientLight(0xffffff, 0.25);
         scene.add(ambient);
 
-        const key = new THREE.DirectionalLight(0xffffff, 0.9);
+        const key = new THREE.DirectionalLight(0xffffff, 0.45);
         key.position.set(10, 20, 10);
         key.castShadow = true;
         key.shadow.mapSize.set(2048, 2048);
@@ -257,23 +278,23 @@ function Viewport3D({ canvasId = 'render-canvas', domain = 'mechanical', onReady
         key.shadow.camera.bottom = -20;
         scene.add(key);
 
-        const fill = new THREE.DirectionalLight(0x8888ff, 0.3);
+        // Fill light is now neutral grey (was 0x8888ff blue cast that
+        // tinted the cube under monochrome viewing).
+        const fill = new THREE.DirectionalLight(0xc0c0c0, 0.15);
         fill.position.set(-10, 5, -10);
         scene.add(fill);
 
-        const rim = new THREE.DirectionalLight(0xffffff, 0.2);
+        const rim = new THREE.DirectionalLight(0xffffff, 0.10);
         rim.position.set(0, -5, -10);
         scene.add(rim);
 
-        // --- Ground shadow ---
-        const groundGeo = new THREE.PlaneGeometry(1, 1); // 1m ground
-        const groundMat = new THREE.ShadowMaterial({ opacity: 0.15 });
-        const ground = new THREE.Mesh(groundGeo, groundMat);
-        ground.rotation.x = -Math.PI / 2;
-        ground.receiveShadow = true;
-        ground.userData.pickable = false;
-        ground.userData.isHelper = true;
-        scene.add(ground);
+        // Slice 951c — the duplicate 1 m ground plane that lived here
+        // (a second ShadowMaterial mesh at y=0 stacked on top of the
+        // 50 m shadow-catcher already created above) is removed. With
+        // two parallel translucent planes at +0.001 and -0.001 the
+        // viewport rendered a faint horizontal "floor stripe" pattern
+        // visible in image.png; one plane is enough for the shadow
+        // catcher and is already toggleable via __studioSetGroundVisible.
 
         // --- Orbit Controls ---
         // Slice 752 — Forge-parity zoom + heavy-load behaviour.
