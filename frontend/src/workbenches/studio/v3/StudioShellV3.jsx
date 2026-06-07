@@ -7320,18 +7320,214 @@ function _synthFromPlan(plan, activeWb) {
   return calls;
 }
 
-// Last-resort keyword scan: extract primitive ids from the raw user
-// prompt. Demo-safety net so a request like "make me a cube" always
-// dispatches the cube primitive even if the model emits prose.
-const _PRIMITIVE_IDS = ['cube','sphere','plane','cylinder','cone','torus','icosahedron','text','curve'];
-function _keywordFallback(userText) {
+// Slice 951j — three-stage dispatch synthesis when the model emits
+// prose instead of clean <tool_call> tags. Stages:
+//
+//   A. _quotedClicksFallback — parse `Click "<id>"` / `click "<id>"`
+//      mentions from the model's prose (training examples used quoted
+//      tool ids in their step-by-step prose, so the LoRAs keep
+//      emitting that shape). Extracts both primitive ids AND
+//      discipline names.
+//   B. _recipeFallback — composite-shape recipes for common nouns
+//      ("coffee table" → top cube + 4 legs; "chair" → seat + back +
+//      4 legs; "snowman" → 3 stacked spheres). Lets prompts like
+//      "model a beautiful coffee table" actually drive the platform
+//      even when neither the model nor the user mention primitive
+//      ids by name.
+//   C. _keywordFallback — bare primitive-id scan over the user's
+//      original prompt (the slice-951b fallback, kept as last resort).
+//
+// Each stage returns [] if it doesn't recognise anything. onCmdSubmit
+// chains them so the first stage that produces ≥1 call wins.
+
+const _PRIMITIVE_IDS = [
+  'cube','sphere','plane','cylinder','cone','torus','icosahedron','text','curve','empty',
+];
+// Common noun → primitive id. Tracks the way users describe parts of
+// composite shapes (a "leg" is a cylinder, a "top" is a cube, etc.)
+// so the recipe + keyword stages can map mentions to real primitives.
+const _NOUN_TO_PRIMITIVE = {
+  ball: 'sphere', orb: 'sphere', head: 'sphere',
+  block: 'cube', box: 'cube', body: 'cube', slab: 'cube', top: 'cube',
+  leg: 'cylinder', post: 'cylinder', shaft: 'cylinder', trunk: 'cylinder',
+  pillar: 'cylinder', column: 'cylinder', pedestal: 'cylinder',
+  pipe: 'cylinder', rod: 'cylinder', stem: 'cylinder',
+  roof: 'cone', spike: 'cone', tip: 'cone', nose: 'cone', tip: 'cone',
+  ring: 'torus', donut: 'torus', collar: 'torus',
+  ground: 'plane', floor: 'plane', wall: 'plane', surface: 'plane',
+  panel: 'plane', sheet: 'plane',
+  rock: 'icosahedron', crystal: 'icosahedron', gem: 'icosahedron',
+};
+const _DISCIPLINE_IDS = new Set([
+  'model','modeling','sculpt','sculpting','uv','uv-texture','shade','animate',
+  'animation','rig','rigging','render','rendering','compose','compositing',
+  'sim','vfx-sim','layout',
+]);
+
+function _quotedClicksFallback(reply) {
+  if (!reply) return [];
+  const src = String(reply);
+  const calls = [];
+  // Match: Click "<id>"  /  click "<id>"  /  Click '<id>'
+  const re = /\bclick(?:ing)?\s+["'`]([a-z0-9_\-:]+)["'`]/gi;
+  let m;
+  while ((m = re.exec(src)) !== null) {
+    const raw = m[1].toLowerCase().trim();
+    // Strip namespace prefixes the trained corpus uses
+    // (e.g. "discipline:modeling" → "modeling").
+    const bare = raw.includes(':') ? raw.split(':').pop() : raw;
+    if (_DISCIPLINE_IDS.has(bare)) {
+      calls.push({ name: 'click-discipline', arguments: { id: bare } });
+    } else if (_PRIMITIVE_IDS.includes(bare)) {
+      calls.push({ name: 'click-primitive', arguments: { id: bare } });
+    } else if (_NOUN_TO_PRIMITIVE[bare]) {
+      calls.push({ name: 'click-primitive', arguments: { id: _NOUN_TO_PRIMITIVE[bare] } });
+    }
+    // Other tokens (e.g. "material-editor") aren't dispatchable here;
+    // dropped silently so they don't poison the call list.
+  }
+  return calls;
+}
+
+// Composite-shape recipes. Each entry produces a multi-call plan that
+// spawns the canonical parts of the recognised shape. The model still
+// emits prose, but the platform actually builds something coherent.
+// Recipes are matched as substrings (case-insensitive) against the
+// user's original prompt.
+const _RECIPES = [
+  {
+    match: ['coffee table', 'side table', 'dining table', ' table'],
+    calls: [
+      // tabletop
+      { name: 'click-primitive', arguments: { id: 'cube' } },
+      // four legs
+      { name: 'click-primitive', arguments: { id: 'cylinder' } },
+      { name: 'click-primitive', arguments: { id: 'cylinder' } },
+      { name: 'click-primitive', arguments: { id: 'cylinder' } },
+      { name: 'click-primitive', arguments: { id: 'cylinder' } },
+    ],
+  },
+  {
+    match: ['chair', 'stool'],
+    calls: [
+      // seat
+      { name: 'click-primitive', arguments: { id: 'cube' } },
+      // back
+      { name: 'click-primitive', arguments: { id: 'cube' } },
+      // four legs
+      { name: 'click-primitive', arguments: { id: 'cylinder' } },
+      { name: 'click-primitive', arguments: { id: 'cylinder' } },
+      { name: 'click-primitive', arguments: { id: 'cylinder' } },
+      { name: 'click-primitive', arguments: { id: 'cylinder' } },
+    ],
+  },
+  {
+    match: ['snowman'],
+    calls: [
+      { name: 'click-primitive', arguments: { id: 'sphere' } },
+      { name: 'click-primitive', arguments: { id: 'sphere' } },
+      { name: 'click-primitive', arguments: { id: 'sphere' } },
+    ],
+  },
+  {
+    match: ['rocket'],
+    calls: [
+      { name: 'click-primitive', arguments: { id: 'cylinder' } }, // body
+      { name: 'click-primitive', arguments: { id: 'cone' } },     // nose
+      { name: 'click-primitive', arguments: { id: 'plane' } },    // fin 1
+      { name: 'click-primitive', arguments: { id: 'plane' } },    // fin 2
+      { name: 'click-primitive', arguments: { id: 'plane' } },    // fin 3
+    ],
+  },
+  {
+    match: ['tree'],
+    calls: [
+      { name: 'click-primitive', arguments: { id: 'cylinder' } },    // trunk
+      { name: 'click-primitive', arguments: { id: 'icosahedron' } }, // canopy
+    ],
+  },
+  {
+    match: ['house', 'cabin', 'cottage'],
+    calls: [
+      { name: 'click-primitive', arguments: { id: 'cube' } },  // walls
+      { name: 'click-primitive', arguments: { id: 'cone' } },  // roof
+      { name: 'click-primitive', arguments: { id: 'cube' } },  // door
+    ],
+  },
+  {
+    match: ['pawn', 'chess piece'],
+    calls: [
+      { name: 'click-primitive', arguments: { id: 'cylinder' } }, // body
+      { name: 'click-primitive', arguments: { id: 'torus' } },    // collar
+      { name: 'click-primitive', arguments: { id: 'sphere' } },   // head
+    ],
+  },
+  {
+    match: ['bolt', 'screw'],
+    calls: [
+      { name: 'click-primitive', arguments: { id: 'cylinder' } }, // shaft
+      { name: 'click-primitive', arguments: { id: 'cylinder' } }, // head
+    ],
+  },
+  {
+    match: ['i-beam', 'beam', 'truss'],
+    calls: [
+      { name: 'click-primitive', arguments: { id: 'cube' } }, // web
+      { name: 'click-primitive', arguments: { id: 'cube' } }, // top flange
+      { name: 'click-primitive', arguments: { id: 'cube' } }, // bottom flange
+    ],
+  },
+  {
+    match: ['bracket'],
+    calls: [
+      { name: 'click-primitive', arguments: { id: 'cube' } },
+      { name: 'click-primitive', arguments: { id: 'cube' } },
+    ],
+  },
+  {
+    match: ['phone', 'smartphone'],
+    calls: [
+      { name: 'click-primitive', arguments: { id: 'cube' } }, // body
+      { name: 'click-primitive', arguments: { id: 'plane' } }, // screen
+    ],
+  },
+];
+
+function _recipeFallback(userText) {
   if (!userText) return [];
   const lower = String(userText).toLowerCase();
+  for (const rec of _RECIPES) {
+    for (const kw of rec.match) {
+      if (lower.includes(kw)) return rec.calls.slice();
+    }
+  }
+  return [];
+}
+
+// Last-resort keyword scan: any primitive id mentioned in either the
+// user prompt OR the model reply. Now also handles common-noun aliases
+// so "make a ball" spawns a sphere, "give me a leg" spawns a cylinder,
+// etc.
+function _keywordFallback(userText, reply) {
+  const src = String((userText || '') + ' ' + (reply || '')).toLowerCase();
   const calls = [];
+  const seen = new Set();
+  // Primitive ids first (most specific).
   for (const id of _PRIMITIVE_IDS) {
-    if (lower.includes(id)) {
+    const re = new RegExp(`\\b${id}\\b`, 'i');
+    if (re.test(src) && !seen.has(id)) {
       calls.push({ name: 'click-primitive', arguments: { id } });
-      break; // Just the first match — one primitive per prompt.
+      seen.add(id);
+    }
+  }
+  // Then noun aliases the user might have used instead of a real id.
+  for (const noun of Object.keys(_NOUN_TO_PRIMITIVE)) {
+    const id = _NOUN_TO_PRIMITIVE[noun];
+    if (seen.has(id)) continue;
+    const re = new RegExp(`\\b${noun}\\b`, 'i');
+    if (re.test(src)) {
+      calls.push({ name: 'click-primitive', arguments: { id } });
+      seen.add(id);
     }
   }
   return calls;
@@ -8414,6 +8610,17 @@ export function StudioShellV3({ mode = 'dark' }) {
       //      click-primitive + click-action calls from the plan fields
       //   3. Keyword scan of the original user prompt for primitive ids
       //      (last-resort demo-safety net)
+      // Slice 951j — five-tier dispatch resolution:
+      //   1. Literal <tool_call> tags from the model
+      //   2. <plan>{...}</plan> → click-discipline + per-body
+      //      click-primitive + click-action synth
+      //   3. Quoted-clicks scan of the model's prose (`Click "cube"` ,
+      //      `click 'modeling'`) — the trained corpus prose used this
+      //      shape so the LoRAs keep emitting it
+      //   4. Composite-shape recipe match against the user prompt
+      //      ("coffee table" → top cube + 4 cylinder legs, etc.)
+      //   5. Keyword scan over user prompt + reply for primitive ids
+      //      AND common-noun aliases (ball→sphere, leg→cylinder)
       let calls = _extractToolCalls(reply);
       let dispatchSource = 'tool_calls';
       if (calls.length === 0) {
@@ -8422,11 +8629,23 @@ export function StudioShellV3({ mode = 'dark' }) {
         if (synth.length > 0) { calls = synth; dispatchSource = 'plan'; }
       }
       if (calls.length === 0) {
-        const kw = _keywordFallback(text);
+        const quoted = _quotedClicksFallback(reply);
+        if (quoted.length > 0) { calls = quoted; dispatchSource = 'quoted-clicks'; }
+      }
+      if (calls.length === 0) {
+        const recipe = _recipeFallback(text);
+        if (recipe.length > 0) {
+          const trainedDisc = STUDIO_TO_TRAINED_DISCIPLINE[activeWb] || 'modeling';
+          calls = [
+            { name: 'click-discipline', arguments: { id: trainedDisc } },
+            ...recipe,
+          ];
+          dispatchSource = 'recipe';
+        }
+      }
+      if (calls.length === 0) {
+        const kw = _keywordFallback(text, reply);
         if (kw.length > 0) {
-          // Prepend a click-discipline call so the cmdbar prompt that
-          // mentions "sphere" while the user sits on the Sculpt tab
-          // still routes to Model to spawn correctly.
           const trainedDisc = STUDIO_TO_TRAINED_DISCIPLINE[activeWb] || 'modeling';
           calls = [
             { name: 'click-discipline', arguments: { id: trainedDisc } },
@@ -8439,6 +8658,13 @@ export function StudioShellV3({ mode = 'dark' }) {
         setThread((t) => [
           ...t,
           { role: 'tool', text: `dispatch source: ${dispatchSource} (synthesized ${calls.length} call${calls.length === 1 ? '' : 's'})` },
+        ]);
+      } else if (calls.length === 0) {
+        // Conversational fall-through: tell the user what to try. Keeps
+        // the thread alive so a follow-up prompt can refine.
+        setThread((t) => [
+          ...t,
+          { role: 'archie', text: 'I couldn\'t extract a buildable plan from that reply. Try naming the parts — e.g. "build a coffee table with a square top and 4 cylinder legs", or just "create a cube".' },
         ]);
       }
       for (const call of calls) {
