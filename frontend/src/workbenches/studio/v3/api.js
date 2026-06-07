@@ -7651,6 +7651,8 @@ export function registerV3Api() {
   // Resampling) direct-lighting path tracer — extends slice 684 path tracer
   // with weighted reservoir sampling + temporal + spatial reuse.
   import('./restir/autoload.js').catch(() => {});
+  // Slice 781 — Parasolid-tier tolerant boolean healing (weld + slivers + hole fill before CSG).
+  import('./booltol/autoload.js').catch(() => {});
 
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
