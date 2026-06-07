@@ -7790,6 +7790,11 @@ export function registerV3Api() {
   // Slice 887 — Motion-capture .bvh import + player.
   import('./bvhimport/autoload.js').catch(() => {});
 
+  // Slice 890 — Photogrammetry / 3D-scan asset import (Reality Capture /
+  // Agisoft Metashape / Meshroom). Real .ply (binary + ASCII) + Wavefront
+  // .obj parsers with vertex colours + point-cloud → mesh transform.
+  import('./scanimport/autoload.js').catch(() => {});
+
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
   import('./cmdpalette/autoload.js').catch(() => {});
