@@ -7703,6 +7703,58 @@ export function registerV3Api() {
   import('./drivers/autoload.js').catch(() => {});
   // Slice 813 — HumanIK auto-rig.
   import('./autorig/autoload.js').catch(() => {});
+  // Slice 814 — Skin SSS material (character shader).
+  import('./skinmat/autoload.js').catch(() => {});
+  // Slice 815 — Facial blendshape editor (ARKit 52).
+  import('./faceblend/autoload.js').catch(() => {});
+  // Slice 816 — Hair card baker (Marmoset / Unreal).
+  import('./haircard/autoload.js').catch(() => {});
+  // Slice 817 — MetaHuman-tier body presets.
+  import('./metabody/autoload.js').catch(() => {});
+  // Slice 818 — Phoneme/viseme lip sync.
+  import('./lipsync/autoload.js').catch(() => {});
+  // Slice 819 — Auto LOD chain.
+  import('./lodchain/autoload.js').catch(() => {});
+  // Slice 820 — Imposter bake.
+  import('./imposter/autoload.js').catch(() => {});
+  // Slice 821 — Texture atlas packing.
+  import('./texatlas/autoload.js').catch(() => {});
+  // Slice 822 — Skeletal LOD bone reduction.
+  import('./boneread/autoload.js').catch(() => {});
+  // Slice 823 — World partition streaming.
+  import('./streampart/autoload.js').catch(() => {});
+  // Slice 824 — Vertex/normal compression.
+  import('./vertcomp/autoload.js').catch(() => {});
+  // Slice 825 — Volumetric fog with multi-scatter.
+  import('./volfog/autoload.js').catch(() => {});
+  // Slice 826 — Day/night cycle.
+  import('./daynight/autoload.js').catch(() => {});
+  // Slice 827 — Foliage wind animation.
+  import('./foliagewind/autoload.js').catch(() => {});
+  // Slice 828 — Wet surface puddle detection.
+  import('./wetness/autoload.js').catch(() => {});
+  // Slice 829 — Animal / wildlife templates.
+  import('./animals/autoload.js').catch(() => {});
+  // Slice 830 — GPU compute path tracer (WebGPU).
+  import('./gpurt/autoload.js').catch(() => {});
+  // Slice 831 — Caustics via bidirectional PT.
+  import('./caustics/autoload.js').catch(() => {});
+  // Slice 832 — Subsurface scattering in path tracer.
+  import('./ptsss/autoload.js').catch(() => {});
+  // Slice 833 — Volumetric ray tracing.
+  import('./ptvol/autoload.js').catch(() => {});
+  // Slice 834 — AOV multi-channel output.
+  import('./aov/autoload.js').catch(() => {});
+  // Slice 835 — Alembic cached-animation export.
+  import('./alembic/autoload.js').catch(() => {});
+  // Slice 836 — MaterialX 1.38 export.
+  import('./matx/autoload.js').catch(() => {});
+  // Slice 837 — OpenColorIO / ACES color management.
+  import('./ocio/autoload.js').catch(() => {});
+  // Slice 838 — Parametric architectural elements (stairs/doors/windows).
+  import('./archelem/autoload.js').catch(() => {});
+  // Slice 839 — IFC4 import/export for BIM.
+  import('./ifc/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.

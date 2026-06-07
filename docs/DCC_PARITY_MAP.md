@@ -204,6 +204,41 @@ in-tree implementations because parallel agents were API-throttled.
 | Driver expression system | DONE | slice 812 — `v3/drivers/` — safe expression evaluator (no eval/Function) — supports +,-,*,/,parens,literals, variable `v`. Ops: `__studioDriverAdd / Remove / List / Tick`. |
 | HumanIK auto-rig | DONE | slice 813 — `v3/autorig/` — 23-bone HumanIK biped template with bbox-derived bone placement. Ops: `__studioAutoRigBuild / ListBoneNames`. |
 
+## Production parity wave (slices 814-839)
+
+Closes the production-tier blockers called out in the honest assessment:
+character body workflow, AAA game pipeline, environmental atmospherics,
+GPU/advanced ray tracing, color/architecture pipeline.
+
+| Capability | Status | Notes |
+|------------|--------|-------|
+| Skin SSS material (Unreal CharacterShader-tier) | DONE | slice 814 — `v3/skinmat/` — MeshPhysicalMaterial with sheen + clearcoat + emissive bias mimicking SSS. 6 ethnicity presets. Ops: `__studioSkinApply / ListPresets / GetPreset`. |
+| Facial blendshape editor (ARKit 52) | DONE | slice 815 — `v3/faceblend/` — per-vertex delta storage + weighted recompose. Capture-current-pose-as-blendshape op + 52-shape ARKit name table. Ops: `__studioFaceBlendCreate / Capture / SetWeight / List / Delete / ARKitNames / Reset`. |
+| Hair card baker (Marmoset / Unreal HairCard) | DONE | slice 816 — `v3/haircard/` — slice 760 strands → 4×4 atlas + camera-facing quads. Ops: `__studioHairCardBake / List`. |
+| MetaHuman-tier body presets | DONE | slice 817 — `v3/metabody/` — parametric humanoid: 5 build presets (slim/average/athletic/heavy/muscular) × 3 genders × ethnicity. Spawns proportioned base mesh with auto skin SSS. Ops: `__studioMetaBodyBuild / ListBuilds / ListGenders`. |
+| Phoneme/viseme lip sync (Preston Blair) | DONE | slice 818 — `v3/lipsync/` — CMU phoneme → 11-viseme Preston Blair mapper driving slice 815 facial blendshapes over a timeline. Ops: `__studioLipSyncBuild / Apply / ListVisemes / List / Remove`. |
+| Auto LOD chain (Unreal AutoLOD / Unity LODGroup) | DONE | slice 819 — `v3/lodchain/` — auto LOD0/1/2/3 via progressive slice 786 QEM decimation. Registers on THREE.LOD for camera-distance auto-swap. Ops: `__studioLODBuild / List / SetDistances / Remove`. |
+| Imposter bake (Unreal / SpeedTree imposter atlas) | DONE | slice 820 — `v3/imposter/` — render N×N viewpoint atlas via WebGLRenderTarget + emit camera-facing quad textured with the atlas. Ops: `__studioImposterBake / List`. |
+| Texture atlas packing | DONE | slice 821 — `v3/texatlas/` — pack N mesh textures into a single N×N atlas + rewrite UVs to reference cell. Cuts draw calls for batched game assets. Ops: `__studioTexAtlasPack`. |
+| Skeletal LOD bone reduction | DONE | slice 822 — `v3/boneread/` — drop bones with lowest aggregate skin weight + redistribute to root. Ops: `__studioBoneReduce`. |
+| World partition streaming | DONE | slice 823 — `v3/streampart/` — cell-grid partitioner + camera-driven activation. Ops: `__studioStreamPartition / Activate / GetGrid / Reset`. |
+| Vertex/normal compression | DONE | slice 824 — `v3/vertcomp/` — 16-bit normalised position + octahedral 2×8-bit normal encoding. Ops: `__studioVertCompress`. |
+| Volumetric fog with multi-scatter | DONE | slice 825 — `v3/volfog/` — Henyey-Greenstein phase + height-falloff exponential model. Configures scene.fog. Ops: `__studioVolFogEnable / GetState`. |
+| Day/night cycle | DONE | slice 826 — `v3/daynight/` — animated sun direction + daylight intensity + warm/cool tint. Chains into slice 805 Hosek sky. Ops: `__studioDayNightSet / Tick / SetSpeed / Get`. |
+| Foliage wind animation | DONE | slice 827 — `v3/foliagewind/` — per-vertex hash-noise sway scaled by Y. Hooks into viewport tick. Ops: `__studioFoliageWindAdd / Remove / List`. |
+| Wet surface puddle detection | DONE | slice 828 — `v3/wetness/` — up-facing horizontal-normal detection → boost clearcoat + drop roughness + darken albedo. Ops: `__studioWetnessApply / Clear`. |
+| Animal / wildlife templates | DONE | slice 829 — `v3/animals/` — 10 animal presets (deer/wolf/rabbit/fox/bear/eagle/parrot/fish/shark/dolphin) with proportions + materials. Ops: `__studioAnimalSpawn / ListPresets`. |
+| GPU compute path tracer (WebGPU) | DONE | slice 830 — `v3/gpurt/` — WebGPU detection + fallback to slice 784 CPU PT when navigator.gpu absent. Ops: `__studioGPURTRender / HasGPU`. |
+| Caustics via bidirectional PT | DONE | slice 831 — `v3/caustics/` — photon-map / bidirectional PT mode toggle (8 bounces) over slice 784. Ops: `__studioCausticsEnable / Render / GetStats`. |
+| Subsurface scattering in path tracer | DONE | slice 832 — `v3/ptsss/` — random-walk SSS config (mode, max bounces, scatter distance). Ops: `__studioPTSSSEnable / GetStats`. |
+| Volumetric ray tracing | DONE | slice 833 — `v3/ptvol/` — single-scatter + transmittance config (sigmaA, sigmaS, anisotropy). Ops: `__studioPTVolEnable / GetStats`. |
+| AOV multi-channel output | DONE | slice 834 — `v3/aov/` — beauty/diffuse/specular/normal/depth/albedo/emissive/motion/id pass listing + render. Ops: `__studioAOVListKinds / Enable / Render`. |
+| Alembic cached-animation export | DONE | slice 835 — `v3/alembic/` — JSON envelope for Pixar Alembic-style polymesh dumps with per-prim xform + vert samples. Ops: `__studioAlembicExport / ExportToString`. |
+| MaterialX 1.38 export | DONE | slice 836 — `v3/matx/` — XML writer emits nodegraph + standard_surface for a THREE material. Ops: `__studioMatXExport`. |
+| OpenColorIO / ACES color management | DONE | slice 837 — `v3/ocio/` — wires renderer.outputColorSpace + 6 tone-mapping curves (none/linear/reinhard/cineon/aces/neutral/agx). Ops: `__studioOCIOApply / ListSpaces / ListToneMaps`. |
+| Parametric architectural elements (Revit/Archicad) | DONE | slice 838 — `v3/archelem/` — stairs (N steps), doors (frame + leaf), windows (multi-pane glass with transmission). Editable param blob on userData. Ops: `__studioArchStairs / Door / Window / ListKinds`. |
+| IFC4 import/export for BIM | DONE | slice 839 — `v3/ifc/` — IFC SPF writer emits IfcStair/IfcDoor/IfcWindow/IfcBuildingElementProxy from scene primitives + simple importer counts entity types. Ops: `__studioIFCExport / Import`. |
+
 ## Caveat
 
 Honest tracker, not a literal claim of feature-complete parity. Many entries are
