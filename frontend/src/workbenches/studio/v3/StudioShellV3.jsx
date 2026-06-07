@@ -71,95 +71,99 @@ const lstor = {
 };
 
 // ─── DISCIPLINES ─────────────────────────────────────────────────────────
-// 15 Studio disciplines. Each entry maps to a workbench rail tab + a
-// distinct toolbar group set + a right-panel content set. icons come
-// from Icons.jsx (disc-* custom marks, no library).
+// Slice 946 — Studio's canonical 9 disciplines after the Forge-mirror
+// redesign. The previous 15-tab set fragmented attention; the 9 below
+// match the Blender/Maya idiom and slot every tool into one obvious
+// home. Folds:
+//   NURBS  → Model (curves/surfaces sub-tools)
+//   Paint  → Shade / UV (texture-paint stays as a UV tool)
+//   Rig    → Animate (Rig group inside Animate toolbar)
+//   FX     → Sim (forces + emitters)
+//   World  → Layout
+//   Physics → Sim
+//   Audio  → Compose
+//   XR     → Layout
+//   Script → topbar action (not a tab)
+//   Archie → footer console only (Slice B)
+//
+// The dropped disciplines' window.__studio* ops stay registered (see the
+// register*Ops imports above) so existing Tool-Registry entries still
+// resolve — only the visual tab list shrinks.
 const DISCIPLINES = [
-  { id: 'model',  label: 'Model',   icon: 'disc-model'  },
-  { id: 'sculpt', label: 'Sculpt',  icon: 'disc-sculpt' },
-  { id: 'paint',  label: 'Paint',   icon: 'disc-paint'  },
-  { id: 'shade',  label: 'Shade',   icon: 'disc-shade'  },
-  { id: 'anim',   label: 'Anim',    icon: 'disc-anim'   },
-  { id: 'rig',    label: 'Rig',     icon: 'disc-rig'    },
-  { id: 'render', label: 'Render',  icon: 'disc-render' },
-  { id: 'fx',     label: 'FX',      icon: 'disc-fx'     },
-  { id: 'world',  label: 'World',   icon: 'disc-world'  },
-  { id: 'nurbs',  label: 'NURBS',   icon: 'disc-nurbs'  },
-  { id: 'phys',   label: 'Physics', icon: 'disc-phys'   },
-  { id: 'audio',  label: 'Audio',   icon: 'disc-audio'  },
-  { id: 'xr',     label: 'XR',      icon: 'disc-xr'     },
-  { id: 'script', label: 'Script',  icon: 'disc-script' },
-  { id: 'archie', label: 'Archie',  icon: 'disc-archie' },
+  { id: 'model',   label: 'Model',   icon: 'disc-model'   },
+  { id: 'sculpt',  label: 'Sculpt',  icon: 'disc-sculpt'  },
+  { id: 'uv',      label: 'UV',      icon: 'disc-uv'      },
+  { id: 'shade',   label: 'Shade',   icon: 'disc-shade'   },
+  { id: 'animate', label: 'Animate', icon: 'disc-animate' },
+  { id: 'render',  label: 'Render',  icon: 'disc-render'  },
+  { id: 'compose', label: 'Compose', icon: 'disc-compose' },
+  { id: 'sim',     label: 'Sim',     icon: 'disc-sim'     },
+  { id: 'layout',  label: 'Layout',  icon: 'disc-layout'  },
 ];
 
 // Toolbar groups per discipline. Each group is a labelled cluster of
 // tools; tool ids map into Icons.jsx names so the glyph stays crisp.
+// Slice 946: group set rebuilt to give each canonical discipline a
+// 3-6 column ribbon that fits at 1920px without horizontal overflow.
+// Tool names re-use the existing Icons.jsx catalogue (no new icons
+// introduced this slice — Slice D ships the bulk icon authoring).
 const TOOLBAR = {
   model: [
     { label: 'Add',       tools: ['cube', 'sphere', 'plane', 'cylinder', 'cone', 'torus', 'icosahedron', 'text', 'curve', 'empty'] },
     { label: 'Transform', tools: ['select', 'move', 'rotate', 'scale'] },
     { label: 'Mesh',      tools: ['extrude', 'inset', 'subdivide', 'bevel', 'mirror'] },
+    { label: 'NURBS',     tools: ['curve', 'cylinder', 'extrude', 'subdivide'] },
     { label: 'View',      tools: ['eye', 'camera', 'light', 'material'] },
   ],
   sculpt: [
-    { label: 'Brush',     tools: ['select', 'move', 'scale'] },
-    { label: 'Smooth',    tools: ['subdivide', 'mirror'] },
+    { label: 'Brush',     tools: ['select', 'move', 'scale', 'extrude'] },
+    { label: 'Smooth',    tools: ['subdivide', 'inset', 'bevel'] },
+    { label: 'Symmetry',  tools: ['mirror'] },
     { label: 'View',      tools: ['eye', 'material'] },
   ],
-  paint: [
-    { label: 'Brush',     tools: ['select', 'move'] },
-    { label: 'Layers',    tools: ['extrude', 'inset'] },
-    { label: 'View',      tools: ['eye', 'material'] },
+  uv: [
+    { label: 'Unwrap',    tools: ['cube', 'sphere', 'plane', 'cylinder'] },
+    { label: 'Edit',      tools: ['select', 'move', 'rotate', 'scale'] },
+    { label: 'Paint',     tools: ['extrude', 'inset', 'material'] },
+    { label: 'View',      tools: ['eye'] },
   ],
   shade: [
     { label: 'Materials', tools: ['material', 'eye'] },
-    { label: 'Topology',  tools: ['cube', 'sphere'] },
+    { label: 'Nodes',     tools: ['cube', 'sphere', 'curve'] },
+    { label: 'Bake',      tools: ['extrude', 'inset', 'subdivide'] },
+    { label: 'Preview',   tools: ['camera', 'light'] },
   ],
-  anim: [
+  animate: [
     { label: 'Playback',  tools: ['play', 'pause'] },
-    { label: 'Keys',      tools: ['extrude', 'inset'] },
+    { label: 'Keys',      tools: ['extrude', 'inset', 'bevel'] },
+    { label: 'Rig',       tools: ['move', 'rotate', 'mirror'] },
+    { label: 'Curves',    tools: ['curve', 'subdivide'] },
     { label: 'View',      tools: ['eye', 'camera'] },
   ],
-  rig: [
-    { label: 'Bones',     tools: ['move', 'rotate'] },
-    { label: 'Constraints', tools: ['mirror', 'extrude'] },
-  ],
   render: [
-    { label: 'Capture',   tools: ['camera', 'eye'] },
+    { label: 'Capture',   tools: ['camera', 'eye', 'play'] },
+    { label: 'Camera',    tools: ['camera', 'move', 'scale'] },
     { label: 'Light',     tools: ['light', 'material'] },
+    { label: 'Engine',    tools: ['play', 'pause', 'eye'] },
     { label: 'Output',    tools: ['settings'] },
   ],
-  fx: [
-    { label: 'Emitters',  tools: ['cube', 'sphere'] },
-    { label: 'Forces',    tools: ['move', 'rotate'] },
+  compose: [
+    { label: 'Inputs',    tools: ['cube', 'sphere', 'plane'] },
+    { label: 'Filters',   tools: ['extrude', 'inset', 'subdivide', 'bevel'] },
+    { label: 'Audio',     tools: ['curve', 'play', 'pause'] },
+    { label: 'Output',    tools: ['settings'] },
   ],
-  world: [
-    { label: 'Terrain',   tools: ['plane', 'subdivide'] },
+  sim: [
+    { label: 'Bodies',    tools: ['cube', 'sphere', 'torus'] },
+    { label: 'Forces',    tools: ['move', 'rotate', 'scale'] },
+    { label: 'Fluids',    tools: ['curve', 'subdivide', 'extrude'] },
+    { label: 'Bake',      tools: ['play', 'pause'] },
+  ],
+  layout: [
+    { label: 'Scene',     tools: ['cube', 'sphere', 'plane', 'cylinder', 'icosahedron'] },
+    { label: 'Camera',    tools: ['camera', 'move'] },
     { label: 'Light',     tools: ['light', 'material'] },
-  ],
-  nurbs: [
-    { label: 'Curves',    tools: ['curve', 'cylinder'] },
-    { label: 'Surfaces',  tools: ['extrude', 'subdivide'] },
-  ],
-  phys: [
-    { label: 'Bodies',    tools: ['cube', 'sphere'] },
-    { label: 'Sim',       tools: ['play', 'pause'] },
-  ],
-  audio: [
-    { label: 'Source',    tools: ['cube'] },
-    { label: 'Mix',       tools: ['play', 'pause'] },
-  ],
-  xr: [
-    { label: 'Stage',     tools: ['cube', 'plane'] },
-    { label: 'Hands',     tools: ['select', 'move'] },
-  ],
-  script: [
-    { label: 'Run',       tools: ['play'] },
-    { label: 'Debug',     tools: ['eye'] },
-  ],
-  archie: [
-    { label: 'Thread',    tools: ['eye'] },
-    { label: 'Tools',     tools: ['settings'] },
+    { label: 'XR',        tools: ['eye', 'select'] },
   ],
 };
 
@@ -201,7 +205,7 @@ function ArchieStatusDot() {
     window.addEventListener('archie-stream-start', onStream);
     return () => { alive = false; clearInterval(id); window.removeEventListener('archie-stream-start', onStream); };
   }, []);
-  const color = state === 'online' || state === 'streaming' ? 'var(--studio-accent, #1de9b6)' : '#3b424d';
+  const color = state === 'online' || state === 'streaming' ? 'var(--studio-accent, #ebecef)' : 'var(--studio-ink-faint, #3d4250)';
   return (
     <span
       data-studio-v3-archie-status
@@ -335,10 +339,10 @@ function ToolKindBadge({ kind }) {
       data-studio-v3-tool-badge-count={n}
       style={{
         position: 'absolute', top: -3, right: -3,
-        background: 'var(--studio-accent, #1de9b6)', color: '#0d1117',
+        background: 'var(--studio-accent, #ebecef)', color: 'var(--studio-canvas, #000000)',
         borderRadius: 8, padding: '0 4px', fontSize: 9, lineHeight: '13px',
         fontFamily: 'var(--studio-mono, ui-monospace)', minWidth: 13, textAlign: 'center',
-        boxShadow: '0 0 0 1px var(--studio-bg, #0d1117)',
+        boxShadow: '0 0 0 1px var(--studio-canvas, #000000)',
       }}
     >{n > 99 ? '99+' : n}</span>
   );
@@ -460,19 +464,19 @@ function QuickAddMenu() {
       onMouseDown={(e) => e.stopPropagation()}
       style={{
         position: 'fixed', left: pos.x, top: pos.y, zIndex: 9100,
-        background: 'var(--studio-bg, #0d1117)',
-        border: '1px solid var(--studio-ink-mute, #1f2733)',
+        background: 'var(--studio-canvas-2, #0a0a0a)',
+        border: '1px solid var(--studio-rail-edge, #1d2027)',
         borderRadius: 4, padding: '4px 0', minWidth: 160,
         boxShadow: '0 4px 16px rgba(0,0,0,0.55)',
         fontFamily: 'inherit', fontSize: 11,
-        color: 'var(--studio-ink, #e6edf3)',
+        color: 'var(--studio-ink, #f0eee6)',
         transform: 'translate(-50%, -50%)',
       }}
     >
       <div style={{
         padding: '4px 10px 6px',
         opacity: 0.55, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em',
-        borderBottom: '1px solid var(--studio-ink-mute, #1f2733)', marginBottom: 4,
+        borderBottom: '1px solid var(--studio-rail-edge, #1d2027)', marginBottom: 4,
       }}>Add</div>
       {items.map((kind) => (
         <button
@@ -490,8 +494,8 @@ function QuickAddMenu() {
             }
             setPos(null);
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--studio-accent, #1de9b6)'; e.currentTarget.style.color = 'var(--studio-bg, #0d1117)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--studio-ink, #e6edf3)'; }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--studio-surface-2, #1f1f1f)'; e.currentTarget.style.color = 'var(--studio-ink, #f0eee6)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--studio-ink, #f0eee6)'; }}
           style={{
             display: 'block', width: '100%', padding: '4px 12px',
             background: 'transparent', color: 'inherit',
@@ -578,10 +582,10 @@ function MarkingMenu() {
         width: 0, height: 0, pointerEvents: 'none',
       }}
     >
-      {/* Centre dot. */}
+      {/* Centre dot — monochrome warm-white per slice 946 (no accent). */}
       <div style={{
         position: 'absolute', left: -3, top: -3, width: 6, height: 6,
-        borderRadius: 3, background: 'var(--studio-accent, #1de9b6)',
+        borderRadius: 3, background: 'var(--studio-accent, #ebecef)',
       }} />
       {items.map((it) => {
         const rad = (it.angle * Math.PI) / 180;
@@ -593,15 +597,15 @@ function MarkingMenu() {
             type="button"
             data-studio-v3-marking-item={it.label.toLowerCase().replace(/\s+/g, '-')}
             onClick={() => { it.call(); setPos(null); }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--studio-accent, #1de9b6)'; e.currentTarget.style.color = 'var(--studio-bg, #0d1117)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--studio-bg-elev, #161b22)'; e.currentTarget.style.color = 'var(--studio-ink, #e6edf3)'; }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--studio-surface-2, #1f1f1f)'; e.currentTarget.style.color = 'var(--studio-ink, #f0eee6)'; e.currentTarget.style.borderColor = 'var(--studio-accent-rim, rgba(255,255,255,0.28))'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--studio-canvas-3, #14161b)'; e.currentTarget.style.color = 'var(--studio-ink, #f0eee6)'; e.currentTarget.style.borderColor = 'var(--studio-rail-edge, #1d2027)'; }}
             style={{
               position: 'absolute',
               left: x - 36, top: y - 12,
               width: 72, height: 24,
-              background: 'var(--studio-bg-elev, #161b22)',
-              color: 'var(--studio-ink, #e6edf3)',
-              border: '1px solid var(--studio-ink-mute, #1f2733)',
+              background: 'var(--studio-canvas-3, #14161b)',
+              color: 'var(--studio-ink, #f0eee6)',
+              border: '1px solid var(--studio-rail-edge, #1d2027)',
               borderRadius: 12,
               fontSize: 10, cursor: 'pointer',
               pointerEvents: 'auto',

@@ -19563,32 +19563,18 @@ function WorkbenchStudioV2({ headless = false } = {}) {
   );
 }
 
-// Router — checks the V3 flag once and dispatches to either shell. Keeps
-// hooks rules intact (no early return inside a hook-using component).
+// Slice 946 — V3 is the ONLY shell. The V2 monolith below this point is
+// dead code that Slice D will delete outright. The opt-out paths (?v3=0,
+// localStorage studioV3='0') are removed so no user accidentally lands
+// on the legacy chrome during the redesign rollout. Hooks rules stay
+// intact — no early return inside a hook-using component.
 function WorkbenchStudio() {
-  const [v3Enabled] = useState(() => {
-    if (typeof window === 'undefined') return true;
-    try {
-      // Slice 742 (UI fix): the Forge-style V3 shell is now the DEFAULT.
-      // Only an explicit opt-out (?v3=0 or localStorage studioV3='0') falls
-      // back to the legacy V2 monolith. Previously V3 required an explicit
-      // opt-IN, so users launching normally saw the messy V2 Blender-clone
-      // (old centred welcome card + old Archie Chat/Code/Parametric bar)
-      // instead of the clean Forge-style shell.
-      const qp = new URLSearchParams(window.location.search).get('v3');
-      if (qp === '0') return false;
-      if (qp === '1') return true;
-      return window.localStorage.getItem('studioV3') !== '0';
-    } catch (_) { return true; }
-  });
-  if (v3Enabled) {
-    const mode = (() => {
-      try { return window.localStorage.getItem('studioV3Theme') === 'light' ? 'light' : 'dark'; }
-      catch (_) { return 'dark'; }
-    })();
-    return <StudioShellV3 mode={mode} />;
-  }
-  return <WorkbenchStudioV2 />;
+  const mode = (() => {
+    if (typeof window === 'undefined') return 'dark';
+    try { return window.localStorage.getItem('studioV3Theme') === 'light' ? 'light' : 'dark'; }
+    catch (_) { return 'dark'; }
+  })();
+  return <StudioShellV3 mode={mode} />;
 }
 
 export default WorkbenchStudio;

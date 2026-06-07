@@ -268,6 +268,41 @@ export const IconDiscArchie   = (p) => wrap('disc-archie', <>
   <circle cx="12" cy="12" r="1.6" fill="currentColor" />
 </>, p);
 
+// Slice 946 — canonical 9-discipline set adds UV / Compose / Sim / Layout
+// glyphs and aliases `disc-anim` → `disc-animate`. Each glyph reads from
+// across the room: UV is the flattened parametric grid, Compose is the
+// node-stack with a connection wire, Sim is three particles tracing a
+// motion path, Layout is a stage with three placed primitives.
+export const IconDiscUV       = (p) => wrap('disc-uv', <>
+  <rect x="3" y="3" width="18" height="18" />
+  <path d="M3 9 H21 M3 15 H21 M9 3 V21 M15 3 V21" strokeOpacity="0.45" />
+  <path d="M3 3 L9 9 M15 15 L21 21" strokeOpacity="0.3" />
+</>, p);
+export const IconDiscCompose  = (p) => wrap('disc-compose', <>
+  <rect x="3" y="3" width="13" height="13" />
+  <rect x="8" y="8" width="13" height="13" />
+  <circle cx="3" cy="3" r="1.5" fill="currentColor" />
+  <circle cx="21" cy="21" r="1.5" fill="currentColor" />
+  <path d="M3 3 L21 21" strokeOpacity="0.3" />
+</>, p);
+export const IconDiscSim      = (p) => wrap('disc-sim', <>
+  <circle cx="5" cy="6" r="1.6" fill="currentColor" />
+  <circle cx="12" cy="12" r="1.6" fill="currentColor" />
+  <circle cx="19" cy="18" r="1.6" fill="currentColor" />
+  <path d="M5 6 C 9 10, 8 14, 12 12 S 16 16, 19 18" strokeOpacity="0.55" />
+  <path d="M3 12 H21" strokeOpacity="0.2" />
+</>, p);
+export const IconDiscLayout   = (p) => wrap('disc-layout', <>
+  <path d="M3 20 H21" />
+  <path d="M3 20 L7 14 L17 14 L21 20" strokeOpacity="0.4" />
+  <rect x="5" y="9" width="4" height="5" />
+  <circle cx="12" cy="11" r="2.5" />
+  <rect x="15" y="11" width="3" height="3" />
+</>, p);
+// Alias so old `disc-anim` references continue to resolve while the new
+// `disc-animate` is the canonical 9-discipline name.
+export const IconDiscAnimate  = IconDiscAnim;
+
 // ─── PANEL CHROME (5) ────────────────────────────────────────────────────
 export const IconNPanel = (p) => wrap('npanel', <>
   <rect x="3" y="4" width="18" height="16" />
@@ -310,9 +345,17 @@ export const ICONS = {
   camera: IconCamera, light: IconLight, material: IconMaterial, eye: IconEye,
   // actions
   undo: IconUndo, redo: IconRedo, play: IconPlay, pause: IconPause,
-  // disciplines
-  'disc-model': IconDiscModel, 'disc-sculpt': IconDiscSculpt, 'disc-paint': IconDiscPaint,
-  'disc-anim': IconDiscAnim, 'disc-render': IconDiscRender, 'disc-shade': IconDiscShade,
+  // disciplines — slice 946: canonical 9 (model/sculpt/uv/shade/animate/
+  // render/compose/sim/layout) + legacy folds kept reachable for the
+  // ops layer (paint/fx/world/nurbs/rig/phys/audio/xr/script/archie).
+  'disc-model': IconDiscModel, 'disc-sculpt': IconDiscSculpt,
+  'disc-uv': IconDiscUV, 'disc-shade': IconDiscShade,
+  'disc-animate': IconDiscAnimate, 'disc-render': IconDiscRender,
+  'disc-compose': IconDiscCompose, 'disc-sim': IconDiscSim,
+  'disc-layout': IconDiscLayout,
+  // legacy folded — still reachable for ops layer / Tool Registry; not
+  // exposed as their own tabs after the 15 → 9 consolidation.
+  'disc-paint': IconDiscPaint, 'disc-anim': IconDiscAnim,
   'disc-fx': IconDiscFX, 'disc-world': IconDiscWorld, 'disc-nurbs': IconDiscNurbs,
   'disc-rig': IconDiscRig, 'disc-phys': IconDiscPhys, 'disc-audio': IconDiscAudio,
   'disc-xr': IconDiscXR, 'disc-script': IconDiscScript, 'disc-archie': IconDiscArchie,

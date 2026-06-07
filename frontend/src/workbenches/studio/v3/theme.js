@@ -1,29 +1,33 @@
 // ArchDisc Studio V3 — Design Tokens.
 //
-// Two modes: 'dark' (OLED, true black, warm-white text) and 'light' (warm
-// drafting-paper off-white, near-black ink). Accent is a slightly deeper
-// teal than V2 — less neon, more professional. All tokens flow through a
-// single `tokens(mode)` accessor so components don't reach into the
-// constants directly — that lets us add a third theme (e.g. 'hi-contrast')
-// later without touching every component.
+// Slice 946 — fully monochrome rebuild. The Studio shell now ships pure
+// OLED-black + matte-black + dark-gray with ZERO chromatic accent. State
+// (hover / active / selected) is conveyed by brightness shifts + 1px
+// hairlines at rgba(255,255,255,0.08) per the Q3 design lock-in. Light
+// mode mirrors the same scale inverted to warm-paper greyscale.
+//
+// Two modes: 'dark' (OLED true black, warm-white text) and 'light'
+// (warm drafting-paper off-white, near-black ink). All tokens flow
+// through a single `tokens(mode)` accessor so components don't reach
+// into the constants directly.
 //
 // Convention: comparable tokens share the same suffix across modes
 // (--ink-0 ↔ --paper-0) so a single CSS variable swap flips the theme.
 
 export const PALETTE = {
   dark: {
-    // Surfaces.
-    'ink-0': '#000000',  // true OLED base — viewport bg, app bg
-    'ink-1': '#08090b',  // panels (ribbon, N-panel, status bar)
-    'ink-2': '#12141a',  // raised surfaces (cards, popovers)
-    'ink-3': '#1c1f28',  // hover / dropdown surface
-    'ink-4': '#2a2e3a',  // borders, dividers
+    // Surfaces — pure greyscale ladder from OLED to dark gray.
+    'ink-0': '#000000',  // OLED — viewport bg, app bg
+    'ink-1': '#0a0a0a',  // matte black — topbar, statusbar, cmdbar
+    'ink-2': '#141414',  // raised — right panel, ribbon body, hover ground
+    'ink-3': '#1f1f1f',  // hover / dropdown surface
+    'ink-4': '#2a2a2a',  // selected / pressed
     // Foreground.
     'fg-1':  '#f0eee6',  // primary text (warm white, not cold #ffffff)
-    'fg-2':  '#a8aab2',  // secondary text
-    'fg-3':  '#5a5d68',  // tertiary / disabled
-    // Edge-light for OLED elevation (shadows vanish on #000).
-    'edge-top':    'rgba(255, 255, 255, 0.06)',
+    'fg-2':  '#a8a8a8',  // secondary text
+    'fg-3':  '#5a5a5a',  // tertiary / disabled
+    // Hairlines — Q3 lock-in.
+    'edge-top':    'rgba(255, 255, 255, 0.08)',  // selected/active hairline
     'edge-bottom': 'rgba(0, 0, 0, 0.50)',
   },
   light: {
@@ -32,23 +36,29 @@ export const PALETTE = {
     'ink-2': '#d8d5cb',
     'ink-3': '#cdc9bb',
     'ink-4': '#b6b1a3',
-    'fg-1':  '#1a1c22',
-    'fg-2':  '#4a4d57',
-    'fg-3':  '#8a8b91',
-    'edge-top':    'rgba(255, 255, 255, 0.85)',
+    'fg-1':  '#1a1a1a',
+    'fg-2':  '#4a4a4a',
+    'fg-3':  '#8a8a8a',
+    'edge-top':    'rgba(20, 20, 20, 0.08)',
     'edge-bottom': 'rgba(0, 0, 0, 0.10)',
   },
 };
 
+// Slice 946 — ACCENT is now monochrome. `base` resolves to the active
+// theme's primary ink; brand identity carries through mark + wordmark
+// + typography alone, never via hue. Semantic signal colors (danger/
+// warn/info/success) stay desaturated greys so the OLED palette holds
+// even under errors — functional indicators without chromatic noise.
 export const ACCENT = {
-  base:    '#0fd4a6',  // primary teal — slightly deeper than V2's #1de9b6
-  pressed: '#08a987',
-  glow:    'rgba(15, 212, 166, 0.18)',
-  // Semantic colours — same across themes; they're meant to read at-a-glance.
-  danger:  '#ff4b6b',
-  warn:    '#f6c14a',
-  info:    '#5da9ff',
-  success: '#0fd4a6',
+  base:    '#ebecef',  // warm white — "now / active" reads via this on dark
+  pressed: '#c0c5cf',
+  glow:    'rgba(235, 236, 239, 0.10)',
+  // Semantic signals — grey-tinted, never saturated. Error/warn stay
+  // legible without breaking the "no accent color" rule.
+  danger:  '#d9d9d9',
+  warn:    '#bdbdbd',
+  info:    '#a0a0a0',
+  success: '#e8e8e8',
 };
 
 // Spacing — 6/12 hybrid on a 4-px grid. Use space[N] for inline values;

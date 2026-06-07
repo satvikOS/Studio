@@ -15,21 +15,14 @@ import { ViewportProvider } from '../contexts/ViewportContext';
 import apiService from '../services/api';
 import '../styles/workbench.css';
 
-// Slice 742 (UI fix): the Studio V3 shell (Forge-style) owns its OWN
-// top bar, status bar, and Archie command bar. When V3 is active we must
-// NOT also render the legacy global chrome (AIConsole / StatusBarPro),
-// or the user sees a duplicated old Archie Chat/Code/Parametric panel and
-// a second status bar stacked under the clean shell.
+// Slice 946 — V3 shell is the only path. The legacy global chrome
+// (header / StatusBarPro / AIConsole) is permanently suppressed; the
+// Forge-style V3 shell owns the entire chrome surface. WorkbenchStudio
+// hard-codes the V3 mount, so this helper is now a constant — kept as a
+// function purely so the JSX call sites read identically while we wait
+// for Slice D's monolith deletion pass.
 function isStudioV3Active() {
-  if (typeof window === 'undefined') return true;
-  try {
-    // Mirror WorkbenchStudio's gate: V3 is default-ON; only ?v3=0 or
-    // localStorage studioV3='0' opts back to the legacy V2 monolith.
-    const qp = new URLSearchParams(window.location.search).get('v3');
-    if (qp === '0') return false;
-    if (qp === '1') return true;
-    return window.localStorage.getItem('studioV3') !== '0';
-  } catch (_) { return true; }
+  return true;
 }
 
 /**
