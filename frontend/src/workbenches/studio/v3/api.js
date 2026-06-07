@@ -7623,6 +7623,8 @@ export function registerV3Api() {
   import('./c4dmograph/autoload.js').catch(() => {});
   // Slice 774 — AutoCAD-style 2D drawing layer (Line/Polyline/Arc/Circle/Rectangle/Dimension/Text + SVG).
   import('./cad2d/autoload.js').catch(() => {});
+  // Slice 775 — Substance Designer noise generators + filters expansion.
+  import('./sdgen/autoload.js').catch(() => {});
   // Slice 777 — Houdini POPs (Particle Operators) — gravity/wind/turbulence/curl/vortex/attractor.
   import('./popfx/autoload.js').catch(() => {});
 
