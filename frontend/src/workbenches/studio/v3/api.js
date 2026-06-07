@@ -7617,6 +7617,9 @@ export function registerV3Api() {
   import('./hdrlib/autoload.js').catch(() => {});
   // Slice 771 — Asset browser library (catalog + search + tag/category + drag-spawn).
   import('./assetlib/autoload.js').catch(() => {});
+  // Slice 774 — AutoCAD-style 2D drawing layer (Line/Polyline/Arc/Circle/
+  // Rectangle/Dimension/Text + layers + SVG export).
+  import('./cad2d/autoload.js').catch(() => {});
 
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
