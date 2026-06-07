@@ -7620,6 +7620,8 @@ export function registerV3Api() {
   // Slice 774 — AutoCAD-style 2D drawing layer (Line/Polyline/Arc/Circle/
   // Rectangle/Dimension/Text + layers + SVG export).
   import('./cad2d/autoload.js').catch(() => {});
+  // Slice 777 — Houdini POPs (Particle Operators) — gravity/wind/turbulence/curl/vortex/attractor + collision.
+  import('./popfx/autoload.js').catch(() => {});
 
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
