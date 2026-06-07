@@ -123,6 +123,76 @@ test('Studio slice 951f — viewport pointer events reach the canvas', async () 
 
   await win.screenshot({ path: path.join(OUT, '01-unblocked-viewport.png') });
 
+  // Diagnostic: surgically remove every Light from the scene + force a
+  // re-render, then capture again. If the bloom persists with zero
+  // lights, it isn't a lighting artifact.
+  await win.evaluate(() => {
+    const s = window.__archdiscScene;
+    if (!s) return;
+    const toRemove = [];
+    s.traverse((o) => { if (o.isLight) toRemove.push(o); });
+    for (const l of toRemove) s.remove(l);
+    // Trigger a render so the change is visible in the next screenshot.
+    const vp = window.__archdiscViewport;
+    if (vp && vp.renderer && vp.camera) vp.renderer.render(s, vp.camera);
+  });
+  await win.waitForTimeout(300);
+  await win.screenshot({ path: path.join(OUT, '02-no-lights.png') });
+
+  // Also try: remove the ground + retry.
+  await win.evaluate(() => {
+    const s = window.__archdiscScene;
+    if (!s) return;
+    const ground = window.__studioGround;
+    if (ground && ground.parent === s) s.remove(ground);
+    const vp = window.__archdiscViewport;
+    if (vp && vp.renderer && vp.camera) vp.renderer.render(s, vp.camera);
+  });
+  await win.waitForTimeout(300);
+  await win.screenshot({ path: path.join(OUT, '03-no-ground-no-lights.png') });
+
+  // And: NoToneMapping + neutral output color space.
+  await win.evaluate(() => {
+    const vp = window.__archdiscViewport;
+    if (!vp || !vp.renderer) return;
+    try { vp.renderer.toneMapping = 0; /* THREE.NoToneMapping */ } catch (_) {}
+    if (vp.scene && vp.camera) vp.renderer.render(vp.scene, vp.camera);
+  });
+  await win.waitForTimeout(300);
+  await win.screenshot({ path: path.join(OUT, '04-no-tonemap.png') });
+
+  // Dump every visible NON-canvas DOM element inside the viewport
+  // region. pointer-events:none divs fall through elementFromPoint,
+  // so the bloom may be a transparent-pointer overlay we never see in
+  // probes.
+  const viewportDom = await win.evaluate(() => {
+    const vp = document.querySelector('[data-studio-v3-viewport]')
+      || document.querySelector('.studio-viewport');
+    if (!vp) return [];
+    const out = [];
+    const rect = vp.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    vp.querySelectorAll('*').forEach((el) => {
+      const er = el.getBoundingClientRect();
+      // Only elements whose bbox contains the viewport centre.
+      if (er.left > cx || er.right < cx || er.top > cy || er.bottom < cy) return;
+      const cs = window.getComputedStyle(el);
+      out.push({
+        tag: el.tagName.toLowerCase(),
+        attrs: Array.from(el.attributes).map((a) => a.name).filter((n) => n.startsWith('data-')).slice(0, 4),
+        cls: (el.className && el.className.baseVal || el.className || '').toString().substring(0, 50),
+        bg: cs.backgroundColor,
+        pointerEvents: cs.pointerEvents,
+        zIndex: cs.zIndex,
+        boxSize: `${Math.round(er.width)}x${Math.round(er.height)}`,
+      });
+    });
+    return out;
+  });
+  console.log('--- VIEWPORT CENTRE DOM CHAIN ---');
+  for (const o of (viewportDom || [])) console.log(JSON.stringify(o));
+
   await win.evaluate(() => {
     window.__studioV3Dirty = false;
     window.onbeforeunload = null;

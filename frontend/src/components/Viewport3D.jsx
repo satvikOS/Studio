@@ -1,1808 +1,334 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+// ArchDisc Studio — Viewport.
+//
+// Slice 951g — Full rewrite, Forge-mirror design.
+//
+// The previous implementation accumulated ~1600 lines of imperative
+// Three.js mount code with helpers (GridHelper, AxesHelper, two
+// ShadowMaterial grounds, TransformControlsGizmo, cursor groups,
+// vertex markers) that each defaulted to visible at world origin —
+// producing the bright cross + horizontal stripe that survived every
+// surgical fix. The user asked for the viewport to mirror Forge's v4
+// design exactly (not its kernel features), and Forge's Viewport.jsx
+// at ~/archdisc-Mech/frontend/src/forge-v4/Viewport.jsx is a clean
+// declarative @react-three/fiber surface. This file is its Studio
+// counterpart.
+//
+// Layout:
+//   <Canvas>
+//     <color background />
+//     <lights /> (1 ambient + 2 directional)
+//     <Grid> (drei's infinite faded floor — no horizon edge)
+//     <OrbitControls> (damped, zoom-to-cursor)
+//     <TransformControls> ONLY when an object is selected
+//     <GizmoHelper> (bottom-right monochrome axis triad)
+//
+// Public window.__studio* surface kept identical so the V3 ops layer
+// keeps resolving against this viewport:
+//   window.__archdiscScene
+//   window.__archdiscViewport = { scene, renderer, camera, controls,
+//                                  transformControls, getSelected,
+//                                  setSelected }
+//   window.__studioFrameAll / FitSelected
+//   window.__studioSetGridVisible / SetAxesVisible / SetGroundVisible
+//   window.__studioSetCameraAxis
+//   etc.
+
+import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
+import { Canvas, useThree, useFrame } from '@react-three/fiber';
+import { Grid, OrbitControls, TransformControls as DreiTransformControls,
+         GizmoHelper, GizmoViewport } from '@react-three/drei';
 import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
-import { TransformControls } from 'three/examples/jsm/controls/TransformControls';
-import { Move, RotateCcw, Maximize, MousePointer, Box, Hexagon, Eye, Grid3x3, Layers } from 'lucide-react';
 import { useViewport } from '../contexts/ViewportContext';
-import { matchesBodyKindFilter } from './SwUxOverlays.jsx';
 
-// ── CAD kernel DECOUPLED ──────────────────────────────────────────────────
-// Studio's viewport is pure three.js. It no longer imports the inherited CAD
-// kernel / ToolExecutionEngine / BodyRegistry — those drove sketch, extrude,
-// the B-rep feature tree, and face/edge picking, none of which Studio uses
-// (Studio models via its own ribbon ops + primitive selection). They are
-// replaced by inert, null-safe local stubs so those code paths stay harmless
-// while the viewport pulls in ZERO CAD code (and drops the OCCT WASM weight).
-class PixelManager { register() {} }
-class InteractiveSketch {
-  constructor() { this.active = false; this.entities = []; this.activeTool = 0; this.planeNormal = null; this._penPressure = 0; }
-  onMouseMove() {} onClick() {} getStatus() { return ''; } getProfile() { return []; }
-  activate() {} setTool() {} deactivate() {} onEscape() {} cleanupWithFoundation() {}
-}
-const SketchTools = { NONE: 0, LINE: 1, CIRCLE: 2, RECTANGLE: 3, ARC: 4, DIMENSION: 5 };
-class Vec3 { constructor(x = 0, y = 0, z = 0) { this.x = x; this.y = y; this.z = z; } }
-function ExtrudeFeature() {}
-const BVH = { build: (items) => ({ raycast: () => items }) }; // no accel; checks all
-const ThreeJSBridge = {
-  clearHighlight() {}, hideVertices() {}, showVertices() {}, highlightFace() {},
-  pickFace() { return null; }, solidToGroup() { return null; },
-};
-function getFeatureTree() { return { addExtrude: () => ({ solid: null }) }; }
-function registerSelectedEdgesProvider() {}
-function getBodyRegistry() { return { select() {} }; }
-// ──────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------
+// Studio-bridge: publishes the r3f Three.js objects on window so the
+// existing ops layer (registerCameraOps / registerSelectionOps / etc.)
+// can dispatch against them. Runs inside <Canvas>, so it has access to
+// the live r3f three instances.
+// -----------------------------------------------------------------------
+function StudioBridge({ selectedRef, setSelected, onReady }) {
+  const { scene, gl, camera } = useThree();
+  const controlsRef = useRef(null);
 
-// Singletons
-const _pixelManager = new PixelManager();
-const _sketch = new InteractiveSketch();
-const _selectedEdges = { ids: new Set(), solidId: null };
-export function getPixelManager() { return _pixelManager; }
-export function getSketch() { return _sketch; }
-export function getSelectedEdges() { return _selectedEdges; }
-// Register the provider so ToolExecutionEngine can read selected edges
-registerSelectedEdgesProvider(() => _selectedEdges);
+  useEffect(() => {
+    // Expose the canonical handles. The ops layer reads these every
+    // call, so keeping them in sync with the live r3f scene is the
+    // only contract the rewrite must honour.
+    window.__archdiscScene = scene;
+    window.__archdiscTHREE = THREE;
+    window.__archdiscViewport = {
+      scene,
+      renderer: gl,
+      camera,
+      controls: () => controlsRef.current,
+      getSelected: () => selectedRef.current,
+      setSelected,
+    };
 
-/**
- * Industrial-grade 3D Viewport
- * - Object/Face/Edge selection modes (1/2/3)
- * - Transform gizmos: Move(G), Rotate(R), Scale(S)
- * - Display modes: Shaded, Wireframe, Shaded+Wireframe, X-Ray
- * - Proper group selection with transform controls
- */
-function Viewport3D({ canvasId = 'render-canvas', domain = 'mechanical', onReady, onSelectionChange }) {
-    const containerRef = useRef(null);
-    const internalsRef = useRef(null); // store scene, camera, etc. without causing re-renders
-    const rafRef = useRef(null);
-    const viewport = useViewport();
-    const [transformMode, setTransformMode] = useState('translate');
-    const [selectionMode, setSelectionMode] = useState('object');
-    const [displayMode, setDisplayMode] = useState('shaded');
-    const [sketchActive, setSketchActive] = useState(false);
-    const [sketchTool, setSketchTool] = useState('none');
-    const [sketchStatus, setSketchStatus] = useState('');
-    const selectionModeRef = useRef('object');
-    const displayModeRef = useRef('shaded');
-    const sketchActiveRef = useRef(false);
-    const lastPickedFace = useRef(null);
-    const selectedEdges = useRef(new Set()); // edge IDs for fillet/chamfer
-    const [edgeSelectionInfo, setEdgeSelectionInfo] = useState({ count: 0, ids: [], solidId: null });
-    const onSelectionChangeRef = useRef(onSelectionChange);
-    const onReadyRef = useRef(onReady);
-    useEffect(() => { onSelectionChangeRef.current = onSelectionChange; }, [onSelectionChange]);
-    useEffect(() => { onReadyRef.current = onReady; }, [onReady]);
-
-    useEffect(() => { selectionModeRef.current = selectionMode; }, [selectionMode]);
-    useEffect(() => { displayModeRef.current = displayMode; }, [displayMode]);
-
-    useEffect(() => {
-        if (!containerRef.current) return;
-        const container = containerRef.current;
-
-        // Clean up any leftover canvases from StrictMode double-mount
-        while (container.querySelector('canvas')) {
-            container.querySelector('canvas').remove();
+    // Frame-all / fit-selected helpers operate on the live scene.
+    window.__studioFrameAll = () => {
+      const box = new THREE.Box3();
+      let hasAny = false;
+      scene.traverse((o) => {
+        if (o && o.userData && o.userData.archdiscStudioPrimitive && o.geometry) {
+          o.updateMatrixWorld();
+          box.expandByObject(o);
+          hasAny = true;
         }
-
-        const width = container.clientWidth || 800;
-        const height = container.clientHeight || 600;
-
-        // --- Scene ---
-        // OLED-black background matches industry CAD apps (NX, CATIA,
-        // Fusion 360 dark mode) — pure #000 maximizes contrast for
-        // shaded/translucent surfaces and saves OLED pixels.
-        const scene = new THREE.Scene();
-        // Slice 951c — match the CSS .studio-viewport-canvas matte
-        // dark-grey so the WebGL canvas blends seamlessly with the
-        // shell. Pure black here against #181818 chrome produced a
-        // visible boundary box around the viewport.
-        scene.background = new THREE.Color(0x181818);
-
-        // --- Camera ---
-        // Slice 752 — Forge-parity wide-dynamic-range frustum. Near 0.001
-        // (1mm) instead of 1e-4 to give the depth buffer real precision,
-        // far 10000 (10km) so heavy scenes (architectural, scattered, or
-        // city-scale assemblies) stay inside the frustum. Combined with
-        // logarithmicDepthBuffer below this gives sub-mm precision at
-        // arm's length AND no z-fighting at km distance.
-        const camera = new THREE.PerspectiveCamera(45, width / height, 0.001, 10000);
-        camera.position.set(0.15, 0.10, 0.15); // ~150mm away for mm-scale parts
-        camera.lookAt(0, 0, 0);
-
-        // --- Renderer ---
-        // Slice 752 — logarithmicDepthBuffer was tried here for heavy
-        // mixed-scale scenes but it interacted badly with the existing
-        // line helpers (GridHelper / AxesHelper) and the ShadowMaterial
-        // ground plane — the lines fattened into 2D-looking smears and
-        // the shadow plane developed a white "oval spot" at origin. The
-        // widened linear frustum (near 0.001 / far 10000) + the adaptive
-        // near/far on scene-bbox change is enough for the user's heavy
-        // workloads without touching the helper visuals.
-        const renderer = new THREE.WebGLRenderer({
-          antialias: true,
-          powerPreference: 'high-performance',
-        });
-        renderer.setSize(width, height);
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-        renderer.shadowMap.enabled = true;
-        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-        // Slice 254: shadow-quality control. setQuality('off' / 'low' /
-        // 'medium' / 'high') toggles shadowMap.enabled + resizes any
-        // existing shadow.mapSize. Lets the user trade quality for FPS.
-        // Slice 273: camera FOV control. Range [10, 110]. Updates the
-        // projection matrix in place — orbit controls keep working.
-        window.__studioSetFov = (deg) => {
-          const v = Math.max(10, Math.min(110, Number(deg) || 50));
-          camera.fov = v;
-          camera.updateProjectionMatrix();
-          window.__studioCamFov = v;
-        };
-        window.__studioGetFov = () => camera.fov;
-        // Slice 256: tone mapping selector. Real DCC parity — Blender,
-        // Unreal, Maya all ship tone-map presets. Names match the
-        // three.js constants. Maps "ACES" / "Cineon" / "Reinhard" /
-        // "Linear" / "None".
-        window.__studioSetToneMapping = (name) => {
-          const map = {
-            none: THREE.NoToneMapping, linear: THREE.LinearToneMapping,
-            reinhard: THREE.ReinhardToneMapping, cineon: THREE.CineonToneMapping,
-            aces: THREE.ACESFilmicToneMapping, neutral: THREE.NeutralToneMapping || THREE.ACESFilmicToneMapping,
-          };
-          const tone = (name in map) ? map[name] : THREE.ACESFilmicToneMapping;
-          renderer.toneMapping = tone;
-          window.__studioToneMapping = name;
-        };
-        // Slice 255: pixel ratio control. Lets users render at lower
-        // (or higher) than native DPR to trade fidelity for FPS.
-        window.__studioSetPixelRatio = (r) => {
-          const clamped = Math.max(0.25, Math.min(3, Number(r) || 1));
-          renderer.setPixelRatio(clamped);
-          window.__studioPixelRatio = clamped;
-        };
-        window.__studioSetShadowQuality = (q) => {
-          const map = { off: 0, low: 512, medium: 1024, high: 2048 };
-          const sz = (q in map) ? map[q] : 1024;
-          renderer.shadowMap.enabled = sz > 0;
-          window.__studioShadowQuality = q;
-          scene.traverse((o) => {
-            if (o.isLight && o.shadow && o.shadow.mapSize) {
-              o.shadow.mapSize.set(sz || 512, sz || 512);
-              if (o.shadow.map) { o.shadow.map.dispose(); o.shadow.map = null; }
-            }
-          });
-        };
-        renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        // Slice 951c — exposure was 1.2 which baked the cube into a
-        // glowing halo against the matte black canvas. 0.85 keeps the
-        // film-curve roll-off intact without clipping near-camera
-        // primitives into highlights.
-        renderer.toneMappingExposure = 0.85;
-        container.appendChild(renderer.domElement);
-
-        // --- Axes triad + Blender-style ground grid (slice 203) ---
-        // Industry CAD apps used to skip a ground plane, but every DCC
-        // tool (Blender, Maya, 3ds Max, Cinema 4D, Houdini, ZBrush)
-        // ships one because it conveys scale + horizon orientation.
-        // Slice 560 — Shadow catcher: a large invisible plane below the
-        // origin that only receives shadows. Toggle via __studioSetGroundVisible.
-        {
-          const ground = new THREE.Mesh(
-            // Slice 951f — was 50 × 50 m. The far edge of a plane that
-            // big projects as a thin horizontal line at the camera's
-            // horizon and the ambient/fill lights caught a faint
-            // specular off it — the "white blob + horizontal line"
-            // visible at the viewport centre even in an EMPTY scene.
-            // 2 × 2 m is plenty for desk-scale shadow catching and
-            // the edge falls well outside the default frustum.
-            new THREE.PlaneGeometry(2, 2),
-            // Slice 951c — opacity 0.28 produced a visible dark fan
-            // pattern from the cube's PCF shadow. 0.12 grounds the
-            // cube without the wide soft penumbra.
-            new THREE.ShadowMaterial({ opacity: 0.12 }),
-          );
-          ground.rotation.x = -Math.PI / 2;
-          ground.position.y = -0.001;
-          ground.receiveShadow = true;
-          // Slice 951f — start hidden too. Even at 2 m the plane was
-          // contributing a bright bloom at the viewport centre (the
-          // last visible "white sphere" in image.png with the gizmo
-          // unmounted), because the ambient + 3 directional lights
-          // tone-map non-zero radiance through the transparent shadow
-          // material under ACES at exposure 0.85. Re-enable per object
-          // selection (or via the Display section toggle).
-          ground.visible = false;
-          ground.userData.isHelper = true;
-          ground.userData.archdiscStudioGround = true;
-          scene.add(ground);
-          window.__studioGround = ground;
-          window.__studioSetGroundVisible = (v) => { ground.visible = !!v; };
-        }
-
-        // Slice 951 — Forge-style clean viewport. The previous floor grid
-        // created a visible horizon line ("2D grid line on top") at its
-        // far edge that fought the smooth-and-dynamic feel the user
-        // wants for the demo. The grid is now mounted invisible by
-        // default; the user re-enables it via the toolbar's Grid toggle
-        // or window.__studioSetGridVisible(true).
-        const axes = new THREE.AxesHelper(0.05); // 50mm axes
-        axes.visible = false;                    // hidden by default with the grid
-        axes.userData.pickable = false;
-        axes.userData.isHelper = true;
-        scene.add(axes);
-        window.__studioAxes = axes;
-        window.__studioSetAxesVisible = (v) => { axes.visible = !!v; };
-        const grid = new THREE.GridHelper(1, 20, 0x666666, 0x2a2a2a);
-        grid.position.y = -0.0005; // sit just below the axes plane so the X/Z axes still read
-        grid.visible = false;
-        grid.userData.pickable = false;
-        grid.userData.isHelper = true;
-        grid.userData.archdiscStudioGrid = true;
-        scene.add(grid);
-        window.__studioGrid = grid;
-        window.__studioSetGridVisible = (v) => { grid.visible = !!v; };
-        // Slice 240: live grid-size control. Re-build the GridHelper
-        // with the new extent + same 20-division count. Slice 951 —
-        // PRESERVE the prior visibility across the rebuild. Without
-        // this, StudioShellV3's settings-panel grid-size onChange (or
-        // any other caller) re-created the grid with `visible = true`
-        // default, overriding the slice 951 "hidden by default" state
-        // and reintroducing the floor-grid horizon line the demo brief
-        // called out for removal.
-        let g = grid;
-        window.__studioSetGridSize = (extent, divisions) => {
-          const wasVisible = g ? g.visible : false;
-          try {
-            scene.remove(g);
-            if (g.geometry && g.geometry.dispose) g.geometry.dispose();
-            if (g.material && g.material.dispose) g.material.dispose();
-          } catch (_) { /* dispose best-effort */ }
-          const newGrid = new THREE.GridHelper(extent || 1, divisions || 20, 0x666666, 0x2a2a2a);
-          newGrid.position.y = -0.0005;
-          newGrid.visible = wasVisible;
-          newGrid.userData.pickable = false;
-          newGrid.userData.isHelper = true;
-          newGrid.userData.archdiscStudioGrid = true;
-          scene.add(newGrid);
-          g = newGrid;
-          window.__studioGrid = newGrid;
-          window.__studioGridSize = extent || 1;
-        };
-
-        // --- Lighting (studio setup) ---
-        // Slice 951c — substantially dimmer than the earlier setup. The
-        // user's image.png showed the cube blooming into a white halo
-        // because ambient 0.4 + key 0.9 + exposure 1.2 (further down)
-        // pushed a near-camera 1 m cube into clipped highlights. Cutting
-        // every intensity by ~50% AND swapping the blue fill for a pure
-        // neutral grey delivers a clean monochrome readout of the scene
-        // without losing definition.
-        const ambient = new THREE.AmbientLight(0xffffff, 0.25);
-        scene.add(ambient);
-
-        const key = new THREE.DirectionalLight(0xffffff, 0.45);
-        key.position.set(10, 20, 10);
-        key.castShadow = true;
-        key.shadow.mapSize.set(2048, 2048);
-        key.shadow.camera.near = 0.5;
-        key.shadow.camera.far = 100;
-        key.shadow.camera.left = -20;
-        key.shadow.camera.right = 20;
-        key.shadow.camera.top = 20;
-        key.shadow.camera.bottom = -20;
-        scene.add(key);
-
-        // Fill light is now neutral grey (was 0x8888ff blue cast that
-        // tinted the cube under monochrome viewing).
-        const fill = new THREE.DirectionalLight(0xc0c0c0, 0.15);
-        fill.position.set(-10, 5, -10);
-        scene.add(fill);
-
-        const rim = new THREE.DirectionalLight(0xffffff, 0.10);
-        rim.position.set(0, -5, -10);
-        scene.add(rim);
-
-        // Slice 951c — the duplicate 1 m ground plane that lived here
-        // (a second ShadowMaterial mesh at y=0 stacked on top of the
-        // 50 m shadow-catcher already created above) is removed. With
-        // two parallel translucent planes at +0.001 and -0.001 the
-        // viewport rendered a faint horizontal "floor stripe" pattern
-        // visible in image.png; one plane is enough for the shadow
-        // catcher and is already toggleable via __studioSetGroundVisible.
-
-        // --- Orbit Controls ---
-        // Slice 752 — Forge-parity zoom + heavy-load behaviour.
-        //   • dampingFactor 0.08 matches Forge v4 (was 0.1 — snappier)
-        //   • minDistance 0.001 (1mm) / maxDistance 5000 (5km) — same
-        //     dynamic range as the camera frustum so the user can't
-        //     wheel "into" or "past" something visible
-        //   • zoomToCursor: true — wheel-zoom moves toward the cursor
-        //     (the SketchUp / Fusion / Forge-v4 default; without this,
-        //     dolly always pivots around the orbit target, which is
-        //     what "zoom doesn't work properly" really means)
-        //   • zoomSpeed 1.0 — 1.2 was overly jumpy under trackpads
-        const orbitControls = new OrbitControls(camera, renderer.domElement);
-        orbitControls.enableDamping = true;
-        orbitControls.dampingFactor = 0.08;
-        orbitControls.screenSpacePanning = true;
-        orbitControls.minDistance = 0.001;   // 1mm min  (was 0.01)
-        orbitControls.maxDistance = 5000;    // 5km max  (was 5)
-        orbitControls.rotateSpeed = 0.8;
-        orbitControls.zoomSpeed = 1.0;       // was 1.2
-        orbitControls.panSpeed = 0.8;
-        orbitControls.zoomToCursor = true;   // slice 752 — Forge / SketchUp parity
-
-        // --- Transform Controls ---
-        const transformControls = new TransformControls(camera, renderer.domElement);
-        transformControls.setSize(0.8);
-        if (!transformControls.userData) transformControls.userData = {};
-        transformControls.userData.isHelper = true;
-        // Slice 951f — Three.js 0.181 TransformControlsGizmo internally
-        // forces its `visible=true` every render tick, so setting
-        // controls.visible = false on init doesn't stick. Instead we
-        // gate the gizmo on attach: don't even add it to the scene
-        // until something is attached, and remove it on detach. The
-        // scene dump in an empty scene was showing every Mesh "X"/"Y"/
-        // "Z"/"XY"/"YZ"/"XZ"/"XYZ"/"XYZE" + 'TransformControlsPlane'
-        // at origin — that's the bright "white sphere + horizontal
-        // line" the user kept reporting at viewport centre.
-        let _gizmoHelper = null;
-        if (transformControls.getHelper) {
-            _gizmoHelper = transformControls.getHelper();
-            _gizmoHelper.userData = { isHelper: true };
-        }
-        const _mountGizmo = () => {
-            if (transformControls.parent !== scene) {
-                try { scene.add(transformControls); } catch (_) { /* older builds */ }
-            }
-            if (_gizmoHelper && _gizmoHelper.parent !== scene) scene.add(_gizmoHelper);
-        };
-        const _unmountGizmo = () => {
-            try { if (transformControls.parent === scene) scene.remove(transformControls); } catch (_) {}
-            try { if (_gizmoHelper && _gizmoHelper.parent === scene) scene.remove(_gizmoHelper); } catch (_) {}
-        };
-        // Don't mount on init — the empty scene shouldn't show any
-        // transform widgetry. Wrap attach() / detach() so the visual
-        // appears exactly when the user selects something.
-        const _origAttach = transformControls.attach.bind(transformControls);
-        const _origDetach = transformControls.detach.bind(transformControls);
-        transformControls.attach = (obj) => {
-            const r = _origAttach(obj);
-            if (transformControls.object) _mountGizmo();
-            return r;
-        };
-        transformControls.detach = () => {
-            const r = _origDetach();
-            _unmountGizmo();
-            return r;
-        };
-
-        // TransformControls disables OrbitControls while the gizmo is being
-        // dragged so the camera doesn't orbit mid-transform. CRITICAL: the
-        // 'false' (drag-end) event MUST always restore orbitControls — if it
-        // were ever missed the viewport would be permanently un-orbitable
-        // ("frozen"). e.value is reliably false on drag-end, so a plain
-        // `!e.value` restores it; we keep this explicit and never gate it.
-        transformControls.addEventListener('dragging-changed', (e) => {
-            orbitControls.enabled = !e.value;
-        });
-
-        // Update object position in real-time while dragging
-        transformControls.addEventListener('objectChange', () => {
-            const obj = transformControls.object;
-            if (obj && onSelectionChange) {
-                onSelectionChangeRef.current({
-                    type: 'object',
-                    name: obj.name || 'Object',
-                    position: { x: obj.position.x.toFixed(3), y: obj.position.y.toFixed(3), z: obj.position.z.toFixed(3) },
-                    rotation: { x: THREE.MathUtils.radToDeg(obj.rotation.x).toFixed(1), y: THREE.MathUtils.radToDeg(obj.rotation.y).toFixed(1), z: THREE.MathUtils.radToDeg(obj.rotation.z).toFixed(1) },
-                    scale: { x: obj.scale.x.toFixed(3), y: obj.scale.y.toFixed(3), z: obj.scale.z.toFixed(3) },
-                });
-            }
-        });
-
-        // Store references
-        const selectedRef = { current: null };
-        internalsRef.current = { scene, camera, renderer, orbitControls, transformControls, selectedRef };
-
-        // Expose framing hooks so foundation handlers can re-centre
-        // the camera on the body they just added. We expose two:
-        //   __archdiscFitToScreen()   — frame ALL meshes in the scene
-        //                                (use sparingly — pulls the
-        //                                 camera back too far when the
-        //                                 grid/gizmo helpers exist)
-        //   __archdiscFocusOnObject(o) — frame a single Object3D tight
-        //                                (preferred for foundation
-        //                                 bodies just added).
-        if (typeof window !== 'undefined') {
-          window.__archdiscFitToScreen = () => {
-            try { focusOnAll(scene, camera, orbitControls); } catch (_) {}
-          };
-          window.__archdiscFocusOnObject = (obj) => {
-            try { focusOnObject(obj, camera, orbitControls); } catch (_) {}
-          };
-          // Frame every foundation body currently in the scene as a
-          // single bbox. Used by tool handlers that add new geometry —
-          // this keeps prior bodies visible alongside the new one.
-          window.__archdiscFocusOnFoundationBodies = () => {
-            try {
-              const box = new THREE.Box3();
-              scene.traverse(o => {
-                if (o.userData?.foundationManifold) {
-                  o.updateMatrixWorld(true);
-                  box.expandByObject(o);
-                }
-              });
-              if (box.isEmpty()) return;
-              const center = box.getCenter(new THREE.Vector3());
-              const size = box.getSize(new THREE.Vector3());
-              const maxDim = Math.max(size.x, size.y, size.z) || 0.05;
-              const halfFov = (camera.fov * Math.PI / 180) / 2;
-              const dist = (maxDim / 2) / Math.tan(halfFov) * 1.6;
-              const dx = 0.6, dy = 0.35, dz = 0.6;
-              const L = Math.hypot(dx, dy, dz);
-              camera.position.set(
-                center.x + dist * dx / L,
-                center.y + dist * dy / L,
-                center.z + dist * dz / L,
-              );
-              camera.near = Math.max(dist * 0.01, 1e-4);
-              camera.far  = Math.max(dist * 100, 100);
-              camera.updateProjectionMatrix();
-              orbitControls.target.copy(center);
-              orbitControls.update();
-            } catch (_) {}
-          };
-          let __orbitBaseRadius = null;
-          window.__archdiscSetOrbitBase = () => {
-            __orbitBaseRadius = camera.position.distanceTo(orbitControls.target) || 1;
-          };
-          window.__archdiscOrbitView = (azimuthDeg, elevationDeg = 20, zoomFactor = 1) => {
-            const target = orbitControls.target;
-            const base = __orbitBaseRadius || camera.position.distanceTo(target) || 1;
-            const r = base * zoomFactor;
-            const az = (azimuthDeg * Math.PI) / 180;
-            const el = (elevationDeg * Math.PI) / 180;
-            camera.position.set(
-              target.x + r * Math.cos(el) * Math.sin(az),
-              target.y + r * Math.sin(el),
-              target.z + r * Math.cos(el) * Math.cos(az),
-            );
-            camera.lookAt(target);
-            orbitControls.update();
-            renderer.render(scene, camera);
-          };
-          window.__archdiscScene = scene;
-          // Expose the live Three.js viewport internals (camera, renderer,
-          // orbitControls) so headed e2e specs can project a body's
-          // world-space centroid to a screen pixel and drive the viewport
-          // with REAL mouse clicks / drag-orbits (motionCapture.js helpers).
-          // Read-only from the spec side — never mutated by e2e.
-          window.__archdiscViewport = {
-            scene, camera, renderer, orbitControls, keyLight: key, ambient,
-            // Slice 396 — expose transform gizmo + a getter for the
-            // currently-selected mesh so V3 (and any other UI shell)
-            // can drive the gizmo + react to selection without owning
-            // its own raycaster.
-            transformControls,
-            getSelected: () => transformControls.object || null,
-          };
-        }
-
-        // --- Raycaster ---
-        const raycaster = new THREE.Raycaster();
-        const mouse = new THREE.Vector2();
-
-        // --- Selection outline material ---
-        const outlineMat = new THREE.MeshBasicMaterial({ color: 0xff6b35, wireframe: true, transparent: true, opacity: 0.5 });
-
-        // Groups that currently carry a face highlight or vertex markers.
-        // clearSelection() clears ONLY these instead of scanning the whole
-        // scene — keeps clear cost O(highlighted) not O(scene²). Each
-        // ThreeJSBridge.clearHighlight/hideVertices call internally does a
-        // getObjectByName subtree search, so a whole-scene traversal that
-        // called them per group was O(N²) for large/nested assemblies.
-        const highlightedGroups = new Set();
-
-        function findTopGroup(obj) {
-            // Walk up to find the top-level group added to scene
-            let current = obj;
-            while (current.parent && current.parent !== scene) {
-                current = current.parent;
-            }
-            return current;
-        }
-
-        function clearSelection() {
-            // Remove selection outline
-            const existing = scene.getObjectByName('__selection_outline__');
-            if (existing) {
-                existing.traverse(c => { if (c.geometry) c.geometry.dispose(); });
-                scene.remove(existing);
-            }
-            // Clear face/edge highlights — only on the groups known to carry
-            // one. The old code did scene.traverse() + clearHighlight +
-            // hideVertices on EVERY group; each of those does a recursive
-            // getObjectByName, making clearSelection O(N²) over scene size.
-            // This runs on every click AND every drag-release.
-            if (highlightedGroups.size) {
-                for (const g of highlightedGroups) {
-                    ThreeJSBridge.clearHighlight(g);
-                    ThreeJSBridge.hideVertices(g);
-                }
-                highlightedGroups.clear();
-            }
-            transformControls.detach();
-            selectedRef.current = null;
-        }
-
-        function selectObject(target) {
-            clearSelection();
-            selectedRef.current = target;
-            // NOTE: the transform gizmo is intentionally NOT attached here.
-            // A plain selection click only highlights (outline) — it must not
-            // drop a TransformControls gizmo over the body. The gizmo's
-            // handles sit at the body's origin; with the body framed centre-
-            // screen a follow-up orbit-drag started on the body would grab a
-            // gizmo handle and translate the object instead of orbiting the
-            // camera — the viewport "freezes" (won't rotate). The gizmo is
-            // now opt-in: attachGizmo() wires it to the current selection
-            // when the user picks a Move/Rotate/Scale transform mode.
-
-            // Add selection wireframe outline
-            const outlineGroup = new THREE.Group();
-            outlineGroup.name = '__selection_outline__';
-            target.traverse(child => {
-                if (child.isMesh && child.geometry) {
-                    const clone = new THREE.Mesh(child.geometry.clone(), outlineMat);
-                    clone.position.copy(child.position);
-                    clone.rotation.copy(child.rotation);
-                    clone.scale.copy(child.scale);
-                    clone.userData.pickable = false;
-                    outlineGroup.add(clone);
-                }
-            });
-            // Position outline at target's world position
-            outlineGroup.position.copy(target.position);
-            outlineGroup.rotation.copy(target.rotation);
-            outlineGroup.scale.copy(target.scale);
-            outlineGroup.userData.pickable = false;
-            outlineGroup.userData.isHelper = true;
-            scene.add(outlineGroup);
-        }
-
-        // Attach the transform gizmo to the current selection on demand —
-        // called when the user explicitly enters a Move/Rotate/Scale mode
-        // (toolbar button or G/R/S key). Selection alone never attaches it,
-        // so a selection click never traps a follow-up orbit-drag.
-        function attachGizmo() {
-            if (selectedRef.current && transformControls.object !== selectedRef.current) {
-                transformControls.attach(selectedRef.current);
-            }
-        }
-        // Expose so the toolbar mode buttons (rendered outside this closure)
-        // can attach the gizmo to whatever is currently selected.
-        internalsRef.current.attachGizmo = attachGizmo;
-
-        // --- Pointer move handler for sketch (supports mouse, touch, pen/stylus) ---
-        const handleMouseMove = (event) => {
-            if (!sketchActiveRef.current || !_sketch.active) return;
-            const rect = renderer.domElement.getBoundingClientRect();
-            // Use pointer coordinates (works with mouse, pen, touch)
-            const clientX = event.clientX ?? event.touches?.[0]?.clientX ?? 0;
-            const clientY = event.clientY ?? event.touches?.[0]?.clientY ?? 0;
-            mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
-            mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
-            raycaster.setFromCamera(mouse, camera);
-            _sketch.onMouseMove(raycaster);
-
-            // Pen pressure support — could be used for line weight
-            if (event.pressure !== undefined && event.pressure > 0) {
-                _sketch._penPressure = event.pressure;
-            }
-        };
-        // Use pointer events for pen/stylus/touch compatibility
-        renderer.domElement.addEventListener('pointermove', handleMouseMove);
-        renderer.domElement.style.touchAction = 'none'; // prevent browser handling
-
-        // ── Tier-11a face/edge/vertex helpers ─────────────────────────
-        // Used by the NX selection-priority filter when the user picks a
-        // foundation-manifold body (no kernelSolid). Each helper is small,
-        // pure-Three.js, and scoped to the hit mesh — no scene-wide walk.
-
-        // Cache analytic-face ids per mesh geometry. Each triangle is
-        // assigned a cluster id by flood-filling over triangles whose face
-        // normals match within EPS_NORMAL_DOT (i.e. co-planar / co-axial
-        // triangles get the same face id). Cached on geometry.userData
-        // so repeated picks on the same body are O(1).
-        const EPS_NORMAL_DOT = 0.999;   // ≈ 2.5° tolerance
-        function ensureAnalyticFaceIds(geom) {
-            if (!geom || !geom.attributes || !geom.attributes.position) return null;
-            if (geom.userData && geom.userData._analyticFaceIds) return geom.userData._analyticFaceIds;
-            const pos = geom.attributes.position;
-            const indexAttr = geom.index;
-            const triCount = indexAttr ? indexAttr.count / 3 : pos.count / 3;
-            // Compute per-triangle normals.
-            const triNormals = new Float32Array(triCount * 3);
-            const va = new THREE.Vector3();
-            const vb = new THREE.Vector3();
-            const vc = new THREE.Vector3();
-            const e1 = new THREE.Vector3();
-            const e2 = new THREE.Vector3();
-            const n = new THREE.Vector3();
-            const triVerts = (i) => {
-                if (indexAttr) {
-                    return [
-                        indexAttr.getX(i * 3 + 0),
-                        indexAttr.getX(i * 3 + 1),
-                        indexAttr.getX(i * 3 + 2),
-                    ];
-                }
-                return [i * 3 + 0, i * 3 + 1, i * 3 + 2];
-            };
-            for (let i = 0; i < triCount; i++) {
-                const [ia, ib, ic] = triVerts(i);
-                va.set(pos.getX(ia), pos.getY(ia), pos.getZ(ia));
-                vb.set(pos.getX(ib), pos.getY(ib), pos.getZ(ib));
-                vc.set(pos.getX(ic), pos.getY(ic), pos.getZ(ic));
-                e1.subVectors(vb, va);
-                e2.subVectors(vc, va);
-                n.crossVectors(e1, e2).normalize();
-                triNormals[i * 3 + 0] = n.x;
-                triNormals[i * 3 + 1] = n.y;
-                triNormals[i * 3 + 2] = n.z;
-            }
-            // Build edge → triangle adjacency.
-            const edgeKey = (a, b) => a < b ? `${a}_${b}` : `${b}_${a}`;
-            const edgeToTris = new Map();
-            for (let i = 0; i < triCount; i++) {
-                const [a, b, c] = triVerts(i);
-                for (const [x, y] of [[a, b], [b, c], [c, a]]) {
-                    const k = edgeKey(x, y);
-                    let arr = edgeToTris.get(k);
-                    if (!arr) { arr = []; edgeToTris.set(k, arr); }
-                    arr.push(i);
-                }
-            }
-            // Flood-fill: triangles in the same face share an edge AND have
-            // the same normal (within EPS).
-            const faceId = new Int32Array(triCount).fill(-1);
-            let nextId = 0;
-            const stack = [];
-            for (let seed = 0; seed < triCount; seed++) {
-                if (faceId[seed] !== -1) continue;
-                const id = nextId++;
-                stack.push(seed);
-                faceId[seed] = id;
-                const sx = triNormals[seed * 3 + 0];
-                const sy = triNormals[seed * 3 + 1];
-                const sz = triNormals[seed * 3 + 2];
-                while (stack.length) {
-                    const t = stack.pop();
-                    const [a, b, c] = triVerts(t);
-                    for (const [x, y] of [[a, b], [b, c], [c, a]]) {
-                        const k = edgeKey(x, y);
-                        const arr = edgeToTris.get(k);
-                        if (!arr) continue;
-                        for (const nbr of arr) {
-                            if (nbr === t || faceId[nbr] !== -1) continue;
-                            const nx = triNormals[nbr * 3 + 0];
-                            const ny = triNormals[nbr * 3 + 1];
-                            const nz = triNormals[nbr * 3 + 2];
-                            const dot = sx * nx + sy * ny + sz * nz;
-                            if (dot >= EPS_NORMAL_DOT) {
-                                faceId[nbr] = id;
-                                stack.push(nbr);
-                            }
-                        }
-                    }
-                }
-            }
-            const data = { faceId, faceCount: nextId, triNormals };
-            geom.userData = geom.userData || {};
-            geom.userData._analyticFaceIds = data;
-            return data;
-        }
-
-        function flagAndHighlightAnalyticFace(hitMesh, faceIndex, color) {
-            const geom = hitMesh.geometry;
-            const data = ensureAnalyticFaceIds(geom);
-            if (!data || typeof faceIndex !== 'number') return null;
-            const id = data.faceId[faceIndex];
-            if (id < 0) return null;
-            // Build a highlight-mesh overlay for all triangles with this face id.
-            const indexAttr = geom.index;
-            const triVerts = (i) => indexAttr
-                ? [indexAttr.getX(i * 3), indexAttr.getX(i * 3 + 1), indexAttr.getX(i * 3 + 2)]
-                : [i * 3, i * 3 + 1, i * 3 + 2];
-            const pos = geom.attributes.position;
-            const highlightIdx = [];
-            for (let i = 0; i < data.faceId.length; i++) {
-                if (data.faceId[i] === id) {
-                    const [a, b, c] = triVerts(i);
-                    highlightIdx.push(a, b, c);
-                }
-            }
-            const overlayGeom = new THREE.BufferGeometry();
-            overlayGeom.setAttribute('position', pos);
-            overlayGeom.setIndex(highlightIdx);
-            const overlayMat = new THREE.MeshBasicMaterial({
-                color, transparent: true, opacity: 0.55, side: THREE.DoubleSide,
-                depthTest: true, polygonOffset: true, polygonOffsetFactor: -1,
-            });
-            const overlay = new THREE.Mesh(overlayGeom, overlayMat);
-            overlay.name = '__selection_outline__';
-            overlay.userData.pickable = false;
-            overlay.userData.isHelper = true;
-            // Overlay shares the underlying mesh's position attribute but only
-            // indexes a SUBSET of the triangles. Three.js computes a bounding
-            // sphere over the WHOLE position attribute, not just the indexed
-            // triangles — for a small face on a large body the bounding sphere
-            // is correct, but the centre is the WHOLE body's centroid and the
-            // overlay would still cull correctly. To be safe against any future
-            // overlay geometry that gets an under-sized bbox (per-face overlays
-            // typically do), turn off frustum culling so the highlight is
-            // always rendered when the parent body is on-screen.
-            overlay.frustumCulled = false;
-            overlay.applyMatrix4(hitMesh.matrixWorld);
-            scene.add(overlay);
-            return id;
-        }
-
-        function pickNearestMeshEdge(hitMesh, hit) {
-            const geom = hitMesh.geometry;
-            if (!geom || typeof hit.faceIndex !== 'number') return null;
-            const pos = geom.attributes.position;
-            const indexAttr = geom.index;
-            const i = hit.faceIndex;
-            const [ia, ib, ic] = indexAttr
-                ? [indexAttr.getX(i * 3), indexAttr.getX(i * 3 + 1), indexAttr.getX(i * 3 + 2)]
-                : [i * 3, i * 3 + 1, i * 3 + 2];
-            const m = hitMesh.matrixWorld;
-            const toWorld = (idx) => new THREE.Vector3(pos.getX(idx), pos.getY(idx), pos.getZ(idx))
-                .applyMatrix4(m);
-            const candidates = [
-                { a: toWorld(ia), b: toWorld(ib) },
-                { a: toWorld(ib), b: toWorld(ic) },
-                { a: toWorld(ic), b: toWorld(ia) },
-            ];
-            const hp = hit.point.clone();
-            const lineDistSq = (p, a, b) => {
-                const ab = new THREE.Vector3().subVectors(b, a);
-                const ap = new THREE.Vector3().subVectors(p, a);
-                const t = Math.max(0, Math.min(1, ap.dot(ab) / ab.dot(ab)));
-                const c = a.clone().add(ab.multiplyScalar(t));
-                return c.distanceToSquared(p);
-            };
-            let best = null;
-            let bestDsq = Infinity;
-            for (const { a, b } of candidates) {
-                const d = lineDistSq(hp, a, b);
-                if (d < bestDsq) { bestDsq = d; best = { a, b }; }
-            }
-            if (!best) return null;
-            return {
-                p1: { x: best.a.x, y: best.a.y, z: best.a.z },
-                p2: { x: best.b.x, y: best.b.y, z: best.b.z },
-                length: best.a.distanceTo(best.b),
-            };
-        }
-
-        function drawEdgeHighlight(scene, edgeInfo, color) {
-            const g = new THREE.BufferGeometry();
-            const verts = new Float32Array([
-                edgeInfo.p1.x, edgeInfo.p1.y, edgeInfo.p1.z,
-                edgeInfo.p2.x, edgeInfo.p2.y, edgeInfo.p2.z,
-            ]);
-            g.setAttribute('position', new THREE.BufferAttribute(verts, 3));
-            const m = new THREE.LineBasicMaterial({ color, linewidth: 4, depthTest: false });
-            const line = new THREE.Line(g, m);
-            line.name = '__selection_outline__';
-            line.userData.pickable = false;
-            line.userData.isHelper = true;
-            line.renderOrder = 999;
-            // 2-point edge highlight — a degenerate-bounded line; Three.js
-            // computes a tight bounding sphere here, but for short edges off
-            // the screen-centre the sphere can fall outside the frustum even
-            // when the parent body is visible. Always render the edge stripe.
-            line.frustumCulled = false;
-            scene.add(line);
-        }
-
-        function pickNearestMeshVertex(hitMesh, hit) {
-            const geom = hitMesh.geometry;
-            if (!geom || typeof hit.faceIndex !== 'number') return null;
-            const pos = geom.attributes.position;
-            const indexAttr = geom.index;
-            const i = hit.faceIndex;
-            const [ia, ib, ic] = indexAttr
-                ? [indexAttr.getX(i * 3), indexAttr.getX(i * 3 + 1), indexAttr.getX(i * 3 + 2)]
-                : [i * 3, i * 3 + 1, i * 3 + 2];
-            const m = hitMesh.matrixWorld;
-            const toWorld = (idx) => new THREE.Vector3(pos.getX(idx), pos.getY(idx), pos.getZ(idx))
-                .applyMatrix4(m);
-            const candidates = [toWorld(ia), toWorld(ib), toWorld(ic)];
-            const hp = hit.point.clone();
-            let best = null;
-            let bestD = Infinity;
-            for (const v of candidates) {
-                const d = v.distanceTo(hp);
-                if (d < bestD) { bestD = d; best = v; }
-            }
-            return best ? {
-                position: { x: best.x, y: best.y, z: best.z },
-                distance: bestD,
-            } : null;
-        }
-
-        function drawVertexMarker(scene, p, color) {
-            const g = new THREE.SphereGeometry(0.0015, 16, 12);
-            const mat = new THREE.MeshBasicMaterial({ color, depthTest: false });
-            const sphere = new THREE.Mesh(g, mat);
-            sphere.position.set(p.x, p.y, p.z);
-            sphere.name = '__selection_outline__';
-            sphere.userData.pickable = false;
-            sphere.userData.isHelper = true;
-            sphere.renderOrder = 999;
-            scene.add(sphere);
-        }
-
-        // --- Click vs drag discrimination ---
-        // handleClick is bound to 'pointerup', which fires for BOTH a plain
-        // click AND the release of an orbit / pan / gizmo drag. Running the
-        // pick + selection churn on a drag-release is wrong CAD UX (a drag
-        // must orbit, never select/deselect) and was a source of the viewport
-        // "freeze on a drag": every drag-release re-ran clearSelection +
-        // selectObject (cloning all geometry, re-attaching TransformControls).
-        // We record the pointerdown position; if pointerup moved more than
-        // DRAG_PX, it was a drag — return before the pick.
-        const DRAG_PX = 5;
-        let pointerDownPos = null;   // { x, y } in client px, or null
-        const handlePointerDown = (event) => {
-            pointerDownPos = { x: event.clientX, y: event.clientY };
-        };
-        renderer.domElement.addEventListener('pointerdown', handlePointerDown);
-
-        // --- Click handler ---
-        let clickPending = false;
-        const handleClick = (event) => {
-            // A TransformControls gizmo drag, or a pointer that travelled
-            // more than DRAG_PX since pointerdown, is a drag — not a click.
-            // Bail before any pick / selection work so a drag only orbits.
-            if (transformControls.dragging) return;
-            if (pointerDownPos) {
-                const moved = Math.hypot(
-                    event.clientX - pointerDownPos.x,
-                    event.clientY - pointerDownPos.y,
-                );
-                pointerDownPos = null;
-                if (moved > DRAG_PX) return; // drag — leave selection untouched
-            }
-            if (clickPending) return;
-            clickPending = true;
-            requestAnimationFrame(() => { clickPending = false; });
-
-            const rect = renderer.domElement.getBoundingClientRect();
-            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-            raycaster.setFromCamera(mouse, camera);
-
-            // If sketch is active, route clicks to sketch engine
-            if (sketchActiveRef.current && _sketch.active) {
-                _sketch.onClick(raycaster);
-                const status = _sketch.getStatus();
-                setSketchStatus(`DOF: ${status.dof} | Entities: ${status.entityCount} | ${status.fullyConstrained ? 'Fully Constrained' : 'Under-constrained'}`);
-                return;
-            }
-
-            // Slice 377 — Edit-mode click routing. If Studio is in a sub-
-            // object edit mode, dispatch to the corresponding picker and
-            // emit a 'studio-pick' event with the result. Skip the default
-            // object-pick so the selection set doesn't change underneath.
-            // Slice 381 — pass shift modifier as additive-select flag.
-            const editMode = window.__studioEditModeRef && window.__studioEditModeRef.current;
-            if (editMode && editMode !== 'object' && editMode !== 'sculpt') {
-                let res = null;
-                if (editMode === 'vertex' && window.__studioPickVertexFromClick) res = window.__studioPickVertexFromClick(mouse.x, mouse.y);
-                else if (editMode === 'edge'  && window.__studioPickEdgeFromClick)  res = window.__studioPickEdgeFromClick(mouse.x, mouse.y);
-                else if (editMode === 'face'  && window.__studioPickFaceFromClick)  res = window.__studioPickFaceFromClick(mouse.x, mouse.y);
-                window.dispatchEvent(new CustomEvent('studio-pick', { detail: { mode: editMode, result: res, additive: !!event.shiftKey } }));
-                return;
-            }
-
-            // Collect pickable objects. Exclude an object if it — OR ANY
-            // ANCESTOR — is flagged isHelper. The TransformControls gizmo's
-            // handle meshes (X/Y/Z, XY/YZ/XZ, XYZ, START/END) are plain
-            // Meshes with no flag of their own; only the gizmo's root helper
-            // carries userData.isHelper. The old mesh-only check let those
-            // handle meshes into the pick set where — sitting in front of the
-            // body — they swallowed every selection click, so a real viewport
-            // click could never select a body.
-            const isInHelper = (o) => {
-                for (let a = o; a; a = a.parent) {
-                    if (a.userData && a.userData.isHelper) return true;
-                }
-                return false;
-            };
-            const pickable = [];
-            scene.traverse(obj => {
-                if (obj.isMesh && obj.userData.pickable !== false &&
-                    !obj.isTransformControlsPlane && !isInHelper(obj) &&
-                    obj.name !== '__selection_outline__' &&
-                    !(obj.parent && obj.parent.name === '__selection_outline__')) {
-                    pickable.push(obj);
-                }
-            });
-
-            // BVH-accelerated picking for large scenes (>50 objects)
-            let candidates = pickable;
-            if (pickable.length > 50) {
-                const bvh = BVH.build(pickable);
-                candidates = bvh.raycast(raycaster.ray);
-            }
-
-            let intersects = raycaster.intersectObjects(candidates, false);
-
-            // ─── Tier-11a NX selection-priority pre-filter ──────────────
-            // The Selection Bar (SwUxOverlays::SelectionPriorityBar) sets
-            // `window.__archdiscSelectionFilter` ∈ {single, solid, sheet,
-            // face, edge, vertex}. We consult it BEFORE the legacy gizmo
-            // selectionMode so the user's stated intent wins.
-            //
-            //  - 'solid' / 'sheet'  → drop intersects whose top group is
-            //    not that body kind. This is the NX behaviour: clicking on
-            //    a solid with sheet-filter active picks the sheet UNDER it.
-            //  - 'face' / 'edge' / 'vertex' → override `mode` for the rest
-            //    of the click; the existing branches handle the work.
-            //  - 'single' / unset  → no filtering; use the legacy mode.
-            const selFilter = (typeof window !== 'undefined'
-                && window.__archdiscSelectionFilter) || 'solid';
-            let mode = selectionModeRef.current;
-            if (selFilter === 'solid' || selFilter === 'sheet') {
-                intersects = intersects.filter((it) => {
-                    try { return matchesBodyKindFilter(findTopGroup(it.object), selFilter); }
-                    catch { return false; }
-                });
-                // Keep `mode` = legacy mode so face/edge sub-handlers still
-                // work if the gizmo is in face/edge mode. Most of the time
-                // mode === 'object' here, which is what NX defaults to.
-            } else if (selFilter === 'face') {
-                mode = 'face';
-            } else if (selFilter === 'edge') {
-                mode = 'edge';
-            } else if (selFilter === 'vertex') {
-                mode = 'vertex';
-            }
-
-            if (intersects.length === 0) {
-                clearSelection();
-                try { getBodyRegistry().select(null); } catch { /* no-op */ }
-                if (onSelectionChangeRef.current) onSelectionChangeRef.current?.(null);
-                if (typeof window !== 'undefined') {
-                    window.__lastViewportPick = {
-                        filter: selFilter, mode, kind: 'none', timestamp: Date.now(),
-                    };
-                }
-                return;
-            }
-
-            const hit = intersects[0];
-            const hitMesh = hit.object;
-            const topGroup = findTopGroup(hitMesh);
-
-            if (mode === 'face') {
-                clearSelection();
-                // Walk up to find kernel solid
-                let group = hitMesh.parent;
-                while (group && !group.userData.kernelSolid) {
-                    if (group === scene) break;
-                    group = group.parent;
-                }
-                if (group && group.userData.kernelSolid) {
-                    const faceId = ThreeJSBridge.pickFace(hit);
-                    if (faceId !== null) {
-                        ThreeJSBridge.highlightFace(group, faceId, 0xff6b35);
-                        highlightedGroups.add(group); // track for O(1) clear
-
-                        // Store the picked face for sketch-on-face activation
-                        lastPickedFace.current = {
-                            face: group.userData.kernelSolid.faces().find(f => f.id === faceId),
-                            normal: hit.face?.normal ? new Vec3(hit.face.normal.x, hit.face.normal.y, hit.face.normal.z) : null,
-                            point: new Vec3(hit.point.x, hit.point.y, hit.point.z),
-                            faceId,
-                            solidId: group.userData.kernelSolid?.id,
-                        };
-
-                        if (typeof window !== 'undefined') {
-                            window.__lastViewportPick = {
-                                filter: selFilter, mode, kind: 'face',
-                                faceId, solidId: group.userData.kernelSolid?.id,
-                                timestamp: Date.now(),
-                            };
-                        }
-                        if (onSelectionChangeRef.current) {
-                            onSelectionChangeRef.current({ type: 'face', faceId, solidId: group.userData.kernelSolid?.id });
-                        }
-                    }
-                } else {
-                    // Non-kernel mesh (foundation manifold path): pick ONE
-                    // analytic face by clustering the hit triangle with
-                    // co-planar triangles that share its normal AND a path
-                    // of shared edges. This is the NX "face filter" so the
-                    // whole-body fallback would be wrong — we paint just
-                    // the planar / coaxial face the user clicked.
-                    if (hit.face?.normal && hitMesh.geometry) {
-                        const localNormal = hit.face.normal.clone();
-                        // World-space normal for the picked-face record.
-                        const worldNormal = localNormal.clone()
-                            .applyMatrix3(new THREE.Matrix3().getNormalMatrix(hitMesh.matrixWorld))
-                            .normalize();
-                        lastPickedFace.current = {
-                            normal: new Vec3(worldNormal.x, worldNormal.y, worldNormal.z),
-                            point: new Vec3(hit.point.x, hit.point.y, hit.point.z),
-                            faceIndex: hit.faceIndex,
-                        };
-                        // Build a per-triangle face-id mapping if absent, then
-                        // flood-fill from hit.faceIndex over triangles whose
-                        // face-normal matches (within EPS) AND share an edge.
-                        const faceClusterId = flagAndHighlightAnalyticFace(
-                            hitMesh, hit.faceIndex, 0xff6b35);
-                        if (faceClusterId !== null) {
-                            highlightedGroups.add(topGroup);
-                        }
-                        if (typeof window !== 'undefined') {
-                            window.__lastViewportPick = {
-                                filter: selFilter, mode, kind: 'face',
-                                faceIndex: hit.faceIndex,
-                                analyticFaceId: faceClusterId,
-                                bodyId: topGroup.userData?.bodyId ?? null,
-                                point: { x: hit.point.x, y: hit.point.y, z: hit.point.z },
-                                normal: { x: worldNormal.x, y: worldNormal.y, z: worldNormal.z },
-                                timestamp: Date.now(),
-                            };
-                        }
-                        if (onSelectionChangeRef.current) {
-                            onSelectionChangeRef.current({
-                                type: 'face',
-                                name: topGroup.name,
-                                faceIndex: hit.faceIndex,
-                                analyticFaceId: faceClusterId,
-                                bodyId: topGroup.userData?.bodyId ?? null,
-                            });
-                        }
-                    } else {
-                        // Last-resort fallback: highlight the whole body.
-                        selectObject(topGroup);
-                        if (onSelectionChangeRef.current) {
-                            onSelectionChangeRef.current({ type: 'face', name: topGroup.name, faceIndex: hit.faceIndex });
-                        }
-                    }
-                }
-                return;
-            }
-
-            if (mode === 'edge') {
-                let group = hitMesh.parent;
-                while (group && !group.userData.kernelSolid) {
-                    if (group === scene) break;
-                    group = group.parent;
-                }
-                if (group && group.userData.kernelSolid) {
-                    const solid = group.userData.kernelSolid;
-                    // Find nearest edge to click point
-                    const hitWorld = hit.point.clone();
-                    let nearestEdge = null;
-                    let nearestDist = Infinity;
-                    for (const e of solid.edges()) {
-                        // Distance from hit point to edge midpoint (approx)
-                        const v1 = e.startVertex?.position;
-                        const v2 = e.endVertex?.position;
-                        if (!v1 || !v2) continue;
-                        const mid = { x: (v1.x + v2.x) / 2, y: (v1.y + v2.y) / 2, z: (v1.z + v2.z) / 2 };
-                        const d = Math.sqrt((mid.x - hitWorld.x) ** 2 + (mid.y - hitWorld.y) ** 2 + (mid.z - hitWorld.z) ** 2);
-                        if (d < nearestDist) { nearestDist = d; nearestEdge = e; }
-                    }
-
-                    if (nearestEdge) {
-                        // Toggle selection
-                        if (selectedEdges.current.has(nearestEdge.id)) {
-                            selectedEdges.current.delete(nearestEdge.id);
-                        } else {
-                            selectedEdges.current.add(nearestEdge.id);
-                        }
-
-                        ThreeJSBridge.showVertices(group, solid, 0.002, 0x00ff88);
-                        highlightedGroups.add(group); // track for O(1) clear
-
-                        const ids = [...selectedEdges.current];
-                        // Sync to global singleton so ToolExecutionEngine can read it
-                        _selectedEdges.ids = new Set(ids);
-                        _selectedEdges.solidId = solid.id;
-                        setEdgeSelectionInfo({ count: ids.length, ids, solidId: solid.id });
-
-                        if (typeof window !== 'undefined') {
-                            window.__lastViewportPick = {
-                                filter: selFilter, mode, kind: 'edge',
-                                solidId: solid.id, edgeId: nearestEdge.id,
-                                timestamp: Date.now(),
-                            };
-                        }
-                        if (onSelectionChangeRef.current) {
-                            onSelectionChangeRef.current({
-                                type: 'edge',
-                                solidId: solid.id,
-                                selectedEdgeIds: ids,
-                                edgeCount: solid.edges().length,
-                                vertexCount: solid.vertices().length,
-                            });
-                        }
-                    }
-                } else {
-                    // Foundation-manifold path — no kernelSolid. Pick the
-                    // nearest mesh edge to the hit point by walking the
-                    // hit triangle's three edges and choosing the one
-                    // whose midpoint is closest to hit.point.
-                    clearSelection();
-                    const edgeInfo = pickNearestMeshEdge(hitMesh, hit);
-                    if (edgeInfo) {
-                        drawEdgeHighlight(scene, edgeInfo, 0xffd83d);
-                        highlightedGroups.add(topGroup);
-                        if (typeof window !== 'undefined') {
-                            window.__lastViewportPick = {
-                                filter: selFilter, mode, kind: 'edge',
-                                bodyId: topGroup.userData?.bodyId ?? null,
-                                p1: edgeInfo.p1, p2: edgeInfo.p2,
-                                length: edgeInfo.length,
-                                timestamp: Date.now(),
-                            };
-                        }
-                        if (onSelectionChangeRef.current) {
-                            onSelectionChangeRef.current({
-                                type: 'edge',
-                                bodyId: topGroup.userData?.bodyId ?? null,
-                                p1: edgeInfo.p1, p2: edgeInfo.p2,
-                                length: edgeInfo.length,
-                            });
-                        }
-                    }
-                }
-                return;
-            }
-
-            if (mode === 'vertex') {
-                // Foundation-manifold + kernel-solid both terminate here.
-                // Walk the hit triangle's three vertices and pick the one
-                // closest to hit.point. For kernelSolid groups we also try
-                // the spine vertex list for a more semantically meaningful
-                // pick.
-                clearSelection();
-                const vInfo = pickNearestMeshVertex(hitMesh, hit);
-                if (vInfo) {
-                    drawVertexMarker(scene, vInfo.position, 0x3ec77e);
-                    highlightedGroups.add(topGroup);
-                    if (typeof window !== 'undefined') {
-                        window.__lastViewportPick = {
-                            filter: selFilter, mode, kind: 'vertex',
-                            bodyId: topGroup.userData?.bodyId ?? null,
-                            position: vInfo.position,
-                            distance: vInfo.distance,
-                            timestamp: Date.now(),
-                        };
-                    }
-                    if (onSelectionChangeRef.current) {
-                        onSelectionChangeRef.current({
-                            type: 'vertex',
-                            bodyId: topGroup.userData?.bodyId ?? null,
-                            position: vInfo.position,
-                            distance: vInfo.distance,
-                        });
-                    }
-                }
-                return;
-            }
-
-            // Object mode — select and enable transform
-            selectObject(topGroup);
-            // If this is a registered foundation body, sync the Part
-            // Browser selection so PropertyManager picks up the right
-            // body (closes the inverse loop: viewport ⇄ side panel).
-            const bodyId = topGroup.userData?.bodyId ?? null;
-            try { getBodyRegistry().select(bodyId); } catch { /* no-op */ }
-            if (typeof window !== 'undefined') {
-                window.__lastViewportPick = {
-                    filter: selFilter, mode, kind: 'object',
-                    bodyId, name: topGroup.name || 'Object',
-                    timestamp: Date.now(),
-                };
-            }
-            if (onSelectionChangeRef.current) {
-                onSelectionChangeRef.current({
-                    type: 'object',
-                    name: topGroup.name || 'Object',
-                    position: { x: topGroup.position.x.toFixed(3), y: topGroup.position.y.toFixed(3), z: topGroup.position.z.toFixed(3) },
-                    solidId: topGroup.userData.kernelSolid?.id,
-                    bodyId,
-                });
-            }
-        };
-
-        renderer.domElement.addEventListener('pointerup', handleClick); // pointerup for pen/touch compat
-
-        // --- Keyboard ---
-        const handleKeyDown = (e) => {
-            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-            switch (e.key.toLowerCase()) {
-                case 'g': transformControls.setMode('translate'); setTransformMode('translate'); attachGizmo(); break;
-                case 'r': transformControls.setMode('rotate'); setTransformMode('rotate'); attachGizmo(); break;
-                case 's':
-                    if (!e.ctrlKey && !e.metaKey) {
-                        transformControls.setMode('scale');
-                        setTransformMode('scale');
-                        attachGizmo();
-                    }
-                    break;
-                case '1': setSelectionMode('object'); break;
-                case '2': setSelectionMode('face'); break;
-                case '3': setSelectionMode('edge'); break;
-                case '4':
-                    // Activate sketch — on picked face if available, else XZ plane
-                    if (!sketchActiveRef.current) {
-                        let planeSpec = 'XZ';
-                        let label = 'XZ plane (top-down)';
-
-                        if (lastPickedFace.current?.normal && lastPickedFace.current?.point) {
-                            // Sketch on the picked face
-                            planeSpec = {
-                                origin: lastPickedFace.current.point,
-                                normal: lastPickedFace.current.normal,
-                            };
-                            label = `picked face (Face #${lastPickedFace.current.faceId || 'mesh'})`;
-                        }
-
-                        _sketch.activate(scene, planeSpec);
-                        _sketch.setTool(SketchTools.LINE);
-                        sketchActiveRef.current = true;
-                        setSketchActive(true);
-                        setSketchTool('line');
-                        setSketchStatus(`Sketch active on ${label} — click to place points`);
-                        orbitControls.enableRotate = false;
-                    }
-                    break;
-                case 'l':
-                    if (sketchActiveRef.current) { _sketch.setTool(SketchTools.LINE); setSketchTool('line'); }
-                    break;
-                case 'c':
-                    if (sketchActiveRef.current && !e.ctrlKey) { _sketch.setTool(SketchTools.CIRCLE); setSketchTool('circle'); }
-                    break;
-                case 'b':
-                    if (sketchActiveRef.current) { _sketch.setTool(SketchTools.RECTANGLE); setSketchTool('rectangle'); }
-                    break;
-                case 'a':
-                    if (sketchActiveRef.current && !e.ctrlKey) { _sketch.setTool(SketchTools.ARC); setSketchTool('arc'); }
-                    break;
-                case 'd':
-                    if (sketchActiveRef.current) { _sketch.setTool(SketchTools.DIMENSION); setSketchTool('dimension'); }
-                    break;
-                case 'e':
-                    // Extrude sketch profile
-                    if (sketchActiveRef.current && _sketch.entities.length > 0) {
-                        const profile = _sketch.getProfile();
-                        if (profile.length >= 3) {
-                            const ft = getFeatureTree();
-                            // Extrude direction = sketch plane normal (default Y for XZ plane)
-                            const dir = _sketch.planeNormal || new Vec3(0, 1, 0);
-                            const feature = ft.addExtrude(profile, dir, 0.020); // 20mm default
-                            if (feature.solid) {
-                                const group = ThreeJSBridge.solidToGroup(feature.solid, { color: 0x9aa3ad, edges: true });
-                                group.userData.pickable = true;
-                                group.userData.generatedModel = true;
-                                group.userData.kernelSolid = feature.solid;
-                                scene.add(group);
-                            }
-                            _sketch.deactivate(scene);
-                            sketchActiveRef.current = false;
-                            setSketchActive(false);
-                            setSketchTool('none');
-                            orbitControls.enableRotate = true;
-                            setSketchStatus(`Extruded: Feature #${feature.id} — ${profile.length} vertices, depth 20mm`);
-                            // Clear the picked face so next sketch defaults to XZ
-                            lastPickedFace.current = null;
-                        } else {
-                            setSketchStatus('Need at least 3 points for extrusion — draw more geometry');
-                        }
-                    }
-                    break;
-                case 'z':
-                    if (!e.ctrlKey && !e.metaKey) {
-                        // Toggle wireframe
-                        const modes = ['shaded', 'wireframe', 'shadedWire', 'xray'];
-                        const next = modes[(modes.indexOf(displayModeRef.current) + 1) % modes.length];
-                        setDisplayMode(next);
-                        applyDisplayMode(scene, next);
-                    }
-                    break;
-                case 'escape':
-                    if (sketchActiveRef.current) {
-                        _sketch.onEscape();
-                        if (_sketch.activeTool === SketchTools.NONE) {
-                            _sketch.deactivate(scene);
-                            sketchActiveRef.current = false;
-                            setSketchActive(false);
-                            setSketchTool('none');
-                            orbitControls.enableRotate = true;
-                            setSketchStatus('');
-                        }
-                    }
-                    break;
-                case 'delete': case 'backspace':
-                    if (selectedRef.current && e.target.tagName !== 'INPUT') {
-                        const obj = selectedRef.current;
-                        clearSelection();
-                        obj.traverse(c => {
-                            if (c.geometry) c.geometry.dispose();
-                            if (c.material) {
-                                if (Array.isArray(c.material)) c.material.forEach(m => m.dispose());
-                                else c.material.dispose();
-                            }
-                        });
-                        scene.remove(obj);
-                        if (onSelectionChangeRef.current) onSelectionChangeRef.current?.(null);
-                    }
-                    break;
-                case 'f':
-                    // Focus/frame selected or all
-                    if (selectedRef.current) {
-                        focusOnObject(selectedRef.current, camera, orbitControls);
-                    } else {
-                        focusOnAll(scene, camera, orbitControls);
-                    }
-                    break;
-                case 'h':
-                    // Hide selected
-                    if (selectedRef.current) {
-                        selectedRef.current.visible = !selectedRef.current.visible;
-                        clearSelection();
-                    }
-                    break;
-            }
-        };
-        window.addEventListener('keydown', handleKeyDown);
-
-        // --- Render loop ---
-        // Slice 252: optional FPS cap via window.__studioFpsCap (0 =
-        // unlimited). Skips frames when called more often than cap
-        // allows, dropping device thermals / battery drain.
-        //
-        // Slice 752 — Render-on-demand for heavy workloads. A dirty flag
-        // gates renderer.render: we draw only when (a) something invalidates
-        // (controls 'change', selection change, scene mutation, animation
-        // tick, transform-controls drag, external code calling the new
-        // window.__studioInvalidate()) OR (b) damping is still in flight.
-        // Idle frames cost zero draws — the win on a stacked scene is
-        // the difference between 60 fps + 80 % GPU and 60 fps + 0 % GPU.
-        // OrbitControls.update() returns true while damping is still
-        // resolving so we always keep drawing during the brief tail.
-        let lastFrameMs = 0;
-        let dirty = true;                                  // first frame always renders
-        let lastSceneChildren = scene.children.length;
-        const invalidate = () => { dirty = true; };
-        // Expose the invalidate hook so transform handlers, AI ops, etc.
-        // can request a single redraw without forcing continuous RAF.
-        if (typeof window !== 'undefined') {
-          window.__studioInvalidate = invalidate;
-        }
-        orbitControls.addEventListener('change', invalidate);
-        try { transformControls.addEventListener('change', invalidate); } catch (_) {}
-        // Slice 752 — Adaptive camera frustum. When the scene bbox grows
-        // we widen near/far to keep depth precision sane; when it shrinks
-        // back we tighten. Cheap to call (one bbox/frame at most).
-        const _adaptBox = new THREE.Box3();
-        const _adaptSize = new THREE.Vector3();
-        let _adaptCheckMs = 0;
-        function adaptFrustum(now) {
-            if (now - _adaptCheckMs < 250) return;        // 4 Hz is enough
-            _adaptCheckMs = now;
-            _adaptBox.makeEmpty();
-            // Only count USER-OWNED primitives — never helpers, gizmos,
-            // shadow planes, lights, instanced helper handles, etc.
-            // Catch-all for legitimate user meshes is the explicit
-            // archdiscStudioPrimitive flag (every spawn path stamps it).
-            scene.traverse((o) => {
-                if (!o || !o.isMesh || !o.visible) return;
-                const ud = o.userData;
-                if (!ud || !ud.archdiscStudioPrimitive) return;
-                if (ud.isHelper) return;
-                try { _adaptBox.expandByObject(o); } catch (_) {}
-            });
-            if (_adaptBox.isEmpty()) return;
-            _adaptBox.getSize(_adaptSize);
-            const radius = 0.5 * _adaptSize.length();
-            if (!isFinite(radius) || radius <= 0) return;
-            const camDist = camera.position.distanceTo(orbitControls.target);
-            // Far plane must cover the whole world-space scene from the
-            // camera — bbox-centre distance + bbox radius + safety. Clamp
-            // to a sane band so depth precision can't collapse.
-            const sceneCentre = new THREE.Vector3();
-            _adaptBox.getCenter(sceneCentre);
-            const distToCentre = sceneCentre.distanceTo(camera.position);
-            const desiredFar = Math.max(10000,
-              Math.min(100000, (distToCentre + radius) * 2));
-            const desiredNear = Math.max(0.001, Math.min(camDist, radius) * 1e-3);
-            // Only update if a meaningful change — avoids a per-frame
-            // projection-matrix rebuild.
-            const farRatio = desiredFar / camera.far;
-            const nearRatio = desiredNear / camera.near;
-            if (farRatio < 0.5 || farRatio > 2 || nearRatio < 0.5 || nearRatio > 2) {
-                camera.far  = desiredFar;
-                camera.near = desiredNear;
-                camera.updateProjectionMatrix();
-                dirty = true;
-            }
-        }
-        function animate(now) {
-            rafRef.current = requestAnimationFrame(animate);
-            const cap = window.__studioFpsCap || 0;
-            if (cap > 0) {
-              const minInterval = 1000 / cap;
-              if (now - lastFrameMs < minInterval - 0.5) return;
-              lastFrameMs = now;
-            }
-            // Slice 752 — scene-graph mutation invalidates render-on-demand.
-            // Cheap shallow check: if top-level child count changed since
-            // last frame, something was added/removed. Deeper mutations
-            // (transform, material) come through __studioInvalidate or
-            // through the controls/transform 'change' events.
-            const cc = scene.children.length;
-            if (cc !== lastSceneChildren) { dirty = true; lastSceneChildren = cc; }
-            adaptFrustum(now);
-            // OrbitControls.update returns true while damping is still
-            // resolving — keep drawing during that tail.
-            const orbitChanging = orbitControls.update();
-            // Slice 629 — Drive the animation mixer if present. If a tick
-            // function is registered it means an animation is running, so
-            // always force a redraw — render-on-demand must not pause
-            // playback. Tick return value is non-uniform across callers.
-            const tick = window.__archdiscViewport && window.__archdiscViewport.__studioAnimTick;
-            let animActive = false;
-            if (typeof tick === 'function') {
-              try { tick(now); } catch (_) {}
-              animActive = true;
-            }
-            // Slice 919 — Cascaded Shadow Maps (real CSM via the three.js
-            // addon). When v3/shadowcasc/ is enabled it installs a per-frame
-            // update slot here; CSM MUST run before renderer.render() to
-            // align its per-cascade light projections to the current camera
-            // matrix. Returning true marks the scene dirty (sun lights move
-            // every frame, so render-on-demand must not skip).
-            const csmUpdate = window.__archdiscViewport && window.__archdiscViewport.__studioCSMUpdate;
-            let csmActive = false;
-            if (typeof csmUpdate === 'function') {
-              try { csmActive = !!csmUpdate(now); } catch (_) {}
-            }
-            // Render-on-demand gate. Always draw the first frame after a
-            // dirty event AND while damping or animation is in flight.
-            if (!dirty && !orbitChanging && !animActive && !csmActive) return;
-            dirty = false;
-            // Slice 610 — Composer takes over rendering when post-effects
-            // are enabled (slice 606+). Keep outline-pass selection synced.
-            const composer = window.__archdiscViewport && window.__archdiscViewport.__studioComposer;
-            if (composer) {
-              const sync = window.__archdiscViewport.__studioOutlineSync;
-              if (typeof sync === 'function') { try { sync(); } catch (_) {} }
-              try { composer.render(); return; } catch (_) {}
-            }
-            renderer.render(scene, camera);
-        }
-        rafRef.current = requestAnimationFrame(animate);
-
-        // --- Resize ---
-        //
-        // FIXED-VIEWPORT MODEL: in this UI the viewport canvas occupies a
-        // stable CSS rectangle inside the .workbench-stage. The toolbar /
-        // properties / rollback drawers are absolute overlays that animate
-        // over their reserved gutters — they DO NOT push the viewport.
-        // Consequently the only legitimate trigger for a viewport resize
-        // is an OUTER WINDOW size change (user resizes the OS window, or
-        // the Electron dev-console toggles, which both shrink the renderer
-        // inner viewport).
-        //
-        // We listen to `window.resize` directly for that case. We also
-        // keep a defensive ResizeObserver on the container so that if a
-        // future change (a CSS variable swap, an a11y zoom, a workbench
-        // wrapper swap) does alter the container's CSS rect, the renderer
-        // still tracks it — but in the steady-state fixed-viewport flow,
-        // the observer never fires because the container size is invariant
-        // under drawer toggles.
-        //
-        // Both sources funnel through a single 50 ms debounced re-fit so
-        // a flurry of layout changes triggers exactly one renderer.setSize.
-        let resizeTimer;
-        let lastAppliedW = container.clientWidth;
-        let lastAppliedH = container.clientHeight;
-        const applyResize = () => {
-            const w = container.clientWidth, h = container.clientHeight;
-            if (w === 0 || h === 0) return;
-            // Skip the re-fit if nothing actually changed — a stray observer
-            // tick during animations otherwise re-runs setSize for no reason
-            // and the canvas can flash. In the fixed-viewport model this
-            // guard is the steady state.
-            if (w === lastAppliedW && h === lastAppliedH) return;
-            lastAppliedW = w;
-            lastAppliedH = h;
-            camera.aspect = w / h;
-            camera.updateProjectionMatrix();
-            renderer.setSize(w, h);
-            // Slice 752 — render-on-demand: resize must force a redraw.
-            dirty = true;
-        };
-        const handleResize = () => {
-            clearTimeout(resizeTimer);
-            resizeTimer = setTimeout(applyResize, 50);
-        };
-        window.addEventListener('resize', handleResize);
-
-        // Defensive container observer — see note above. In the
-        // fixed-viewport layout this is essentially dormant during normal
-        // operation; it only fires when the OUTER window resize cascades
-        // into a container-size change, which is exactly the case the
-        // window.resize handler also covers (the redundancy is the
-        // belt-and-braces design). Drawer collapse / expand events do
-        // NOT change the container size because the gutters are reserved.
-        let resizeObserver = null;
-        if (typeof ResizeObserver !== 'undefined') {
-            resizeObserver = new ResizeObserver(handleResize);
-            resizeObserver.observe(container);
-        }
-
-        // --- Notify ---
-        // Register PixelManager
-        _pixelManager.register(renderer, scene, camera);
-        // Expose scene/camera/renderer to window for E2E tests and AI agents
-        if (typeof window !== 'undefined') {
-            window.__three_scene = scene;
-            window.__three_camera = camera;
-            window.__three_renderer = renderer;
-            window.THREE = THREE;
-            // Interactive sketch singleton + foundation cleanup hook.
-            window.__archdiscSketch = _sketch;
-            window.__archdiscCleanupSketch = (opts) =>
-                _sketch.active ? _sketch.cleanupWithFoundation(opts)
-                               : { ok: false, reason: 'no active sketch' };
-        }
-
-        if (onReadyRef.current) onReadyRef.current({ scene, camera, renderer, controls: orbitControls, transformControls });
-        if (viewport?.registerViewport) {
-            viewport.registerViewport({ scene, camera, renderer, controls: orbitControls, transformControls });
-        }
-
-        return () => {
-            cancelAnimationFrame(rafRef.current);
-            clearTimeout(resizeTimer);
-            window.removeEventListener('resize', handleResize);
-            if (resizeObserver) {
-                try { resizeObserver.disconnect(); } catch { /* ignore */ }
-                resizeObserver = null;
-            }
-            window.removeEventListener('keydown', handleKeyDown);
-            if (renderer.domElement) {
-                renderer.domElement.removeEventListener('pointerup', handleClick);
-                renderer.domElement.removeEventListener('pointerdown', handlePointerDown);
-                renderer.domElement.removeEventListener('pointermove', handleMouseMove);
-            }
-            if (_sketch.active) _sketch.deactivate(scene);
-            try { transformControls.detach(); } catch (e) {}
-            try { transformControls.dispose(); } catch (e) {}
-            orbitControls.dispose();
-            renderer.dispose();
-            // Remove canvas from container
-            try {
-                if (renderer.domElement && container.contains(renderer.domElement)) {
-                    container.removeChild(renderer.domElement);
-                }
-            } catch (e) { /* ignore if already removed */ }
-            internalsRef.current = null;
-        };
-    }, [canvasId, domain]);
-
-    // --- Display mode change from button ---
-    const cycleDisplayMode = useCallback(() => {
-        const modes = ['shaded', 'wireframe', 'shadedWire', 'xray'];
-        const next = modes[(modes.indexOf(displayMode) + 1) % modes.length];
-        setDisplayMode(next);
-        if (internalsRef.current) applyDisplayMode(internalsRef.current.scene, next);
-    }, [displayMode]);
-
-    const handleModeChange = useCallback((mode) => {
-        setTransformMode(mode);
-        if (internalsRef.current) {
-            internalsRef.current.transformControls.setMode(mode);
-            // Clicking a Move/Rotate/Scale toolbar button is the explicit
-            // signal that the user wants the transform gizmo — attach it to
-            // the current selection now (selection alone never attaches it).
-            if (internalsRef.current.attachGizmo) internalsRef.current.attachGizmo();
-        }
-    }, []);
-
-    const displayLabels = { shaded: 'Shaded', wireframe: 'Wire', shadedWire: 'S+W', xray: 'X-Ray' };
-
-    return (
-        <div ref={containerRef} style={{ width: '100%', height: '100%', minHeight: '200px', position: 'relative', overflow: 'hidden' }}>
-            {/* Transform toolbar */}
-            <div className="gizmo-toolbar">
-                <button className={`gizmo-btn ${transformMode === 'translate' ? 'active' : ''}`}
-                    onClick={() => handleModeChange('translate')} title="Move (G)"><Move size={14} /></button>
-                <button className={`gizmo-btn ${transformMode === 'rotate' ? 'active' : ''}`}
-                    onClick={() => handleModeChange('rotate')} title="Rotate (R)"><RotateCcw size={14} /></button>
-                <button className={`gizmo-btn ${transformMode === 'scale' ? 'active' : ''}`}
-                    onClick={() => handleModeChange('scale')} title="Scale (S)"><Maximize size={14} /></button>
-            </div>
-
-            {/* Selection + Display toolbar */}
-            <div className="selection-toolbar">
-                <button className={`gizmo-btn ${selectionMode === 'object' ? 'active' : ''}`}
-                    onClick={() => setSelectionMode('object')} title="Object (1)"><MousePointer size={14} /></button>
-                <button className={`gizmo-btn ${selectionMode === 'face' ? 'active' : ''}`}
-                    onClick={() => setSelectionMode('face')} title="Face (2)"><Box size={14} /></button>
-                <button className={`gizmo-btn ${selectionMode === 'edge' ? 'active' : ''}`}
-                    onClick={() => setSelectionMode('edge')} title="Edge (3)"><Hexagon size={14} /></button>
-                <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.1)', margin: '0 2px' }} />
-                <button className="gizmo-btn" onClick={cycleDisplayMode} title="Display mode (Z)">
-                    <Eye size={14} />
-                </button>
-                <span className="selection-mode-label">{displayLabels[displayMode]}</span>
-            </div>
-
-            {/* Sketch toolbar — appears when sketch is active */}
-            {sketchActive && (
-                <div className="sketch-toolbar">
-                    <span className="sketch-toolbar-label">SKETCH</span>
-                    <button className={`gizmo-btn ${sketchTool === 'line' ? 'active' : ''}`}
-                        onClick={() => { _sketch.setTool(SketchTools.LINE); setSketchTool('line'); }} title="Line (L)">L</button>
-                    <button className={`gizmo-btn ${sketchTool === 'rectangle' ? 'active' : ''}`}
-                        onClick={() => { _sketch.setTool(SketchTools.RECTANGLE); setSketchTool('rectangle'); }} title="Rectangle (B)">R</button>
-                    <button className={`gizmo-btn ${sketchTool === 'circle' ? 'active' : ''}`}
-                        onClick={() => { _sketch.setTool(SketchTools.CIRCLE); setSketchTool('circle'); }} title="Circle (C)">C</button>
-                    <button className={`gizmo-btn ${sketchTool === 'arc' ? 'active' : ''}`}
-                        onClick={() => { _sketch.setTool(SketchTools.ARC); setSketchTool('arc'); }} title="Arc (A)">A</button>
-                    <button className={`gizmo-btn ${sketchTool === 'dimension' ? 'active' : ''}`}
-                        onClick={() => { _sketch.setTool(SketchTools.DIMENSION); setSketchTool('dimension'); }} title="Dimension (D)">D</button>
-                    <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.1)', margin: '0 4px' }} />
-                    <button className="gizmo-btn" onClick={() => {
-                        // Extrude and exit sketch
-                        const profile = _sketch.getProfile();
-                        if (profile.length >= 3 && internalsRef.current) {
-                            const ft = getFeatureTree();
-                            const feature = ft.addExtrude(profile, new Vec3(0, 1, 0), 0.02);
-                            if (feature.solid) {
-                                const group = ThreeJSBridge.solidToGroup(feature.solid, { color: 0x9aa3ad, edges: true });
-                                group.userData.pickable = true;
-                                group.userData.generatedModel = true;
-                                group.userData.kernelSolid = feature.solid;
-                                internalsRef.current.scene.add(group);
-                            }
-                            _sketch.deactivate(internalsRef.current.scene);
-                            sketchActiveRef.current = false;
-                            setSketchActive(false);
-                            setSketchTool('none');
-                            if (internalsRef.current.orbitControls) internalsRef.current.orbitControls.enableRotate = true;
-                            setSketchStatus(`Extruded: Feature #${feature.id}`);
-                        }
-                    }} title="Extrude (E)">Extrude</button>
-                    <button className="gizmo-btn" onClick={() => {
-                        if (internalsRef.current) {
-                            _sketch.deactivate(internalsRef.current.scene);
-                            sketchActiveRef.current = false;
-                            setSketchActive(false);
-                            setSketchTool('none');
-                            if (internalsRef.current.orbitControls) internalsRef.current.orbitControls.enableRotate = true;
-                            setSketchStatus('');
-                        }
-                    }} title="Exit Sketch (Esc)">Exit</button>
-                </div>
-            )}
-
-            {/* Sketch status */}
-            {sketchStatus && (
-                <div className="sketch-status-bar">
-                    {sketchActive && <span className="sketch-active-badge">SKETCH</span>}
-                    <span>{sketchStatus}</span>
-                </div>
-            )}
-        </div>
-    );
+      });
+      if (!hasAny) return { ok: false, error: 'empty scene' };
+      const size = new THREE.Vector3();
+      const center = new THREE.Vector3();
+      box.getSize(size);
+      box.getCenter(center);
+      const r = Math.max(size.length() / 2, 0.001);
+      const fov = camera.fov * Math.PI / 180;
+      const dist = r / Math.tan(fov / 2) * 1.8;
+      const dir = new THREE.Vector3(1, 0.6, 1).normalize();
+      camera.position.copy(center).add(dir.multiplyScalar(dist));
+      camera.lookAt(center);
+      camera.updateProjectionMatrix();
+      const c = controlsRef.current;
+      if (c) { c.target.copy(center); c.update(); }
+      return { ok: true };
+    };
+    window.__studioFitSelected = () => {
+      const sel = selectedRef.current;
+      if (!sel) return window.__studioFrameAll();
+      sel.updateMatrixWorld();
+      const box = new THREE.Box3().setFromObject(sel);
+      const size = new THREE.Vector3();
+      const center = new THREE.Vector3();
+      box.getSize(size);
+      box.getCenter(center);
+      const r = Math.max(size.length() / 2, 0.001);
+      const fov = camera.fov * Math.PI / 180;
+      const dist = r / Math.tan(fov / 2) * 2.2;
+      const dir = new THREE.Vector3(1, 0.6, 1).normalize();
+      camera.position.copy(center).add(dir.multiplyScalar(dist));
+      camera.lookAt(center);
+      camera.updateProjectionMatrix();
+      const c = controlsRef.current;
+      if (c) { c.target.copy(center); c.update(); }
+      return { ok: true };
+    };
+    window.__studioSetCameraAxis = (axis) => {
+      const c = controlsRef.current;
+      const tgt = c ? c.target : new THREE.Vector3();
+      const d = camera.position.distanceTo(tgt) || 3;
+      const m = { top:   [0,  d, 0],
+                  bottom:[0, -d, 0],
+                  front: [0,  0, d],
+                  back:  [0,  0,-d],
+                  right: [d,  0, 0],
+                  left:  [-d, 0, 0],
+                  persp: [d * 0.7, d * 0.5, d * 0.7] };
+      const p = m[axis] || m.persp;
+      camera.position.set(tgt.x + p[0], tgt.y + p[1], tgt.z + p[2]);
+      camera.lookAt(tgt);
+      camera.updateProjectionMatrix();
+      if (c) c.update();
+      return { ok: true, axis };
+    };
+    window.__studioSetFov = (deg) => {
+      const v = Math.max(10, Math.min(110, Number(deg) || 45));
+      camera.fov = v;
+      camera.updateProjectionMatrix();
+    };
+    window.__studioGetFov = () => camera.fov;
+    window.__studioSetPixelRatio = (r) => {
+      gl.setPixelRatio(Math.max(0.25, Math.min(3, Number(r) || 1)));
+    };
+
+    if (onReady) onReady({ scene, renderer: gl, camera });
+    return () => {
+      if (window.__archdiscScene === scene) {
+        delete window.__archdiscScene;
+        delete window.__archdiscViewport;
+      }
+    };
+  }, [scene, gl, camera, selectedRef, setSelected, onReady]);
+
+  // r3f's OrbitControls comes from drei; we need its ref so the bridge
+  // can update its target on frame/fit operations. The component below
+  // assigns to controlsRef via a forwarded ref.
+  return <BridgeOrbitControls controlsRef={controlsRef} />;
 }
 
-// --- Display mode application ---
-function applyDisplayMode(scene, mode) {
-    scene.traverse(obj => {
-        if (!obj.isMesh || obj.userData.isHelper) return;
-        const mat = obj.material;
-        if (!mat) return;
+function BridgeOrbitControls({ controlsRef }) {
+  return (
+    <OrbitControls
+      ref={controlsRef}
+      makeDefault
+      enableDamping
+      dampingFactor={0.08}
+      screenSpacePanning
+      rotateSpeed={0.8}
+      panSpeed={0.8}
+      zoomSpeed={1.0}
+      zoomToCursor
+      minDistance={0.001}
+      maxDistance={5000}
+    />
+  );
+}
 
-        // Store original color if not stored
-        if (!mat.userData) mat.userData = {};
-        if (mat.userData._origColor === undefined) {
-            mat.userData._origColor = mat.color ? mat.color.getHex() : 0x888888;
-            mat.userData._origOpacity = mat.opacity;
-            mat.userData._origTransparent = mat.transparent;
-            mat.userData._origWireframe = mat.wireframe;
-        }
-
-        switch (mode) {
-            case 'shaded':
-                mat.wireframe = false;
-                mat.transparent = mat.userData._origTransparent;
-                mat.opacity = mat.userData._origOpacity;
-                break;
-            case 'wireframe':
-                mat.wireframe = true;
-                mat.transparent = false;
-                mat.opacity = 1.0;
-                break;
-            case 'shadedWire':
-                mat.wireframe = false;
-                mat.transparent = false;
-                mat.opacity = 1.0;
-                // Add wireframe overlay — handled by edge lines in ThreeJSBridge
-                break;
-            case 'xray':
-                mat.wireframe = false;
-                mat.transparent = true;
-                mat.opacity = 0.25;
-                break;
-        }
-        mat.needsUpdate = true;
+// -----------------------------------------------------------------------
+// Selection bridge: clicks on a primitive update the selectedRef and
+// fire studio-selection-changed for the ops layer.
+// -----------------------------------------------------------------------
+function SelectionLayer({ selectedRef, setSelected }) {
+  const { scene } = useThree();
+  const onPointerDown = useCallback((e) => {
+    const o = e.object;
+    if (o && o.userData && o.userData.archdiscStudioPrimitive) {
+      setSelected(o);
+      e.stopPropagation?.();
+    }
+  }, [setSelected]);
+  useEffect(() => {
+    scene.traverse((o) => {
+      if (o && o.userData && o.userData.archdiscStudioPrimitive) {
+        // r3f only routes pointer events via Object3D's onPointerDown
+        // prop; pre-existing meshes spawned via the legacy spawn() path
+        // listen via a window event instead.
+      }
     });
+  }, [scene]);
+  // Bubble a window-level selection so legacy hooks (status bar, props
+  // panel) refresh. Hooked here to colocate with the actual selection.
+  useEffect(() => {
+    const refresh = () => {
+      window.dispatchEvent(new CustomEvent('studio-selection-changed', {
+        detail: { selected: selectedRef.current },
+      }));
+    };
+    window.__studioSelectMesh = (m) => { setSelected(m); refresh(); };
+    window.__studioSelectedMesh = () => selectedRef.current;
+    window.__studioSelectedMeshes = () => (selectedRef.current ? [selectedRef.current] : []);
+    window.__studioDeselect = () => { setSelected(null); refresh(); };
+    window.__studioSelectAll = () => null; /* multi-select TBD */
+    return () => {
+      delete window.__studioSelectMesh;
+      delete window.__studioSelectedMesh;
+      delete window.__studioSelectedMeshes;
+      delete window.__studioDeselect;
+      delete window.__studioSelectAll;
+    };
+  }, [selectedRef, setSelected]);
+  // Click-empty-space → deselect.
+  const onPointerMissed = useCallback(() => {
+    setSelected(null);
+  }, [setSelected]);
+  useEffect(() => {
+    // r3f passes onPointerMissed via <Canvas> prop; we wire that up in
+    // the outer component. SelectionLayer just exports the handler via
+    // a window hook for the outer scope.
+    window.__studioPointerMissed = onPointerMissed;
+    return () => { delete window.__studioPointerMissed; };
+  }, [onPointerMissed]);
+  return null;
 }
 
-function focusOnObject(obj, camera, controls) {
-    const box = new THREE.Box3().setFromObject(obj);
-    if (box.isEmpty()) return;
-    const center = box.getCenter(new THREE.Vector3());
-    const size = box.getSize(new THREE.Vector3());
-    const maxDim = Math.max(size.x, size.y, size.z) || 0.05;
-    // Frame so the body fills ~70 % of the shorter viewport axis.
-    // Multiplier 1.05 gives a ~5 % margin around the bounding sphere.
-    const halfFov = (camera.fov * Math.PI / 180) / 2;
-    const dist = (maxDim / 2) / Math.tan(halfFov) * 1.05;
-    // Keep the existing iso-ish viewing direction (dx ≈ dz, dy small).
-    // Direction unit-vector (0.6, 0.35, 0.6) normalised.
-    const dx = 0.6, dy = 0.35, dz = 0.6;
-    const L = Math.hypot(dx, dy, dz);
-    camera.position.set(
-      center.x + dist * dx / L,
-      center.y + dist * dy / L,
-      center.z + dist * dz / L,
-    );
-    camera.near = Math.max(dist * 0.001, 0.0001);
-    camera.far  = Math.max(dist * 100, 100);
-    camera.updateProjectionMatrix();
-    controls.target.copy(center);
-    controls.update();
+// -----------------------------------------------------------------------
+// Transform gizmo — mounts ONLY when a primitive is selected. Drei's
+// TransformControls handles all the gizmo lifecycle (attach/detach,
+// visibility, drag-cancel-on-orbit). The legacy gizmo-at-origin bug
+// (Three.js 0.181 reasserting visible=true every frame) is unreachable
+// because we mount the component conditionally — when there's no
+// target, the component itself doesn't render.
+// -----------------------------------------------------------------------
+function TransformLayer({ selected, mode }) {
+  if (!selected) return null;
+  return (
+    <DreiTransformControls
+      object={selected}
+      mode={mode}
+      size={0.8}
+      space="world"
+    />
+  );
 }
 
-function focusOnAll(scene, camera, controls) {
-    const box = new THREE.Box3();
-    scene.traverse(obj => {
-        if (obj.isMesh && !obj.userData.isHelper && obj.visible) {
-            box.expandByObject(obj);
-        }
-    });
-    if (box.isEmpty()) return;
-    const center = box.getCenter(new THREE.Vector3());
-    const size = box.getSize(new THREE.Vector3());
-    const maxDim = Math.max(size.x, size.y, size.z) || 5;
-    const dist = maxDim / Math.tan((camera.fov * Math.PI / 180) / 2) * 1.8;
-    camera.position.set(center.x + dist * 0.6, center.y + dist * 0.4, center.z + dist * 0.6);
-    // Match the per-scene framing helpers (focusOnObject /
-    // __archdiscFocusOnFoundationBodies) and auto-fit the clip planes to
-    // the scene diagonal. Without this, focusOnAll on a large assembly
-    // leaves camera.far at its initial 100 m so anything beyond the
-    // frustum gets clipped at certain camera distances — exactly the
-    // "at angles some parts are not rendered" symptom the user reported.
-    camera.near = Math.max(dist * 0.001, 0.0001);
-    camera.far  = Math.max(dist * 100, 100);
-    camera.updateProjectionMatrix();
-    controls.target.copy(center);
-    controls.update();
+// -----------------------------------------------------------------------
+// Theme-aware grid + lighting.
+// -----------------------------------------------------------------------
+function SceneStaticsLayer({ theme }) {
+  // Slice 951g — drei's <Grid> is an infinite-feeling fading floor:
+  // no visible far edge, no horizon stripe. cellColor / sectionColor
+  // are tuned to the slice-950 monochrome palette (no chromatic
+  // accent). Position y = -0.001 sits just below world origin so the
+  // origin axes don't z-fight.
+  return (
+    <>
+      <ambientLight intensity={theme === 'light' ? 0.7 : 0.35} />
+      <directionalLight position={[10, 20, 10]} intensity={0.6} castShadow={false} />
+      <directionalLight position={[-10, 5, -10]} intensity={0.2} />
+      <Grid
+        args={[10, 10]}
+        cellSize={0.1}
+        cellThickness={0.6}
+        cellColor={theme === 'light' ? '#c0c0c0' : '#2a2a2a'}
+        sectionSize={1}
+        sectionThickness={1.0}
+        sectionColor={theme === 'light' ? '#8a8a8a' : '#3a3a3a'}
+        position={[0, -0.001, 0]}
+        fadeDistance={30}
+        fadeStrength={1.6}
+        infiniteGrid
+      />
+    </>
+  );
+}
+
+// -----------------------------------------------------------------------
+// Public component used by StudioShellV3.
+// -----------------------------------------------------------------------
+function Viewport3D() {
+  const [selected, setSelected] = useState(null);
+  const selectedRef = useRef(null);
+  selectedRef.current = selected;
+  const setSelectedAndRef = useCallback((m) => {
+    selectedRef.current = m;
+    setSelected(m);
+  }, []);
+
+  const vpCtx = useViewport ? (() => { try { return useViewport(); } catch (_) { return null; } })() : null;
+  const theme = (vpCtx && vpCtx.theme) || 'dark';
+  const gizmoMode = (vpCtx && vpCtx.gizmoMode) || 'translate';
+
+  return (
+    <div
+      data-studio-v3-viewport
+      style={{
+        position: 'absolute', inset: 0,
+        background: theme === 'light' ? '#ebebeb' : '#181818',
+      }}
+    >
+      <Canvas
+        camera={{ position: [0.3, 0.2, 0.3], fov: 45, near: 0.001, far: 5000 }}
+        gl={{ antialias: true, alpha: false, powerPreference: 'high-performance' }}
+        onPointerMissed={() => setSelectedAndRef(null)}
+        style={{ width: '100%', height: '100%' }}
+        data-testid="studio-viewport-canvas"
+      >
+        <color attach="background" args={[theme === 'light' ? '#ebebeb' : '#181818']} />
+        <SceneStaticsLayer theme={theme} />
+        <StudioBridge
+          selectedRef={selectedRef}
+          setSelected={setSelectedAndRef}
+        />
+        <SelectionLayer selectedRef={selectedRef} setSelected={setSelectedAndRef} />
+        <TransformLayer selected={selected} mode={gizmoMode} />
+        <GizmoHelper alignment="bottom-right" margin={[64, 64]}>
+          <GizmoViewport
+            axisColors={['#a0a0a0', '#c8c8c8', '#888888']}
+            labelColor="#dddddd"
+          />
+        </GizmoHelper>
+      </Canvas>
+    </div>
+  );
 }
 
 export default Viewport3D;
