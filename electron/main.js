@@ -56,6 +56,19 @@ function initAutoUpdater() {
 }
 
 function createWindow() {
+  // Slice 951e — guard against the `activate` event firing before
+  // app.whenReady() resolves. The crash the user hit on the arm64 .app
+  // was: macOS dispatched `activate` from the Finder double-click
+  // BEFORE the ready signal arrived, the activate handler called
+  // createWindow(), and `new BrowserWindow(...)` synchronously throws
+  // "Cannot create BrowserWindow before app is ready". The check below
+  // makes createWindow idempotent and safe at any timing — early calls
+  // are dropped, late calls re-use the existing window if it survived.
+  if (!app.isReady()) return;
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    try { mainWindow.show(); mainWindow.focus(); } catch (_) {}
+    return;
+  }
   mainWindow = new BrowserWindow({
     width: 1920,
     height: 1080,
@@ -245,5 +258,16 @@ app.on('window-all-closed', () => {
 });
 
 app.on('activate', () => {
+  // Slice 951e — wait for whenReady before constructing a window. The
+  // user's arm64 build crashed here because macOS Finder fired
+  // `activate` during the early launch phase, before app was ready.
+  if (!app.isReady()) {
+    app.whenReady().then(() => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    }).catch((err) => {
+      console.error('[main:activate] whenReady rejected:', err && err.stack || err);
+    });
+    return;
+  }
   if (BrowserWindow.getAllWindows().length === 0) createWindow();
 });
