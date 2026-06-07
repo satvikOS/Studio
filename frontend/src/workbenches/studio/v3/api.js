@@ -7673,6 +7673,8 @@ export function registerV3Api() {
   import('./taafx/autoload.js').catch(() => {});
   // Slice 798 — Motion vector G-buffer.
   import('./motionvecfx/autoload.js').catch(() => {});
+  // Slice 891 — SVGF spatio-temporal denoiser (à-trous + temporal reuse).
+  import('./denoiser/autoload.js').catch(() => {});
   // Slice 799 — Decal projector.
   import('./decals/autoload.js').catch(() => {});
   // Slice 800 — SpeedTree procedural trees.
