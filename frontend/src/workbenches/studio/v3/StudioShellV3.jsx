@@ -7044,7 +7044,13 @@ function callDirectIfPossible(input) {
   }
 }
 
-function CommandBar({ onSubmit }) {
+// ─── CommandBar (slice 947) ───────────────────────────────────────────────
+// Footer Archie console strip. Always-on; focus/submit/Cmd+K all open
+// the floating ArchieChatOverlay so the user has a single mental model:
+// the cmdbar is the write surface, the overlay is the read surface.
+// A small thread-count chip surfaces when there's a conversation but
+// the overlay is closed, so the user can re-open with one click.
+function CommandBar({ onSubmit, archieOpen, onOpen, threadCount }) {
   const ref = useRef(null);
   useEffect(() => {
     const onKey = (e) => {
@@ -7052,11 +7058,12 @@ function CommandBar({ onSubmit }) {
       if (meta && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         ref.current?.focus();
+        onOpen && onOpen();
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [onOpen]);
   return (
     <div className="studio-cmdbar" data-studio-v3-cmdbar>
       <span className="studio-cmdbar-glyph" title="Archie">◐</span>
@@ -7065,47 +7072,133 @@ function CommandBar({ onSubmit }) {
         className="studio-cmdbar-input"
         data-studio-v3-cmdbar-input
         placeholder="Ask Archie — or type a Studio API: studioListSceneStats / studioExtrudeSelectedFaces 0.005"
+        onFocus={() => onOpen && onOpen()}
         onKeyDown={(e) => {
           if (e.key === 'Enter' && e.currentTarget.value.trim()) {
             const v = e.currentTarget.value.trim();
             e.currentTarget.value = '';
             onSubmit && onSubmit(v);
+            onOpen && onOpen();
           }
         }}
       />
+      {threadCount > 0 && !archieOpen && (
+        <button
+          type="button"
+          className="studio-cmdbar-chip"
+          data-studio-v3-cmdbar-chip
+          onClick={() => onOpen && onOpen()}
+          title={`${threadCount} message${threadCount === 1 ? '' : 's'} in Archie thread — click to open`}
+        >
+          {threadCount} <span style={{ opacity: 0.55, marginLeft: 4 }}>▴</span>
+        </button>
+      )}
       <span className="studio-cmdbar-hint">
-        <kbd>⌘K</kbd>
+        {archieOpen ? <kbd>ESC</kbd> : <kbd>⌘K</kbd>}
       </span>
     </div>
   );
 }
 
-// ─── ArchieThread (inline strip above cmdbar) ─────────────────────────────
-// Slice 407 — replaces the right-side ArchieDock. Archie now lives ONLY
-// at the bottom of the shell so its surface area matches Forge exactly.
-// When there are messages the strip slides up above the cmdbar showing
-// the most recent 8 entries; user can clear to collapse.
-function ArchieThread({ thread, onClear }) {
-  if (!thread.length) return null;
+// ─── ArchieChatOverlay (slice 947) ────────────────────────────────────────
+// Replaces the slice-407 inline `ArchieThread` strip with a proper
+// floating chat window anchored to the bottom-right of the shell. Stays
+// hidden until the user opens it (cmdbar focus / submit / Cmd+K / chip
+// click). Closes on Esc / X / the cmdbar's own toggle.
+//
+// The overlay is read-only — composing happens in the cmdbar — so it
+// never steals focus from the active tool. Messages auto-scroll to the
+// latest entry. Three roles render with distinct hairline-left tones
+// (user / archie / tool) so the conversation reads even in pure
+// monochrome.
+function ArchieChatOverlay({ open, expanded, thread, onClose, onToggleExpanded, onClear }) {
+  const bodyRef = useRef(null);
+  useEffect(() => {
+    if (open && bodyRef.current) {
+      bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
+    }
+  }, [thread, open]);
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (e) => {
+      if (e.key !== 'Escape') return;
+      // Don't poach Esc when a modal / menu / editor that owns Esc is
+      // active. Close only when Esc isn't going to do something useful
+      // elsewhere (no text-input focus inside a modal, no menu open).
+      const ae = document.activeElement;
+      const inCmd = ae && ae.closest && (
+        ae.closest('[data-studio-v3-cmdbar]') ||
+        ae.closest('[data-studio-v3-archie-overlay]')
+      );
+      const elsewhere = ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable) && !inCmd;
+      if (elsewhere) return;
+      e.preventDefault();
+      onClose && onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+  if (!open) return null;
   return (
-    <div className="studio-archie-thread" data-studio-v3-archie-thread>
-      <div className="studio-archie-thread-head">
-        <span className="studio-archie-thread-spark">◐</span>
-        <span>Archie · {thread.length}</span>
+    <div
+      className={`studio-archie-overlay${expanded ? ' studio-archie-overlay-expanded' : ''}`}
+      data-studio-v3-archie-overlay
+      data-archie-expanded={expanded ? 'true' : 'false'}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      <header className="studio-archie-overlay-head">
+        <span className="studio-archie-overlay-glyph" aria-hidden="true">◐</span>
+        <span className="studio-archie-overlay-title">Archie</span>
+        <span className="studio-archie-overlay-count" data-studio-v3-archie-count>{thread.length}</span>
         <span style={{ flex: 1 }} />
         <button
           type="button"
-          className="studio-archie-thread-clear"
+          className="studio-archie-overlay-btn"
           data-studio-v3-archie-clear
           onClick={onClear}
           title="Clear thread"
-        ><Icon name="close" size={11} /></button>
+        ><Icon name="clear" size={12} /></button>
+        <button
+          type="button"
+          className="studio-archie-overlay-btn"
+          data-studio-v3-archie-expand
+          onClick={onToggleExpanded}
+          title={expanded ? 'Collapse' : 'Expand'}
+        ><Icon name={expanded ? 'collapse' : 'expand'} size={12} /></button>
+        <button
+          type="button"
+          className="studio-archie-overlay-btn"
+          data-studio-v3-archie-close
+          onClick={onClose}
+          title="Close (Esc)"
+        ><Icon name="close" size={12} /></button>
+      </header>
+      <div className="studio-archie-overlay-body" data-studio-v3-archie-body ref={bodyRef}>
+        {thread.length === 0 ? (
+          <div className="studio-archie-overlay-empty" data-studio-v3-archie-empty>
+            <div style={{ fontSize: 13, color: 'var(--studio-ink)', marginBottom: 6, fontWeight: 500 }}>
+              Drive Studio with words.
+            </div>
+            <div>
+              Try: <code>create a unit cube</code>, <code>frame the scene</code>, or any{' '}
+              <code>studioFoo arg</code> direct call.
+            </div>
+          </div>
+        ) : (
+          thread.map((m, i) => (
+            <div key={i} className="studio-archie-overlay-msg" data-role={m.role} data-studio-v3-archie-msg>
+              <span className="studio-archie-overlay-msg-role">{m.role}</span>
+              <span className="studio-archie-overlay-msg-text">{m.text}</span>
+            </div>
+          ))
+        )}
       </div>
-      <div className="studio-archie-thread-body">
-        {thread.slice(-8).map((m, i) => (
-          <div key={i} className="studio-archie-msg" data-role={m.role}>{m.text}</div>
-        ))}
-      </div>
+      <footer className="studio-archie-overlay-foot">
+        <span>Compose in the bar below.</span>
+        <span>
+          <kbd>Esc</kbd> close · <kbd>⌘K</kbd> focus
+        </span>
+      </footer>
     </div>
   );
 }
@@ -7138,6 +7231,12 @@ export function StudioShellV3({ mode = 'dark' }) {
   const [selection, setSelection] = useState(null);
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const [thread, setThread] = useState([]);
+  // Slice 947 — Archie chat overlay. The strip stays at the foot
+  // (CommandBar), the floating overlay shows the conversation. Auto-
+  // opens whenever a message is pushed to the thread so the user sees
+  // tool results without hunting for the chip.
+  const [archieOpen, setArchieOpen] = useState(false);
+  const [archieExpanded, setArchieExpanded] = useState(false);
   // Slice 479 — Presentation mode (clean viewport with overlays hidden).
   const [present, setPresent] = useState(false);
   useEffect(() => {
@@ -8053,8 +8152,20 @@ export function StudioShellV3({ mode = 'dark' }) {
       />
       <TimelineStrip />
       <StatusBar wb={activeWb} editMode={editMode} />
-      <ArchieThread thread={thread} onClear={() => setThread([])} />
-      <CommandBar onSubmit={onCmdSubmit} />
+      <ArchieChatOverlay
+        open={archieOpen}
+        expanded={archieExpanded}
+        thread={thread}
+        onClose={() => setArchieOpen(false)}
+        onToggleExpanded={() => setArchieExpanded((v) => !v)}
+        onClear={() => { setThread([]); }}
+      />
+      <CommandBar
+        onSubmit={onCmdSubmit}
+        archieOpen={archieOpen}
+        onOpen={() => setArchieOpen(true)}
+        threadCount={thread.length}
+      />
       <OnboardingTour />
       <ToastBus />
       <MarqueeOverlay />

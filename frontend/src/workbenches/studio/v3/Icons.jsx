@@ -327,6 +327,27 @@ export const IconCheck = (p) => wrap('check', <>
   <path d="M5 13 L10 18 L19 7" />
 </>, p);
 
+// Slice 947 — Archie chat overlay header / composer glyphs. Hand-rolled
+// to read at 14px on the footer strip + at 16px in the overlay header.
+export const IconSend = (p) => wrap('send', <>
+  <path d="M21 12 L3 21 L7 12 L3 3 Z" />
+  <path d="M7 12 H21" strokeOpacity="0.35" />
+</>, p);
+export const IconExpand = (p) => wrap('expand', <>
+  <path d="M4 4 H10 M4 4 V10 M20 20 H14 M20 20 V14" />
+  <path d="M4 4 L10 10 M20 20 L14 14" strokeOpacity="0.45" />
+</>, p);
+export const IconCollapse = (p) => wrap('collapse', <>
+  <path d="M10 4 V10 M4 10 H10 M14 20 V14 M20 14 H14" />
+  <path d="M10 10 L4 4 M14 14 L20 20" strokeOpacity="0.45" />
+</>, p);
+export const IconClear = (p) => wrap('clear', <>
+  <path d="M5 7 H19" />
+  <path d="M9 7 V5 H15 V7" />
+  <path d="M6 7 V20 H18 V7" />
+  <path d="M10 11 V17 M14 11 V17" strokeOpacity="0.55" />
+</>, p);
+
 // ─── INDEX (for dynamic lookup) ─────────────────────────────────────────
 export const ICONS = {
   // primitives
@@ -362,6 +383,8 @@ export const ICONS = {
   // chrome
   npanel: IconNPanel, tshelf: IconTShelf, settings: IconSettings,
   close: IconClose, check: IconCheck,
+  // Archie chat overlay (slice 947)
+  send: IconSend, expand: IconExpand, collapse: IconCollapse, clear: IconClear,
 };
 
 // Dynamic icon picker — render by string name. Useful for data-driven

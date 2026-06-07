@@ -121,11 +121,11 @@ function WorkbenchContainer() {
     // Global keyboard shortcuts
     useEffect(() => {
         const handleKeyDown = (e) => {
-            // Command Palette: Ctrl+K or Cmd+K
-            if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-                e.preventDefault();
-                setCommandPaletteOpen(prev => !prev);
-            }
+            // Slice 947 — Cmd+K is now owned by the V3 cmdbar (focuses
+            // the Archie console + opens the floating overlay). The
+            // legacy CommandPalette is dead under the V3-only shell;
+            // remove the global Cmd+K handler so it doesn't poach the
+            // event from StudioShellV3's CommandBar useEffect.
             // Undo: Ctrl+Z
             if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
                 if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
