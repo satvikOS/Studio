@@ -2034,6 +2034,16 @@ function SplashScreen() {
 // at its world X,Z scaled to a 120×120 canvas with the camera position +
 // look ray as a fan. Provides spatial context in cluttered scenes.
 function ViewportMinimap() {
+  // Slice 951h — REMOVED. Per the user's screenshot the 120×120 canvas
+  // sat over the viewport bottom-left and (a) blocked OrbitControls
+  // drag/zoom in that region — the user could only orbit in the thin
+  // strip BETWEEN the minimap and the right inspector, and (b) when
+  // click-pan'd, fired the "Minimap pan → (x, z)" toast the user kept
+  // seeing. Forge's viewport has no top-down minimap, so the rewrite
+  // drops it too. The pan/Frame-All helpers stay reachable via the
+  // bottom-right GizmoHelper axis cube.
+  return null;
+  // eslint-disable-next-line no-unreachable
   const ref = React.useRef(null);
   React.useEffect(() => {
     let raf = 0;
@@ -2252,6 +2262,97 @@ function QuadViewOverlay() {
           fontFamily: 'var(--studio-mono, ui-monospace)',
         }}>Persp · live</span>
       </div>
+    </div>
+  );
+}
+
+// ─── UpdateNotification (slice 951h) ──────────────────────────────────────
+// Surfaces electron-updater lifecycle events as a top-right banner.
+// Subscribes to window.studioUpdater (set up by electron/preload.js)
+// and shows three states: "Update v… available" / "Downloading … %" /
+// "Update v… ready — restart to apply". Click the action button to
+// trigger autoUpdater.quitAndInstall via IPC.
+function UpdateNotification() {
+  const [state, setState] = useState(null);
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.studioUpdater) return undefined;
+    const off = window.studioUpdater.onUpdate((channel, payload) => {
+      if (channel === 'update:available') {
+        setState({ kind: 'available', version: (payload && payload.version) || '' });
+      } else if (channel === 'update:progress') {
+        setState({ kind: 'progress', percent: Math.round((payload && payload.percent) || 0) });
+      } else if (channel === 'update:downloaded') {
+        setState({ kind: 'downloaded', version: (payload && payload.version) || '' });
+      } else if (channel === 'update:error') {
+        setState({ kind: 'error', message: (payload && payload.message) || 'update error' });
+        setTimeout(() => setState(null), 6000);
+      }
+    });
+    return () => { if (typeof off === 'function') off(); };
+  }, []);
+  if (!state) return null;
+  const restart = () => {
+    if (window.studioUpdater && typeof window.studioUpdater.quitAndInstall === 'function') {
+      window.studioUpdater.quitAndInstall();
+    }
+  };
+  const label = state.kind === 'available'
+    ? `New update v${state.version} available — downloading`
+    : state.kind === 'progress'
+    ? `Downloading update · ${state.percent}%`
+    : state.kind === 'downloaded'
+    ? `Update v${state.version} ready`
+    : `Update error: ${state.message}`;
+  const showButton = state.kind === 'downloaded';
+  return (
+    <div
+      data-studio-v3-update-notification
+      data-studio-v3-update-state={state.kind}
+      style={{
+        position: 'fixed', top: 44, right: 14, zIndex: 90,
+        background: 'var(--studio-canvas-2, #0a0a0a)',
+        border: '1px solid var(--studio-accent-rim, rgba(255,255,255,0.28))',
+        borderRadius: 4,
+        padding: '8px 12px',
+        color: 'var(--studio-ink, #f0eee6)',
+        fontFamily: 'var(--studio-font, system-ui)',
+        fontSize: 11,
+        display: 'flex', alignItems: 'center', gap: 12,
+        boxShadow: '0 8px 24px rgba(0, 0, 0, 0.45)',
+        minWidth: 280,
+      }}
+    >
+      <span style={{
+        width: 6, height: 6, borderRadius: 3,
+        background: state.kind === 'error' ? 'var(--studio-err, #d9d9d9)' : 'var(--studio-ink, #f0eee6)',
+      }} />
+      <span style={{ flex: 1 }}>{label}</span>
+      {showButton && (
+        <button
+          type="button"
+          data-studio-v3-update-restart
+          onClick={restart}
+          style={{
+            padding: '3px 10px', fontSize: 10, fontFamily: 'inherit', fontWeight: 600,
+            background: 'var(--studio-ink, #f0eee6)',
+            color: 'var(--studio-canvas, #000000)',
+            border: 'none', borderRadius: 3, cursor: 'pointer',
+            letterSpacing: '0.04em', textTransform: 'uppercase',
+          }}
+        >Restart</button>
+      )}
+      <button
+        type="button"
+        data-studio-v3-update-dismiss
+        onClick={() => setState(null)}
+        title="Dismiss"
+        style={{
+          width: 18, height: 18, padding: 0, lineHeight: '14px',
+          background: 'transparent', border: 'none',
+          color: 'var(--studio-ink-mute, #777)',
+          cursor: 'pointer', fontFamily: 'inherit', fontSize: 14,
+        }}
+      >×</button>
     </div>
   );
 }
@@ -6616,6 +6717,23 @@ function OutlinerRows() {
 // Click anywhere on the strip to scrub the frame; double-click clears
 // the keyframes display by jumping back to frame 0.
 function TimelineStrip() {
+  // Slice 951h — hidden unless the active discipline actually uses
+  // animation. The user's screenshot showed the 0/10/20/30/40/50/60
+  // tick labels stacked above MODEL on the discipline rail (the strip
+  // was overflowing its slot in the shell grid) — pure noise outside
+  // the Animate tab. Returning null in non-animation disciplines keeps
+  // the component identity for callers but renders zero DOM.
+  if (typeof window !== 'undefined') {
+    try {
+      const wb = (window.__studioActiveWb && window.__studioActiveWb()) || null;
+      if (wb && wb !== 'animate' && wb !== 'anim') return null;
+    } catch (_) {}
+    // If we can't detect the active wb at all, default to hidden — the
+    // user opens animation explicitly when they need it.
+    return null;
+  }
+  return null;
+  // eslint-disable-next-line no-unreachable
   const [frame, setFrame] = useState(0);
   const [maxFrame, setMaxFrame] = useState(60);
   const [keyframes, setKeyframes] = useState([]);
@@ -8589,6 +8707,7 @@ export function StudioShellV3({ mode = 'dark' }) {
       />
       <OnboardingTour />
       <ToastBus />
+      <UpdateNotification />
       <MarqueeOverlay />
       <KeypressFlash />
       <SaveAsModal />

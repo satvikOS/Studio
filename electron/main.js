@@ -47,7 +47,22 @@ function initAutoUpdater() {
     // installs on next quit (autoInstallOnAppQuit).
     notifyRenderer('update:downloaded', { version: info.version });
   });
-  autoUpdater.on('error', (err) => console.error('[updater] error:', err == null ? 'unknown' : (err.stack || err).toString()));
+  autoUpdater.on('error', (err) => {
+    console.error('[updater] error:', err == null ? 'unknown' : (err.stack || err).toString());
+    notifyRenderer('update:error', { message: err && err.message ? err.message : String(err) });
+  });
+
+  // Slice 951h — let the renderer ask the main process to apply a
+  // downloaded update. The user clicks "Restart to update" in the
+  // banner and the app quits + relaunches into the new version.
+  const { ipcMain } = require('electron');
+  ipcMain.on('update:quit-and-install', () => {
+    if (autoUpdater && autoUpdater.quitAndInstall) {
+      try { autoUpdater.quitAndInstall(); } catch (err) {
+        console.error('[updater] quitAndInstall failed:', err && err.stack || err);
+      }
+    }
+  });
 
   // Fires the check + native "update ready" notification.
   autoUpdater.checkForUpdatesAndNotify().catch((err) => {
@@ -89,6 +104,10 @@ function createWindow() {
       contextIsolation: true,
       webgl: true,
       enableWebSQL: false,
+      // Slice 951h — preload exposes window.studioUpdater so the
+      // React renderer can show an in-app banner when a new release
+      // is downloaded.
+      preload: path.join(__dirname, 'preload.js'),
     },
     backgroundColor: '#181818',
     show: false,
