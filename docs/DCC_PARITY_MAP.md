@@ -322,3 +322,19 @@ the parallel agent swarm.
 Honest tracker, not a literal claim of feature-complete parity. Many entries are
 PARTIAL/STUB/ABSENT by design — this map exists so the gaps are explicit and
 trackable as they are closed, slice by slice.
+
+## Shader-pass depth push main-thread (slices 923-929)
+
+Real GLSL ShaderPass implementations + the central composer wiring that
+threads them into slice 752's render loop. These complete what the prior
+config-only slices documented.
+
+| Capability | Status | Notes |
+|------------|--------|-------|
+| EffectComposer wiring | DONE | slice 923 — `v3/composerwire/` — central registry for post-process passes. Overrides `renderer.render` to dispatch through `EffectComposer` when passes are registered. Reorders + enables/disables passes; resize handler. Ops: `__studioComposerRegister / Enable / SetUniform / List / Remove / Resize / GetComposer`. |
+| Chromatic aberration ShaderPass | DONE | slice 924 — `v3/chromabpass/` — REAL GLSL fragment shader with radial R/B channel offset from screen centre. Wires into composer at order 80. Ops: `__studioChromAbPassEnable / SetIntensity / GetStats`. |
+| Vignette ShaderPass | DONE | slice 925 — `v3/vignettepass/` — REAL GLSL smoothstep radial darkening. Ops: `__studioVignettePassEnable / Set`. |
+| Sharpen ShaderPass | DONE | slice 926 — `v3/sharpenpass/` — REAL GLSL 4-tap unsharp-mask kernel (recovers detail lost to TAA). Ops: `__studioSharpenPassEnable / Set`. |
+| Lens dirt ShaderPass | DONE | slice 927 — `v3/lensdirtpass/` — REAL GLSL bright-pass-modulated dirt overlay with 4 procedural pattern generators (streaks/droplets/fingerprint/dust). Wires at order 85. Ops: `__studioLensDirtPassEnable / Set`. |
+| Auto-exposure / eye adaptation | DONE | slice 928 — `v3/autoexposure/` — REAL 64×64 luminance readback every 10 frames + smooth `toneMappingExposure` ramp toward target EV. Hooks viewport tick. Ops: `__studioAutoExposureEnable / GetStats / Measure`. |
+| Motion vector MRT pass | DONE | slice 929 — `v3/motionvecmrt/` — REAL per-vertex prev+current MVP shader writing screen-space velocity to a `HalfFloatType RGFormat` render target. Drives slice 912 motion blur + slice 916 TAA. Tracks `prevMatrices` per mesh via WeakMap. Ops: `__studioMotionVecMRTCapture / GetTarget / Reset`. |

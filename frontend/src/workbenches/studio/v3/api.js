@@ -7809,6 +7809,14 @@ export function registerV3Api() {
   import('./realmblur/autoload.js').catch(() => {});
   import('./assetbundle/autoload.js').catch(() => {});
   import('./postchain/autoload.js').catch(() => {});
+  // Slices 923-929 — shader-pass main-thread companions
+  import('./composerwire/autoload.js').catch(() => {});
+  import('./chromabpass/autoload.js').catch(() => {});
+  import('./vignettepass/autoload.js').catch(() => {});
+  import('./sharpenpass/autoload.js').catch(() => {});
+  import('./lensdirtpass/autoload.js').catch(() => {});
+  import('./autoexposure/autoload.js').catch(() => {});
+  import('./motionvecmrt/autoload.js').catch(() => {});
 
   // Slice 890 — Photogrammetry / 3D-scan asset import (Reality Capture /
   // Agisoft Metashape / Meshroom). Real .ply (binary + ASCII) + Wavefront
