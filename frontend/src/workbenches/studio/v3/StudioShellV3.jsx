@@ -5372,7 +5372,7 @@ function CameraBookmarksSection() {
 // so CSS can hide overlays declaratively.
 function DisplaySection() {
   const items = [
-    { id: 'grid', label: 'Grid', defaultOn: true, onChange: (v) => { if (window.__studioSetGridVisible) window.__studioSetGridVisible(v); } },
+    { id: 'grid', label: 'Grid', defaultOn: false, onChange: (v) => { if (window.__studioSetGridVisible) window.__studioSetGridVisible(v); } },
     { id: 'minimap', label: 'Minimap', defaultOn: true, onChange: (v) => { const el = document.querySelector('[data-studio-v3-minimap]'); if (el) el.style.display = v ? '' : 'none'; } },
     { id: 'watermark', label: 'Watermark', defaultOn: true, onChange: (v) => { const el = document.querySelector('[data-studio-v3-watermark]'); if (el) el.style.display = v ? '' : 'none'; } },
     { id: 'archie-status', label: 'Archie dot', defaultOn: true, onChange: (v) => { const el = document.querySelector('[data-studio-v3-archie-status]'); if (el) el.style.display = v ? '' : 'none'; } },
@@ -7022,8 +7022,14 @@ function DirtyDot() {
 // E2E tests set window.__studioArchieMock = (text) => mockedResponse to
 // bypass the real fetch with a deterministic synthetic plan.
 const ARCHIE_BASE_URL = 'http://localhost:8080';
-const ARCHIE_ADAPTER  = 'foundational_studio';
-const ARCHIE_MODEL    = 'archie-7b-base';
+// Slice 951 — the local mlx_lm.server resolves `adapters` relative to
+// its cwd (~/archdisc-Models per scripts/serve_archie_2brain.sh), so the
+// full path `adapters/archie/foundational_studio` is what the server
+// hot-swaps to. Sending the bare basename used to be silently accepted
+// as a basename relative to the model dir and failed silently. The
+// model id matches the directory mlx_lm.server was started with.
+const ARCHIE_ADAPTER  = 'adapters/archie/foundational_studio';
+const ARCHIE_MODEL    = 'archie-7b-base-bf16';
 const ARCHIE_SYSTEM_PROMPT = (
   'You are Archie, the resident AI inside ArchDisc Studio. Drive the ' +
   'platform by emitting <tool_call>{"name":"…","arguments":{…}}</tool_call> ' +

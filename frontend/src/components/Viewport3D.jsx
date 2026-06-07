@@ -191,15 +191,22 @@ function Viewport3D({ canvasId = 'render-canvas', domain = 'mechanical', onReady
           window.__studioSetGroundVisible = (v) => { ground.visible = !!v; };
         }
 
-        // Subtle grey GridHelper at world origin, sized to the same
-        // scale as the axes (1m extent, 20 divisions = 5cm cells).
-        // Toggle with window.__studioGridVisible = false to hide.
+        // Slice 951 — Forge-style clean viewport. The previous floor grid
+        // created a visible horizon line ("2D grid line on top") at its
+        // far edge that fought the smooth-and-dynamic feel the user
+        // wants for the demo. The grid is now mounted invisible by
+        // default; the user re-enables it via the toolbar's Grid toggle
+        // or window.__studioSetGridVisible(true).
         const axes = new THREE.AxesHelper(0.05); // 50mm axes
+        axes.visible = false;                    // hidden by default with the grid
         axes.userData.pickable = false;
         axes.userData.isHelper = true;
         scene.add(axes);
+        window.__studioAxes = axes;
+        window.__studioSetAxesVisible = (v) => { axes.visible = !!v; };
         const grid = new THREE.GridHelper(1, 20, 0x666666, 0x2a2a2a);
         grid.position.y = -0.0005; // sit just below the axes plane so the X/Z axes still read
+        grid.visible = false;
         grid.userData.pickable = false;
         grid.userData.isHelper = true;
         grid.userData.archdiscStudioGrid = true;
@@ -207,20 +214,29 @@ function Viewport3D({ canvasId = 'render-canvas', domain = 'mechanical', onReady
         window.__studioGrid = grid;
         window.__studioSetGridVisible = (v) => { grid.visible = !!v; };
         // Slice 240: live grid-size control. Re-build the GridHelper
-        // with the new extent + same 20-division count.
+        // with the new extent + same 20-division count. Slice 951 —
+        // PRESERVE the prior visibility across the rebuild. Without
+        // this, StudioShellV3's settings-panel grid-size onChange (or
+        // any other caller) re-created the grid with `visible = true`
+        // default, overriding the slice 951 "hidden by default" state
+        // and reintroducing the floor-grid horizon line the demo brief
+        // called out for removal.
+        let g = grid;
         window.__studioSetGridSize = (extent, divisions) => {
+          const wasVisible = g ? g.visible : false;
           try {
-            const wasVisible = grid.visible;
-            scene.remove(grid);
-            if (grid.geometry && grid.geometry.dispose) grid.geometry.dispose();
-            if (grid.material && grid.material.dispose) grid.material.dispose();
+            scene.remove(g);
+            if (g.geometry && g.geometry.dispose) g.geometry.dispose();
+            if (g.material && g.material.dispose) g.material.dispose();
           } catch (_) { /* dispose best-effort */ }
           const newGrid = new THREE.GridHelper(extent || 1, divisions || 20, 0x666666, 0x2a2a2a);
           newGrid.position.y = -0.0005;
+          newGrid.visible = wasVisible;
           newGrid.userData.pickable = false;
           newGrid.userData.isHelper = true;
           newGrid.userData.archdiscStudioGrid = true;
           scene.add(newGrid);
+          g = newGrid;
           window.__studioGrid = newGrid;
           window.__studioGridSize = extent || 1;
         };

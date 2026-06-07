@@ -114,24 +114,26 @@
   color-scheme: light;
 }
 
-/* Geometry — matched 1:1 to Forge (forge-v4/tokens.css) so the Studio
-   shell reads identically: same zone heights, rail/panel widths, and tool
-   grid metrics. See docs/FORGE_UI_SPEC.md. */
+/* Geometry — slice 951 demo tightening. The slice 946 metrics matched
+   Forge 1:1 (topbar 40, qat 32, toolbar 48 — total 120 px before the
+   viewport starts); the demo needs more vertical room for the canvas
+   and a noticeably compact top chrome. Heights drop to 30 / 24 / 38
+   (total 92 px) with proportionally smaller tool buttons. */
 :root {
-  --studio-topbar-h:    40px;
-  --studio-qat-h:       32px;
-  --studio-toolbar-h:   48px;
-  --studio-statusbar-h: 26px;
-  --studio-cmdbar-h:    52px;
+  --studio-topbar-h:    30px;
+  --studio-qat-h:       24px;
+  --studio-toolbar-h:   38px;
+  --studio-statusbar-h: 22px;
+  --studio-cmdbar-h:    44px;
 
-  --studio-wb-rail-w:   72px;          /* left workbench rail (Forge: 72) */
-  --studio-right-w:     340px;         /* right panel (Forge: 340) */
-  --studio-right-collapsed-w: 36px;
-  --studio-archie-w:    380px;         /* archie dock when open (Forge: 380) */
+  --studio-wb-rail-w:   64px;          /* left workbench rail */
+  --studio-right-w:     320px;         /* right panel */
+  --studio-right-collapsed-w: 32px;
+  --studio-archie-w:    380px;         /* archie dock when open */
 
-  --studio-tool-row-h:  36px;
-  --studio-tool-size:   32px;
-  --studio-tool-gap:    3px;
+  --studio-tool-row-h:  30px;
+  --studio-tool-size:   26px;
+  --studio-tool-gap:    2px;
 
   --studio-radius:      4px;
   --studio-radius-lg:   8px;
@@ -370,9 +372,16 @@
   cursor: not-allowed;
 }
 
-/* ============ Viewport surface ============ */
+/* ============ Viewport surface ============
+ *
+ * Slice 951 — flat matte dark-gray canvas matching Forge's design.
+ * The earlier slice-946 design had a `radial-gradient(ellipse at 50% 35%, …)`
+ * that produced a visible bright oval / vignette in the center of the
+ * viewport ("white oval spot") — explicitly called out for removal.
+ * The new canvas is a single flat #181818 dark-gray so the rendered
+ * scene reads against a clean, perfectly-uniform backdrop. */
 .studio-viewport-canvas {
-  background: radial-gradient(ellipse at 50% 35%, #0d1015 0%, var(--studio-canvas) 70%);
+  background: #181818;
 }
 .studio-viewport canvas {
   width: 100% !important;
@@ -389,7 +398,7 @@
   inset: 0;
 }
 :root[data-studio-theme="light"] .studio-viewport-canvas {
-  background: radial-gradient(ellipse at 50% 35%, #f6f7f9 0%, var(--studio-canvas) 70%);
+  background: #ebebeb;
 }
 /* Viewport heads-up bar — edit-mode chips, axis chips, render-mode */
 .studio-vp-hud {
