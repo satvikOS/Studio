@@ -7791,6 +7791,24 @@ export function registerV3Api() {
   import('./netcode/autoload.js').catch(() => {});
   // Slice 887 — Motion-capture .bvh import + player.
   import('./bvhimport/autoload.js').catch(() => {});
+  // Slice 893 — REAL screen-space global illumination (SSAO + colour bounce).
+  import('./ssgi/autoload.js').catch(() => {});
+  // Slices 900-914 — depth-push main-thread modules
+  import('./mhuman/autoload.js').catch(() => {});
+  import('./webcamtrack/autoload.js').catch(() => {});
+  import('./renderfarm/autoload.js').catch(() => {});
+  import('./consoleready/autoload.js').catch(() => {});
+  import('./megaload/autoload.js').catch(() => {});
+  import('./bokehdof/autoload.js').catch(() => {});
+  import('./exrio/autoload.js').catch(() => {});
+  import('./windshade/autoload.js').catch(() => {});
+  import('./cubeprobes/autoload.js').catch(() => {});
+  import('./voxelgi/autoload.js').catch(() => {});
+  import('./replay/autoload.js').catch(() => {});
+  import('./kawase/autoload.js').catch(() => {});
+  import('./realmblur/autoload.js').catch(() => {});
+  import('./assetbundle/autoload.js').catch(() => {});
+  import('./postchain/autoload.js').catch(() => {});
 
   // Slice 890 — Photogrammetry / 3D-scan asset import (Reality Capture /
   // Agisoft Metashape / Meshroom). Real .ply (binary + ASCII) + Wavefront
