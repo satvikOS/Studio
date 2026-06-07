@@ -7817,6 +7817,26 @@ export function registerV3Api() {
   import('./lensdirtpass/autoload.js').catch(() => {});
   import('./autoexposure/autoload.js').catch(() => {});
   import('./motionvecmrt/autoload.js').catch(() => {});
+  // Slices 930-939 — code-only runway: GPU PT, DDGI, hair, cloth, fluids,
+  // RBD fracture, DynaMesh+ZRemesher, UV LSCM/ABF++, FACS face rig, Nuke comp.
+  import('./gpupt/autoload.js').catch(() => {});
+  import('./ddgi/autoload.js').catch(() => {});
+  import('./hairgroom/autoload.js').catch(() => {});
+  import('./clothfem/autoload.js').catch(() => {});
+  import('./flippyro/autoload.js').catch(() => {});
+  import('./rbdfracture/autoload.js').catch(() => {});
+  import('./dynaremesh/autoload.js').catch(() => {});
+  import('./uvunwrap/autoload.js').catch(() => {});
+  import('./facerig/autoload.js').catch(() => {});
+  import('./nukecomp/autoload.js').catch(() => {});
+  // Slices 940-945 — external-content ingestion readiness: face scans,
+  // Megascans/Quixel, live mocap, voice/dialogue, console SDK seam, farm queue.
+  import('./facescan/autoload.js').catch(() => {});
+  import('./megascanslib/autoload.js').catch(() => {});
+  import('./mocaplive/autoload.js').catch(() => {});
+  import('./voicepipeline/autoload.js').catch(() => {});
+  import('./consolebuild/autoload.js').catch(() => {});
+  import('./farmqueue/autoload.js').catch(() => {});
 
   // Slice 890 — Photogrammetry / 3D-scan asset import (Reality Capture /
   // Agisoft Metashape / Meshroom). Real .ply (binary + ASCII) + Wavefront
