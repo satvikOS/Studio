@@ -280,6 +280,7 @@ camera tracking + cryptomatte + render queue, project files + multi-camera
 | Multi-camera setup + switcher | DONE | slice 879 — `v3/multicam/` — named camera presets + viewport.camera swap. Ops: `__studioMultiCamCreate / Activate / List / Remove / SetPosition`. |
 | 4K / 8K target render pipeline | DONE | slice 880 — `v3/target4k/` — preset table (1080p/1440p/4k/8k) + path-tracer dispatch at target res. Ops: `__studio4KSetPreset / ListPresets / Render / GetState`. |
 | Performance profiler | DONE | slice 881 — `v3/perfprof/` — DOM overlay with FPS / frame time / draw calls / triangles / JS heap. Hooks viewport tick. Ops: `__studioPerfShow / Hide / GetStats`. |
+| Multiplayer WebRTC P2P netcode | DONE | slice 888 — `v3/netcode/` — real RTCPeerConnection setup with STUN NAT traversal + ordered control channel + unreliable replicate channel; auto-syncs scene-object transforms at 20 Hz across the link. Ops: `__studioNetHost / Join / Accept / Send / On / Replicate / Unreplicate / Subscribe / GetPeers / Disconnect / Stats`. |
 
 ## Caveat
 

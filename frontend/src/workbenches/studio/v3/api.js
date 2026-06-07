@@ -7786,6 +7786,7 @@ export function registerV3Api() {
   import('./multicam/autoload.js').catch(() => {});
   import('./target4k/autoload.js').catch(() => {});
   import('./perfprof/autoload.js').catch(() => {});
+  import('./netcode/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.
