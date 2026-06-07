@@ -7629,6 +7629,24 @@ export function registerV3Api() {
   import('./plasthist/autoload.js').catch(() => {});
   // Slice 777 — Houdini POPs (Particle Operators) — gravity/wind/turbulence/curl/vortex/attractor.
   import('./popfx/autoload.js').catch(() => {});
+  // Slice 778 — convex RBD (GJK + EPA + impulse solver).
+  import('./rbdconvex/autoload.js').catch(() => {});
+  // Slice 779 — arbitrary-genus quad remesh (cross-field + integer-grid).
+  import('./quadanygen/autoload.js').catch(() => {});
+  // Slice 780 — multi-layer cloth (self-collision + sewing + layer stack).
+  import('./clothlayer/autoload.js').catch(() => {});
+  // Slice 782 — ZBrush 50+ brush catalog.
+  import('./zbrushpro/autoload.js').catch(() => {});
+  // Slice 785 — OpenVDB-tier volume ops (advect/dilate/erode/smooth/grad/div).
+  import('./vdbops/autoload.js').catch(() => {});
+  // Slice 786 — QEM quadric-error mesh decimation (Garland-Heckbert).
+  import('./qemdecim/autoload.js').catch(() => {});
+  // Slice 787 — Archie Tool Registry V2 (auto-introspected op manifest).
+  import('../../../ai/index-installer.js').catch(() => {});
+  // Slice 788 — 4K scene stress harness (FPS / memory / 4K render).
+  import('./stress/autoload.js').catch(() => {});
+  // Slice 791 — Substance Designer visual graph editor (generators × filters).
+  import('./sdgraphedit/autoload.js').catch(() => {});
 
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
