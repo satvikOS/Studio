@@ -1429,6 +1429,14 @@ function KeymapCheatsheet() {
 // banner (autosave still in storage). The banner self-hides if the
 // user spawns anything in the meantime.
 function AutosaveRestorePrompt() {
+  // Slice 951f — disabled. Was a banner pinned to top-centre of the
+  // viewport that overlapped the camera-drag drop-zone. The autosave
+  // payload still survives in localStorage; the user can recover
+  // explicitly via __studioAutosaveRestoreLatest() / a File menu entry
+  // when that lands. Empty render keeps the component identity for any
+  // existing <AutosaveRestorePrompt /> mount points.
+  return null;
+  // eslint-disable-next-line no-unreachable
   const [info, setInfo] = useState(null);
   useEffect(() => {
     // Defer one tick so V3 API + scene have mounted.
@@ -3642,6 +3650,15 @@ function OnboardingTour() {
 }
 
 function WelcomeCard() {
+  // Slice 951f — removed per user request. The card centred on the
+  // viewport blocked OrbitControls drag/zoom interactions (its DOM
+  // node intercepted pointer events even though all it advertised was
+  // help text), so "can't move or zoom" was actually "can't grab the
+  // viewport because a div is sitting on top of it." Returning null
+  // here keeps the component identity stable for any code that still
+  // mounts <WelcomeCard /> in the shell but renders zero DOM.
+  return null;
+  // eslint-disable-next-line no-unreachable
   const [empty, setEmpty] = useState(true);
   const [recent, setRecent] = useState([]);
   useEffect(() => {
@@ -5382,7 +5399,7 @@ function DisplaySection() {
     { id: 'watermark', label: 'Watermark', defaultOn: true, onChange: (v) => { const el = document.querySelector('[data-studio-v3-watermark]'); if (el) el.style.display = v ? '' : 'none'; } },
     { id: 'archie-status', label: 'Archie dot', defaultOn: true, onChange: (v) => { const el = document.querySelector('[data-studio-v3-archie-status]'); if (el) el.style.display = v ? '' : 'none'; } },
     { id: 'keypress', label: 'Keypress flash', defaultOn: false, onChange: () => {} },
-    { id: 'ground', label: 'Shadow ground', defaultOn: true, onChange: (v) => { if (window.__studioSetGroundVisible) window.__studioSetGroundVisible(v); } },
+    { id: 'ground', label: 'Shadow ground', defaultOn: false, onChange: (v) => { if (window.__studioSetGroundVisible) window.__studioSetGroundVisible(v); } },
     { id: 'safe-area', label: 'Safe area', defaultOn: false, onChange: (v) => {
       let el = document.querySelector('[data-studio-v3-safe-area]');
       if (v) {

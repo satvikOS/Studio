@@ -54,9 +54,18 @@ function setCursor(pos) {
 }
 
 function getCursor() {
-  const c = ensureCursor();
-  if (!c) return [0, 0, 0];
-  return [c.position.x, c.position.y, c.position.z];
+  // Slice 951f — DO NOT auto-mount the cursor on a read. Polling
+  // accessors (status bar, ribbon labels, the V2 cursor-position
+  // readout) call __studioGetCursor() every frame; the old code's
+  // ensureCursor() side-effect materialised a 1.2 cm RGB-axis cross
+  // at world origin on the first poll, producing the bright "white
+  // sphere/cross" the user saw at the viewport centre in image.png.
+  // Reads now return [0,0,0] (or the existing cursor's position)
+  // without creating geometry. Writes via setCursor still call
+  // ensureCursor so the cursor appears the moment the user actually
+  // requests it.
+  if (!_cursor) return [0, 0, 0];
+  return [_cursor.position.x, _cursor.position.y, _cursor.position.z];
 }
 
 function snapCursorOrigin() {

@@ -186,18 +186,30 @@ function Viewport3D({ canvasId = 'render-canvas', domain = 'mechanical', onReady
         // origin that only receives shadows. Toggle via __studioSetGroundVisible.
         {
           const ground = new THREE.Mesh(
-            new THREE.PlaneGeometry(50, 50),
+            // Slice 951f — was 50 × 50 m. The far edge of a plane that
+            // big projects as a thin horizontal line at the camera's
+            // horizon and the ambient/fill lights caught a faint
+            // specular off it — the "white blob + horizontal line"
+            // visible at the viewport centre even in an EMPTY scene.
+            // 2 × 2 m is plenty for desk-scale shadow catching and
+            // the edge falls well outside the default frustum.
+            new THREE.PlaneGeometry(2, 2),
             // Slice 951c — opacity 0.28 produced a visible dark fan
-            // pattern radiating from the cube's shadow across the floor
-            // plane (the "2D grid line on top" the user kept reporting
-            // was actually PCF shadow banding stretched over 50 m of
-            // ground). 0.12 keeps the shadow grounded but eliminates
-            // the wide soft penumbra that read as a floor grid.
+            // pattern from the cube's PCF shadow. 0.12 grounds the
+            // cube without the wide soft penumbra.
             new THREE.ShadowMaterial({ opacity: 0.12 }),
           );
           ground.rotation.x = -Math.PI / 2;
           ground.position.y = -0.001;
           ground.receiveShadow = true;
+          // Slice 951f — start hidden too. Even at 2 m the plane was
+          // contributing a bright bloom at the viewport centre (the
+          // last visible "white sphere" in image.png with the gizmo
+          // unmounted), because the ambient + 3 directional lights
+          // tone-map non-zero radiance through the transparent shadow
+          // material under ACES at exposure 0.85. Re-enable per object
+          // selection (or via the Display section toggle).
+          ground.visible = false;
           ground.userData.isHelper = true;
           ground.userData.archdiscStudioGround = true;
           scene.add(ground);
@@ -323,13 +335,45 @@ function Viewport3D({ canvasId = 'render-canvas', domain = 'mechanical', onReady
         transformControls.setSize(0.8);
         if (!transformControls.userData) transformControls.userData = {};
         transformControls.userData.isHelper = true;
-        // TransformControls extends Object3D — add its gizmo helper to scene
-        try { scene.add(transformControls); } catch (e) { /* some Three.js versions need getHelper */ }
+        // Slice 951f — Three.js 0.181 TransformControlsGizmo internally
+        // forces its `visible=true` every render tick, so setting
+        // controls.visible = false on init doesn't stick. Instead we
+        // gate the gizmo on attach: don't even add it to the scene
+        // until something is attached, and remove it on detach. The
+        // scene dump in an empty scene was showing every Mesh "X"/"Y"/
+        // "Z"/"XY"/"YZ"/"XZ"/"XYZ"/"XYZE" + 'TransformControlsPlane'
+        // at origin — that's the bright "white sphere + horizontal
+        // line" the user kept reporting at viewport centre.
+        let _gizmoHelper = null;
         if (transformControls.getHelper) {
-            const helper = transformControls.getHelper();
-            helper.userData = { isHelper: true };
-            scene.add(helper);
+            _gizmoHelper = transformControls.getHelper();
+            _gizmoHelper.userData = { isHelper: true };
         }
+        const _mountGizmo = () => {
+            if (transformControls.parent !== scene) {
+                try { scene.add(transformControls); } catch (_) { /* older builds */ }
+            }
+            if (_gizmoHelper && _gizmoHelper.parent !== scene) scene.add(_gizmoHelper);
+        };
+        const _unmountGizmo = () => {
+            try { if (transformControls.parent === scene) scene.remove(transformControls); } catch (_) {}
+            try { if (_gizmoHelper && _gizmoHelper.parent === scene) scene.remove(_gizmoHelper); } catch (_) {}
+        };
+        // Don't mount on init — the empty scene shouldn't show any
+        // transform widgetry. Wrap attach() / detach() so the visual
+        // appears exactly when the user selects something.
+        const _origAttach = transformControls.attach.bind(transformControls);
+        const _origDetach = transformControls.detach.bind(transformControls);
+        transformControls.attach = (obj) => {
+            const r = _origAttach(obj);
+            if (transformControls.object) _mountGizmo();
+            return r;
+        };
+        transformControls.detach = () => {
+            const r = _origDetach();
+            _unmountGizmo();
+            return r;
+        };
 
         // TransformControls disables OrbitControls while the gizmo is being
         // dragged so the camera doesn't orbit mid-transform. CRITICAL: the

@@ -75,13 +75,22 @@ function createWindow() {
     minWidth: 1280,
     minHeight: 720,
     title: 'ArchDisc Studio — 3D Content Creation Platform',
+    // Slice 951f — kill the macOS native title-bar row. The user's
+    // image.png showed ~28 px of "empty space above the ribbon" — that
+    // band was macOS's native title bar (which the previous build let
+    // draw, even with the menubar already inside Studio's topbar).
+    // 'hiddenInset' on macOS keeps the traffic-light buttons but moves
+    // them INTO the topbar slot (no separate row); ignored on Windows
+    // + Linux so they still get a normal frame.
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    trafficLightPosition: { x: 10, y: 8 },
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
       webgl: true,
       enableWebSQL: false,
     },
-    backgroundColor: '#0d0d1a',
+    backgroundColor: '#181818',
     show: false,
   });
 
