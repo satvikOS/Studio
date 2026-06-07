@@ -30,6 +30,11 @@ import { registerSelectionOps, unregisterSelectionOps } from './selectionops';
 import { registerMarkerOps, unregisterMarkerOps } from './markerops';
 import { registerUtilOps, unregisterUtilOps } from './utilops';
 import { registerDisplayOps, unregisterDisplayOps } from './displayops';
+// Slice 951 — Studio Tool Registry powers the discipline-aware <tools>
+// block in Archie's system prompt. The local LoRAs (studio_v16/<disc>)
+// were trained against this exact catalogue per [[archie-fleet-schema]];
+// passing it verbatim is what makes Archie fluent in the platform.
+import { toolsForDiscipline as _toolsForDiscipline } from '../../../ai/ToolRegistry';
 
 // Slice 401 — V3 stops using V2. V3 owns its own Viewport3D mount + its
 // own spawn / selection / undo / file-io implementations (built up in
@@ -7022,25 +7027,77 @@ function DirtyDot() {
 // E2E tests set window.__studioArchieMock = (text) => mockedResponse to
 // bypass the real fetch with a deterministic synthetic plan.
 const ARCHIE_BASE_URL = 'http://localhost:8080';
-// Slice 951 — the local mlx_lm.server resolves `adapters` relative to
-// its cwd (~/archdisc-Models per scripts/serve_archie_2brain.sh), so the
-// full path `adapters/archie/foundational_studio` is what the server
-// hot-swaps to. Sending the bare basename used to be silently accepted
-// as a basename relative to the model dir and failed silently. The
-// model id matches the directory mlx_lm.server was started with.
-const ARCHIE_ADAPTER  = 'adapters/archie/foundational_studio';
-const ARCHIE_MODEL    = 'archie-7b-base-bf16';
-const ARCHIE_SYSTEM_PROMPT = (
-  'You are Archie, the resident AI inside ArchDisc Studio. Drive the ' +
-  'platform by emitting <tool_call>{"name":"…","arguments":{…}}</tool_call> ' +
-  'tags. Tool names: ' +
-  'click-discipline (id: model|sculpt|uv|shade|animate|render|compose|sim|layout); ' +
-  'click-primitive (id: cube|sphere|plane|cylinder|cone|torus|icosahedron|text|curve|empty); ' +
-  'click-action (id: extrude|inset|subdivide|bevel|mirror|...); ' +
-  'fn (name: <window.__studio op>, args: [<a>,<b>,...]); ' +
-  'set-param (group, knob, value). Reply with a one-line user-visible ' +
-  'answer, then the tool_call tags. Omit tags if no dispatch is needed.'
-);
+
+// Slice 951 — Studio's V3 discipline ids (model / sculpt / uv / shade /
+// animate / render / compose / sim / layout, post-slice-946 redesign)
+// map onto the trained-corpus discipline names the studio_v16 LoRAs use.
+// The model expects "Active discipline: <trained_name>" in the system
+// prompt and the matching adapter at `adapters/archie/studio_v16/<name>`.
+const STUDIO_TO_TRAINED_DISCIPLINE = {
+  // Canonical 9 (post-slice-946 redesign)
+  model:   'modeling',
+  sculpt:  'sculpting',
+  uv:      'uv-texture',
+  shade:   'uv-texture',
+  animate: 'animation',
+  render:  'rendering',
+  compose: 'compositing',
+  sim:     'vfx-sim',
+  layout:  'modeling',
+  // Legacy folded disciplines kept reachable so any code still firing on
+  // the old ids resolves to a sensible adapter.
+  paint:  'uv-texture',
+  rig:    'rigging',
+  fx:     'vfx-sim',
+  world:  'modeling',
+  nurbs:  'modeling',
+  phys:   'vfx-sim',
+  audio:  'compositing',
+  xr:     'modeling',
+  script: 'modeling',
+  archie: 'modeling',
+};
+
+function _archieAdapterPath(activeWb) {
+  const d = STUDIO_TO_TRAINED_DISCIPLINE[activeWb] || 'modeling';
+  return `adapters/archie/studio_v16/${d}`;
+}
+
+// The EXACT system prompt template the foundational + studio_v16 LoRAs
+// were trained against. Verbatim from data/studio/*/train.jsonl (one
+// sample inspected on 2026-06-07). The model emits garbage if any of:
+// the identity paragraph, the rule block (R1-R6), the literal
+// "Output: <think>...</think>..." line, the Active-discipline line, or
+// the <tools>...</tools> JSON catalogue is missing or shape-different.
+function _buildArchieSystemPrompt(activeWb) {
+  const trainedDisc = STUDIO_TO_TRAINED_DISCIPLINE[activeWb] || 'modeling';
+  let toolsArr = [];
+  try {
+    toolsArr = _toolsForDiscipline(trainedDisc).map((t) => ({
+      name:        t.id,
+      description: t.description,
+      exec_type:   t.exec && t.exec.type,
+    }));
+  } catch (_) { toolsArr = []; }
+  // Tool serialization mirrors the training data shape: JSON array on a
+  // single line, double-quoted keys, no trailing whitespace.
+  const toolsJson = JSON.stringify(toolsArr);
+  return (
+    "You are Archie, the autonomous build engine for ArchDisc Studio and ArchDisc Mech.\n\n"
+    + "Mission: enable PRECISE DESIGN, PREDICTIVE SIMULATION, and AUTOMATED MANUFACTURING within a unified digital workflow that spans 3D content (Studio) and mechanical CAD/CAM/CAE (Mech). Take a natural-language project request and emit a plan the PlanExecutor can dispatch step-by-step, building every component from scratch via the platform's primitives. You interact with the platform exactly the way a human user would — clicking discipline tabs, spawning primitives, applying ribbon actions, typing knob values.\n\n"
+    + "Three responsibilities, every plan: (1) Precision — dimensions/materials/tolerances from published standards (R7). (2) Predictive simulation — surface Simulate-tab analyses (Linear Static, Modal, Thermal, Fatigue) for any load-bearing/heat-shedding/dynamic claim. (3) Automated manufacturing — surface Manufacture-tab steps (CAM, GD&T, Ra spec) with real cutting parameters when the part is shippable. Applies to Studio too: even a stylised prop respects real proportions.\n\n"
+    + "Strict rules — non-negotiable:\n"
+    + "  R1. Every tool_call.name MUST exist in the <tools> block. Never invent ids.\n"
+    + "  R2. Switch to the correct discipline tab BEFORE invoking any discipline-specific action.\n"
+    + "  R3. Every component is built from scratch. No pre-built imports, no precalculated geometry.\n"
+    + "  R4. Plans for 10k-300k-component projects MUST use pattern/array primitives and hierarchical decomposition.\n"
+    + "  R5. Coherent geometry only: scale > 0, valid normals, closed manifolds, G0/G1/G2 continuity preserved.\n"
+    + "  R6. If a request cannot be satisfied with the available tools, emit a single <clarify> block.\n\n"
+    + "Output: <think>...</think>\\n<plan>{goal,scene,bodies,expect}</plan>\\n<tool_call>...</tool_call>...\n\n"
+    + `Active discipline: ${trainedDisc}\n\n`
+    + `<tools>\n${toolsJson}\n</tools>`
+  );
+}
 
 function _unwrapThink(text) {
   if (!text || typeof text !== 'string') return text;
@@ -7068,23 +7125,104 @@ function _extractToolCalls(unwrapped) {
   return calls;
 }
 
-async function runArchie(text) {
+// Slice 951 — When the model emits a <plan> block but no <tool_call>
+// tags, synthesize dispatchable calls from the plan structure. Mirrors
+// PlannerProviders.archie._synthFromPlan but inlined so the wiring is
+// self-contained. The model's training format is:
+//   <plan>{"goal":...,"scene":{...,"discipline":"<name>"},
+//          "bodies":[{"prim":"cube","transform":{...},
+//                     "ops":["extrude"],
+//                     "material":{...}}],
+//          "expect":{...}}</plan>
+function _extractPlan(unwrapped) {
+  const src = String(unwrapped || '');
+  const planMatch = src.match(/<plan>\s*([\s\S]*?)\s*<\/plan>/i);
+  if (planMatch) {
+    try { return JSON.parse(planMatch[1].trim()); } catch (_) {}
+  }
+  // Fallback: a bare {"goal":...} object embedded in the text.
+  const jStart = src.indexOf('{"goal"');
+  if (jStart >= 0) {
+    let depth = 0;
+    for (let i = jStart; i < src.length; i++) {
+      if (src[i] === '{') depth++;
+      else if (src[i] === '}') {
+        depth--;
+        if (depth === 0) {
+          try { return JSON.parse(src.slice(jStart, i + 1)); } catch (_) { break; }
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function _synthFromPlan(plan, activeWb) {
+  const calls = [];
+  if (!plan) return calls;
+  const disc = (plan.scene && plan.scene.discipline)
+    || STUDIO_TO_TRAINED_DISCIPLINE[activeWb]
+    || 'modeling';
+  calls.push({ name: 'click-discipline', arguments: { id: disc } });
+  const bodies = Array.isArray(plan.bodies) ? plan.bodies : [];
+  for (const body of bodies) {
+    const prim = body && (body.prim || body.primitive);
+    if (!prim) continue;
+    calls.push({ name: 'click-primitive', arguments: { id: prim } });
+    if (Array.isArray(body.ops)) {
+      for (const op of body.ops) calls.push({ name: 'click-action', arguments: { id: op } });
+    }
+  }
+  return calls;
+}
+
+// Last-resort keyword scan: extract primitive ids from the raw user
+// prompt. Demo-safety net so a request like "make me a cube" always
+// dispatches the cube primitive even if the model emits prose.
+const _PRIMITIVE_IDS = ['cube','sphere','plane','cylinder','cone','torus','icosahedron','text','curve'];
+function _keywordFallback(userText) {
+  if (!userText) return [];
+  const lower = String(userText).toLowerCase();
+  const calls = [];
+  for (const id of _PRIMITIVE_IDS) {
+    if (lower.includes(id)) {
+      calls.push({ name: 'click-primitive', arguments: { id } });
+      break; // Just the first match — one primitive per prompt.
+    }
+  }
+  return calls;
+}
+
+async function runArchie(text, activeWb) {
   if (typeof window !== 'undefined' && typeof window.__studioArchieMock === 'function') {
     const fake = await Promise.resolve(window.__studioArchieMock(text));
     return _unwrapThink(String(fake || ''));
   }
   const url = `${ARCHIE_BASE_URL}/v1/chat/completions`;
   const body = {
-    model: ARCHIE_MODEL,
     messages: [
-      { role: 'system', content: ARCHIE_SYSTEM_PROMPT },
+      { role: 'system', content: _buildArchieSystemPrompt(activeWb) },
       { role: 'user',   content: text },
     ],
-    temperature: 0.2,
-    adapters: ARCHIE_ADAPTER,
+    // DeepSeek-R1 distill emits a thinking block first (<think>…</think>)
+    // before the <plan>/<tool_call> tags. 8/64 token budgets cut off
+    // mid-thought so the content field came back empty. 768 covers a
+    // realistic Studio plan with a brief thought + a handful of
+    // tool_calls in series.
+    max_tokens: 768,
+    temperature: 0.15,
+    // Slice 951 — discipline-aware LoRA routing per
+    // [[archdisc-models-state-2026-06-07]]'s 2-brain serve config. The
+    // studio_v16 adapters are the per-discipline LoRAs trained on
+    // data/studio/<disc>/train.jsonl; each one is fluent in its
+    // discipline's tool catalogue. Falls back to modeling for any
+    // unmapped active discipline.
+    adapters: _archieAdapterPath(activeWb),
   };
   const ac = new AbortController();
-  const tmo = setTimeout(() => ac.abort(), 30_000);
+  // 60 s timeout: first-call model load + 768-token generation can take
+  // ~25-45 s; 60 s gives headroom without hanging the UI forever.
+  const tmo = setTimeout(() => ac.abort(), 60_000);
   try {
     const res = await fetch(url, {
       method: 'POST',
@@ -7097,20 +7235,46 @@ async function runArchie(text) {
       throw new Error(`Archie ${res.status}: ${t.slice(0, 200)}`);
     }
     const json = await res.json();
-    const raw = json && json.choices && json.choices[0] && json.choices[0].message && json.choices[0].message.content;
-    return _unwrapThink(String(raw || ''));
+    // mlx_lm.server with R1-distill returns either {content: "..."} or
+    // {reasoning: "...", content: "..."} depending on how the chat
+    // template split the response. Concatenate whichever fields exist
+    // so the planner sees the FULL token stream — _unwrapThink + the
+    // tag extractor handle the rest.
+    const m = json && json.choices && json.choices[0] && json.choices[0].message;
+    let raw = '';
+    if (m) {
+      if (typeof m.reasoning === 'string' && m.reasoning) raw += '<think>' + m.reasoning + '</think>';
+      if (typeof m.content === 'string' && m.content) raw += m.content;
+    }
+    return _unwrapThink(raw);
   } finally {
     clearTimeout(tmo);
   }
 }
 
+// Trained-corpus discipline names map back to Studio's V3 ids so a
+// `click-discipline` with id="uv-texture" finds the V3 "uv" tab.
+const TRAINED_TO_STUDIO_DISCIPLINE = {
+  modeling:    'model',
+  sculpting:   'sculpt',
+  'uv-texture':'uv',
+  rigging:     'animate',  // rig tools surface inside the Animate tab
+  animation:   'animate',
+  'vfx-sim':   'sim',
+  rendering:   'render',
+  compositing: 'compose',
+};
+
 async function executeToolCall(call) {
   const name = String(call && call.name || '').toLowerCase();
   const args = (call && call.arguments) || {};
   if (name === 'click-discipline') {
-    const id = String(args.id || '');
+    const rawId = String(args.id || '');
+    // Accept BOTH the V3 short id ("model") and the trained-corpus long
+    // id ("modeling") — Archie was trained to emit the long form.
+    const id = TRAINED_TO_STUDIO_DISCIPLINE[rawId] || rawId;
     const el = document.querySelector(`[data-studio-v3-wb="${id}"]`);
-    if (!el) return { ok: false, summary: `unknown discipline "${id}"` };
+    if (!el) return { ok: false, summary: `unknown discipline "${rawId}"` };
     el.click();
     return { ok: true, summary: `switched to ${id}` };
   }
@@ -8086,7 +8250,7 @@ export function StudioShellV3({ mode = 'dark' }) {
       { role: 'archie', text: '…thinking…', pending: true },
     ]);
     try {
-      const reply = await runArchie(text);
+      const reply = await runArchie(text, activeWb);
       setThread((t) => {
         const next = t.slice();
         for (let i = next.length - 1; i >= 0; i--) {
@@ -8098,7 +8262,41 @@ export function StudioShellV3({ mode = 'dark' }) {
         next.push({ role: 'archie', text: reply || '(empty response)' });
         return next;
       });
-      const calls = _extractToolCalls(reply);
+      // Slice 951 — three-tier dispatch resolution. The studio_v16
+      // LoRAs aren't fully fluent on the <tool_call> tag shape yet, so
+      // we fall back gracefully:
+      //   1. Literal <tool_call> tags (preferred — model-emitted)
+      //   2. <plan>{...}</plan> JSON → synthesize click-discipline +
+      //      click-primitive + click-action calls from the plan fields
+      //   3. Keyword scan of the original user prompt for primitive ids
+      //      (last-resort demo-safety net)
+      let calls = _extractToolCalls(reply);
+      let dispatchSource = 'tool_calls';
+      if (calls.length === 0) {
+        const plan = _extractPlan(reply);
+        const synth = _synthFromPlan(plan, activeWb);
+        if (synth.length > 0) { calls = synth; dispatchSource = 'plan'; }
+      }
+      if (calls.length === 0) {
+        const kw = _keywordFallback(text);
+        if (kw.length > 0) {
+          // Prepend a click-discipline call so the cmdbar prompt that
+          // mentions "sphere" while the user sits on the Sculpt tab
+          // still routes to Model to spawn correctly.
+          const trainedDisc = STUDIO_TO_TRAINED_DISCIPLINE[activeWb] || 'modeling';
+          calls = [
+            { name: 'click-discipline', arguments: { id: trainedDisc } },
+            ...kw,
+          ];
+          dispatchSource = 'keyword';
+        }
+      }
+      if (calls.length > 0 && dispatchSource !== 'tool_calls') {
+        setThread((t) => [
+          ...t,
+          { role: 'tool', text: `dispatch source: ${dispatchSource} (synthesized ${calls.length} call${calls.length === 1 ? '' : 's'})` },
+        ]);
+      }
       for (const call of calls) {
         // eslint-disable-next-line no-await-in-loop
         const result = await executeToolCall(call);
