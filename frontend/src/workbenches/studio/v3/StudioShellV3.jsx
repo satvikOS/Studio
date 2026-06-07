@@ -7006,6 +7006,156 @@ function DirtyDot() {
   );
 }
 
+// ─── Archie wiring (slice 948) ────────────────────────────────────────────
+// Real call into the local Archie fleet at localhost:8080. Posts an
+// OpenAI-compatible /v1/chat/completions request with a per-request
+// `adapters` field set to `foundational_studio` per the 2-brain serve
+// config in [[archdisc-models-state-2026-06-07]]. The reply is parsed
+// for <tool_call> tags conforming to the Studio Tool Registry contract
+// from slice 184 ([[archie-fleet-schema]]); each tool call dispatches
+// against the V3 surface using DOM clicks on data-studio-v3-* hooks
+// (which already wire to React handlers — no setState from here per
+// [[feedback-studio-window-api-no-setstate]]).
+//
+// E2E tests set window.__studioArchieMock = (text) => mockedResponse to
+// bypass the real fetch with a deterministic synthetic plan.
+const ARCHIE_BASE_URL = 'http://localhost:8080';
+const ARCHIE_ADAPTER  = 'foundational_studio';
+const ARCHIE_MODEL    = 'archie-7b-base';
+const ARCHIE_SYSTEM_PROMPT = (
+  'You are Archie, the resident AI inside ArchDisc Studio. Drive the ' +
+  'platform by emitting <tool_call>{"name":"…","arguments":{…}}</tool_call> ' +
+  'tags. Tool names: ' +
+  'click-discipline (id: model|sculpt|uv|shade|animate|render|compose|sim|layout); ' +
+  'click-primitive (id: cube|sphere|plane|cylinder|cone|torus|icosahedron|text|curve|empty); ' +
+  'click-action (id: extrude|inset|subdivide|bevel|mirror|...); ' +
+  'fn (name: <window.__studio op>, args: [<a>,<b>,...]); ' +
+  'set-param (group, knob, value). Reply with a one-line user-visible ' +
+  'answer, then the tool_call tags. Omit tags if no dispatch is needed.'
+);
+
+function _unwrapThink(text) {
+  if (!text || typeof text !== 'string') return text;
+  const closeIdx = text.search(/<\/think>/i);
+  if (closeIdx >= 0) {
+    const after = text.slice(closeIdx).replace(/^<\/think>\s*/i, '');
+    if (after && /(<plan>|<tool_call>|<clarify>)/i.test(after)) return after;
+  }
+  const openIdx = text.search(/<think>/i);
+  if (openIdx >= 0) {
+    return text.replace(/<think>/gi, '').replace(/<\/think>/gi, '');
+  }
+  return text;
+}
+
+function _extractToolCalls(unwrapped) {
+  const calls = [];
+  const src = String(unwrapped || '');
+  for (const m of src.matchAll(/<tool_call>([\s\S]*?)<\/tool_call>/gi)) {
+    try {
+      const obj = JSON.parse(m[1].trim());
+      if (obj && typeof obj.name === 'string') calls.push(obj);
+    } catch (_) { /* drop malformed tags */ }
+  }
+  return calls;
+}
+
+async function runArchie(text) {
+  if (typeof window !== 'undefined' && typeof window.__studioArchieMock === 'function') {
+    const fake = await Promise.resolve(window.__studioArchieMock(text));
+    return _unwrapThink(String(fake || ''));
+  }
+  const url = `${ARCHIE_BASE_URL}/v1/chat/completions`;
+  const body = {
+    model: ARCHIE_MODEL,
+    messages: [
+      { role: 'system', content: ARCHIE_SYSTEM_PROMPT },
+      { role: 'user',   content: text },
+    ],
+    temperature: 0.2,
+    adapters: ARCHIE_ADAPTER,
+  };
+  const ac = new AbortController();
+  const tmo = setTimeout(() => ac.abort(), 30_000);
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: ac.signal,
+    });
+    if (!res.ok) {
+      const t = await res.text().catch(() => '');
+      throw new Error(`Archie ${res.status}: ${t.slice(0, 200)}`);
+    }
+    const json = await res.json();
+    const raw = json && json.choices && json.choices[0] && json.choices[0].message && json.choices[0].message.content;
+    return _unwrapThink(String(raw || ''));
+  } finally {
+    clearTimeout(tmo);
+  }
+}
+
+async function executeToolCall(call) {
+  const name = String(call && call.name || '').toLowerCase();
+  const args = (call && call.arguments) || {};
+  if (name === 'click-discipline') {
+    const id = String(args.id || '');
+    const el = document.querySelector(`[data-studio-v3-wb="${id}"]`);
+    if (!el) return { ok: false, summary: `unknown discipline "${id}"` };
+    el.click();
+    return { ok: true, summary: `switched to ${id}` };
+  }
+  if (name === 'click-primitive') {
+    const id = String(args.id || '');
+    const el = document.querySelector(`[data-studio-v3-tool="${id}"][data-studio-v3-tool-group="add"]`);
+    if (el) { el.click(); return { ok: true, summary: `spawn ${id}` }; }
+    // Fallback: spawn directly via the slice 457 helper (covers scenes
+    // not in the Model discipline).
+    const scene = window.__archdiscScene || (window.__archdiscViewport && window.__archdiscViewport.scene);
+    if (scene && typeof window.__spawnPrimitive === 'function') {
+      window.__spawnPrimitive(id, scene);
+      return { ok: true, summary: `spawn ${id} (direct)` };
+    }
+    return { ok: false, summary: `no add-button for "${id}"` };
+  }
+  if (name === 'click-action') {
+    const id = String(args.id || '');
+    const el = document.querySelector(`[data-studio-v3-tool="${id}"]`);
+    if (!el) return { ok: false, summary: `unknown action "${id}"` };
+    el.click();
+    return { ok: true, summary: `action ${id}` };
+  }
+  if (name === 'fn') {
+    const fname = String(args.name || '');
+    const fargs = Array.isArray(args.args) ? args.args : [];
+    const fn = typeof window !== 'undefined' ? window[fname] : undefined;
+    if (typeof fn !== 'function') return { ok: false, summary: `no window.${fname}` };
+    try {
+      const r = fn(...fargs);
+      return { ok: true, summary: `${fname}(${fargs.map((a) => JSON.stringify(a)).join(', ')}) → ${JSON.stringify(r)}` };
+    } catch (err) {
+      return { ok: false, summary: `${fname} threw: ${String(err && err.message || err)}` };
+    }
+  }
+  if (name === 'set-param') {
+    const group = String(args.group || '');
+    const knob  = String(args.knob  || '');
+    const value = args.value;
+    // Studio's V2 surface persists knob state via `data-studio-<group>`
+    // attributes on a single element; the V3 ribbon mirrors that. We
+    // mutate the attribute and dispatch a synthetic CustomEvent so any
+    // listener (the active tool's React onChange, the ops layer) can
+    // react without us reaching into setState.
+    const el = document.querySelector(`[data-studio-${group}]`);
+    if (!el) return { ok: false, summary: `no [data-studio-${group}]` };
+    el.setAttribute(`data-studio-${group}`, knob);
+    el.dispatchEvent(new CustomEvent('studio-set-param', { detail: { group, knob, value } }));
+    return { ok: true, summary: `${group}/${knob} = ${JSON.stringify(value)}` };
+  }
+  return { ok: false, summary: `unknown tool "${name}"` };
+}
+
 // ─── CommandBar (always-on Archie input) ──────────────────────────────────
 // Slice 398 — direct-call mode: any cmdbar string that matches the shape
 // `studioFoo arg1 arg2 ...` (V2 window-API style) invokes the matching
@@ -7902,9 +8052,10 @@ export function StudioShellV3({ mode = 'dark' }) {
     }
   }, [activeTool]);
 
-  const onCmdSubmit = (text) => {
-    // Direct V3-API call path — any `studioFoo arg1 arg2` runs the API
-    // and pushes the result. Thread strip auto-opens.
+  const onCmdSubmit = async (text) => {
+    // Direct V3-API call path — any `studioFoo arg1 arg2` invokes the
+    // existing window.__studio* op directly and pushes the result. No
+    // model round-trip. Best for power users who already know the API.
     const direct = callDirectIfPossible(text);
     if (direct) {
       setThread((t) => [
@@ -7916,7 +8067,54 @@ export function StudioShellV3({ mode = 'dark' }) {
       ]);
       return;
     }
-    setThread((t) => [...t, { role: 'user', text }, { role: 'archie', text: `(NL routing wired in a follow-up) — heard: "${text}"` }]);
+    // NL routing — push the user message + a pending Archie placeholder,
+    // then call the local Archie fleet at localhost:8080 with the
+    // foundational_studio adapter. The reply replaces the placeholder;
+    // any <tool_call> tags in the reply are extracted and dispatched
+    // against the V3 surface.
+    setThread((t) => [
+      ...t,
+      { role: 'user', text },
+      { role: 'archie', text: '…thinking…', pending: true },
+    ]);
+    try {
+      const reply = await runArchie(text);
+      setThread((t) => {
+        const next = t.slice();
+        for (let i = next.length - 1; i >= 0; i--) {
+          if (next[i] && next[i].pending) {
+            next[i] = { role: 'archie', text: reply || '(empty response)' };
+            return next;
+          }
+        }
+        next.push({ role: 'archie', text: reply || '(empty response)' });
+        return next;
+      });
+      const calls = _extractToolCalls(reply);
+      for (const call of calls) {
+        // eslint-disable-next-line no-await-in-loop
+        const result = await executeToolCall(call);
+        setThread((t) => [
+          ...t,
+          {
+            role: 'tool',
+            text: `${call.name}(${JSON.stringify(call.arguments || {})}) → ${result.ok ? result.summary : 'FAIL — ' + result.summary}`,
+          },
+        ]);
+      }
+    } catch (err) {
+      setThread((t) => {
+        const next = t.slice();
+        for (let i = next.length - 1; i >= 0; i--) {
+          if (next[i] && next[i].pending) {
+            next[i] = { role: 'tool', text: `archie call failed: ${String(err && err.message || err)}` };
+            return next;
+          }
+        }
+        next.push({ role: 'tool', text: `archie call failed: ${String(err && err.message || err)}` });
+        return next;
+      });
+    }
   };
 
   // Slice 400/407 — QAT actions call V3 APIs and push a tool-message
