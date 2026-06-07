@@ -7755,6 +7755,37 @@ export function registerV3Api() {
   import('./archelem/autoload.js').catch(() => {});
   // Slice 839 — IFC4 import/export for BIM.
   import('./ifc/autoload.js').catch(() => {});
+  // Slices 840-884 — AAA game engine mega push
+  import('./ecs/autoload.js').catch(() => {});
+  import('./gamescript/autoload.js').catch(() => {});
+  import('./saveload/autoload.js').catch(() => {});
+  import('./inputmap/autoload.js').catch(() => {});
+  import('./triggervol/autoload.js').catch(() => {});
+  import('./gameui/autoload.js').catch(() => {});
+  import('./statemachine/autoload.js').catch(() => {});
+  import('./spatial3d/autoload.js').catch(() => {});
+  import('./audiomix/autoload.js').catch(() => {});
+  import('./reverbzone/autoload.js').catch(() => {});
+  import('./deferred/autoload.js').catch(() => {});
+  import('./shadowcasc/autoload.js').catch(() => {});
+  import('./spotcookie/autoload.js').catch(() => {});
+  import('./bloomstack/autoload.js').catch(() => {});
+  import('./lensdirt/autoload.js').catch(() => {});
+  import('./fxaasmaa/autoload.js').catch(() => {});
+  import('./celshader/autoload.js').catch(() => {});
+  import('./animstate/autoload.js').catch(() => {});
+  import('./blendtree/autoload.js').catch(() => {});
+  import('./footik/autoload.js').catch(() => {});
+  import('./lookat/autoload.js').catch(() => {});
+  import('./compgraph/autoload.js').catch(() => {});
+  import('./rotomatte/autoload.js').catch(() => {});
+  import('./camtrack/autoload.js').catch(() => {});
+  import('./cryptomatte/autoload.js').catch(() => {});
+  import('./renderqueue/autoload.js').catch(() => {});
+  import('./projectfile/autoload.js').catch(() => {});
+  import('./multicam/autoload.js').catch(() => {});
+  import('./target4k/autoload.js').catch(() => {});
+  import('./perfprof/autoload.js').catch(() => {});
 
   // Slice 683 — visible command palette UI bound to Cmd/Ctrl+Shift+P.
   // Lazy-imported so callers can pre-register their own ops first.

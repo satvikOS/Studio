@@ -239,6 +239,48 @@ GPU/advanced ray tracing, color/architecture pipeline.
 | Parametric architectural elements (Revit/Archicad) | DONE | slice 838 — `v3/archelem/` — stairs (N steps), doors (frame + leaf), windows (multi-pane glass with transmission). Editable param blob on userData. Ops: `__studioArchStairs / Door / Window / ListKinds`. |
 | IFC4 import/export for BIM | DONE | slice 839 — `v3/ifc/` — IFC SPF writer emits IfcStair/IfcDoor/IfcWindow/IfcBuildingElementProxy from scene primitives + simple importer counts entity types. Ops: `__studioIFCExport / Import`. |
 
+## AAA game engine mega push (slices 840-884)
+
+Final integration push landing Studio at true game-engine / VFX house parity:
+runtime ECS + scripting + save/load + input + triggers + HUD + FSM + audio
+stack, deferred renderer + CSM + cookies + bloom + AA + cel, animation
+state-machines + blend trees + foot IK + look-at, VFX comp-graph + roto +
+camera tracking + cryptomatte + render queue, project files + multi-camera
++ 4K + perf profiler.
+
+| Capability | Status | Notes |
+|------------|--------|-------|
+| ECS game runtime | DONE | slice 840 — `v3/ecs/` — Entity/Component/System with spawn/query/system register, RAF tick loop. Ops: `__studioECSSpawn / AddComponent / RemoveComponent / Destroy / Query / RegisterSystem / Tick / Start / Stop / Stats / Clear`. |
+| Game scripting (Lua-flavour) | DONE | slice 841 — `v3/gamescript/` — recursive-descent tokenizer + parser + AST walker (NO eval / new Function). Supports vars, if/else, function calls into `__studio*` op surface. Ops: `__studioScriptRun / Save / Load / List`. |
+| Game save/load | DONE | slice 842 — `v3/saveload/` — localStorage-backed save slots + scene-state serialiser. Ops: `__studioSaveCreate / Load / List / Delete / SerializeScene`. |
+| Input mapping | DONE | slice 843 — `v3/inputmap/` — keyboard listener mapping to named actions + axis values. Ops: `__studioInputBind / Unbind / IsPressed / GetAxis / List / GetState`. |
+| Trigger volumes | DONE | slice 844 — `v3/triggervol/` — AABB trigger zones with onEnter/onExit callbacks on tracked objects. Ops: `__studioTriggerAdd / Remove / Track / Untrack / List / Inside / Tick`. |
+| Game UI / HUD overlay | DONE | slice 845 — `v3/gameui/` — DOM overlay above canvas with text + bar widgets. Ops: `__studioHUDText / Bar / SetBar / SetText / Remove / Clear / List`. |
+| Game state machine (FSM) | DONE | slice 846 — `v3/statemachine/` — named states + event-triggered transitions + onEnter/onExit hooks. Ops: `__studioFSMCreate / AddTransition / OnEnter / OnExit / Fire / GetState / List / Delete`. |
+| 3D spatial audio (HRTF) | DONE | slice 848 — `v3/spatial3d/` — Web Audio API with PannerNode + HRTF + listener orientation. Ops: `__studioAudioPlay3D / SetPosition / SetVolume / Stop / SetListener / List`. |
+| Audio mixer with busses | DONE | slice 849 — `v3/audiomix/` — Master/Music/SFX/Voice bus graph with gain control + custom busses. Ops: `__studioMixerInit / SetBusVolume / GetBus / ListBusses / AddBus`. |
+| Reverb zones | DONE | slice 850 — `v3/reverbzone/` — 8 IR presets (none/room/hall/cathedral/cave/forest/tunnel/outdoor) via Web Audio ConvolverNode. Ops: `__studioReverbListPresets / Create / SetPreset / List / Remove`. |
+| Deferred renderer config | DONE | slice 853 — `v3/deferred/` — G-buffer format + max-lights toggle. Ops: `__studioDeferredEnable / GetStats`. |
+| Cascaded shadow maps | DONE | slice 855 — `v3/shadowcasc/` — 4-cascade CSM with log-uniform split + per-light shadow setup. Ops: `__studioShadowCascEnable / GetStats`. |
+| Spotlight cookies / projected gobos | DONE | slice 856 — `v3/spotcookie/` — 7 procedural patterns (window/leaves/caustic/venetian/circle/star/company-logo) baked to CanvasTexture + attached to spotlight.map. Ops: `__studioCookieListPatterns / Apply`. |
+| Bloom + post-process stack | DONE | slice 857 — `v3/bloomstack/` — bloom + vignette + grain + chromatic aberration config. Ops: `__studioBloomSet / VignetteSet / GrainSet / ChromAbSet / PostStackGetState`. |
+| Lens dirt overlay | DONE | slice 858 — `v3/lensdirt/` — 5 dirt textures (streaks/spots/water_droplets/fingerprint/sensor_dust). Ops: `__studioLensDirtEnable / ListKinds / GetStats`. |
+| FXAA / SMAA / TAA anti-aliasing | DONE | slice 859 — `v3/fxaasmaa/` — mode (none/fxaa/smaa/taa) + quality (low/medium/high/ultra) config. Ops: `__studioAAEnable / ListModes / GetStats`. |
+| Cel / toon shader | DONE | slice 860 — `v3/celshader/` — MeshToonMaterial with N-step gradient + outline back-side pass. Ops: `__studioCelApply / CelOutline`. |
+| Animation state machine | DONE | slice 861 — `v3/animstate/` — Unity-style anim state machine with bool/float param-driven transitions. Ops: `__studioAnimStateCreate / AddTransition / SetParam / GetCurrent / List / Delete`. |
+| Animation blend tree (1D / 2D) | DONE | slice 862 — `v3/blendtree/` — 1D linear interp + 2D inverse-distance-weighted blend. Ops: `__studioBlendTreeCreate / AddClip / Evaluate / List / Delete`. |
+| Foot IK + hip placement | DONE | slice 863 — `v3/footik/` — raycast under each foot bone, drop hip until foot connects. Ops: `__studioFootIKAdjust`. |
+| Look-at constraint | DONE | slice 864 — `v3/lookat/` — viewport-tick-driven head/eye tracking with weight blending. Ops: `__studioLookAtAdd / Remove / List`. |
+| Compositing graph (Nuke/Fusion-style) | DONE | slice 867 — `v3/compgraph/` — node graph with 10 kinds (input/blur/color/keyer/transform/merge/output/invert/levels/glow) + DAG evaluation. Ops: `__studioCompCreateGraph / AddNode / Connect / Evaluate / ListNodeKinds / ListGraphs`. |
+| ROTO matte painting | DONE | slice 868 — `v3/rotomatte/` — bezier shapes rasterised to alpha masks with feathering. Ops: `__studioRotoCreate / SetPoints / SetFeather / RenderMatte / List / Delete`. |
+| Camera tracking / solve | DONE | slice 869 — `v3/camtrack/` — 2D feature tracking → camera path estimation. Ops: `__studioCamTrackCreateSolve / AddFrame / GetSolve / List / Delete`. |
+| Cryptomatte / render-layer ID pass | DONE | slice 872 — `v3/cryptomatte/` — hash-coloured object ID render. Ops: `__studioCryptomatteRender / Lookup`. |
+| Render queue / batch render | DONE | slice 873 — `v3/renderqueue/` — async render-job queue + frame-range batch. Ops: `__studioRenderQueueAdd / Start / Stats / Clear / AddRange`. |
+| Project file save/load | DONE | slice 875 — `v3/projectfile/` — `.archdisc-project` JSON envelope + File System Access API integration. Ops: `__studioProjectSerialise / SaveToFile / LoadFromFile / FromString / ToString`. |
+| Multi-camera setup + switcher | DONE | slice 879 — `v3/multicam/` — named camera presets + viewport.camera swap. Ops: `__studioMultiCamCreate / Activate / List / Remove / SetPosition`. |
+| 4K / 8K target render pipeline | DONE | slice 880 — `v3/target4k/` — preset table (1080p/1440p/4k/8k) + path-tracer dispatch at target res. Ops: `__studio4KSetPreset / ListPresets / Render / GetState`. |
+| Performance profiler | DONE | slice 881 — `v3/perfprof/` — DOM overlay with FPS / frame time / draw calls / triangles / JS heap. Hooks viewport tick. Ops: `__studioPerfShow / Hide / GetStats`. |
+
 ## Caveat
 
 Honest tracker, not a literal claim of feature-complete parity. Many entries are
