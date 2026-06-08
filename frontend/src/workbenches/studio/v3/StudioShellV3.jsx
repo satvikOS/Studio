@@ -7481,21 +7481,10 @@ function _humanizeCall(call, result) {
 const _PRIMITIVE_IDS = [
   'cube','sphere','plane','cylinder','cone','torus','icosahedron','text','curve','empty',
 ];
-// Common noun → primitive id. Tracks the way users describe parts of
-// composite shapes (a "leg" is a cylinder, a "top" is a cube, etc.)
-// so the recipe + keyword stages can map mentions to real primitives.
-const _NOUN_TO_PRIMITIVE = {
-  ball: 'sphere', orb: 'sphere', head: 'sphere',
-  block: 'cube', box: 'cube', body: 'cube', slab: 'cube', top: 'cube',
-  leg: 'cylinder', post: 'cylinder', shaft: 'cylinder', trunk: 'cylinder',
-  pillar: 'cylinder', column: 'cylinder', pedestal: 'cylinder',
-  pipe: 'cylinder', rod: 'cylinder', stem: 'cylinder',
-  roof: 'cone', spike: 'cone', tip: 'cone', nose: 'cone', tip: 'cone',
-  ring: 'torus', donut: 'torus', collar: 'torus',
-  ground: 'plane', floor: 'plane', wall: 'plane', surface: 'plane',
-  panel: 'plane', sheet: 'plane',
-  rock: 'icosahedron', crystal: 'icosahedron', gem: 'icosahedron',
-};
+// Slice 954 — no noun-to-primitive alias table. "Click \"leg\"" is not a
+// registered Studio primitive; mapping it to cylinder here is a hardcoded
+// fallback in disguise. Archie must emit an actual registered primitive id
+// or a valid tool_call. Anything else remains honest non-dispatch.
 const _DISCIPLINE_IDS = new Set([
   'model','modeling','sculpt','sculpting','uv','uv-texture','shade','animate',
   'animation','rig','rigging','render','rendering','compose','compositing',
@@ -7518,11 +7507,9 @@ function _quotedClicksFallback(reply) {
       calls.push({ name: 'click-discipline', arguments: { id: bare } });
     } else if (_PRIMITIVE_IDS.includes(bare)) {
       calls.push({ name: 'click-primitive', arguments: { id: bare } });
-    } else if (_NOUN_TO_PRIMITIVE[bare]) {
-      calls.push({ name: 'click-primitive', arguments: { id: _NOUN_TO_PRIMITIVE[bare] } });
     }
-    // Other tokens (e.g. "material-editor") aren't dispatchable here;
-    // dropped silently so they don't poison the call list.
+    // Other tokens (e.g. "leg", "material-editor") aren't dispatchable
+    // here; dropped silently so they don't poison the call list.
   }
   return calls;
 }

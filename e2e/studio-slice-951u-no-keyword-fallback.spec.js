@@ -73,7 +73,7 @@ test('Studio slice 951u — prompt keywords do not spawn geometry without model 
     return r.fulfill({
       status: 200,
       headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
-      body: sseBody('I understand you asked for a sphere, cylinder, and chair leg, but I am not emitting any dispatch protocol here.'),
+      body: sseBody('I understand you asked for a sphere, cylinder, and chair leg. Click "leg". I am not emitting any registered primitive id or dispatch protocol here.'),
     });
   });
 
