@@ -7379,6 +7379,29 @@ function _humanizeReply(rawReply, dispatchedCalls) {
   return s;
 }
 
+// Slice 953 — humanize from EXECUTION results, not merely parsed intent.
+// A malformed/unknown model tool_call is still model-derived structure, but
+// the chat window must not claim it "spawned" anything unless Studio actually
+// accepted the command. This keeps failed Archie calls honest while preserving
+// the concise success summary for real dispatches.
+function _humanizeResolvedReply(rawReply, dispatchResults) {
+  const results = Array.isArray(dispatchResults) ? dispatchResults : [];
+  const okCalls = results.filter((r) => r && r.result && r.result.ok).map((r) => r.call);
+  if (okCalls.length > 0) return _humanizeReply(rawReply, okCalls);
+  const failed = results.filter((r) => r && r.result && !r.result.ok);
+  if (failed.length > 0) {
+    const summaries = [];
+    for (const r of failed) {
+      const s = String((r.result && r.result.summary) || '').trim();
+      if (s && !summaries.includes(s)) summaries.push(s);
+      if (summaries.length >= 2) break;
+    }
+    const noun = failed.length === 1 ? 'command' : 'commands';
+    return `I parsed ${failed.length} Archie ${noun}, but Studio did not execute ${failed.length === 1 ? 'it' : 'them'}${summaries.length ? `: ${summaries.join('; ')}` : '.'}`;
+  }
+  return _humanizeReply(rawReply, []);
+}
+
 // Helper: turn a list of tool calls into a one-line natural summary
 // (e.g. "Switched to Modeling, spawned a cube and 4 cylinders.").
 const _PRIMITIVE_LABEL = {
@@ -7845,6 +7868,11 @@ async function executeToolCall(call) {
   }
   if (name === 'click-primitive') {
     const id = String(args.id || '');
+    // Slice 953 — never pass invented model ids into __spawnPrimitive.
+    // The helper can create a default-ish mesh for unknown strings, which
+    // turns a bad model tool_call into fake success. Validate against the
+    // registry first so unsupported ids surface as honest failures.
+    if (!_PRIMITIVE_IDS.includes(id)) return { ok: false, summary: `unknown primitive "${id}"` };
     const el = document.querySelector(`[data-studio-v3-tool="${id}"][data-studio-v3-tool-group="add"]`);
     if (el) { el.click(); return { ok: true, summary: `spawn ${id}` }; }
     // Fallback: spawn directly via the slice 457 helper (covers scenes
@@ -8836,6 +8864,7 @@ export function StudioShellV3({ mode = 'dark' }) {
       // call commits. We track signatures in _specSigSet so the
       // post-stream tier-1 loop below skips anything already executed.
       const _specSigSet = new Set();
+      const _specResultBySig = new Map();
       const _sig = (c) => JSON.stringify({ n: c.name, a: c.arguments || {} });
       const reply = await runArchie(text, activeWb, {
         onToken: ({ acc_content }) => _streamUpdate(acc_content),
@@ -8844,6 +8873,7 @@ export function StudioShellV3({ mode = 'dark' }) {
           if (_specSigSet.has(sig)) return;
           _specSigSet.add(sig);
           const result = await executeToolCall(call);
+          _specResultBySig.set(sig, { call, result });
           setThread((t) => [
             ...t,
             { role: 'tool', text: _humanizeCall(call, result) },
@@ -8888,13 +8918,37 @@ export function StudioShellV3({ mode = 'dark' }) {
           dispatchSource = 'decomposer';
         }
       }
-      // Slice 951l — replace the "…thinking…" placeholder with a
-      // humanized version of the reply (tags stripped, markdown
-      // collapsed, dispatch summary appended when the raw text is
-      // empty or just protocol). The DISPATCH below still runs against
-      // the raw reply; only the chat-window text changes.
+      // Slice 953 — execute first, then replace the pending Archie text
+      // from actual execution results. Parsed intent alone is not enough:
+      // an unknown tool_call must read as a failed command, not as a
+      // successful spawn summary.
+      const dispatchResults = [];
+      for (const call of calls) {
+        const sig = _sig(call);
+        // Slice 951t — skip anything the speculative dispatcher already
+        // executed during streaming so we don't double-spawn primitives.
+        if (_specSigSet.has(sig)) {
+          const prior = _specResultBySig.get(sig);
+          if (prior) dispatchResults.push(prior);
+          continue;
+        }
+        // eslint-disable-next-line no-await-in-loop
+        const result = await executeToolCall(call);
+        dispatchResults.push({ call, result });
+        setThread((t) => [
+          ...t,
+          {
+            role: 'tool',
+            text: _humanizeCall(call, result),
+          },
+        ]);
+      }
+      // Slice 951l/953 — replace the "…thinking…" placeholder with a
+      // humanized version of the reply. Success summaries are derived
+      // only from successful dispatch results; failed calls surface their
+      // real Studio error instead of pretending geometry appeared.
       const humanized = calls.length
-        ? _humanizeReply(reply, calls)
+        ? _humanizeResolvedReply(reply, dispatchResults)
         : (reply && reply.trim()
             ? _humanizeReply(reply, [])
             : "I couldn't make sense of that — try naming the parts you want (e.g. \"a cube tabletop and four cylinder legs\") or refining what you mean.");
@@ -8909,20 +8963,6 @@ export function StudioShellV3({ mode = 'dark' }) {
         next.push({ role: 'archie', text: humanized });
         return next;
       });
-      for (const call of calls) {
-        // Slice 951t — skip anything the speculative dispatcher already
-        // executed during streaming so we don't double-spawn primitives.
-        if (_specSigSet.has(_sig(call))) continue;
-        // eslint-disable-next-line no-await-in-loop
-        const result = await executeToolCall(call);
-        setThread((t) => [
-          ...t,
-          {
-            role: 'tool',
-            text: _humanizeCall(call, result),
-          },
-        ]);
-      }
     } catch (err) {
       setThread((t) => {
         const next = t.slice();
