@@ -7549,6 +7549,71 @@ function _keywordFallback(userText, reply) {
   return calls;
 }
 
+// Slice 951o — second-pass decomposer. When the first model call
+// produces 0 dispatchable tool_calls (typical for complex prompts like
+// "build a coffee table" — the LoRA emits prose with fake primitive
+// names), fire a SECOND call with a tight, focused prompt that asks
+// the model to decompose the user's request into a flat list of
+// registered primitive ids. The model still does the decomposition —
+// no client-side noun→primitive lookup. The second call uses a fresh
+// minimal system prompt to bypass the "step-by-step explanation"
+// prior that hijacks the first call.
+async function _runDecomposerPass(userText) {
+  if (typeof window !== 'undefined' && typeof window.__studioArchieMock === 'function') {
+    return [];  // Mocks bypass the decomposer
+  }
+  const primIds = ['cube','sphere','plane','cylinder','cone','torus','icosahedron','text','curve'];
+  const sys =
+    'You are a 3D-modeling primitive decomposer. The user describes an object; you list which Studio primitives compose it.\n\n'
+    + 'Available primitive ids (use ONLY these): ' + primIds.join(', ') + '\n\n'
+    + 'Reply with ONLY a single JSON array of primitive ids in build order. No prose, no markdown, no explanation.\n\n'
+    + 'Format: ["<id>", "<id>", "<id>"]\n\n'
+    + 'Examples:\n'
+    + '  "snowman" -> ["sphere", "sphere", "sphere"]\n'
+    + '  "umbrella" -> ["cone", "cylinder"]\n'
+    + '  "candle" -> ["cylinder", "cone"]';
+  const body = {
+    messages: [
+      { role: 'system', content: sys },
+      { role: 'user', content: userText },
+    ],
+    max_tokens: 200,
+    temperature: 0.1,
+  };
+  const ac = new AbortController();
+  const tmo = setTimeout(() => ac.abort(), 45_000);
+  try {
+    const res = await fetch(`${ARCHIE_BASE_URL}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: ac.signal,
+    });
+    if (!res.ok) return [];
+    const json = await res.json();
+    const m = json && json.choices && json.choices[0] && json.choices[0].message;
+    const raw = ((m && m.reasoning) || '') + ((m && m.content) || '');
+    // Find a JSON array in the response. Models often wrap it.
+    const arrayMatch = raw.match(/\[[\s\S]*?\]/);
+    if (!arrayMatch) return [];
+    let arr;
+    try { arr = JSON.parse(arrayMatch[0]); } catch (_) { return []; }
+    if (!Array.isArray(arr)) return [];
+    const calls = [];
+    for (const id of arr) {
+      const norm = String(id || '').trim().toLowerCase();
+      if (primIds.includes(norm)) {
+        calls.push({ name: 'click-primitive', arguments: { id: norm } });
+      }
+    }
+    return calls;
+  } catch (_) {
+    return [];
+  } finally {
+    clearTimeout(tmo);
+  }
+}
+
 async function runArchie(text, activeWb) {
   if (typeof window !== 'undefined' && typeof window.__studioArchieMock === 'function') {
     const fake = await Promise.resolve(window.__studioArchieMock(text));
@@ -8654,6 +8719,18 @@ export function StudioShellV3({ mode = 'dark' }) {
       if (calls.length === 0) {
         const quoted = _quotedClicksFallback(reply);
         if (quoted.length > 0) { calls = quoted; dispatchSource = 'quoted-clicks'; }
+      }
+      if (calls.length === 0) {
+        // Slice 951o — model-driven second-pass decomposer.
+        const decomp = await _runDecomposerPass(text);
+        if (decomp.length > 0) {
+          const trainedDisc = STUDIO_TO_TRAINED_DISCIPLINE[activeWb] || 'modeling';
+          calls = [
+            { name: 'click-discipline', arguments: { id: trainedDisc } },
+            ...decomp,
+          ];
+          dispatchSource = 'decomposer';
+        }
       }
       if (calls.length === 0) {
         const kw = _keywordFallback(text, reply);
