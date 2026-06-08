@@ -1,0 +1,93 @@
+// frontend/src/ai/SessionMemoryClient.js
+//
+// Phase A.4 — shared long-session memory client.
+//
+// Talks to the local memory-store server (Python, :8083) that persists
+// every Archie turn to SQLite with a sentence-transformer embedding of
+// the user prompt. On every NEW turn, we ask the store for the top-K
+// most-similar prior turns and inject them into Archie's next system
+// prompt as <prior_context>{json}</prior_context>. After the dispatch,
+// we fire-and-forget the new turn back into the store.
+//
+// Studio and Forge share THIS module (byte-equal copies until we can
+// extract @archdisc/memory). One user → one memory → two front-ends.
+//
+// Usage in runArchie:
+//   const priors = await recallPriorTurns(userText, { app: 'studio' });
+//   const userContent = [priors, viewportState ? `<viewport_state>${viewportState}</viewport_state>` : '', userText]
+//     .filter(Boolean).join('\n\n');
+//   // dispatch chat completion …
+//   rememberTurn({ app: 'studio', user_text: userText, assistant_summary: reply.slice(0, 280) });
+
+const DEFAULT_BASE_URL = 'http://localhost:8083';
+
+/**
+ * Recall the top-K prior turns most similar to `query`. Returns a
+ * <prior_context>{json}</prior_context> string ready to splice into
+ * the next user message, or '' when the store is unreachable / opted
+ * out / has no entries yet.
+ *
+ * Bounded by timeoutMs so a slow store can never stall the chat.
+ */
+export async function recallPriorTurns(query, {
+  app, k = 3, timeoutMs = 2000, baseUrl = DEFAULT_BASE_URL,
+} = {}) {
+  if (typeof window !== 'undefined' && window.__archieMemoryOff) return '';
+  if (!query || typeof query !== 'string' || !query.trim()) return '';
+  const ac = new AbortController();
+  const tmo = setTimeout(() => ac.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${baseUrl}/recall`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, k, app }),
+      signal: ac.signal,
+    });
+    if (!res.ok) return '';
+    const data = await res.json();
+    const turns = Array.isArray(data && data.turns) ? data.turns : [];
+    if (!turns.length) return '';
+    // Trim each entry to the fields Archie cares about, keep them small.
+    const compact = turns.map((t) => ({
+      ts: t.ts,
+      app: t.app,
+      user: t.user_text,
+      summary: t.assistant_summary || null,
+      score: t.score,
+    }));
+    return `<prior_context>${JSON.stringify(compact)}</prior_context>`;
+  } catch (_) {
+    return '';
+  } finally {
+    clearTimeout(tmo);
+  }
+}
+
+/**
+ * Persist the just-completed turn. Fire-and-forget — never awaited by
+ * the chat dispatch so a slow store cannot stall the UI. Errors are
+ * logged to console (visible in dev) but never thrown.
+ */
+export function rememberTurn({
+  app, user_text, assistant_summary = null, tool_calls = null,
+  session_id = null, baseUrl = DEFAULT_BASE_URL,
+} = {}) {
+  if (typeof window !== 'undefined' && window.__archieMemoryOff) return;
+  if (!user_text || typeof user_text !== 'string') return;
+  if (app !== 'studio' && app !== 'forge') return;
+  // Cap content sizes so a long auto-build trace doesn't blow up the DB.
+  const trimmedSummary = typeof assistant_summary === 'string'
+    ? assistant_summary.slice(0, 800) : null;
+  fetch(`${baseUrl}/remember`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      app, user_text, assistant_summary: trimmedSummary,
+      tool_calls, session_id,
+    }),
+  }).catch((e) => {
+    if (typeof console !== 'undefined' && console.warn) {
+      console.warn('[mem] remember failed (non-fatal):', e?.message || e);
+    }
+  });
+}

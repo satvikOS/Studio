@@ -42,6 +42,14 @@ import { toolsForDiscipline as _toolsForDiscipline } from '../../../ai/ToolRegis
 // when the caption server is down or the canvas is unavailable, the
 // capture skips silently and Archie runs blind (current behaviour).
 import { captureAndCaption as _captureAndCaption } from '../../../ai/VisionPerception';
+// Slice 951r — long-session memory (Phase A.4). Every runArchie turn
+// fetches the top-K most-similar prior turns from the local SQLite
+// store (memory_store_server on :8083) and injects them as
+// <prior_context>…</prior_context> in the user message. After the
+// dispatch, the turn is fire-and-forget remembered back into the store
+// so future sessions inherit the context. window.__archieMemoryOff
+// pins the legacy path for tests.
+import { recallPriorTurns as _recallPriorTurns, rememberTurn as _rememberTurn } from '../../../ai/SessionMemoryClient';
 
 // Slice 401 — V3 stops using V2. V3 owns its own Viewport3D mount + its
 // own spawn / selection / undo / file-io implementations (built up in
@@ -7675,9 +7683,18 @@ async function runArchie(text, activeWb) {
       finally { clearTimeout(_visionTmo); }
     }
   }
-  const _userContent = _viewportCaption
-    ? `<viewport_state>${_viewportCaption}</viewport_state>\n\n${text}`
-    : text;
+  // Slice 951r — recall prior turns from the long-session memory store.
+  // Bounded by the helper's own timeout so a slow recall doesn't stall
+  // the chat dispatch. Order matters: priors first (background), then
+  // viewport state (what's on screen NOW), then the user's new prompt.
+  let _priorContext = '';
+  try { _priorContext = await _recallPriorTurns(text, { app: 'studio' }); }
+  catch (_) { /* memory optional */ }
+  const _userContent = [
+    _priorContext,
+    _viewportCaption ? `<viewport_state>${_viewportCaption}</viewport_state>` : '',
+    text,
+  ].filter(Boolean).join('\n\n');
   const url = `${ARCHIE_BASE_URL}/v1/chat/completions`;
   // Slice 951m — one-shot format anchor. The base R1-distill model's
   // "Step-by-Step Explanation" prior overpowers the LoRA's trained
@@ -7738,7 +7755,12 @@ async function runArchie(text, activeWb) {
       if (typeof m.reasoning === 'string' && m.reasoning) raw += '<think>' + m.reasoning + '</think>';
       if (typeof m.content === 'string' && m.content) raw += m.content;
     }
-    return _unwrapThink(raw);
+    const _final = _unwrapThink(raw);
+    // Slice 951r — fire-and-forget remember the turn (user prompt +
+    // unwrapped assistant content) so future sessions can recall it.
+    // _rememberTurn never awaits — a slow store cannot block the UI.
+    _rememberTurn({ app: 'studio', user_text: text, assistant_summary: _final });
+    return _final;
   } finally {
     clearTimeout(tmo);
   }
