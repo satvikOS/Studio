@@ -35,6 +35,13 @@ import { registerDisplayOps, unregisterDisplayOps } from './displayops';
 // were trained against this exact catalogue per [[archie-fleet-schema]];
 // passing it verbatim is what makes Archie fluent in the platform.
 import { toolsForDiscipline as _toolsForDiscipline } from '../../../ai/ToolRegistry';
+// Slice 951q — close the perception loop. Every runArchie turn captures
+// the live viewport, captions it via the local Qwen2.5-VL server on :8081,
+// and injects the structured caption into Archie's next user message as
+// <viewport_state>…</viewport_state>. The vision wrapper is optional:
+// when the caption server is down or the canvas is unavailable, the
+// capture skips silently and Archie runs blind (current behaviour).
+import { captureAndCaption as _captureAndCaption } from '../../../ai/VisionPerception';
 
 // Slice 401 — V3 stops using V2. V3 owns its own Viewport3D mount + its
 // own spawn / selection / undo / file-io implementations (built up in
@@ -7640,6 +7647,37 @@ async function runArchie(text, activeWb) {
     const fake = await Promise.resolve(window.__studioArchieMock(text));
     return _unwrapThink(String(fake || ''));
   }
+  // Slice 951q — viewport perception. Capture the live canvas, caption it
+  // via the local VL server, and prepend the caption to the user message
+  // as <viewport_state>. Bounded by a short timeout: a slow VL response
+  // must not stall the chat dispatch, so we cap at 4 s and fall through to
+  // a blind run if vision is down. An explicit window opt-out
+  // (window.__studioArchieVisionOff) lets tests pin the legacy path.
+  let _viewportCaption = '';
+  if (typeof window !== 'undefined' && !window.__studioArchieVisionOff) {
+    const _vp = window.__archdiscViewport;
+    const _canvas = _vp && _vp.renderer && _vp.renderer.domElement;
+    if (_canvas && typeof _canvas.toBlob === 'function') {
+      // Three.js WebGLRenderer defaults to preserveDrawingBuffer=false, so
+      // a stale framebuffer read returns a blank PNG. Force a synchronous
+      // render of the live scene + camera immediately before toBlob so
+      // the VL server sees the actual viewport, not garbage.
+      try {
+        if (_vp.scene && _vp.camera && _vp.renderer && _vp.renderer.render) {
+          _vp.renderer.render(_vp.scene, _vp.camera);
+        }
+      } catch (_) { /* render hint best-effort */ }
+      const _visionAc = new AbortController();
+      const _visionTmo = setTimeout(() => _visionAc.abort(), 4000);
+      try {
+        _viewportCaption = await _captureAndCaption({ canvas: _canvas, signal: _visionAc.signal });
+      } catch (_) { /* vision optional — silent */ }
+      finally { clearTimeout(_visionTmo); }
+    }
+  }
+  const _userContent = _viewportCaption
+    ? `<viewport_state>${_viewportCaption}</viewport_state>\n\n${text}`
+    : text;
   const url = `${ARCHIE_BASE_URL}/v1/chat/completions`;
   // Slice 951m — one-shot format anchor. The base R1-distill model's
   // "Step-by-Step Explanation" prior overpowers the LoRA's trained
@@ -7656,7 +7694,7 @@ async function runArchie(text, activeWb) {
       { role: 'system', content: _buildArchieSystemPrompt(activeWb) },
       { role: 'user',   content: 'sanity check — spawn one cube' },
       { role: 'assistant', content: '<think>Single primitive. Switch discipline first.</think>\n<plan>{"goal":"sanity check","scene":{"app":"studio","discipline":"modeling"},"expect":{"bodies":1}}</plan>\n<tool_call>{"name":"click-discipline","arguments":{"id":"modeling"}}</tool_call>\n<tool_call>{"name":"click-primitive","arguments":{"id":"cube"}}</tool_call>' },
-      { role: 'user',   content: text },
+      { role: 'user',   content: _userContent },
     ],
     // DeepSeek-R1 distill emits a thinking block first (<think>…</think>)
     // before the <plan>/<tool_call> tags. 8/64 token budgets cut off
