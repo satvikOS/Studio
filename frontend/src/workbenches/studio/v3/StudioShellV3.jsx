@@ -1444,14 +1444,6 @@ function KeymapCheatsheet() {
 // banner (autosave still in storage). The banner self-hides if the
 // user spawns anything in the meantime.
 function AutosaveRestorePrompt() {
-  // Slice 951f — disabled. Was a banner pinned to top-centre of the
-  // viewport that overlapped the camera-drag drop-zone. The autosave
-  // payload still survives in localStorage; the user can recover
-  // explicitly via __studioAutosaveRestoreLatest() / a File menu entry
-  // when that lands. Empty render keeps the component identity for any
-  // existing <AutosaveRestorePrompt /> mount points.
-  return null;
-  // eslint-disable-next-line no-unreachable
   const [info, setInfo] = useState(null);
   useEffect(() => {
     // Defer one tick so V3 API + scene have mounted.
@@ -1494,8 +1486,13 @@ function AutosaveRestorePrompt() {
       data-studio-v3-autosave-restore
       data-studio-v3-autosave-ts={info.ts}
       style={{
-        position: 'absolute', top: 16, left: '50%',
-        transform: 'translateX(-50%)', zIndex: 30,
+        // Slice 952 — restore banner belongs to the viewport chrome, not
+        // centered over Forge's topbar/QAT/toolbar rows. Anchor it below
+        // the full top chrome stack so menus and tools always remain clear.
+        position: 'absolute',
+        top: 'calc(var(--studio-topbar-h, 40px) + var(--studio-qat-h, 32px) + var(--studio-toolbar-h, 48px) + 12px)',
+        left: 'calc(var(--studio-wb-rail-w, 72px) + 16px)',
+        transform: 'none', zIndex: 30,
         background: 'rgba(13, 17, 23, 0.92)',
         color: 'var(--studio-ink, #f0eee6)',
         border: '1px solid var(--studio-accent, #ebecef)',
