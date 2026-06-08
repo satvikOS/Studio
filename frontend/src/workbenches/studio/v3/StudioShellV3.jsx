@@ -7440,22 +7440,17 @@ function _humanizeCall(call, result) {
   return `${name}${id ? ' ' + id : ''}.`;
 }
 
-// Slice 951j — three-stage dispatch synthesis when the model emits
-// prose instead of clean <tool_call> tags. Stages:
+// Slice 951j/951u — dispatch synthesis when Archie emits structured
+// content but not literal <tool_call> tags. These tiers EXTRACT intent
+// from Archie output; they do not turn the user's keywords into hidden
+// client-side geometry. Slice 951u removed the final keyword fallback
+// because it made failed model calls look successful.
 //
 //   A. _quotedClicksFallback — parse `Click "<id>"` / `click "<id>"`
 //      mentions from the model's prose (training examples used quoted
 //      tool ids in their step-by-step prose, so the LoRAs keep
 //      emitting that shape). Extracts both primitive ids AND
 //      discipline names.
-//   B. _recipeFallback — composite-shape recipes for common nouns
-//      ("coffee table" → top cube + 4 legs; "chair" → seat + back +
-//      4 legs; "snowman" → 3 stacked spheres). Lets prompts like
-//      "model a beautiful coffee table" actually drive the platform
-//      even when neither the model nor the user mention primitive
-//      ids by name.
-//   C. _keywordFallback — bare primitive-id scan over the user's
-//      original prompt (the slice-951b fallback, kept as last resort).
 //
 // Each stage returns [] if it doesn't recognise anything. onCmdSubmit
 // chains them so the first stage that produces ≥1 call wins.
@@ -7532,34 +7527,10 @@ function _quotedClicksFallback(reply) {
 // fall through to the conversational message asking the user to name
 // the parts — that's an honest failure, not a templated one.
 
-// Last-resort keyword scan: any primitive id mentioned in either the
-// user prompt OR the model reply. Now also handles common-noun aliases
-// so "make a ball" spawns a sphere, "give me a leg" spawns a cylinder,
-// etc.
-function _keywordFallback(userText, reply) {
-  const src = String((userText || '') + ' ' + (reply || '')).toLowerCase();
-  const calls = [];
-  const seen = new Set();
-  // Primitive ids first (most specific).
-  for (const id of _PRIMITIVE_IDS) {
-    const re = new RegExp(`\\b${id}\\b`, 'i');
-    if (re.test(src) && !seen.has(id)) {
-      calls.push({ name: 'click-primitive', arguments: { id } });
-      seen.add(id);
-    }
-  }
-  // Then noun aliases the user might have used instead of a real id.
-  for (const noun of Object.keys(_NOUN_TO_PRIMITIVE)) {
-    const id = _NOUN_TO_PRIMITIVE[noun];
-    if (seen.has(id)) continue;
-    const re = new RegExp(`\\b${noun}\\b`, 'i');
-    if (re.test(src)) {
-      calls.push({ name: 'click-primitive', arguments: { id } });
-      seen.add(id);
-    }
-  }
-  return calls;
-}
+// Slice 951u — no user-keyword fallback. If Archie cannot emit a
+// parseable plan / quoted click / decomposer result, the UI must show an
+// honest failure. Spawning primitives because the user's prompt happened
+// to contain "chair leg" or "sphere" is a client-side fake, not autonomy.
 
 // Slice 951o — second-pass decomposer. When the first model call
 // produces 0 dispatchable tool_calls (typical for complex prompts like
@@ -8884,26 +8855,16 @@ export function StudioShellV3({ mode = 'dark' }) {
       // the dispatch summary baked in.
       // Slice 951 — three-tier dispatch resolution. The studio_v16
       // LoRAs aren't fully fluent on the <tool_call> tag shape yet, so
-      // we fall back gracefully:
+      // we accept only model-derived structure:
       //   1. Literal <tool_call> tags (preferred — model-emitted)
       //   2. <plan>{...}</plan> JSON → synthesize click-discipline +
       //      click-primitive + click-action calls from the plan fields
-      //   3. Keyword scan of the original user prompt for primitive ids
-      //      (last-resort demo-safety net)
-      // Slice 951k — four-tier dispatch (recipe tier from 951j removed).
-      // All four tiers EXTRACT structure from real model output:
-      //   1. Literal <tool_call> tags from the model
-      //   2. <plan>{...}</plan> JSON → click-discipline + per-body
-      //      click-primitive + click-action synth (drives a proper
-      //      build sequence from the model's stated intent)
       //   3. Quoted-clicks scan of the model's prose (`Click "cube"`)
       //      — the trained corpus prose used this shape so the LoRAs
-      //      keep emitting it. Extracts whatever the model actually
-      //      named, not what we guessed about its intent.
-      //   4. Keyword scan over user prompt + reply for primitive ids
-      //      AND common-noun aliases (ball→sphere, leg→cylinder, …)
-      //      — minimal "the user said the word cylinder so spawn one"
-      //      safety net, not a recipe.
+      //      keep emitting it.
+      //   4. Model-driven decomposer pass. Slice 951u removed the old
+      //      user-keyword/common-noun fallback because it was a hidden
+      //      client-side fake, not Archie autonomy.
       let calls = _extractToolCalls(reply);
       let dispatchSource = 'tool_calls';
       if (calls.length === 0) {
@@ -8925,17 +8886,6 @@ export function StudioShellV3({ mode = 'dark' }) {
             ...decomp,
           ];
           dispatchSource = 'decomposer';
-        }
-      }
-      if (calls.length === 0) {
-        const kw = _keywordFallback(text, reply);
-        if (kw.length > 0) {
-          const trainedDisc = STUDIO_TO_TRAINED_DISCIPLINE[activeWb] || 'modeling';
-          calls = [
-            { name: 'click-discipline', arguments: { id: trainedDisc } },
-            ...kw,
-          ];
-          dispatchSource = 'keyword';
         }
       }
       // Slice 951l — replace the "…thinking…" placeholder with a
