@@ -7553,7 +7553,7 @@ function _quotedClicksFallback(reply) {
 // prior that hijacks the first call.
 async function _runDecomposerPass(userText) {
   if (typeof window !== 'undefined' && typeof window.__studioArchieMock === 'function') {
-    return [];  // Mocks bypass the decomposer
+    return { calls: [], error: '' };  // Mocks bypass the decomposer
   }
   const primIds = ['cube','sphere','plane','cylinder','cone','torus','icosahedron','text','curve'];
   const sys =
@@ -7588,7 +7588,10 @@ async function _runDecomposerPass(userText) {
       body: JSON.stringify(body),
       signal: ac.signal,
     });
-    if (!res.ok) return [];
+    if (!res.ok) {
+      const t = await res.text().catch(() => '');
+      return { calls: [], error: `Archie decomposer ${res.status}${t ? `: ${t.slice(0, 160)}` : ''}` };
+    }
     const json = await res.json();
     const m = json && json.choices && json.choices[0] && json.choices[0].message;
     // Slice 951p — prefer message.content (the model's final answer)
@@ -7609,10 +7612,10 @@ async function _runDecomposerPass(userText) {
       const reasoningMatches = [...reasoning.matchAll(/\[[\s\S]*?\]/g)];
       if (reasoningMatches.length > 0) arrayMatch = reasoningMatches[reasoningMatches.length - 1];
     }
-    if (!arrayMatch) return [];
+    if (!arrayMatch) return { calls: [], error: 'Archie decomposer returned no JSON primitive array' };
     let arr;
-    try { arr = JSON.parse(arrayMatch[0]); } catch (_) { return []; }
-    if (!Array.isArray(arr)) return [];
+    try { arr = JSON.parse(arrayMatch[0]); } catch (err) { return { calls: [], error: `Archie decomposer JSON parse failed: ${String(err && err.message || err)}` }; }
+    if (!Array.isArray(arr)) return { calls: [], error: 'Archie decomposer returned a non-array payload' };
     const calls = [];
     for (const id of arr) {
       const norm = String(id || '').trim().toLowerCase();
@@ -7620,9 +7623,9 @@ async function _runDecomposerPass(userText) {
         calls.push({ name: 'click-primitive', arguments: { id: norm } });
       }
     }
-    return calls;
-  } catch (_) {
-    return [];
+    return { calls, error: calls.length ? '' : 'Archie decomposer returned no registered Studio primitives' };
+  } catch (err) {
+    return { calls: [], error: `Archie decomposer request failed: ${String(err && err.message || err)}` };
   } finally {
     clearTimeout(tmo);
   }
@@ -8893,14 +8896,16 @@ export function StudioShellV3({ mode = 'dark' }) {
         const quoted = _quotedClicksFallback(reply);
         if (quoted.length > 0) { calls = quoted; dispatchSource = 'quoted-clicks'; }
       }
+      let decomposerError = '';
       if (calls.length === 0) {
         // Slice 951o — model-driven second-pass decomposer.
         const decomp = await _runDecomposerPass(text);
-        if (decomp.length > 0) {
+        decomposerError = (decomp && decomp.error) || '';
+        if (decomp && decomp.calls && decomp.calls.length > 0) {
           const trainedDisc = STUDIO_TO_TRAINED_DISCIPLINE[activeWb] || 'modeling';
           calls = [
             { name: 'click-discipline', arguments: { id: trainedDisc } },
-            ...decomp,
+            ...decomp.calls,
           ];
           dispatchSource = 'decomposer';
         }
@@ -8936,9 +8941,11 @@ export function StudioShellV3({ mode = 'dark' }) {
       // real Studio error instead of pretending geometry appeared.
       const humanized = calls.length
         ? _humanizeResolvedReply(reply, dispatchResults)
-        : (reply && reply.trim()
-            ? _humanizeReply(reply, [])
-            : "I couldn't make sense of that — try naming the parts you want (e.g. \"a cube tabletop and four cylinder legs\") or refining what you mean.");
+        : (decomposerError
+            ? `I couldn't execute that. The model did not emit a valid tool call, and the second-pass decomposer failed: ${decomposerError}.`
+            : (reply && reply.trim()
+                ? _humanizeReply(reply, [])
+                : "I couldn't make sense of that — try naming the parts you want (e.g. \"a cube tabletop and four cylinder legs\") or refining what you mean."));
       setThread((t) => {
         const next = t.slice();
         for (let i = next.length - 1; i >= 0; i--) {
