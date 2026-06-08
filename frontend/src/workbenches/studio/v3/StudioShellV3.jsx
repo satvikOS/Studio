@@ -7650,7 +7650,13 @@ async function _runDecomposerPass(userText) {
   }
 }
 
-async function runArchie(text, activeWb) {
+async function runArchie(text, activeWb, opts = {}) {
+  // Slice 951s — optional streaming. If the caller passes onToken, we
+  // request SSE from mlx_lm.server, parse each delta as it arrives, and
+  // call onToken({ delta_content, delta_reasoning, acc }) so the UI can
+  // render tokens in real time. Without onToken we keep the legacy
+  // single-shot path so existing callers/tests are unchanged.
+  const onToken = typeof opts.onToken === 'function' ? opts.onToken : null;
   if (typeof window !== 'undefined' && typeof window.__studioArchieMock === 'function') {
     const fake = await Promise.resolve(window.__studioArchieMock(text));
     return _unwrapThink(String(fake || ''));
@@ -7727,6 +7733,7 @@ async function runArchie(text, activeWb) {
     // discipline's tool catalogue. Falls back to modeling for any
     // unmapped active discipline.
     adapters: _archieAdapterPath(activeWb),
+    stream: !!onToken,
   };
   const ac = new AbortController();
   // 60 s timeout: first-call model load + 768-token generation can take
@@ -7743,7 +7750,52 @@ async function runArchie(text, activeWb) {
       const t = await res.text().catch(() => '');
       throw new Error(`Archie ${res.status}: ${t.slice(0, 200)}`);
     }
-    const json = await res.json();
+    // Slice 951s — streaming path. mlx_lm.server emits OpenAI-compat
+    // SSE: each line `data: {json}\n` with a final `data: [DONE]`.
+    // We accumulate content + reasoning into the same {reasoning,
+    // content} shape the legacy path returns so _unwrapThink and the
+    // downstream tag extractor handle both branches identically.
+    let json;
+    if (onToken) {
+      let accReason = '';
+      let accContent = '';
+      const reader = res.body && typeof res.body.getReader === 'function'
+        ? res.body.getReader() : null;
+      if (!reader) {
+        // Defensive: response body unreadable. Fall through to non-stream parse.
+        json = await res.json();
+      } else {
+        const decoder = new TextDecoder('utf-8');
+        let buf = '';
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          let nl;
+          while ((nl = buf.indexOf('\n')) >= 0) {
+            const line = buf.slice(0, nl).trim();
+            buf = buf.slice(nl + 1);
+            if (!line || !line.startsWith('data:')) continue;
+            const payload = line.slice(5).trim();
+            if (!payload || payload === '[DONE]') continue;
+            let chunk;
+            try { chunk = JSON.parse(payload); } catch (_) { continue; }
+            const delta = chunk && chunk.choices && chunk.choices[0] && chunk.choices[0].delta;
+            if (!delta) continue;
+            const dReason  = typeof delta.reasoning === 'string' ? delta.reasoning : '';
+            const dContent = typeof delta.content   === 'string' ? delta.content   : '';
+            if (dReason)  accReason  += dReason;
+            if (dContent) accContent += dContent;
+            try { onToken({ delta_content: dContent, delta_reasoning: dReason, acc_content: accContent, acc_reasoning: accReason }); }
+            catch (_) { /* downstream UI errors must not stop the stream */ }
+          }
+        }
+        json = { choices: [{ message: { reasoning: accReason, content: accContent } }] };
+      }
+    } else {
+      json = await res.json();
+    }
     // mlx_lm.server with R1-distill returns either {content: "..."} or
     // {reasoning: "...", content: "..."} depending on how the chat
     // template split the response. Concatenate whichever fields exist
@@ -8764,7 +8816,24 @@ export function StudioShellV3({ mode = 'dark' }) {
       { role: 'archie', text: '…thinking…', pending: true },
     ]);
     try {
-      const reply = await runArchie(text, activeWb);
+      // Slice 951s — stream tokens into the pending overlay message so
+      // the user sees Archie compose its reply in real time. The
+      // post-stream dispatch logic below is unchanged — _extractToolCalls
+      // operates on the full final text returned by runArchie.
+      const _streamUpdate = (acc) => {
+        setThread((t) => {
+          const last = t[t.length - 1];
+          if (!last || last.role !== 'archie' || !last.pending) return t;
+          // Strip <think>…</think> from the visible stream so the user
+          // doesn't see the chain-of-thought — show only emerging
+          // content. Empty after strip means stay on the placeholder.
+          const visible = (acc || '').replace(/<think>[\s\S]*?(<\/think>|$)/g, '').trim();
+          return [...t.slice(0, -1), { ...last, text: visible || '…thinking…' }];
+        });
+      };
+      const reply = await runArchie(text, activeWb, {
+        onToken: ({ acc_content }) => _streamUpdate(acc_content),
+      });
       // Slice 951l — defer the Archie chat message until AFTER we've
       // synthesized the tool calls, so we can humanize the reply with
       // the dispatch summary baked in.
