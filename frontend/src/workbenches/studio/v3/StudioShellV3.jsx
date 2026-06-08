@@ -7598,9 +7598,24 @@ async function _runDecomposerPass(userText) {
     if (!res.ok) return [];
     const json = await res.json();
     const m = json && json.choices && json.choices[0] && json.choices[0].message;
-    const raw = ((m && m.reasoning) || '') + ((m && m.content) || '');
-    // Find a JSON array in the response. Models often wrap it.
-    const arrayMatch = raw.match(/\[[\s\S]*?\]/);
+    // Slice 951p — prefer message.content (the model's final answer)
+    // over message.reasoning (the chain of thought, which often
+    // contains candidate arrays the model rejected). Live verified:
+    // 'small house' reasoning had [cone, cylinder] as a candidate but
+    // content had [cube, cube, cone, cube] — the parser was picking
+    // the reasoning candidate. Now content's the priority; we look
+    // for the LAST array in content (the final answer after any
+    // revision), and only fall back to reasoning if content is empty.
+    const content = (m && m.content) || '';
+    const reasoning = (m && m.reasoning) || '';
+    let arrayMatch = null;
+    // All array matches in content, take the last (final answer).
+    const contentMatches = [...content.matchAll(/\[[\s\S]*?\]/g)];
+    if (contentMatches.length > 0) arrayMatch = contentMatches[contentMatches.length - 1];
+    if (!arrayMatch) {
+      const reasoningMatches = [...reasoning.matchAll(/\[[\s\S]*?\]/g)];
+      if (reasoningMatches.length > 0) arrayMatch = reasoningMatches[reasoningMatches.length - 1];
+    }
     if (!arrayMatch) return [];
     let arr;
     try { arr = JSON.parse(arrayMatch[0]); } catch (_) { return []; }
