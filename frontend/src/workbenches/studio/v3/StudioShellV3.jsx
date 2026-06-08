@@ -7657,6 +7657,13 @@ async function runArchie(text, activeWb, opts = {}) {
   // render tokens in real time. Without onToken we keep the legacy
   // single-shot path so existing callers/tests are unchanged.
   const onToken = typeof opts.onToken === 'function' ? opts.onToken : null;
+  // Slice 951t — speculative tool-call dispatch. If the caller passes
+  // onToolCall, we await it (in stream order) every time a complete
+  // <tool_call>…</tool_call> block closes during the SSE stream so the
+  // dispatch fires the moment the model commits to a call, not after
+  // the full reply arrives. Post-stream extraction still re-extracts
+  // the same calls; the caller is expected to dedupe by signature.
+  const onToolCall = typeof opts.onToolCall === 'function' ? opts.onToolCall : null;
   if (typeof window !== 'undefined' && typeof window.__studioArchieMock === 'function') {
     const fake = await Promise.resolve(window.__studioArchieMock(text));
     return _unwrapThink(String(fake || ''));
@@ -7755,10 +7762,33 @@ async function runArchie(text, activeWb, opts = {}) {
     // We accumulate content + reasoning into the same {reasoning,
     // content} shape the legacy path returns so _unwrapThink and the
     // downstream tag extractor handle both branches identically.
+    // Slice 951t — speculative dispatch. While accumulating, scan for
+    // newly-closed <tool_call>…</tool_call> blocks and await
+    // onToolCall(parsed) per call so the dispatch fires the moment
+    // the model commits. The caller dedupes by signature in the
+    // post-stream dispatch tier.
     let json;
     if (onToken) {
       let accReason = '';
       let accContent = '';
+      // Slice 951t: tracks how much of accContent we've already scanned
+      // for complete tool_call blocks so each one fires exactly once.
+      let toolScanFrom = 0;
+      const _maybeFlushToolCalls = async () => {
+        if (!onToolCall) return;
+        const re = /<tool_call>([\s\S]*?)<\/tool_call>/gi;
+        re.lastIndex = toolScanFrom;
+        let m;
+        while ((m = re.exec(accContent)) !== null) {
+          toolScanFrom = re.lastIndex;
+          let obj;
+          try { obj = JSON.parse(m[1].trim()); } catch (_) { continue; }
+          if (obj && typeof obj.name === 'string') {
+            try { await onToolCall(obj); }
+            catch (_) { /* dispatch errors surfaced via UI thread */ }
+          }
+        }
+      };
       const reader = res.body && typeof res.body.getReader === 'function'
         ? res.body.getReader() : null;
       if (!reader) {
@@ -7789,6 +7819,7 @@ async function runArchie(text, activeWb, opts = {}) {
             if (dContent) accContent += dContent;
             try { onToken({ delta_content: dContent, delta_reasoning: dReason, acc_content: accContent, acc_reasoning: accReason }); }
             catch (_) { /* downstream UI errors must not stop the stream */ }
+            if (dContent) await _maybeFlushToolCalls();
           }
         }
         json = { choices: [{ message: { reasoning: accReason, content: accContent } }] };
@@ -8831,8 +8862,25 @@ export function StudioShellV3({ mode = 'dark' }) {
           return [...t.slice(0, -1), { ...last, text: visible || '…thinking…' }];
         });
       };
+      // Slice 951t — speculative tool-call dispatch. Every time the
+      // model closes a <tool_call>…</tool_call> mid-stream, runArchie
+      // awaits onToolCall here so the dispatch fires the moment the
+      // call commits. We track signatures in _specSigSet so the
+      // post-stream tier-1 loop below skips anything already executed.
+      const _specSigSet = new Set();
+      const _sig = (c) => JSON.stringify({ n: c.name, a: c.arguments || {} });
       const reply = await runArchie(text, activeWb, {
         onToken: ({ acc_content }) => _streamUpdate(acc_content),
+        onToolCall: async (call) => {
+          const sig = _sig(call);
+          if (_specSigSet.has(sig)) return;
+          _specSigSet.add(sig);
+          const result = await executeToolCall(call);
+          setThread((t) => [
+            ...t,
+            { role: 'tool', text: _humanizeCall(call, result) },
+          ]);
+        },
       });
       // Slice 951l — defer the Archie chat message until AFTER we've
       // synthesized the tool calls, so we can humanize the reply with
@@ -8915,6 +8963,9 @@ export function StudioShellV3({ mode = 'dark' }) {
         return next;
       });
       for (const call of calls) {
+        // Slice 951t — skip anything the speculative dispatcher already
+        // executed during streaming so we don't double-spawn primitives.
+        if (_specSigSet.has(_sig(call))) continue;
         // eslint-disable-next-line no-await-in-loop
         const result = await executeToolCall(call);
         setThread((t) => [
