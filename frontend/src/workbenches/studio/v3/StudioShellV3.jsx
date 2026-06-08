@@ -7577,11 +7577,17 @@ async function _runDecomposerPass(userText) {
       { role: 'system', content: sys },
       { role: 'user', content: userText },
     ],
-    max_tokens: 200,
+    // Slice 951p — R1-distill emits its full chain of thought into the
+    // `reasoning` field BEFORE producing `content`. 200 max_tokens cut
+    // off mid-thought so content came back empty. Verified at runtime:
+    // "coffee table" needs ~440 completion tokens (390 reasoning + 50
+    // content). 1500 gives headroom for complex prompts ("forest with
+    // 25 assets" reasons longer) without making the UI hang.
+    max_tokens: 1500,
     temperature: 0.1,
   };
   const ac = new AbortController();
-  const tmo = setTimeout(() => ac.abort(), 45_000);
+  const tmo = setTimeout(() => ac.abort(), 90_000);
   try {
     const res = await fetch(`${ARCHIE_BASE_URL}/v1/chat/completions`, {
       method: 'POST',
