@@ -7555,9 +7555,21 @@ async function runArchie(text, activeWb) {
     return _unwrapThink(String(fake || ''));
   }
   const url = `${ARCHIE_BASE_URL}/v1/chat/completions`;
+  // Slice 951m — one-shot format anchor. The base R1-distill model's
+  // "Step-by-Step Explanation" prior overpowers the LoRA's trained
+  // <tool_call> emission even with the verbatim training system prompt:
+  // probes show <plan> tags but zero <tool_call> tags for environment-
+  // scale prompts. One in-context assistant turn showing the EXACT
+  // protocol shape (think → plan JSON → tool_call series, no prose
+  // outside the tags) is enough to lock format induction without
+  // teaching specific shapes. The example uses a single-primitive
+  // request so it can't accidentally template a complex build — the
+  // model has to generalise from format only.
   const body = {
     messages: [
       { role: 'system', content: _buildArchieSystemPrompt(activeWb) },
+      { role: 'user',   content: 'sanity check — spawn one cube' },
+      { role: 'assistant', content: '<think>Single primitive. Switch discipline first.</think>\n<plan>{"goal":"sanity check","scene":{"app":"studio","discipline":"modeling"},"expect":{"bodies":1}}</plan>\n<tool_call>{"name":"click-discipline","arguments":{"id":"modeling"}}</tool_call>\n<tool_call>{"name":"click-primitive","arguments":{"id":"cube"}}</tool_call>' },
       { role: 'user',   content: text },
     ],
     // DeepSeek-R1 distill emits a thinking block first (<think>…</think>)
