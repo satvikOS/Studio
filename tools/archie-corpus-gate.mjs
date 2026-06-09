@@ -50,9 +50,15 @@ function parseJsonl(text, sourcePath = '<memory>') {
 }
 
 function dimensionVector(row) {
-  const bbox = row?.real_world_scale?.bbox;
+  const scale = row?.real_world_scale || {};
+  const bbox = scale.bbox;
   if (!Array.isArray(bbox)) return [];
-  return bbox.map((n) => Number.isFinite(Number(n)) ? Number(n).toFixed(4) : 'nan');
+  const unit = String(scale.unit || '').toLowerCase();
+  const unitToMetres = unit === 'mm' ? 0.001 : 1;
+  return bbox.map((n) => {
+    const value = Number(n);
+    return Number.isFinite(value) ? (value * unitToMetres).toFixed(4) : 'nan';
+  });
 }
 
 function semanticKey(row) {

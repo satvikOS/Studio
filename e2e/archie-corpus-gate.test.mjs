@@ -65,6 +65,31 @@ test('Archie corpus semantic key dedupes equivalent object/dimension/operation r
   assert.equal(semanticKey(firstChair), semanticKey(duplicateChair));
 });
 
+test('Archie corpus semantic key normalizes metres and millimetres before dedupe', () => {
+  const base = {
+    object_type: 'M8 hex bolt',
+    real_world_scale: { unit: 'm', bbox: [0.013, 0.013, 0.04] },
+    operations: ['create hex head', 'thread shaft'],
+    constraints: ['ISO metric fastener proportions'],
+    negative_checks: ['reject smooth unthreaded cylinder'],
+    source: 'unit-test',
+    license: 'CC0',
+    provenance_url: 'local:test',
+    domain_tags: ['fastener'],
+    materials: ['steel'],
+  };
+  const inMm = {
+    ...base,
+    real_world_scale: { unit: 'mm', bbox: [13, 13, 40] },
+  };
+
+  assert.equal(semanticKey(base), semanticKey(inMm));
+  const result = gateSamples([{ row: base, line: 1 }, { row: inMm, line: 2 }], { minScore: 0.5 });
+  assert.equal(result.accepted.length, 1);
+  assert.equal(result.rejected.length, 1);
+  assert.ok(result.rejected[0].reasons.some((reason) => reason.includes('duplicate semantic_key')));
+});
+
 test('Archie corpus gate CLI writes accepted JSONL and rejection report', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'archie-corpus-gate-'));
   const accepted = path.join(dir, 'accepted.jsonl');
