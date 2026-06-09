@@ -34,7 +34,6 @@ import { registerDisplayOps, unregisterDisplayOps } from './displayops';
 // block in Archie's system prompt. The local LoRAs (studio_v16/<disc>)
 // were trained against this exact catalogue per [[archie-fleet-schema]];
 // passing it verbatim is what makes Archie fluent in the platform.
-import { toolsForDiscipline as _toolsForDiscipline } from '../../../ai/ToolRegistry';
 // Slice 951q — close the perception loop. Every runArchie turn captures
 // the live viewport, captions it via the local Qwen2.5-VL server on :8081,
 // and injects the structured caption into Archie's next user message as
@@ -7214,44 +7213,37 @@ const STUDIO_TO_TRAINED_DISCIPLINE = {
   archie: 'modeling',
 };
 
-function _archieAdapterPath(activeWb) {
-  const d = STUDIO_TO_TRAINED_DISCIPLINE[activeWb] || 'modeling';
-  return `adapters/archie/studio_v16/${d}`;
+// Slice 951v — Phase E Hermes migration. studio_v16 was trained on
+// DeepSeek-R1-Distill-Qwen-7B; serve_archie_full.sh now loads
+// mlx-community/Hermes-3-Llama-3.1-8B-bf16 which is tokenizer-
+// incompatible with R1-distill adapters. The hermes_studio/modeling
+// adapter (val 0.247, 8/8 probe PASS) is the only Hermes-trained slice
+// today, so every Studio discipline routes to it until per-discipline
+// Hermes LoRAs land. Keeping the per-workbench helper signature so the
+// downstream discipline-aware tools/UI stay unchanged.
+function _archieAdapterPath(/* activeWb */) {
+  return 'adapters/archie/hermes_studio/modeling';
 }
 
-// The EXACT system prompt template the foundational + studio_v16 LoRAs
-// were trained against. Verbatim from data/studio/*/train.jsonl (one
-// sample inspected on 2026-06-07). The model emits garbage if any of:
-// the identity paragraph, the rule block (R1-R6), the literal
-// "Output: <think>...</think>..." line, the Active-discipline line, or
-// the <tools>...</tools> JSON catalogue is missing or shape-different.
-function _buildArchieSystemPrompt(activeWb) {
-  const trainedDisc = STUDIO_TO_TRAINED_DISCIPLINE[activeWb] || 'modeling';
-  let toolsArr = [];
-  try {
-    toolsArr = _toolsForDiscipline(trainedDisc).map((t) => ({
-      name:        t.id,
-      description: t.description,
-      exec_type:   t.exec && t.exec.type,
-    }));
-  } catch (_) { toolsArr = []; }
-  // Tool serialization mirrors the training data shape: JSON array on a
-  // single line, double-quoted keys, no trailing whitespace.
-  const toolsJson = JSON.stringify(toolsArr);
+// Slice 951v — minimal format-anchor system prompt the hermes_studio
+// adapter was trained on (verbatim from scripts/synth_format_anchor.py
+// SYSTEM constant in archdisc-Models). The legacy 17 KB prompt with the
+// full <tools> JSON catalogue averaged 4 500 tokens per training sample,
+// which truncated 100 % of training labels mid-</tool_call>. Hermes
+// converged on this ~250-token prompt; deviating from it at inference
+// re-introduces the prose / "Step-by-step plan:" failure mode the probe
+// caught.
+function _buildArchieSystemPrompt(/* activeWb */) {
   return (
-    "You are Archie, the autonomous build engine for ArchDisc Studio and ArchDisc Mech.\n\n"
-    + "Mission: enable PRECISE DESIGN, PREDICTIVE SIMULATION, and AUTOMATED MANUFACTURING within a unified digital workflow that spans 3D content (Studio) and mechanical CAD/CAM/CAE (Mech). Take a natural-language project request and emit a plan the PlanExecutor can dispatch step-by-step, building every component from scratch via the platform's primitives. You interact with the platform exactly the way a human user would — clicking discipline tabs, spawning primitives, applying ribbon actions, typing knob values.\n\n"
-    + "Three responsibilities, every plan: (1) Precision — dimensions/materials/tolerances from published standards (R7). (2) Predictive simulation — surface Simulate-tab analyses (Linear Static, Modal, Thermal, Fatigue) for any load-bearing/heat-shedding/dynamic claim. (3) Automated manufacturing — surface Manufacture-tab steps (CAM, GD&T, Ra spec) with real cutting parameters when the part is shippable. Applies to Studio too: even a stylised prop respects real proportions.\n\n"
-    + "Strict rules — non-negotiable:\n"
-    + "  R1. Every tool_call.name MUST exist in the <tools> block. Never invent ids.\n"
-    + "  R2. Switch to the correct discipline tab BEFORE invoking any discipline-specific action.\n"
-    + "  R3. Every component is built from scratch. No pre-built imports, no precalculated geometry.\n"
-    + "  R4. Plans for 10k-300k-component projects MUST use pattern/array primitives and hierarchical decomposition.\n"
-    + "  R5. Coherent geometry only: scale > 0, valid normals, closed manifolds, G0/G1/G2 continuity preserved.\n"
-    + "  R6. If a request cannot be satisfied with the available tools, emit a single <clarify> block.\n\n"
-    + "Output: <think>...</think>\\n<plan>{goal,scene,bodies,expect}</plan>\\n<tool_call>...</tool_call>...\n\n"
-    + `Active discipline: ${trainedDisc}\n\n`
-    + `<tools>\n${toolsJson}\n</tools>`
+    "You are Archie. Build a scene from registered Studio primitives.\n\n"
+    + "Output exactly this shape:\n"
+    + "  <plan>{\"goal\":\"<noun>\",\"bodies\":<int>}</plan>\n"
+    + "  <tool_call>{\"name\":\"click-discipline\",\"arguments\":{\"id\":\"modeling\"}}</tool_call>\n"
+    + "  <tool_call>{\"name\":\"click-primitive\",\"arguments\":{\"id\":\"<id>\"}}</tool_call>\n"
+    + "  ...one <tool_call> per primitive...\n\n"
+    + "Primitive ids: cube, sphere, plane, cylinder, cone, torus, icosahedron, text, curve.\n"
+    + "Action ids: bevel, apply-xform, sculpt-erode.\n"
+    + "No prose outside the tags. No <think> block."
   );
 }
 
