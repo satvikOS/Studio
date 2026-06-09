@@ -7225,14 +7225,15 @@ function _archieAdapterPath(/* activeWb */) {
   return 'adapters/archie/hermes_studio/modeling';
 }
 
-// Slice 951v — minimal format-anchor system prompt the hermes_studio
-// adapter was trained on (verbatim from scripts/synth_format_anchor.py
-// SYSTEM constant in archdisc-Models). The legacy 17 KB prompt with the
-// full <tools> JSON catalogue averaged 4 500 tokens per training sample,
-// which truncated 100 % of training labels mid-</tool_call>. Hermes
-// converged on this ~250-token prompt; deviating from it at inference
-// re-introduces the prose / "Step-by-step plan:" failure mode the probe
-// caught.
+// Slice 951v/951w — minimal format-anchor system prompt the
+// hermes_studio adapter was trained on (verbatim from
+// scripts/synth_format_anchor.py SYSTEM in archdisc-Models). Slice 951w
+// extends the prompt with an explicit alias-rewrite block so Hermes maps
+// natural-language synonyms (voxel-sphere, dodecahedron, box, ball, ...)
+// onto the 9 valid v3-runtime primitive ids instead of dispatching the
+// hallucinated id and falling out of _PRIMITIVE_IDS. The Studio LoRA was
+// resumed on the same widened corpus (val 0.073 vs v1 0.247) so the
+// runtime + adapter speak the same vocabulary.
 function _buildArchieSystemPrompt(/* activeWb */) {
   return (
     "You are Archie. Build a scene from registered Studio primitives.\n\n"
@@ -7241,8 +7242,21 @@ function _buildArchieSystemPrompt(/* activeWb */) {
     + "  <tool_call>{\"name\":\"click-discipline\",\"arguments\":{\"id\":\"modeling\"}}</tool_call>\n"
     + "  <tool_call>{\"name\":\"click-primitive\",\"arguments\":{\"id\":\"<id>\"}}</tool_call>\n"
     + "  ...one <tool_call> per primitive...\n\n"
-    + "Primitive ids: cube, sphere, plane, cylinder, cone, torus, icosahedron, text, curve.\n"
-    + "Action ids: bevel, apply-xform, sculpt-erode.\n"
+    + "VALID primitive ids — EXACTLY these 9, nothing else:\n"
+    + "  cube, sphere, plane, cylinder, cone, torus, icosahedron, text, curve.\n"
+    + "Action ids: bevel, apply-xform, sculpt-erode.\n\n"
+    + "These 9 are POLYGON meshes — the realistic-quality default. NURBS and\n"
+    + "subdivision-surface workflows still START from these polygon primitives;\n"
+    + "the user converts later via the modeling ribbon. Voxel is a fallback only.\n\n"
+    + "Any other id is invalid. Map natural-language synonyms to one of the 9:\n"
+    + "  box → cube. ball → sphere. donut/ring → torus. cap/funnel → cone.\n"
+    + "  polygon mesh / poly mesh / mesh → cube. quad mesh / quad → cube.\n"
+    + "  subdivision surface / subd / catmull-clark / smooth mesh → sphere.\n"
+    + "  nurbs surface / rational surface → sphere.\n"
+    + "  nurbs sphere → sphere. nurbs cube → cube. nurbs cylinder → cylinder.\n"
+    + "  voxel-cube / voxel cube → cube. voxel-sphere / voxel sphere → sphere.\n"
+    + "  dodecahedron / tetrahedron / icosphere → icosahedron. text3d → text.\n"
+    + "  nurbs curve / spline / line / bezier → curve. flat / floor / ground → plane.\n"
     + "No prose outside the tags. No <think> block."
   );
 }
@@ -8840,18 +8854,45 @@ export function StudioShellV3({ mode = 'dark' }) {
           return [...t.slice(0, -1), { ...last, text: visible || '…thinking…' }];
         });
       };
-      // Slice 951t — speculative tool-call dispatch. Every time the
-      // model closes a <tool_call>…</tool_call> mid-stream, runArchie
-      // awaits onToolCall here so the dispatch fires the moment the
-      // call commits. We track signatures in _specSigSet so the
-      // post-stream tier-1 loop below skips anything already executed.
+      // Slice 951t/951w — speculative tool-call dispatch. Every time
+      // the model closes a <tool_call>…</tool_call> mid-stream,
+      // runArchie awaits onToolCall here so the dispatch fires the
+      // moment the call commits. We track signatures in _specSigSet so
+      // the post-stream tier-1 loop below skips anything already
+      // executed.
+      //
+      // Slice 951w — signature now includes a per-instance index so
+      // repeated identical click-primitive calls each spawn a body. The
+      // legacy sig collapsed N identical calls to 1, so "spawn 6
+      // cylinders" only ever placed one cylinder in the scene. We keep
+      // collapsing redundant click-discipline switches (same id) since
+      // those are idempotent and the model often re-emits them.
       const _specSigSet = new Set();
       const _specResultBySig = new Map();
-      const _sig = (c) => JSON.stringify({ n: c.name, a: c.arguments || {} });
+      // Signature factory: returns a NEW _sig() with its own counter
+      // state. The streaming dispatch + the post-stream replay each
+      // call _makeSigner() so they assign matching #0/#1/#2/... sigs
+      // for repeated identical click-primitive calls (e.g. six
+      // cylinders for a forest each spawn a body).
+      const _makeSigner = () => {
+        const counts = new Map();
+        return (c) => {
+          // click-discipline is idempotent — collapse by id only.
+          if (c && c.name === 'click-discipline') {
+            const id = (c.arguments && c.arguments.id) || '';
+            return `disc:${id}`;
+          }
+          const base = JSON.stringify({ n: c.name, a: c.arguments || {} });
+          const seen = counts.get(base) || 0;
+          counts.set(base, seen + 1);
+          return `${base}#${seen}`;
+        };
+      };
+      const _streamSig = _makeSigner();
       const reply = await runArchie(text, activeWb, {
         onToken: ({ acc_content }) => _streamUpdate(acc_content),
         onToolCall: async (call) => {
-          const sig = _sig(call);
+          const sig = _streamSig(call);
           if (_specSigSet.has(sig)) return;
           _specSigSet.add(sig);
           const result = await executeToolCall(call);
@@ -8907,10 +8948,13 @@ export function StudioShellV3({ mode = 'dark' }) {
       // an unknown tool_call must read as a failed command, not as a
       // successful spawn summary.
       const dispatchResults = [];
+      const _postSig = _makeSigner();
       for (const call of calls) {
-        const sig = _sig(call);
-        // Slice 951t — skip anything the speculative dispatcher already
-        // executed during streaming so we don't double-spawn primitives.
+        const sig = _postSig(call);
+        // Slice 951t/951w — skip anything the speculative dispatcher
+        // already executed during streaming so we don't double-spawn
+        // primitives. Both signers use the same counter rule (per-base
+        // #0/#1/#2/...) so identical-base calls match positionally.
         if (_specSigSet.has(sig)) {
           const prior = _specResultBySig.get(sig);
           if (prior) dispatchResults.push(prior);
