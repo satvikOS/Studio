@@ -7696,36 +7696,27 @@ async function runArchie(text, activeWb, opts = {}) {
     text,
   ].filter(Boolean).join('\n\n');
   const url = `${ARCHIE_BASE_URL}/v1/chat/completions`;
-  // Slice 951m — one-shot format anchor. The base R1-distill model's
-  // "Step-by-Step Explanation" prior overpowers the LoRA's trained
-  // <tool_call> emission even with the verbatim training system prompt:
-  // probes show <plan> tags but zero <tool_call> tags for environment-
-  // scale prompts. One in-context assistant turn showing the EXACT
-  // protocol shape (think → plan JSON → tool_call series, no prose
-  // outside the tags) is enough to lock format induction without
-  // teaching specific shapes. The example uses a single-primitive
-  // request so it can't accidentally template a complex build — the
-  // model has to generalise from format only.
+  // Slice 951x — flat [system, user] stack, mirroring Forge-190 and the
+  // hermes_studio training mix exactly. The slice-951m few-shot anchor
+  // (an R1-distill crutch) injected an in-context example containing a
+  // <think> block and the legacy {"goal","scene","expect"} plan schema —
+  // both shapes the Hermes LoRA was trained AGAINST. Hermes pattern-
+  // matched the example over its fine-tune and reverted to base-model
+  // behaviour at runtime (voxel-sphere hallucinations, old plan schema)
+  // while bare [system, user] curls against the same adapter were clean.
+  // Any in-context example here must match the training corpus byte-for-
+  // byte or it actively fights the LoRA.
   const body = {
     messages: [
       { role: 'system', content: _buildArchieSystemPrompt(activeWb) },
-      { role: 'user',   content: 'sanity check — spawn one cube' },
-      { role: 'assistant', content: '<think>Single primitive. Switch discipline first.</think>\n<plan>{"goal":"sanity check","scene":{"app":"studio","discipline":"modeling"},"expect":{"bodies":1}}</plan>\n<tool_call>{"name":"click-discipline","arguments":{"id":"modeling"}}</tool_call>\n<tool_call>{"name":"click-primitive","arguments":{"id":"cube"}}</tool_call>' },
       { role: 'user',   content: _userContent },
     ],
-    // DeepSeek-R1 distill emits a thinking block first (<think>…</think>)
-    // before the <plan>/<tool_call> tags. 8/64 token budgets cut off
-    // mid-thought so the content field came back empty. 768 covers a
-    // realistic Studio plan with a brief thought + a handful of
-    // tool_calls in series.
+    // 768 covers the plan + a dozen tool_calls; hermes_studio emits no
+    // <think> preamble so the budget is all tags.
     max_tokens: 768,
     temperature: 0.15,
-    // Slice 951 — discipline-aware LoRA routing per
-    // [[archdisc-models-state-2026-06-07]]'s 2-brain serve config. The
-    // studio_v16 adapters are the per-discipline LoRAs trained on
-    // data/studio/<disc>/train.jsonl; each one is fluent in its
-    // discipline's tool catalogue. Falls back to modeling for any
-    // unmapped active discipline.
+    // Slice 951v — every discipline routes to the single Hermes adapter
+    // (see _archieAdapterPath) until per-discipline Hermes LoRAs land.
     adapters: _archieAdapterPath(activeWb),
     stream: !!onToken,
   };
