@@ -7225,38 +7225,37 @@ function _archieAdapterPath(/* activeWb */) {
   return 'adapters/archie/hermes_studio/modeling';
 }
 
-// Slice 951v/951w — minimal format-anchor system prompt the
-// hermes_studio adapter was trained on (verbatim from
-// scripts/synth_format_anchor.py SYSTEM in archdisc-Models). Slice 951w
-// extends the prompt with an explicit alias-rewrite block so Hermes maps
-// natural-language synonyms (voxel-sphere, dodecahedron, box, ball, ...)
-// onto the 9 valid v3-runtime primitive ids instead of dispatching the
-// hallucinated id and falling out of _PRIMITIVE_IDS. The Studio LoRA was
-// resumed on the same widened corpus (val 0.073 vs v1 0.247) so the
-// runtime + adapter speak the same vocabulary.
+// Slice 951z — staged-workflow SYSTEM_V2, verbatim from
+// scripts/synth_staged_workflow.py SYSTEM_V2 in archdisc-Models. One
+// prompt now covers BOTH sample tiers (format-anchor spawns + staged
+// cinematographer traces over the fn channel). Byte-drift from the
+// training constant reintroduces base-model regression — see the
+// slice-951x few-shot incident.
 function _buildArchieSystemPrompt(/* activeWb */) {
   return (
-    "You are Archie. Build a scene from registered Studio primitives.\n\n"
+    "You are Archie. Build scenes from registered Studio primitives, then stage them like a cinematographer.\n\n"
     + "Output exactly this shape:\n"
     + "  <plan>{\"goal\":\"<noun>\",\"bodies\":<int>}</plan>\n"
     + "  <tool_call>{\"name\":\"click-discipline\",\"arguments\":{\"id\":\"modeling\"}}</tool_call>\n"
-    + "  <tool_call>{\"name\":\"click-primitive\",\"arguments\":{\"id\":\"<id>\"}}</tool_call>\n"
-    + "  ...one <tool_call> per primitive...\n\n"
-    + "VALID primitive ids — EXACTLY these 9, nothing else:\n"
-    + "  cube, sphere, plane, cylinder, cone, torus, icosahedron, text, curve.\n"
-    + "Action ids: bevel, apply-xform, sculpt-erode.\n\n"
-    + "These 9 are POLYGON meshes — the realistic-quality default. NURBS and\n"
-    + "subdivision-surface workflows still START from these polygon primitives;\n"
-    + "the user converts later via the modeling ribbon. Voxel is a fallback only.\n\n"
-    + "Any other id is invalid. Map natural-language synonyms to one of the 9:\n"
-    + "  box → cube. ball → sphere. donut/ring → torus. cap/funnel → cone.\n"
-    + "  polygon mesh / poly mesh / mesh → cube. quad mesh / quad → cube.\n"
-    + "  subdivision surface / subd / catmull-clark / smooth mesh → sphere.\n"
-    + "  nurbs surface / rational surface → sphere.\n"
-    + "  nurbs sphere → sphere. nurbs cube → cube. nurbs cylinder → cylinder.\n"
-    + "  voxel-cube / voxel cube → cube. voxel-sphere / voxel sphere → sphere.\n"
-    + "  dodecahedron / tetrahedron / icosphere → icosahedron. text3d → text.\n"
-    + "  nurbs curve / spline / line / bezier → curve. flat / floor / ground → plane.\n"
+    + "  ...one <tool_call> per step...\n\n"
+    + "Channels:\n"
+    + "  click-primitive {id} — VALID ids, EXACTLY these 9: cube, sphere, plane, cylinder, cone, torus, icosahedron, text, curve.\n"
+    + "  click-action {id} — bevel, apply-xform, sculpt-erode.\n"
+    + "  fn {name, args[]} — staged passes (args are positional):\n"
+    + "    __studioSelectNewest [] | __studioSelectByName [\"cube\"]\n"
+    + "    __studioSelectionApplyTransform [{\"position\":[x,y,z],\"rotation\":[rx,ry,rz],\"scale\":[sx,sy,sz]}]\n"
+    + "    __studioMaterialPresetApply [\"gold|chrome|copper|glass|plastic|rubber|wood|concrete|velvet\"]\n"
+    + "    __studioModifierAdd [\"subdivide|solidify|twist|bend|taper|spherify|smooth\", {opts}]\n"
+    + "    __studioAddPointLight [[x,y,z], color, intensity] | __studioAddSpotLight [[x,y,z],[tx,ty,tz], color, intensity]\n"
+    + "    __studioAddRectLight [[x,y,z], w, h, color, intensity]\n"
+    + "    __studioSetFog [color, near, far]\n"
+    + "    __studioMainCameraLook [[x,y,z],[tx,ty,tz]]\n"
+    + "Workflow per body: spawn → __studioSelectNewest → transform → material. Then lights, then camera.\n"
+    + "Colors are decimal ints (16777215 = white, 16772812 = warm). Units are metres.\n"
+    + "These 9 primitives are POLYGON meshes — the realistic default; SubD/NURBS start from them. Voxel is a fallback only.\n"
+    + "Map synonyms onto the 9: box→cube, ball→sphere, donut/ring→torus, voxel-*→cube/sphere,\n"
+    + "dodecahedron/icosphere→icosahedron, nurbs/spline/bezier→curve, floor/ground→plane,\n"
+    + "subdivision surface/subd/smooth mesh→sphere, polygon/quad mesh→cube.\n"
     + "No prose outside the tags. No <think> block."
   );
 }
@@ -7711,9 +7710,13 @@ async function runArchie(text, activeWb, opts = {}) {
       { role: 'system', content: _buildArchieSystemPrompt(activeWb) },
       { role: 'user',   content: _userContent },
     ],
-    // 768 covers the plan + a dozen tool_calls; hermes_studio emits no
-    // <think> preamble so the budget is all tags.
-    max_tokens: 768,
+    // Slice 951z — staged cinematographer traces (spawn → select →
+    // transform → material per body, then lights + camera) run up to
+    // ~2,100 tokens for dense scenes (a 5-tree forest is ~48 calls);
+    // the old 768 cap truncated them mid-trace and 1800 still clipped
+    // the forest tail. hermes_studio emits no <think> preamble so the
+    // budget is all tags.
+    max_tokens: 2400,
     temperature: 0.15,
     // Slice 951v — every discipline routes to the single Hermes adapter
     // (see _archieAdapterPath) until per-discipline Hermes LoRAs land.
@@ -7721,9 +7724,12 @@ async function runArchie(text, activeWb, opts = {}) {
     stream: !!onToken,
   };
   const ac = new AbortController();
-  // 60 s timeout: first-call model load + 768-token generation can take
-  // ~25-45 s; 60 s gives headroom without hanging the UI forever.
-  const tmo = setTimeout(() => ac.abort(), 60_000);
+  // Slice 951z — 150 s timeout. A dense staged trace is ~2,100 tokens
+  // at ~40 tok/s on the q4 serve ≈ 55 s warm, and a cold adapter swap
+  // adds 20-30 s; the old 60 s cap aborted exactly the scenes the
+  // staged corpus exists for. Streaming keeps the UI live throughout,
+  // so the long ceiling doesn't freeze anything.
+  const tmo = setTimeout(() => ac.abort(), 150_000);
   try {
     const res = await fetch(url, {
       method: 'POST',
