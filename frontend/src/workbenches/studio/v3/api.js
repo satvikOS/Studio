@@ -201,6 +201,65 @@ export function registerV3Api() {
     return { ok: false };
   };
 
+  // Slice 951y — ADDRESSABLE selection for Archie staged workflows.
+  // __studioSelectMesh takes a live Mesh object, which a tool_call can
+  // never produce; every selection-based op (modifiers, material
+  // presets, transforms) was therefore unreachable from the fn dispatch
+  // channel. These two select by STRING/recency so a model-emitted
+  // `{"name":"fn","arguments":{"name":"__studioSelectByName","args":["cube"]}}`
+  // resolves a real mesh. Spawned primitives are named `${kind}-${n}`
+  // (spawn.js), so a bare kind ("cube") matches the newest of that kind.
+  const _scenePrimitives = () => {
+    const scene = window.__archdiscScene
+      || (window.__archdiscViewport && window.__archdiscViewport.scene);
+    const out = [];
+    if (scene) scene.traverse((o) => {
+      if (o && o.userData && o.userData.archdiscStudioPrimitive) out.push(o);
+    });
+    return out;
+  };
+  window.__studioSelectByName = (name) => {
+    const q = String(name || '').trim().toLowerCase();
+    if (!q) return { ok: false, error: 'empty name' };
+    const prims = _scenePrimitives();
+    // Exact name first, else kind-prefix (`cube` → newest `cube-N`).
+    let hits = prims.filter((o) => (o.name || '').toLowerCase() === q);
+    if (!hits.length) hits = prims.filter((o) => (o.name || '').toLowerCase().startsWith(q + '-'));
+    if (!hits.length) hits = prims.filter((o) => (o.name || '').toLowerCase().includes(q));
+    if (!hits.length) return { ok: false, error: `no primitive matching "${name}"`, have: prims.map((o) => o.name) };
+    const mesh = hits[hits.length - 1];
+    const r = window.__studioSelectMesh(mesh);
+    return r && r.ok ? { ok: true, selected: mesh.name } : { ok: false, error: 'attach failed' };
+  };
+  window.__studioSelectNewest = () => {
+    const prims = _scenePrimitives();
+    if (!prims.length) return { ok: false, error: 'empty scene' };
+    const mesh = prims[prims.length - 1];
+    const r = window.__studioSelectMesh(mesh);
+    return r && r.ok ? { ok: true, selected: mesh.name } : { ok: false, error: 'attach failed' };
+  };
+
+  // Slice 951y — main-camera hero-shot setter. The camera-rig fns
+  // (__studioCameraSetPosition etc.) address rig cameras by uuid, which
+  // a model can't know; this one drives the live viewport camera +
+  // OrbitControls target directly (controls target update per the BVH
+  // raycast lessons — stale targets break subsequent orbiting).
+  window.__studioMainCameraLook = (pos, target) => {
+    const vp = window.__archdiscViewport;
+    if (!vp || !vp.camera) return { ok: false, error: 'no viewport' };
+    const p = Array.isArray(pos) ? pos : [4, 3, 6];
+    const t = Array.isArray(target) ? target : [0, 0.5, 0];
+    vp.camera.position.set(p[0], p[1], p[2]);
+    if (vp.controls && vp.controls.target) {
+      vp.controls.target.set(t[0], t[1], t[2]);
+      vp.controls.update && vp.controls.update();
+    } else {
+      vp.camera.lookAt(t[0], t[1], t[2]);
+    }
+    vp.camera.updateMatrixWorld(true);
+    return { ok: true, position: p, target: t };
+  };
+
   // Scene I/O.
   window.__studioSaveScene = () => saveScene();
   window.__studioLoadScene = (j) => loadScene(j);
