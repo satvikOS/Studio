@@ -4041,17 +4041,25 @@ function ReferenceLibrarySection() {
   };
   const onDrop = (e) => {
     e.preventDefault();
-    const files = Array.from(e.dataTransfer?.files || []).filter((f) => f.type.startsWith('image/')).slice(0, 4);
-    files.forEach((f) => {
-      if (f.size > 800_000) return; // keep localStorage honest
+    const files = Array.from(e.dataTransfer?.files || []).filter((f) => f.type.startsWith('image/') && f.size <= 800_000).slice(0, 4);
+    // Slice 956 — read ALL files first, persist ONCE: per-file onload
+    // writers raced each other through localStorage and dropped images
+    // (review-confirmed). Filenames are sanitized at ingest.
+    Promise.all(files.map((f) => new Promise((res) => {
       const rd = new FileReader();
-      rd.onload = () => {
-        persist([...(JSON.parse(window.localStorage.getItem(_REFS_KEY) || '[]')), {
-          id: `ref-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e4)}`,
-          name: f.name, dataUrl: rd.result, caption: null,
-        }].slice(-12));
-      };
+      rd.onload = () => res({
+        id: `ref-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e4)}`,
+        name: _stripUntrainedTags(f.name).slice(0, 80) || 'image',
+        dataUrl: rd.result, caption: null,
+      });
+      rd.onerror = () => res(null);
       rd.readAsDataURL(f);
+    }))).then((loaded) => {
+      const fresh = loaded.filter(Boolean);
+      if (!fresh.length) return;
+      let prev = [];
+      try { prev = JSON.parse(window.localStorage.getItem(_REFS_KEY) || '[]'); } catch (_) {}
+      persist([...prev, ...fresh].slice(-12));
     });
   };
   const describe = async (r) => {
@@ -4062,7 +4070,7 @@ function ReferenceLibrarySection() {
       });
       if (!res.ok) throw new Error(String(res.status));
       const j = await res.json();
-      persist(refs.map((x) => (x.id === r.id ? { ...x, caption: j.caption || '(no caption)' } : x)));
+      persist(refs.map((x) => (x.id === r.id ? { ...x, caption: _stripUntrainedTags(j.caption) || '(no caption)' } : x)));
     } catch (_) {
       persist(refs.map((x) => (x.id === r.id ? { ...x, caption: '(vision server offline)' } : x)));
     }
@@ -4070,7 +4078,7 @@ function ReferenceLibrarySection() {
   const useRef_ = (r) => {
     const el = document.querySelector('[data-studio-v3-cmdbar-input]');
     if (!el) return;
-    const note = `Reference "${r.name}"${r.caption && !r.caption.startsWith('(') ? `: ${r.caption}` : ''} — `;
+    const note = `Reference "${_stripUntrainedTags(r.name)}"${r.caption && !r.caption.startsWith('(') ? `: ${_stripUntrainedTags(r.caption)}` : ''} — `;
     el.value = note + el.value;
     el.dispatchEvent(new Event('input', { bubbles: true }));
     el.focus();
@@ -7485,6 +7493,18 @@ async function _verifyCoherence(noun, bodies) {
 // camera) into localStorage per project. Surfaced in the Inspector;
 // "suggest" prepends the style note VISIBLY into the cmdbar — the same
 // no-hidden-injection law as the reference library.
+// Slice 956 — tag sanitizer for EVERY externally-sourced string that can
+// reach the model context or the memory DB (the poisoning law's side
+// doors, confirmed by adversarial review): vision captions, dropped
+// filenames, recalled digests, plan-content extracts. Neutralizes the
+// tag shapes the adapter treats as protocol.
+function _stripUntrainedTags(s) {
+  return String(s == null ? '' : s)
+    .replace(/<\/?\s*(tool_call|plan|think|viewport_state|prior_context|clarify)\b[^>]*>/gi, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 const _STYLE_KEY = 'studio.v3.style-memory.default';
 function _recordStyle(calls, bodyCount) {
   try {
@@ -8015,7 +8035,8 @@ async function runArchie(text, activeWb, opts = {}) {
       const _visionAc = new AbortController();
       const _visionTmo = setTimeout(() => _visionAc.abort(), 4000);
       try {
-        _viewportCaption = await _captureAndCaption({ canvas: _canvas, signal: _visionAc.signal });
+        _viewportCaption = _stripUntrainedTags(
+          await _captureAndCaption({ canvas: _canvas, signal: _visionAc.signal }));
       } catch (_) { /* vision optional — silent */ }
       finally { clearTimeout(_visionTmo); }
     }
@@ -8171,12 +8192,11 @@ async function runArchie(text, activeWb, opts = {}) {
     // (the 951x few-shot law, resurfacing through the memory channel —
     // a poisoned summary made "coffee table hero shot" copy a bare-
     // spawn trace verbatim). Store a plain-text digest instead.
+    const _planBody = _stripUntrainedTags((_final.match(/<plan>([\s\S]*?)<\/plan>/i) || [])[1] || '');
     const _digest = /<tool_call>/i.test(_final)
       ? `dispatched ${(_final.match(/<tool_call>/gi) || []).length} tool calls`
-        + ((_final.match(/<plan>([\s\S]*?)<\/plan>/i) || [])[1]
-            ? ` for plan ${(_final.match(/<plan>([\s\S]*?)<\/plan>/i) || [])[1].slice(0, 120)}`
-            : '')
-      : _final.slice(0, 400);
+        + (_planBody ? ` for plan ${_planBody.slice(0, 120)}` : '')
+      : _stripUntrainedTags(_final).slice(0, 400);
     _rememberTurn({ app: 'studio', user_text: text, assistant_summary: _digest });
     return _final;
   } finally {
