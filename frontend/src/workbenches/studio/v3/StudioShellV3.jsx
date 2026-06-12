@@ -3939,6 +3939,40 @@ function ViewportHUD({ editMode, setEditMode, axis, setAxis }) {
   );
 }
 
+// ─── Slice 954 — Project Style section (§6 per-project style memory) ─────
+function StyleMemorySection() {
+  const [style, setStyle] = useState(null);
+  useEffect(() => {
+    const read = () => {
+      try { setStyle(JSON.parse(window.localStorage.getItem(_STYLE_KEY) || 'null')); } catch (_) {}
+    };
+    read();
+    const iv = setInterval(read, 2500);
+    return () => clearInterval(iv);
+  }, []);
+  if (!style || !style.builds) return null;
+  const top = Object.entries(style.mats || {}).sort((a, b) => b[1] - a[1]).slice(0, 3);
+  const suggest = () => {
+    const el = document.querySelector('[data-studio-v3-cmdbar-input]');
+    if (!el || !top.length) return;
+    el.value = `Project style: mostly ${top.map(([m]) => m).join(' + ')}, ~${style.avgBodies} bodies — ` + el.value;
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.focus();
+  };
+  return (
+    <div className="studio-right-section" data-studio-v3-style-memory>
+      <div className="studio-right-section-title">Project Style · {style.builds} builds</div>
+      {top.map(([m, n]) => (
+        <div key={m} className="studio-right-row"><span>{m}</span><strong>×{n}</strong></div>
+      ))}
+      <div className="studio-right-row"><span>typical bodies</span><strong>{style.avgBodies}</strong></div>
+      <button type="button" className="studio-right-tab" data-studio-v3-style-suggest onClick={suggest}>
+        suggest in cmdbar
+      </button>
+    </div>
+  );
+}
+
 // ─── Slice 953 — Render Queue tab (§6 render-farm orchestration UI) ──────
 // The queue back-end shipped long ago (api.js: __studioEnqueueRender /
 // __studioRunRenderQueue / camera restore / PNG export); this is its
@@ -4167,6 +4201,7 @@ function RightPanel({ collapsed, onToggle, activeWb, editMode, selection }) {
             </div>
             {/* Slice 566 — Rename row works whether the React selection
                 prop is set or not, polling __studioSelectedMesh directly. */}
+            <StyleMemorySection />
             <RenameSection />
             <ObjectPropsSection />
             <ConstraintsSection />
@@ -7445,6 +7480,35 @@ async function _verifyCoherence(noun, bodies) {
   }
 }
 
+// Slice 954 — §6 per-project style memory. Every build that passes the
+// coherence gate records its signature (materials used, body count,
+// camera) into localStorage per project. Surfaced in the Inspector;
+// "suggest" prepends the style note VISIBLY into the cmdbar — the same
+// no-hidden-injection law as the reference library.
+const _STYLE_KEY = 'studio.v3.style-memory.default';
+function _recordStyle(calls, bodyCount) {
+  try {
+    const mats = {};
+    let cam = null;
+    for (const c of calls || []) {
+      if (c?.name === 'fn' && c?.arguments?.name === '__studioMaterialPresetApply') {
+        const m = c.arguments.args?.[0];
+        if (typeof m === 'string') mats[m] = (mats[m] || 0) + 1;
+      }
+      if (c?.name === 'fn' && c?.arguments?.name === '__studioMainCameraLook') {
+        cam = c.arguments.args?.[0] || null;
+      }
+    }
+    const prev = JSON.parse(window.localStorage.getItem(_STYLE_KEY) || '{"mats":{},"builds":0,"avgBodies":0}');
+    for (const [m, n] of Object.entries(mats)) prev.mats[m] = (prev.mats[m] || 0) + n;
+    prev.avgBodies = Math.round(((prev.avgBodies * prev.builds) + bodyCount) / (prev.builds + 1) * 10) / 10;
+    prev.builds += 1;
+    if (cam) prev.lastCamera = cam;
+    prev.ts = Date.now();
+    window.localStorage.setItem(_STYLE_KEY, JSON.stringify(prev));
+  } catch (_) { /* style memory is best-effort */ }
+}
+
 function _snapshotPrimNames() {
   const s = window.__archdiscScene || (window.__archdiscViewport && window.__archdiscViewport.scene);
   const names = new Set();
@@ -9299,6 +9363,7 @@ export function StudioShellV3({ mode = 'dark' }) {
               ? '[verifier] coherent ✓'
               : `[verifier] incoherent — ${_v.reason}`,
           }]);
+          if (_v.verdict === 'coherent') _recordStyle(calls, _newBodies.length);
           if (_v.verdict === 'incoherent') {
             _logFailure('incoherent-scene', text, _v.reason);
             if (!_opts.isRetry) {

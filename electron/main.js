@@ -116,7 +116,12 @@ function createWindow() {
   // Load the built frontend
   const isDev = process.argv.includes('--dev');
   if (isDev) {
-    mainWindow.loadURL('http://localhost:3000');
+    // Slice 955 — dev port moved 3000 → 3100: the user's separate
+    // hermes-agent gateway (launchd ai.hermes.gateway) runs a WhatsApp
+    // bridge that binds :3000; it rebound the port mid-session on
+    // 2026-06-12 and every --dev launch silently loaded the wrong
+    // server. 3100 is unclaimed.
+    mainWindow.loadURL('http://localhost:3100');
     // Slice 742 (UI fix): do NOT auto-open DevTools on --dev. It popped the
     // Elements/Console panel over the app every launch (and was the source
     // of the e2e DevTools-window boot race). Opt in explicitly with
