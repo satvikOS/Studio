@@ -48,13 +48,25 @@ export async function recallPriorTurns(query, {
     const turns = Array.isArray(data && data.turns) ? data.turns : [];
     if (!turns.length) return '';
     // Trim each entry to the fields Archie cares about, keep them small.
-    const compact = turns.map((t) => ({
-      ts: t.ts,
-      app: t.app,
-      user: t.user_text,
-      summary: t.assistant_summary || null,
-      score: t.score,
-    }));
+    // Slice 952 — sanitize summaries on the way IN to the prompt: any
+    // <tool_call>/<plan> tags in a recalled summary act as an untrained
+    // in-context example and hijack the model's output format (the
+    // 951x few-shot law via the memory channel). Pre-952 DB rows may
+    // still carry raw dumps — strip, never trust.
+    const compact = turns.map((t) => {
+      let summary = t.assistant_summary || null;
+      if (summary && /<(tool_call|plan|think)>/i.test(summary)) {
+        const n = (summary.match(/<tool_call>/gi) || []).length;
+        summary = n ? `dispatched ${n} tool calls` : null;
+      }
+      return {
+        ts: t.ts,
+        app: t.app,
+        user: String(t.user_text || '').slice(0, 200),
+        summary: summary ? String(summary).slice(0, 240) : null,
+        score: t.score,
+      };
+    });
     return `<prior_context>${JSON.stringify(compact)}</prior_context>`;
   } catch (_) {
     return '';

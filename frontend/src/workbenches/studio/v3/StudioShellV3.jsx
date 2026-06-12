@@ -7225,6 +7225,149 @@ function _archieAdapterPath(/* activeWb */) {
   return 'adapters/archie/hermes_studio/modeling';
 }
 
+// Slice 952 — §6 failure-mode catalog client. Every Archie failure
+// (call abort, failed dispatch, incoherent verdict) lands in
+// archdisc-Models/data/failures/YYYY-MM.jsonl via the memory store's
+// /failure endpoint. Fire-and-forget: catalog down ≠ broken builds.
+function _logFailure(kind, prompt, detail) {
+  try {
+    fetch('http://localhost:8083/failure', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ app: 'studio', kind, prompt: String(prompt || '').slice(0, 500), detail: String(detail || '').slice(0, 1000) }),
+    }).catch(() => {});
+  } catch (_) { /* never throw from telemetry */ }
+}
+
+// Slice 952 — B.4 coherence gate. Verbatim training prompt from
+// archdisc-Models scripts/synth_coherence_pairs.py SYSTEM; the
+// verifier_q4 LoRA (100 % on 80 held-out pairs) rides the SAME q4
+// server via per-request adapter hot-swap — no second process.
+const _VERIFIER_SYSTEM =
+  'You are Archie\'s coherence verifier. Decide whether a built '
+  + 'scene is COHERENT for the named subject. A coherent scene has: '
+  + 'every body with positive scale; primitives that plausibly '
+  + 'compose the subject; proportions within human-factor or '
+  + 'engineering bounds; no missing critical body. Reply with either '
+  + '"coherent" on a single line, or "incoherent — <one-line reason>".';
+
+// Tier 1 — deterministic rules. Zero/negative/NaN scale, absurd world
+// dimensions: these are arithmetic, not judgement. A veteran checks;
+// he doesn't ask a neural net whether a scale is negative. Instant,
+// exact reasons, zero latency.
+//
+// Tier 2 — the trained verifier_q4 LoRA for FUZZY plausibility
+// ("does sphere×3 read as a snowman?"). Behind window.__studioVerifierLLM
+// until a leakage-free corpus gets it ≥90 %: the v1 corpus taught the
+// jitter signature (100 % held-out, 0 % real discrimination) and the
+// de-biased v2 sits at 41 % — documented in the failure catalog. Rules
+// catch every corruption class the pairs encode; the LLM tier adds
+// noun-plausibility once it earns its place.
+function _verifyCoherenceRules(bodies) {
+  for (let i = 0; i < bodies.length; i++) {
+    const b = bodies[i];
+    for (let k = 0; k < 3; k++) {
+      const v = b.scale[k];
+      if (!Number.isFinite(v)) return { verdict: 'incoherent', reason: `body "${b.kind}" has non-finite scale on axis ${k}` };
+      if (v === 0) return { verdict: 'incoherent', reason: `body "${b.kind}" has zero scale on axis ${k}` };
+      if (v < 0) return { verdict: 'incoherent', reason: `body "${b.kind}" has negative scale on axis ${k}` };
+      if (v > 50) return { verdict: 'incoherent', reason: `body "${b.kind}" axis ${k} is ${v} m — beyond any human-factor bound` };
+      if (v > 0 && v < 0.002) return { verdict: 'incoherent', reason: `body "${b.kind}" axis ${k} is ${v} m — sub-millimetre sliver` };
+    }
+  }
+  return { verdict: 'coherent', reason: '' };
+}
+
+async function _verifyCoherence(noun, bodies) {
+  const rules = _verifyCoherenceRules(bodies);
+  if (rules.verdict === 'incoherent') return rules;
+  if (typeof window === 'undefined' || !window.__studioVerifierLLM) return rules;
+  const ac = new AbortController();
+  const tmo = setTimeout(() => ac.abort(), 30_000);
+  try {
+    const res = await fetch(`${ARCHIE_BASE_URL}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: [
+          { role: 'system', content: _VERIFIER_SYSTEM },
+          { role: 'user', content: `Scene noun: "${noun}". Built bodies (JSON):\n${JSON.stringify(bodies)}` },
+        ],
+        max_tokens: 60,
+        temperature: 0,
+        adapters: 'adapters/archie/verifier_q4',
+        stream: false,
+      }),
+      signal: ac.signal,
+    });
+    if (!res.ok) return rules;
+    const j = await res.json();
+    const out = String(j?.choices?.[0]?.message?.content || '').trim();
+    if (/^incoherent/i.test(out)) {
+      return { verdict: 'incoherent', reason: out.replace(/^incoherent\s*[—-]*\s*/i, '').trim() };
+    }
+    return rules;
+  } catch (_) {
+    return rules;
+  } finally {
+    clearTimeout(tmo);
+  }
+}
+
+function _snapshotPrimNames() {
+  const s = window.__archdiscScene || (window.__archdiscViewport && window.__archdiscViewport.scene);
+  const names = new Set();
+  if (s) s.traverse((o) => { if (o?.userData?.archdiscStudioPrimitive) names.add(o.name); });
+  return names;
+}
+
+// Bodies spawned since the snapshot, summarised in the verifier's
+// trained shape: {kind, scale:[x,y,z], ops:[]}. kind comes from the
+// spawn.js naming convention `${kind}-${n}`.
+//
+// DISTRIBUTION NOTE: the verifier corpus carries metre-ish dimension
+// values (a table top reads [1.6, 0.06, 0.7]); runtime mesh.scale is
+// the ABSOLUTE multiplier over spawn.js's 0.03 m bases (30-200× for
+// staged scenes). Hand the verifier raw multipliers and every clean
+// build reads as huge-scale corruption — so convert scale → world
+// metres with the same per-kind base table the staged corpus uses.
+const _VERIFIER_BASE = {
+  cube: [0.03, 0.03, 0.03], sphere: [0.036, 0.036, 0.036],
+  plane: [0.048, 0.048, 0.048], cylinder: [0.03, 0.03, 0.03],
+  cone: [0.033, 0.03, 0.033], torus: [0.0408, 0.0408, 0.0408],
+  icosahedron: [0.036, 0.036, 0.036],
+};
+function _collectNewBodies(beforeNames) {
+  const s = window.__archdiscScene || (window.__archdiscViewport && window.__archdiscViewport.scene);
+  const out = [];
+  if (!s) return out;
+  s.traverse((o) => {
+    if (!o?.userData?.archdiscStudioPrimitive || beforeNames.has(o.name)) return;
+    const kind = String(o.name || '').split('-')[0] || 'unknown';
+    const base = _VERIFIER_BASE[kind] || [0.03, 0.03, 0.03];
+    const sc = o.scale.toArray();
+    out.push({
+      kind,
+      scale: sc.map((v, i) => Math.round(v * base[i] * 1000) / 1000),
+      ops: [],
+      _name: o.name,
+    });
+  });
+  return out;
+}
+
+function _removeBodiesByName(names) {
+  const s = window.__archdiscScene || (window.__archdiscViewport && window.__archdiscViewport.scene);
+  if (!s) return;
+  const doomed = [];
+  s.traverse((o) => { if (o?.userData?.archdiscStudioPrimitive && names.includes(o.name)) doomed.push(o); });
+  for (const o of doomed) {
+    if (o.geometry) o.geometry.dispose();
+    if (o.material?.dispose) o.material.dispose();
+    if (o.parent) o.parent.remove(o);
+  }
+}
+
 // Slice 951z — staged-workflow SYSTEM_V2, verbatim from
 // scripts/synth_staged_workflow.py SYSTEM_V2 in archdisc-Models. One
 // prompt now covers BOTH sample tiers (format-anchor spawns + staged
@@ -7824,9 +7967,22 @@ async function runArchie(text, activeWb, opts = {}) {
     }
     const _final = _unwrapThink(raw);
     // Slice 951r — fire-and-forget remember the turn (user prompt +
-    // unwrapped assistant content) so future sessions can recall it.
+    // assistant content) so future sessions can recall it.
     // _rememberTurn never awaits — a slow store cannot block the UI.
-    _rememberTurn({ app: 'studio', user_text: text, assistant_summary: _final });
+    //
+    // Slice 952 — NEVER store raw tag dumps as the summary. A recalled
+    // <tool_call> trace inside <prior_context> acts as an in-context
+    // example the LoRA was never trained on and hijacks the next reply
+    // (the 951x few-shot law, resurfacing through the memory channel —
+    // a poisoned summary made "coffee table hero shot" copy a bare-
+    // spawn trace verbatim). Store a plain-text digest instead.
+    const _digest = /<tool_call>/i.test(_final)
+      ? `dispatched ${(_final.match(/<tool_call>/gi) || []).length} tool calls`
+        + ((_final.match(/<plan>([\s\S]*?)<\/plan>/i) || [])[1]
+            ? ` for plan ${(_final.match(/<plan>([\s\S]*?)<\/plan>/i) || [])[1].slice(0, 120)}`
+            : '')
+      : _final.slice(0, 400);
+    _rememberTurn({ app: 'studio', user_text: text, assistant_summary: _digest });
     return _final;
   } finally {
     clearTimeout(tmo);
@@ -8810,7 +8966,7 @@ export function StudioShellV3({ mode = 'dark' }) {
     }
   }, [activeTool]);
 
-  const onCmdSubmit = async (text) => {
+  const onCmdSubmit = async (text, _opts = {}) => {
     // Direct V3-API call path — any `studioFoo arg1 arg2` invokes the
     // existing window.__studio* op directly and pushes the result. No
     // model round-trip. Best for power users who already know the API.
@@ -8835,6 +8991,9 @@ export function StudioShellV3({ mode = 'dark' }) {
       { role: 'user', text },
       { role: 'archie', text: '…thinking…', pending: true },
     ]);
+    // Slice 952 — snapshot the scene's primitive names so the coherence
+    // gate below can isolate exactly the bodies THIS turn created.
+    const _namesBefore = _snapshotPrimNames();
     try {
       // Slice 951s — stream tokens into the pending overlay message so
       // the user sees Archie compose its reply in real time. The
@@ -8990,7 +9149,39 @@ export function StudioShellV3({ mode = 'dark' }) {
         next.push({ role: 'archie', text: humanized });
         return next;
       });
+      // Slice 952 — B.4 coherence gate. Multi-body builds get scored by
+      // the verifier_q4 LoRA (same server, per-request adapter swap).
+      // Incoherent → log to the failure catalog, tear down the failed
+      // bodies, and rebuild ONCE with the verifier's reason appended —
+      // the bible's "below threshold → rework without asking". Verifier
+      // unreachable/unparseable → builds proceed ungated (never block
+      // the user on telemetry infrastructure).
+      const _newBodies = _collectNewBodies(_namesBefore);
+      if (_newBodies.length >= 2) {
+        const _plan = _extractPlan(reply);
+        const _noun = String((_plan && _plan.goal) || text).slice(0, 80);
+        const _v = await _verifyCoherence(_noun, _newBodies.map(({ _name, ...b }) => b));
+        if (_v) {
+          setThread((t) => [...t, {
+            role: 'tool',
+            text: _v.verdict === 'coherent'
+              ? '[verifier] coherent ✓'
+              : `[verifier] incoherent — ${_v.reason}`,
+          }]);
+          if (_v.verdict === 'incoherent') {
+            _logFailure('incoherent-scene', text, _v.reason);
+            if (!_opts.isRetry) {
+              setThread((t) => [...t, { role: 'tool', text: '[verifier] rebuilding once with the correction…' }]);
+              _removeBodiesByName(_newBodies.map((b) => b._name));
+              await onCmdSubmit(
+                `${text}\n\n(The previous attempt failed verification: ${_v.reason}. Fix that.)`,
+                { isRetry: true });
+            }
+          }
+        }
+      }
     } catch (err) {
+      _logFailure('archie-call-failed', text, String(err && err.message || err));
       setThread((t) => {
         const next = t.slice();
         for (let i = next.length - 1; i >= 0; i--) {
