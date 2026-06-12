@@ -6948,20 +6948,33 @@ export function registerV3Api() {
     return { ok: true, rendered: done.length };
   };
 
-  // Slice 579 — CSG boolean modifier. Wraps manifold-3d for real
-  // Union / Subtract / Intersect on the two most recently selected
-  // meshes; falls back to a plain mergeGeometries when WASM init fails.
+  // Slice 579/957 — CSG boolean modifier over manifold-3d. Slice 957
+  // (parity ledger #1): the silent mergeGeometries fallback is GONE — a
+  // merge masquerading as a boolean is a fake, not a degraded result.
+  // No DCC ships a boolean that quietly stops booleaning (Blender/Maya
+  // surface kernel failures; Parasolid/ACIS never degrade). On any
+  // engine or op failure the REAL error reaches the user and the
+  // operands stay untouched in the scene.
   let _manifold = null;
+  let _manifoldErr = null;
   const ensureManifold = async () => {
     if (_manifold) return _manifold;
     try {
+      // Slice 957 — the bare import let Emscripten fetch './manifold.wasm'
+      // relative to the page, which Vite answers with index.html (WASM
+      // magic-word error) — so the engine NEVER initialised in dev and
+      // every boolean silently merged. Resolve the wasm through the
+      // bundler's asset pipeline instead.
       const mod = await import('manifold-3d');
+      const wasmUrl = (await import('manifold-3d/manifold.wasm?url')).default;
       const Module = mod.default || mod;
-      const m = await Module();
+      const m = await Module({ locateFile: (f) => (f.endsWith('.wasm') ? wasmUrl : f) });
       m.setup();
       _manifold = m;
+      _manifoldErr = null;
       return _manifold;
     } catch (e) {
+      _manifoldErr = String(e && e.message || e);
       return null;
     }
   };
@@ -6997,37 +7010,34 @@ export function registerV3Api() {
       ? window.__studioSelectedMeshesSet.slice(-2)
       : [];
     if (set.length !== 2) return { ok: false, error: 'need 2 selected' };
-    if (window.__studioPushUndo) window.__studioPushUndo(`csg-${op}`);
     const lib = await ensureManifold();
-    let result = null;
-    let fallback = false;
-    if (lib) {
-      try {
-        const M = lib.Manifold;
-        const a = new M(toManifoldMesh(set[0]));
-        const b = new M(toManifoldMesh(set[1]));
-        if (op === 'union') result = a.add(b);
-        else if (op === 'subtract') result = a.subtract(b);
-        else if (op === 'intersect') result = a.intersect(b);
-        else return { ok: false, error: 'bad op' };
-      } catch (e) {
-        fallback = true;
-      }
-    } else {
-      fallback = true;
+    if (!lib) {
+      const err = `boolean engine unavailable: manifold-3d failed to initialise (${_manifoldErr || 'unknown'})`;
+      if (window.__studioToast) window.__studioToast(`CSG ${op} failed — ${err}`, 'error');
+      return { ok: false, error: err };
     }
-    let outMesh;
-    if (!fallback && result) {
-      outMesh = fromManifoldMesh(result, `csg-${op}`);
-    } else {
-      const mod = await import('three/examples/jsm/utils/BufferGeometryUtils.js');
-      const geos = set.map((m) => { const g = m.geometry.clone(); m.updateMatrixWorld(true); g.applyMatrix4(m.matrixWorld); return g; });
-      const merged = mod.mergeGeometries(geos, false) || geos[0];
-      outMesh = new THREE.Mesh(merged, new THREE.MeshStandardMaterial({ color: 0xb7c4cf }));
-      outMesh.castShadow = true; outMesh.receiveShadow = true;
-      outMesh.name = `csg-${op}-fallback`;
-      outMesh.userData = { archdiscStudioPrimitive: true, archdiscStudioPrimitiveKind: 'csg', archdiscStudioCsgFallback: true };
+    if (window.__studioPushUndo) window.__studioPushUndo(`csg-${op}`);
+    let result;
+    try {
+      const M = lib.Manifold;
+      const MeshGL = lib.Mesh;
+      // manifold-3d's own weld: Mesh.merge() builds the vertex merge
+      // maps for normal-split inputs — the library-canonical fix for
+      // "Not manifold" on THREE-style geometry.
+      const mka = new MeshGL(await toManifoldMesh(set[0])); mka.merge();
+      const mkb = new MeshGL(await toManifoldMesh(set[1])); mkb.merge();
+      const a = new M(mka);
+      const b = new M(mkb);
+      if (op === 'union') result = a.add(b);
+      else if (op === 'subtract') result = a.subtract(b);
+      else if (op === 'intersect') result = a.intersect(b);
+      else return { ok: false, error: 'bad op' };
+    } catch (e) {
+      const err = `CSG ${op} failed in the boolean engine: ${String(e && e.message || e)} — operands untouched (likely non-manifold input; run weld/triangulate first)`;
+      if (window.__studioToast) window.__studioToast(err, 'error');
+      return { ok: false, error: err };
     }
+    const outMesh = fromManifoldMesh(result, `csg-${op}`);
     const s = window.__archdiscScene;
     s.add(outMesh);
     for (const m of set) {
@@ -7038,8 +7048,8 @@ export function registerV3Api() {
     }
     window.__studioSelectedMeshesSet = [outMesh];
     if (window.__studioSelectMesh) window.__studioSelectMesh(outMesh);
-    if (window.__studioToast) window.__studioToast(`CSG ${op}${fallback ? ' (fallback)' : ''}`, 'ok');
-    return { ok: true, op, fallback };
+    if (window.__studioToast) window.__studioToast(`CSG ${op}`, 'ok');
+    return { ok: true, op, fallback: false };
   };
 
   // Slice 569 — Join multi-selected meshes into a single archdisc
