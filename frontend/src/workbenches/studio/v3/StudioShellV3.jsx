@@ -3939,7 +3939,136 @@ function ViewportHUD({ editMode, setEditMode, axis, setAxis }) {
   );
 }
 
-// ─── RightPanel (Inspector / Outliner / Layers) ──────────────────────────
+// ─── Slice 953 — Render Queue tab (§6 render-farm orchestration UI) ──────
+// The queue back-end shipped long ago (api.js: __studioEnqueueRender /
+// __studioRunRenderQueue / camera restore / PNG export); this is its
+// missing UIUX surface. Jobs render in queue order; "current view"
+// snapshots the live camera as a job.
+function RenderQueueSection() {
+  const [jobs, setJobs] = useState([]);
+  const [running, setRunning] = useState(false);
+  const refresh = () => {
+    const st = window.__studioRenderQueueState || { jobs: [], running: false };
+    setJobs((window.__studioListRenderQueue && window.__studioListRenderQueue()) || []);
+    setRunning(!!st.running);
+  };
+  useEffect(() => {
+    refresh();
+    window.addEventListener('studio-render-queue-changed', refresh);
+    const iv = setInterval(refresh, 1500);
+    return () => { window.removeEventListener('studio-render-queue-changed', refresh); clearInterval(iv); };
+  }, []);
+  const queueCurrent = () => {
+    const vp = window.__archdiscViewport;
+    if (!vp || !vp.camera) return;
+    const t = vp.orbitControls && vp.orbitControls.target
+      ? vp.orbitControls.target.toArray() : [0, 0, 0];
+    window.__studioEnqueueRender && window.__studioEnqueueRender({
+      name: `view-${Date.now().toString(36)}`,
+      position: vp.camera.position.toArray(), target: t,
+    });
+  };
+  return (
+    <div className="studio-right-section" data-studio-v3-render-queue>
+      <div className="studio-right-section-title">Render Queue · {jobs.length}{running ? ' · running' : ''}</div>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
+        <button type="button" className="studio-right-tab" data-studio-v3-rq-add onClick={queueCurrent}>+ current view</button>
+        <button type="button" className="studio-right-tab" data-studio-v3-rq-bookmarks
+                onClick={() => window.__studioEnqueueCameraBookmarks && window.__studioEnqueueCameraBookmarks()}>+ bookmarks</button>
+        <button type="button" className="studio-right-tab" data-studio-v3-rq-run disabled={running || !jobs.length}
+                onClick={() => window.__studioRunRenderQueue && window.__studioRunRenderQueue()}>run</button>
+        <button type="button" className="studio-right-tab" data-studio-v3-rq-clear disabled={!jobs.length}
+                onClick={() => window.__studioClearRenderQueue && window.__studioClearRenderQueue()}>clear</button>
+      </div>
+      {jobs.length === 0 && <div className="studio-right-row"><span>queue empty — add the current view</span></div>}
+      {jobs.map((j, i) => (
+        <div key={`${j.name}-${i}`} className="studio-right-row" data-studio-v3-rq-job={j.name}>
+          <span>{i + 1}. {j.name}</span><strong>{j.w}×{j.h}</strong>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Slice 953 — Reference Library tab (§6 PureRef-style scrapbook) ──────
+// Local-only, IP-clean: the user drags their OWN images in; thumbnails
+// persist via localStorage data-URLs (capped). "describe" captions via
+// the local vision server when it's up. "use" puts the reference note
+// INTO the cmdbar visibly — never silently injected into the model
+// prompt (the context-window law: no untrained shapes smuggled in).
+const _REFS_KEY = 'studio.v3.reference-library';
+function ReferenceLibrarySection() {
+  const [refs, setRefs] = useState(() => {
+    try { return JSON.parse(window.localStorage.getItem(_REFS_KEY) || '[]'); } catch (_) { return []; }
+  });
+  const persist = (next) => {
+    setRefs(next);
+    try { window.localStorage.setItem(_REFS_KEY, JSON.stringify(next)); } catch (_) { /* quota — keep in-memory */ }
+  };
+  const onDrop = (e) => {
+    e.preventDefault();
+    const files = Array.from(e.dataTransfer?.files || []).filter((f) => f.type.startsWith('image/')).slice(0, 4);
+    files.forEach((f) => {
+      if (f.size > 800_000) return; // keep localStorage honest
+      const rd = new FileReader();
+      rd.onload = () => {
+        persist([...(JSON.parse(window.localStorage.getItem(_REFS_KEY) || '[]')), {
+          id: `ref-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e4)}`,
+          name: f.name, dataUrl: rd.result, caption: null,
+        }].slice(-12));
+      };
+      rd.readAsDataURL(f);
+    });
+  };
+  const describe = async (r) => {
+    try {
+      const res = await fetch('http://localhost:8081/caption', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: r.dataUrl }),
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      const j = await res.json();
+      persist(refs.map((x) => (x.id === r.id ? { ...x, caption: j.caption || '(no caption)' } : x)));
+    } catch (_) {
+      persist(refs.map((x) => (x.id === r.id ? { ...x, caption: '(vision server offline)' } : x)));
+    }
+  };
+  const useRef_ = (r) => {
+    const el = document.querySelector('[data-studio-v3-cmdbar-input]');
+    if (!el) return;
+    const note = `Reference "${r.name}"${r.caption && !r.caption.startsWith('(') ? `: ${r.caption}` : ''} — `;
+    el.value = note + el.value;
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.focus();
+  };
+  return (
+    <div className="studio-right-section" data-studio-v3-refs
+         onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
+      <div className="studio-right-section-title">References · {refs.length}</div>
+      {refs.length === 0 && (
+        <div className="studio-right-row"><span>drag images here (≤800 KB, keeps last 12)</span></div>
+      )}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+        {refs.map((r) => (
+          <div key={r.id} data-studio-v3-ref={r.name} style={{ fontSize: 10 }}>
+            <img src={r.dataUrl} alt={r.name}
+                 style={{ width: '100%', borderRadius: 3, display: 'block' }} />
+            <div style={{ opacity: 0.8, margin: '2px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</div>
+            {r.caption && <div style={{ opacity: 0.6, marginBottom: 2 }}>{String(r.caption).slice(0, 80)}</div>}
+            <div style={{ display: 'flex', gap: 4 }}>
+              <button type="button" className="studio-right-tab" data-studio-v3-ref-describe onClick={() => describe(r)}>describe</button>
+              <button type="button" className="studio-right-tab" data-studio-v3-ref-use onClick={() => useRef_(r)}>use</button>
+              <button type="button" className="studio-right-tab" data-studio-v3-ref-del
+                      onClick={() => persist(refs.filter((x) => x.id !== r.id))}>×</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── RightPanel (Inspector / Outliner / Layers / Render / Refs) ──────────
 function RightPanel({ collapsed, onToggle, activeWb, editMode, selection }) {
   const [tab, setTab] = useState('inspector');
   // Slice 478 — react to studio-right-tab-set from the Cmd+1/2/3 hotkey.
@@ -4006,7 +4135,7 @@ function RightPanel({ collapsed, onToggle, activeWb, editMode, selection }) {
         }}
       />
       <div className="studio-right-tabs" data-studio-v3-right-tabs>
-        {['inspector', 'outliner', 'layers'].map((t) => (
+        {['inspector', 'outliner', 'layers', 'render', 'refs'].map((t) => (
           <button
             key={t}
             type="button"
@@ -4026,6 +4155,8 @@ function RightPanel({ collapsed, onToggle, activeWb, editMode, selection }) {
         ><Icon name="close" size={11} /></button>
       </div>
       <div className="studio-right-body" data-studio-v3-right-body={tab}>
+        {tab === 'render' && <RenderQueueSection />}
+        {tab === 'refs' && <ReferenceLibrarySection />}
         {tab === 'inspector' && <InspectorFilter />}
         {tab === 'inspector' && (
           <>
