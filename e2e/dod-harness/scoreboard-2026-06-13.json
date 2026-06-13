@@ -1,0 +1,136 @@
+{
+  "date": "2026-06-13",
+  "passed": 7,
+  "of": 9,
+  "board": [
+    {
+      "id": 1,
+      "prompt": "build me a hero shot of a Scandinavian living room in golden",
+      "pass": true,
+      "stats": {
+        "prims": 13,
+        "lights": 6,
+        "physMats": 13,
+        "offOrigin": 12,
+        "cam": [
+          3.62,
+          1.52,
+          3.67
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "pass": null,
+      "note": "runs in Forge — scored manually until the cross-app harness lands"
+    },
+    {
+      "id": 3,
+      "prompt": "forest scene, 50 trees, dawn, with a wolf in the foreground ",
+      "pass": true,
+      "stats": {
+        "prims": 58,
+        "lights": 8,
+        "physMats": 9,
+        "offOrigin": 57,
+        "cam": [
+          0.45,
+          0.52,
+          7
+        ]
+      }
+    },
+    {
+      "id": 4,
+      "prompt": "give me a chair that fits a 1.2 m³ volume and supports 120 k",
+      "pass": true,
+      "stats": {
+        "prims": 7,
+        "lights": 11,
+        "physMats": 7,
+        "offOrigin": 6,
+        "cam": [
+          1.62,
+          1.18,
+          1.71
+        ]
+      }
+    },
+    {
+      "id": 5,
+      "prompt": "design a cassette deck — VU meters, transport buttons, hairl",
+      "pass": true,
+      "stats": {
+        "prims": 11,
+        "lights": 14,
+        "physMats": 11,
+        "offOrigin": 11,
+        "cam": [
+          0.71,
+          0.81,
+          0.84
+        ]
+      }
+    },
+    {
+      "id": 6,
+      "prompt": "now make the same cassette deck in the visual language of a ",
+      "pass": true,
+      "stats": {
+        "prims": 12,
+        "lights": 16,
+        "physMats": 12,
+        "offOrigin": 12,
+        "cam": [
+          0.62,
+          0.75,
+          0.84
+        ]
+      }
+    },
+    {
+      "id": 7,
+      "prompt": "I'm doing arch-viz of a kitchen. Build it. Surprise me on th",
+      "pass": true,
+      "stats": {
+        "prims": 13,
+        "lights": 18,
+        "physMats": 13,
+        "offOrigin": 12,
+        "cam": [
+          3.18,
+          1.62,
+          2.67
+        ]
+      }
+    },
+    {
+      "id": 8,
+      "prompt": "this character mesh has 28k tris, I need it under 8k for mob",
+      "pass": true,
+      "replyChars": 140
+    },
+    {
+      "id": 9,
+      "prompt": "load my last scene, do whatever you think it needs to be por",
+      "pass": false,
+      "stats": {
+        "prims": 2,
+        "lights": 18,
+        "physMats": 0,
+        "offOrigin": 2,
+        "cam": [
+          3.18,
+          1.62,
+          2.67
+        ]
+      }
+    },
+    {
+      "id": 10,
+      "prompt": "self-critique your last 3 outputs and propose 5 improvements",
+      "pass": false,
+      "replyChars": 159
+    }
+  ]
+}

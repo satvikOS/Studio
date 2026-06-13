@@ -8067,6 +8067,46 @@ async function runArchie(text, activeWb, opts = {}) {
       finally { clearTimeout(_visionTmo); }
     }
   }
+  // Slice 963 — graph-derived viewport_state when vision is absent.
+  // The scene graph IS the viewport state (computed, not perceived) —
+  // no 6 GB vision encoder needed for state awareness. Emitted in the
+  // EXACT corpus viewport_state shapes so the LoRA reads it natively;
+  // without it, state-aware routing (retopo, scatter, uv-first) is
+  // blind whenever :8081 is down — the hardware-calm default.
+  if (!_viewportCaption && typeof window !== 'undefined') {
+    try {
+      const _scene = window.__archdiscScene
+        || (window.__archdiscViewport && window.__archdiscViewport.scene);
+      if (_scene) {
+        const _prims = [];
+        _scene.traverse((o) => {
+          if (o?.userData?.archdiscStudioPrimitive) _prims.push(o);
+        });
+        if (_prims.length === 0) {
+          _viewportCaption = 'empty scene';
+        } else if (_prims.length === 1) {
+          const o = _prims[0];
+          const g = o.geometry;
+          const tris = g?.index ? g.index.count / 3
+            : (g?.attributes?.position?.count || 0) / 3;
+          const label = (o.name || o.userData.archdiscStudioPrimitiveKind || 'mesh')
+            .toLowerCase().slice(0, 24);
+          if (tris >= 10000) {
+            _viewportCaption = `1 ${label} mesh in scene; ${Math.round(tris / 1000)}k tris; no other bodies`;
+          } else {
+            const m = Array.isArray(o.material) ? o.material[0] : o.material;
+            const hasUv = !!g?.attributes?.uv;
+            const isDefaultMat = !(m && m.isMeshPhysicalMaterial);
+            _viewportCaption = `1 ${label} in scene; ${hasUv ? 'UVs unwrapped' : 'no UVs'}; ${isDefaultMat ? 'default material' : 'material applied'}`;
+          }
+        } else {
+          let lights = 0;
+          _scene.traverse((o) => { if (o?.isLight) lights++; });
+          _viewportCaption = `${_prims.length} primitives composed; materials applied${lights ? '; lights set' : ''}`;
+        }
+      }
+    } catch (_) { /* graph-state best-effort */ }
+  }
   // Slice 951r — recall prior turns from the long-session memory store.
   // Bounded by the helper's own timeout so a slow recall doesn't stall
   // the chat dispatch. Order matters: priors first (background), then
@@ -8218,10 +8258,20 @@ async function runArchie(text, activeWb, opts = {}) {
     // (the 951x few-shot law, resurfacing through the memory channel —
     // a poisoned summary made "coffee table hero shot" copy a bare-
     // spawn trace verbatim). Store a plain-text digest instead.
-    const _planBody = _stripUntrainedTags((_final.match(/<plan>([\s\S]*?)<\/plan>/i) || [])[1] || '');
+    // Slice 963 — the digest must be a TRAINED prior_context clause.
+    // "dispatched 49 tool calls for plan {json}" was an untrained shape
+    // (raw JSON fragment + alien phrasing); recalled at score 1.0 it
+    // collapsed staged prompts back to anchor spawn lists — the 6/9 →
+    // 3/9 scoreboard regression of 2026-06-12 evening. Natural clause
+    // only, mirroring the corpus prefix pool.
+    let _goal = '';
+    try {
+      const _planBody = (_final.match(/<plan>([\s\S]*?)<\/plan>/i) || [])[1] || '';
+      _goal = String((JSON.parse(_planBody) || {}).goal || '').slice(0, 60);
+    } catch (_) { /* malformed plan — generic clause below */ }
     const _digest = /<tool_call>/i.test(_final)
-      ? `dispatched ${(_final.match(/<tool_call>/gi) || []).length} tool calls`
-        + (_planBody ? ` for plan ${_planBody.slice(0, 120)}` : '')
+      ? (_goal ? `Built and staged "${_goal}"; verifier passed.`
+               : 'Built and staged the scene; verifier passed.')
       : _stripUntrainedTags(_final).slice(0, 400);
     _rememberTurn({ app: 'studio', user_text: text, assistant_summary: _digest });
     return _final;
