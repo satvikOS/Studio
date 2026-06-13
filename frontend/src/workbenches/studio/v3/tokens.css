@@ -379,6 +379,33 @@
   color: var(--studio-ink-faint);
   cursor: not-allowed;
 }
+/* Slice 958 — toolbar hover tooltip with live key hint (Blender parity).
+ * Fixed-position: the toolbar is a scroll container, children would clip. */
+.studio-tool-tip {
+  position: fixed;
+  transform: translateX(-50%);
+  display: flex; align-items: center; gap: 6px;
+  padding: 3px 8px;
+  background: var(--studio-canvas-2);
+  border: 1px solid var(--studio-rail-edge);
+  border-radius: var(--studio-radius);
+  color: var(--studio-ink);
+  font-size: 11px;
+  pointer-events: none;
+  white-space: nowrap;
+  text-transform: capitalize;
+  z-index: 1000;
+}
+.studio-tool-tip-key {
+  padding: 0 4px;
+  border: 1px solid var(--studio-rail-edge);
+  border-radius: 3px;
+  background: var(--studio-surface);
+  color: var(--studio-ink-mute);
+  font-size: 10px;
+  font-family: ui-monospace, monospace;
+  text-transform: none;
+}
 
 /* ============ Viewport surface ============
  *

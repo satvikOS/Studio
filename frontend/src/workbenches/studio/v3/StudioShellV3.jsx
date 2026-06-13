@@ -401,8 +401,20 @@ const PRIMITIVE_KINDS = new Set([
 ]);
 const TRANSFORM_TOOLS = new Set(['select', 'move', 'rotate', 'scale']);
 
+// Slice 958 — live key hints on toolbar hover (Blender "Move (G)" parity).
+// ONLY keys the keydown handler actually binds; an unhinted tool shows its
+// name alone rather than a fabricated shortcut.
+const TOOL_HINTS = { move: 'G', rotate: 'R', scale: 'S' };
+
 function Toolbar({ wbId, activeTool, setTool, onInvoke }) {
   const groups = TOOLBAR[wbId] || TOOLBAR.model;
+  // Fixed-position tooltip: .studio-toolbar scrolls (overflow-x: auto), so
+  // an ::after child would clip — a viewport-anchored div escapes it.
+  const [tip, setTip] = React.useState(null);
+  const showTip = (e, t) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    setTip({ x: r.left + r.width / 2, y: r.bottom + 6, label: t, hint: TOOL_HINTS[t] || null });
+  };
   return (
     <div className="studio-toolbar" data-studio-v3-toolbar>
       {groups.map((g, i) => (
@@ -420,7 +432,9 @@ function Toolbar({ wbId, activeTool, setTool, onInvoke }) {
                 data-studio-v3-tool={t}
                 data-studio-v3-tool-group={g.label.toLowerCase()}
                 data-active={active ? 'true' : 'false'}
-                title={t}
+                aria-label={TOOL_HINTS[t] ? `${t} (${TOOL_HINTS[t]})` : t}
+                onMouseEnter={(e) => showTip(e, t)}
+                onMouseLeave={() => setTip(null)}
                 onClick={() => {
                   if (isTransform) setTool(t);
                   else onInvoke && onInvoke(t, g.label.toLowerCase());
@@ -434,6 +448,13 @@ function Toolbar({ wbId, activeTool, setTool, onInvoke }) {
           })}
         </div>
       ))}
+      {tip && (
+        <div className="studio-tool-tip" data-studio-v3-tooltip
+             style={{ left: tip.x, top: tip.y }}>
+          {tip.label}
+          {tip.hint && <span className="studio-tool-tip-key">{tip.hint}</span>}
+        </div>
+      )}
     </div>
   );
 }
@@ -7597,17 +7618,22 @@ function _buildArchieSystemPrompt(/* activeWb */) {
     + "  <tool_call>{\"name\":\"click-discipline\",\"arguments\":{\"id\":\"modeling\"}}</tool_call>\n"
     + "  ...one <tool_call> per step...\n\n"
     + "Channels:\n"
+    + "  click-discipline {id} — modeling, uv-texture, rendering. Switch before stage-specific fns.\n"
     + "  click-primitive {id} — VALID ids, EXACTLY these 9: cube, sphere, plane, cylinder, cone, torus, icosahedron, text, curve.\n"
     + "  click-action {id} — bevel, apply-xform, sculpt-erode.\n"
     + "  fn {name, args[]} — staged passes (args are positional):\n"
     + "    __studioSelectNewest [] | __studioSelectByName [\"cube\"]\n"
     + "    __studioSelectionApplyTransform [{\"position\":[x,y,z],\"rotation\":[rx,ry,rz],\"scale\":[sx,sy,sz]}]\n"
-    + "    __studioMaterialPresetApply [\"gold|chrome|copper|glass|plastic|rubber|wood|concrete|velvet\"]\n"
+    + "    __studioMaterialPresetApply [\"gold|chrome|copper|glass|plastic|rubber|wood|concrete|velvet|foliage|brass\"]\n"
     + "    __studioModifierAdd [\"subdivide|solidify|twist|bend|taper|spherify|smooth\", {opts}]\n"
     + "    __studioAddPointLight [[x,y,z], color, intensity] | __studioAddSpotLight [[x,y,z],[tx,ty,tz], color, intensity]\n"
     + "    __studioAddRectLight [[x,y,z], w, h, color, intensity]\n"
     + "    __studioSetFog [color, near, far]\n"
     + "    __studioMainCameraLook [[x,y,z],[tx,ty,tz]]\n"
+    + "    __studioScatterInstances [count, radius] — instance the selected body count× within radius (forests, crowds)\n"
+    + "    __studioDecimate [keepRatio] — retopo: keep that fraction of tris, keepRatio = target/current (0.05-0.95)\n"
+    + "    __studioUvProjectCube [] | __studioUvProjectCylinder [] | __studioUvProjectSphere [] | __studioUvProjectPlanar [] — uv-texture discipline\n"
+    + "    __studioRenderClayImage [] | __studioExportSnapshotPng [] — rendering discipline\n"
     + "Workflow per body: spawn → __studioSelectNewest → transform → material. Then lights, then camera.\n"
     + "Colors are decimal ints (16777215 = white, 16772812 = warm). Units are metres.\n"
     + "These 9 primitives are POLYGON meshes — the realistic default; SubD/NURBS start from them. Voxel is a fallback only.\n"

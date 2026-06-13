@@ -3184,6 +3184,8 @@ export function registerV3Api() {
     wood:     { color: 0xb38950, metalness: 0, roughness: 0.7 },
     concrete: { color: 0xa0a0a0, metalness: 0, roughness: 0.95 },
     velvet:   { color: 0x6e1e3a, metalness: 0, roughness: 1, sheen: 1, sheenColor: 0xff8aa5 },
+    foliage:  { color: 0x2d5a27, metalness: 0, roughness: 0.85, sheen: 0.3, sheenColor: 0x4a7c43 },
+    brass:    { color: 0xc9a227, metalness: 1.0, roughness: 0.35 },
   };
 
   const _ensurePhysMat = (sel) => {
