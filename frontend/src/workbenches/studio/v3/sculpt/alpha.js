@@ -34,7 +34,7 @@ function makeTex(fillFn) {
       buf[y * N + x] = Math.min(1, Math.max(0, fillFn(u, v)));
     }
   }
-  return buf;
+  return { buf, n: N };
 }
 
 // 1. circle — Gauss falloff
@@ -155,6 +155,8 @@ export function alphaList() {
     active: _activeName,
     resolution: N,
     alphas: Array.from(_alphas.keys()),
+    custom: Array.from(_alphas.entries())
+      .filter(([, e]) => e.custom).map(([k]) => k),
   };
 }
 
@@ -172,22 +174,23 @@ export function alphaSet(name) {
 export function alphaSample(u, v) {
   if (!_activeName) return { ok: true, weight: 1, active: null };
   ensureBuilt();
-  const buf = _alphas.get(_activeName);
-  if (!buf) return { ok: true, weight: 1, active: null };
+  const entry = _alphas.get(_activeName);
+  if (!entry) return { ok: true, weight: 1, active: null };
+  const { buf, n } = entry;
   // tile UVs into [0..1]
   let uu = u - Math.floor(u);
   let vv = v - Math.floor(v);
-  // bilinear sample
-  const xf = uu * (N - 1);
-  const yf = vv * (N - 1);
+  // bilinear sample at the alpha's own resolution
+  const xf = uu * (n - 1);
+  const yf = vv * (n - 1);
   const x0 = Math.floor(xf), y0 = Math.floor(yf);
-  const x1 = Math.min(N - 1, x0 + 1);
-  const y1 = Math.min(N - 1, y0 + 1);
+  const x1 = Math.min(n - 1, x0 + 1);
+  const y1 = Math.min(n - 1, y0 + 1);
   const fx = xf - x0, fy = yf - y0;
-  const a = buf[y0 * N + x0];
-  const b = buf[y0 * N + x1];
-  const c = buf[y1 * N + x0];
-  const d = buf[y1 * N + x1];
+  const a = buf[y0 * n + x0];
+  const b = buf[y0 * n + x1];
+  const c = buf[y1 * n + x0];
+  const d = buf[y1 * n + x1];
   const w = (a * (1 - fx) + b * fx) * (1 - fy) + (c * (1 - fx) + d * fx) * fy;
   return { ok: true, weight: w, active: _activeName };
 }
@@ -203,7 +206,91 @@ export function alphaWeightAt(u, v) {
 export function alphaGetActiveBuffer() {
   if (!_activeName) return null;
   ensureBuilt();
-  return _alphas.get(_activeName) || null;
+  const entry = _alphas.get(_activeName);
+  return entry ? entry.buf : null;
 }
 
 export const ALPHA_RES = N;
+
+// ─── Slice 959 — custom alpha-image stencils (ZBrush parity) ─────────────
+//
+// Load ANY grayscale image as a brush alpha: a data URL, an
+// HTMLImageElement / ImageBitmap / canvas, or raw {data,width,height}
+// RGBA pixels. Luminance (Rec. 709) becomes the brush weight. Custom
+// alphas live in the same registry as the 8 procedural ones, so
+// alphaSet / alphaSample / the brush patcher need no changes.
+
+const CUSTOM_RES = 128; // resample target for image stencils
+
+function bufFromImageData(data, width, height) {
+  const out = new Float32Array(CUSTOM_RES * CUSTOM_RES);
+  for (let y = 0; y < CUSTOM_RES; y++) {
+    for (let x = 0; x < CUSTOM_RES; x++) {
+      // nearest-source sample; CUSTOM_RES is dense enough that the
+      // bilinear read in alphaSample smooths the rest.
+      const sx = Math.min(width - 1, Math.round((x / (CUSTOM_RES - 1)) * (width - 1)));
+      const sy = Math.min(height - 1, Math.round((y / (CUSTOM_RES - 1)) * (height - 1)));
+      const i = (sy * width + sx) * 4;
+      const lum = (0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]) / 255;
+      const a = data[i + 3] / 255;
+      out[y * CUSTOM_RES + x] = Math.min(1, Math.max(0, lum * a));
+    }
+  }
+  return out;
+}
+
+async function decodeToImageData(source) {
+  if (source && typeof source === 'object'
+      && source.data && Number.isFinite(source.width) && Number.isFinite(source.height)) {
+    return source; // already RGBA pixels
+  }
+  let drawable = source;
+  if (typeof source === 'string') {
+    drawable = await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('alpha image failed to decode'));
+      img.src = source;
+    });
+  }
+  const w = drawable.naturalWidth || drawable.videoWidth || drawable.width;
+  const h = drawable.naturalHeight || drawable.videoHeight || drawable.height;
+  if (!w || !h) throw new Error('alpha image has no dimensions');
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(drawable, 0, 0);
+  return ctx.getImageData(0, 0, w, h);
+}
+
+export async function alphaLoadImage(name, source) {
+  ensureBuilt();
+  if (!name || typeof name !== 'string') return { ok: false, error: 'name required' };
+  if (SPEC.some(([n]) => n === name)) {
+    return { ok: false, error: `"${name}" is a built-in alpha — pick another name` };
+  }
+  if (source == null) return { ok: false, error: 'image source required' };
+  const img = await decodeToImageData(source);
+  const buf = bufFromImageData(img.data, img.width, img.height);
+  // A stencil that is all-zero (or all-one) modulates nothing — that is
+  // an authoring mistake the sculptor should hear about, not discover
+  // three strokes later.
+  let mn = 1, mx = 0;
+  for (let i = 0; i < buf.length; i++) { if (buf[i] < mn) mn = buf[i]; if (buf[i] > mx) mx = buf[i]; }
+  if (mx - mn < 1e-4) {
+    return { ok: false, error: 'alpha image is uniform — no usable stencil contrast' };
+  }
+  _alphas.set(name, { buf, n: CUSTOM_RES, custom: true });
+  _activeName = name;
+  return { ok: true, name, active: name, resolution: CUSTOM_RES, sourceSize: [img.width, img.height] };
+}
+
+export function alphaDeleteCustom(name) {
+  ensureBuilt();
+  const entry = _alphas.get(name);
+  if (!entry) return { ok: false, error: 'no alpha' };
+  if (!entry.custom) return { ok: false, error: 'built-in alphas cannot be deleted' };
+  _alphas.delete(name);
+  if (_activeName === name) _activeName = null;
+  return { ok: true, deleted: name };
+}

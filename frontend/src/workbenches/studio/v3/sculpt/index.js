@@ -19,6 +19,7 @@ import {
 } from './layers.js';
 import {
   alphaList, alphaSet, alphaSample, alphaWeightAt,
+  alphaLoadImage, alphaDeleteCustom,
 } from './alpha.js';
 // Slice 732 — ZBrush Subtools / subtool hierarchy.
 import {
@@ -159,6 +160,8 @@ const OP_NAMES = [
   '__studioSculptLayerSetActive',     '__studioSculptLayerDelete',
   '__studioSculptAlphaList', '__studioSculptAlphaSet',   '__studioSculptAlphaSample',
   '__studioSculptActiveAlpha',
+  // Slice 959 — custom alpha-image stencils.
+  '__studioSculptAlphaLoadImage', '__studioSculptAlphaDeleteCustom',
   // Slice 732 — Subtools.
   '__studioSubtoolList', '__studioSubtoolActive', '__studioSubtoolSetActive',
   '__studioSubtoolRename', '__studioSubtoolSetVisible', '__studioSubtoolSolo',
@@ -278,6 +281,12 @@ export function installSculpt() {
     'Sample the active alpha at fractional UV (bilinear).');
   reg('__studioSculptActiveAlpha', () => (alphaList().active || null),
     'Return the active alpha brush name (or null).');
+  // Slice 959 — custom alpha-image stencils (ZBrush parity). Source can
+  // be a data URL, an Image/ImageBitmap/canvas, or raw RGBA pixels.
+  reg('__studioSculptAlphaLoadImage', (name, source) => alphaLoadImage(name, source),
+    'Load a grayscale image as a custom alpha stencil and activate it.');
+  reg('__studioSculptAlphaDeleteCustom', (name) => alphaDeleteCustom(name),
+    'Delete a custom alpha stencil (built-ins are protected).');
 
   // ── Subtools (slice 732) — ZBrush SubTool hierarchy ─────────────────
   reg('__studioSubtoolList', () => listSubtools(),
