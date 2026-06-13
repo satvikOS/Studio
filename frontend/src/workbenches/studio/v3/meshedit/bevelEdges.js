@@ -123,8 +123,88 @@ function _retri(outIdx, triIdx, v, vNew) {
   if (outIdx[triIdx * 3 + 2] === v) outIdx[triIdx * 3 + 2] = vNew;
 }
 
+// Slice 961 — chained corner resolution (Maya corner-bevel fillet).
+// When ≥2 beveled edges share a vertex, each strip ends in its own rim
+// pair and the corner is left as a HOLE whose boundary cycle passes
+// through the rim verts AND any original verts exposed by split wing
+// edges. Filling a rim-only fan is wrong (it leaves slivers and adds
+// stray boundary); the correct move is to TRACE the actual boundary
+// loop around the orphaned corner and fill that polygon.
+function _resolveCorners(verts, outIdx, cornerRims, cornerNormals) {
+  let cornerFaces = 0;
+  const errors = [];
+
+  // Edge-use counts over the final index buffer → boundary adjacency.
+  const useCount = new Map();
+  for (let f = 0; f < outIdx.length / 3; f++) {
+    const a = outIdx[f * 3], b = outIdx[f * 3 + 1], c = outIdx[f * 3 + 2];
+    for (const k of [_edgeKey(a, b), _edgeKey(b, c), _edgeKey(c, a)]) {
+      useCount.set(k, (useCount.get(k) || 0) + 1);
+    }
+  }
+  const bAdj = new Map(); // vert → Set(boundary neighbours)
+  for (const [k, n] of useCount) {
+    if (n !== 1) continue;
+    const [a, b] = k.split('_').map(Number);
+    if (!bAdj.has(a)) bAdj.set(a, new Set());
+    if (!bAdj.has(b)) bAdj.set(b, new Set());
+    bAdj.get(a).add(b);
+    bAdj.get(b).add(a);
+  }
+
+  const filled = new Set(); // verts consumed by a fill, to keep loops disjoint
+
+  for (const [v, rims] of cornerRims) {
+    const rimSet = new Set(rims);
+    const start = rims.find((r) => bAdj.has(r) && !filled.has(r));
+    if (start == null) continue;
+
+    // Walk the boundary cycle from `start`. At a junction prefer a rim
+    // of THIS corner; a dead end or runaway walk aborts honestly.
+    const loop = [start];
+    let prev = -1, cur = start, ok = false;
+    for (let step = 0; step < 64; step++) {
+      const nbrs = Array.from(bAdj.get(cur) || []).filter((x) => x !== prev && !filled.has(x));
+      if (!nbrs.length) break;
+      let next = nbrs.length === 1 ? nbrs[0]
+        : (nbrs.find((x) => rimSet.has(x)) ?? nbrs[0]);
+      if (next === start) { ok = loop.length >= 3; break; }
+      loop.push(next);
+      prev = cur; cur = next;
+    }
+    if (!ok) { errors.push(`corner at vert ${v}: open or ambiguous boundary — left unfilled`); continue; }
+    // The loop must actually be this corner's hole: ≥2 of its rims on it.
+    if (loop.filter((x) => rimSet.has(x)).length < 2) continue;
+
+    // Winding: Newell normal of the loop vs the averaged wing normal.
+    const ns = cornerNormals.get(v) || [];
+    let nx = 0, ny = 0, nz = 0;
+    for (const n of ns) { nx += n[0]; ny += n[1]; nz += n[2]; }
+    let lx = 0, ly = 0, lz = 0; // Newell
+    for (let i = 0; i < loop.length; i++) {
+      const p = loop[i], q = loop[(i + 1) % loop.length];
+      const px = verts[p * 3], py = verts[p * 3 + 1], pz = verts[p * 3 + 2];
+      const qx = verts[q * 3], qy = verts[q * 3 + 1], qz = verts[q * 3 + 2];
+      lx += (py - qy) * (pz + qz);
+      ly += (pz - qz) * (px + qx);
+      lz += (px - qx) * (py + qy);
+    }
+    const ordered = (lx * nx + ly * ny + lz * nz >= 0) ? loop : loop.slice().reverse();
+
+    // Fan-fill the traced polygon (corner holes are small and convex-ish).
+    for (let i = 1; i < ordered.length - 1; i++) {
+      outIdx.push(ordered[0], ordered[i], ordered[i + 1]);
+      cornerFaces++;
+    }
+    for (const x of ordered) filled.add(x);
+  }
+  return { cornerFaces, errors };
+}
+
 // Real bevel-edges. Returns { ok, geometry, addedFaces } or { ok: false, error }.
-export function bevelEdges(geometry, edgePairs, width) {
+// opts.cornerResolution (default true) fills the corner where chained
+// beveled edges meet — pass false for the legacy per-edge behaviour.
+export function bevelEdges(geometry, edgePairs, width, opts = {}) {
   if (!geometry || !geometry.attributes || !geometry.attributes.position) {
     return { ok: false, error: 'no geometry' };
   }
@@ -147,6 +227,16 @@ export function bevelEdges(geometry, edgePairs, width) {
   let beveled = 0;
   let skipped = 0;
   const errors = [];
+  // Slice 961 — rim bookkeeping for corner resolution: original vertex →
+  // rim verts spawned at it, and the wing normals that meet there.
+  const cornerRims = new Map();
+  const cornerNormals = new Map();
+  const _rim = (v, idx) => {
+    let a = cornerRims.get(v); if (!a) { a = []; cornerRims.set(v, a); } a.push(idx);
+  };
+  const _cn = (v, n) => {
+    let a = cornerNormals.get(v); if (!a) { a = []; cornerNormals.set(v, a); } a.push(n);
+  };
 
   for (const pair of edgePairs) {
     if (!Array.isArray(pair) || pair.length < 2) { skipped++; continue; }
@@ -212,7 +302,23 @@ export function bevelEdges(geometry, edgePairs, width) {
     outIdx.push(aLeftIdx, bLeftIdx, bRightIdx);
     outIdx.push(aLeftIdx, bRightIdx, aRightIdx);
 
+    _rim(vA, aLeftIdx); _rim(vA, aRightIdx);
+    _rim(vB, bLeftIdx); _rim(vB, bRightIdx);
+    _cn(vA, nA); _cn(vA, nB);
+    _cn(vB, nA); _cn(vB, nB);
+
     beveled++;
+  }
+
+  // Slice 961 — corner resolution at vertices where ≥2 beveled edges meet.
+  let cornerFaces = 0;
+  if (opts.cornerResolution !== false) {
+    for (const [v, rims] of cornerRims) {
+      if (rims.length <= 2) cornerRims.delete(v); // single edge end — no corner
+    }
+    const cr = _resolveCorners(verts, outIdx, cornerRims, cornerNormals);
+    cornerFaces = cr.cornerFaces;
+    errors.push(...cr.errors);
   }
 
   const newGeom = new THREE.BufferGeometry();
@@ -228,8 +334,9 @@ export function bevelEdges(geometry, edgePairs, width) {
   return {
     ok: true,
     geometry: newGeom,
-    addedFaces: beveled * 2,   // each beveled edge adds one quad = 2 tris.
+    addedFaces: beveled * 2 + cornerFaces, // strip quads + corner fans.
     beveled,
+    cornerFaces,
     skipped,
     errors,
   };

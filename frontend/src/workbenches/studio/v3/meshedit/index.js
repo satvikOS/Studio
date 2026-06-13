@@ -90,15 +90,20 @@ function opMultiCut(meshUuid, startIdx, endIdx, segments) {
 }
 
 // ─── 3. Bevel edges ───────────────────────────────────────────────────
-function opBevelEdges(meshUuid, edgePairs, width) {
+// Slice 961 — opts.cornerResolution (default true): where ≥2 beveled
+// edges meet, the corner hole is boundary-traced and fan-filled
+// (Maya corner-bevel fillet). Pass { cornerResolution: false } for the
+// legacy per-edge behaviour.
+function opBevelEdges(meshUuid, edgePairs, width, opts) {
   const mesh = _resolveMesh(meshUuid);
   if (!mesh) return { ok: false, error: 'no mesh' };
   if (!mesh.geometry) return { ok: false, error: 'mesh has no geometry' };
   _pushUndo();
-  const r = bevelEdges(mesh.geometry, edgePairs, width);
+  const r = bevelEdges(mesh.geometry, edgePairs, width, opts || {});
   if (!r.ok) return r;
   _swapGeometry(mesh, r.geometry);
-  return { ok: true, addedFaces: r.addedFaces, beveled: r.beveled, skipped: r.skipped, errors: r.errors };
+  return { ok: true, addedFaces: r.addedFaces, beveled: r.beveled,
+           cornerFaces: r.cornerFaces || 0, skipped: r.skipped, errors: r.errors };
 }
 
 // ─── 4. Extrude edge ─────────────────────────────────────────────────
@@ -249,8 +254,8 @@ export function installMeshEdit() {
       'Maya MultiCut — insert a chain of new verts along the line through two picks and split any triangle the line crosses.',
     ],
     __studioMeshBevelEdges: [
-      (uuid, edgePairs, width) => opBevelEdges(uuid, edgePairs, width),
-      'Maya/Modo Bevel Edges — replace each marked edge with two parallel edges offset by `width` and fill the gap with quads.',
+      (uuid, edgePairs, width, opts) => opBevelEdges(uuid, edgePairs, width, opts),
+      'Maya/Modo Bevel Edges — replace each marked edge with two parallel edges offset by `width`, fill the gap with quads, and fan-fill chained corners (opts.cornerResolution, default true).',
     ],
     __studioMeshExtrudeEdge: [
       (uuid, edgeIdx, distance, axis) => opExtrudeEdge(uuid, edgeIdx, distance, axis),
