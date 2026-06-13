@@ -198,7 +198,22 @@ function SelectionLayer({ selectedRef, setSelected }) {
   const onPointerDown = useCallback((e) => {
     const o = e.object;
     if (o && o.userData && o.userData.archdiscStudioPrimitive) {
-      setSelected(o);
+      // Slice 962 — modifier-key routing (Blender/Maya parity):
+      // Shift extends the set, Ctrl/Cmd toggles membership, plain click
+      // replaces. The set ops live in selectionops.js (window layer);
+      // the gizmo tracks the ACTIVE mesh via the __studioSelectMesh
+      // bridge those ops call.
+      const ne = e.nativeEvent || e;
+      const ctrl = !!(ne.ctrlKey || ne.metaKey || e.ctrlKey || e.metaKey);
+      const shift = !!(ne.shiftKey || e.shiftKey);
+      if (ctrl && typeof window.__studioMultiSelectToggle === 'function') {
+        window.__studioMultiSelectToggle(o);
+      } else if (shift && typeof window.__studioMultiSelectAdd === 'function') {
+        window.__studioMultiSelectAdd(o);
+      } else {
+        window.__studioSelectedMeshesSet = [o];
+        setSelected(o);
+      }
       e.stopPropagation?.();
     }
   }, [setSelected]);
@@ -232,8 +247,9 @@ function SelectionLayer({ selectedRef, setSelected }) {
       delete window.__studioSelectAll;
     };
   }, [selectedRef, setSelected]);
-  // Click-empty-space → deselect.
+  // Click-empty-space → deselect (the whole multi-select set too).
   const onPointerMissed = useCallback(() => {
+    window.__studioSelectedMeshesSet = [];
     setSelected(null);
   }, [setSelected]);
   useEffect(() => {

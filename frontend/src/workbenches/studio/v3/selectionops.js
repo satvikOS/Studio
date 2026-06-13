@@ -79,6 +79,60 @@ function getPivotMode() {
   return window.__studioPivotMode || 'median';
 }
 
+// ─── Slice 962 — modifier-key multi-select set ops ──────────────────────
+// (Blender/Maya parity: Shift extends, Ctrl/Cmd toggles.) Pure window-
+// layer state per the window-API law — the ONLY React touch is the same
+// guarded __studioSelectMesh bridge selectAll already uses, so the gizmo
+// follows the ACTIVE mesh (last meaningful pick) exactly like Blender.
+function _sameMesh(a, b) { return !!(a && b && a.uuid === b.uuid); }
+
+function _announceSet() {
+  const set = Array.isArray(window.__studioSelectedMeshesSet)
+    ? window.__studioSelectedMeshesSet : [];
+  window.dispatchEvent(new CustomEvent('studio-selection-changed', {
+    detail: { selected: set.length ? set[set.length - 1] : null, set: set.slice() },
+  }));
+}
+
+function multiSelectAdd(mesh) {
+  if (!mesh) return { ok: false, error: 'no mesh' };
+  const cur = Array.isArray(window.__studioSelectedMeshesSet)
+    ? window.__studioSelectedMeshesSet : [];
+  const next = cur.some((m) => _sameMesh(m, mesh)) ? cur.slice() : [...cur, mesh];
+  window.__studioSelectedMeshesSet = next;
+  if (window.__studioSelectMesh) { try { window.__studioSelectMesh(mesh); } catch (_) {} }
+  _announceSet();
+  return { ok: true, count: next.length, active: mesh.uuid };
+}
+
+function multiSelectToggle(mesh) {
+  if (!mesh) return { ok: false, error: 'no mesh' };
+  const cur = Array.isArray(window.__studioSelectedMeshesSet)
+    ? window.__studioSelectedMeshesSet : [];
+  const had = cur.some((m) => _sameMesh(m, mesh));
+  const next = had ? cur.filter((m) => !_sameMesh(m, mesh)) : [...cur, mesh];
+  window.__studioSelectedMeshesSet = next;
+  if (next.length) {
+    const active = next[next.length - 1];
+    if (window.__studioSelectMesh) { try { window.__studioSelectMesh(active); } catch (_) {} }
+  } else {
+    // Empty set: null the React-side selection via the viewport's own
+    // pointer-missed handler (owns setSelected), then detach the gizmo.
+    if (window.__studioPointerMissed) { try { window.__studioPointerMissed(); } catch (_) {} }
+    if (window.__studioDeselect) { try { window.__studioDeselect(); } catch (_) {} }
+  }
+  _announceSet();
+  return { ok: true, count: next.length, toggledOff: had };
+}
+
+function multiSelectClear() {
+  window.__studioSelectedMeshesSet = [];
+  if (window.__studioPointerMissed) { try { window.__studioPointerMissed(); } catch (_) {} }
+  if (window.__studioDeselect) { try { window.__studioDeselect(); } catch (_) {} }
+  _announceSet();
+  return { ok: true };
+}
+
 export function registerSelectionOps() {
   window.__studioSelectAll      = selectAll;
   window.__studioSelectInverse  = selectInverse;
@@ -86,11 +140,15 @@ export function registerSelectionOps() {
   window.__studioSelectedMeshes = selectedMeshes;
   window.__studioSetPivotMode   = setPivotMode;
   window.__studioGetPivotMode   = getPivotMode;
+  window.__studioMultiSelectAdd    = multiSelectAdd;
+  window.__studioMultiSelectToggle = multiSelectToggle;
+  window.__studioMultiSelectClear  = multiSelectClear;
 }
 
 export function unregisterSelectionOps() {
   for (const k of [
     '__studioSelectAll', '__studioSelectInverse', '__studioDeselect',
     '__studioSelectedMeshes', '__studioSetPivotMode', '__studioGetPivotMode',
+    '__studioMultiSelectAdd', '__studioMultiSelectToggle', '__studioMultiSelectClear',
   ]) { try { delete window[k]; } catch (_) {} }
 }
