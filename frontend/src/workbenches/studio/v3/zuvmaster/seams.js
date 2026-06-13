@@ -46,9 +46,25 @@ function _faceNormal(pos, i0, i1, i2) {
 
 // Detect seam edges + segment triangles into charts.
 // Returns { charts: number[][] (triangle indices per chart), seamCount }.
-export function segmentCharts(positions, indices, seamAngleDeg = 40) {
+// Slice 960 — `userSeams` (parity ledger #6, Blender Ctrl+E "Mark Seam"):
+// an iterable of undirected vertex-pair keys ('a:b' or the editauxops
+// 'a,b' form). Painted seams merge with angle detection; pass
+// `seamAngleDeg: null` to cut along painted seams ONLY (boundary edges
+// stay seams by definition — a chart must be bounded).
+export function segmentCharts(positions, indices, seamAngleDeg = 40, userSeams = null) {
   const triCount = indices.length / 3;
-  const cosThresh = Math.cos(seamAngleDeg * Math.PI / 180);
+  const angleDetect = seamAngleDeg != null;
+  const cosThresh = angleDetect ? Math.cos(seamAngleDeg * Math.PI / 180) : -2;
+  const painted = new Set();
+  if (userSeams) {
+    for (const k of userSeams) {
+      const m = String(k).split(/[,:]/);
+      if (m.length === 2) {
+        const a = +m[0], b = +m[1];
+        if (Number.isFinite(a) && Number.isFinite(b)) painted.add(_edgeKey(a, b));
+      }
+    }
+  }
 
   // Map each undirected edge → list of triangle indices touching it.
   const edgeTris = new Map();
@@ -72,8 +88,11 @@ export function segmentCharts(positions, indices, seamAngleDeg = 40) {
   // between its two faces is sharper than the threshold.
   const isSeam = new Set();
   let seamCount = 0;
+  let paintedUsed = 0;
   for (const [k, tris] of edgeTris) {
     if (tris.length !== 2) { isSeam.add(k); seamCount++; continue; }
+    if (painted.has(k)) { isSeam.add(k); seamCount++; paintedUsed++; continue; }
+    if (!angleDetect) continue;
     const n0 = normals[tris[0]], n1 = normals[tris[1]];
     const dot = n0[0] * n1[0] + n0[1] * n1[1] + n0[2] * n1[2];
     if (dot < cosThresh) { isSeam.add(k); seamCount++; }
@@ -104,7 +123,7 @@ export function segmentCharts(positions, indices, seamAngleDeg = 40) {
     }
     charts.push(tris);
   }
-  return { charts, seamCount, isSeam };
+  return { charts, seamCount, isSeam, paintedUsed };
 }
 
 // Full auto seam-cut + per-chart LSCM unwrap. Returns
@@ -113,8 +132,8 @@ export function segmentCharts(positions, indices, seamAngleDeg = 40) {
 export function autoSeamUnwrap(positions, indices, opts = {}) {
   const N = positions.length / 3;
   if (N < 3 || !indices || indices.length < 3) return { ok: false, reason: 'no geometry' };
-  const seamAngle = Number(opts.seamAngleDeg) || 40;
-  const { charts, seamCount } = segmentCharts(positions, indices, seamAngle);
+  const seamAngle = opts.seamAngleDeg === null ? null : (Number(opts.seamAngleDeg) || 40);
+  const { charts, seamCount, paintedUsed } = segmentCharts(positions, indices, seamAngle, opts.userSeams || null);
   if (!charts.length) return { ok: false, reason: 'no charts' };
 
   // Build an EXPANDED (non-indexed-style but indexed with per-chart vertex
@@ -179,7 +198,7 @@ export function autoSeamUnwrap(positions, indices, opts = {}) {
     positions: Float32Array.from(outPos),
     uv: Float32Array.from(outUV),
     indices: Uint32Array.from(outIdx),
-    charts: charts.length, seamCount, flattenedCharts: okCharts,
+    charts: charts.length, seamCount, paintedUsed, flattenedCharts: okCharts,
   };
 }
 

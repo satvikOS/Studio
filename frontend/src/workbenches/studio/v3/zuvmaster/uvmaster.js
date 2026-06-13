@@ -153,7 +153,17 @@ export function unwrapWithSeams(meshUuid, opts) {
   const pos = mesh.geometry.attributes.position.array;
   const idx = mesh.geometry.index?.array
     || (() => { const n = pos.length / 3; const a = new Uint32Array(n); for (let i = 0; i < n; i++) a[i] = i; return a; })();
-  const r = autoSeamUnwrap(pos, idx, { seamAngleDeg: Number(opts?.seamAngleDeg) || 40 });
+  // Slice 960 — painted seams (__studioMarkEdgeSeam → userData.studioSeamEdges)
+  // merge into the cut. opts.markedOnly cuts ONLY along painted seams
+  // (Blender unwrap-with-marked-seams); the unwrap rebuilds geometry with
+  // per-chart vertex copies, so paint seams BEFORE unwrapping — vertex
+  // indices change after the cut.
+  const marked = (opts?.useMarkedSeams !== false && mesh.userData?.studioSeamEdges?.size)
+    ? Array.from(mesh.userData.studioSeamEdges) : null;
+  const r = autoSeamUnwrap(pos, idx, {
+    seamAngleDeg: opts?.markedOnly ? null : (Number(opts?.seamAngleDeg) || 40),
+    userSeams: marked,
+  });
   if (!r.ok) return r;
   // The seam unwrap returns an EXPANDED geometry (per-chart vertex copies)
   // so charts don't share UVs across seams — rebuild the mesh from it.
@@ -164,7 +174,9 @@ export function unwrapWithSeams(meshUuid, opts) {
   if (g.attributes.normal) g.deleteAttribute('normal');
   g.computeVertexNormals();
   g.computeBoundingSphere();
-  return { ok: true, method: 'seam-lscm', charts: r.charts, seamCount: r.seamCount, flattenedCharts: r.flattenedCharts };
+  if (mesh.userData?.studioSeamEdges) mesh.userData.studioSeamEdges.clear(); // indices changed — stale keys are lies
+  return { ok: true, method: 'seam-lscm', charts: r.charts, seamCount: r.seamCount,
+           paintedUsed: r.paintedUsed || 0, flattenedCharts: r.flattenedCharts };
 }
 
 // Slice 736 — report how many seam-bounded charts a mesh would segment
