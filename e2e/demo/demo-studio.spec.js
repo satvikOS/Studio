@@ -120,8 +120,63 @@ test('Studio investor demo — plan → drive → visually verify', async () => 
         finals.push(name);
       }
     }
-    report.push({ id: r.id, title: r.title, ref: r.ref, passed, stats, finals });
-    console.log(`[demo:${r.id}] ${passed ? 'PASS' : 'FAIL'} prims=${stats.prims} phys=${stats.physMats} lightsΔ=${stats.lightsDelta} camMoved=${stats.camMoved}`);
+    // ── FINAL PIPELINE STAGE: hi-def M4 Max GPU ray-traced render →
+    //    publish full deliverable. Only on a passed build. ──
+    let render = { mode: 'skipped' };
+    let deliverable = { files: [] };
+    if (passed) {
+      // RENDER — progressive GPU path tracer (M4 Max). Soft-fails to the
+      // rasterized viewport if RT is unsupported on the box (per rtgpu
+      // brief), so the demo always yields a hero frame.
+      render = await win.evaluate(async () => {
+        try {
+          if (typeof window.__studioRTGPURebuildScene === 'function') window.__studioRTGPURebuildScene();
+          const start = window.__studioRTGPUStart
+            ? window.__studioRTGPUStart({ samplesPerFrame: 8, maxBounces: 4 }) : { ok: false };
+          if (start && start.ok && start.active !== false) {
+            const target = 256; const t0 = Date.now();
+            while (Date.now() - t0 < 25000) {
+              const st = window.__studioRTGPUGetState ? window.__studioRTGPUGetState() : null;
+              if (st && (st.samples || 0) >= target) break;
+              await new Promise((res) => setTimeout(res, 400));
+            }
+            const st = window.__studioRTGPUGetState ? window.__studioRTGPUGetState() : {};
+            return { mode: 'rtgpu', samples: st.samples || 0, supported: true };
+          }
+          // fallback: single path-trace pass or clay
+          if (typeof window.__studioPathTraceRender === 'function') { await window.__studioPathTraceRender(); return { mode: 'pathtrace-cpu' }; }
+          return { mode: 'raster', supported: !!(start && start.supported) };
+        } catch (e) { return { mode: 'error', error: String(e && e.message || e) }; }
+      });
+      await win.waitForTimeout(600);
+      await win.screenshot({ path: path.join(OUT, `${r.id}-RENDER.png`) });
+
+      // PUBLISH — full deliverable: glb + STL + scene JSON + the render
+      // PNG (above). Export ops return data to the page; write to disk +
+      // verify non-empty (the publish go/no-go).
+      const exported = await win.evaluate(() => {
+        const out = {};
+        const tryExport = (key, fn) => { try { const v = fn(); if (v != null) out[key] = v; } catch (_) {} };
+        tryExport('glb', () => { const b = window.__studioExportGlbBinary && window.__studioExportGlbBinary(); if (!b) return null; const u8 = b instanceof Uint8Array ? b : new Uint8Array(b); let s = ''; for (let i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]); return { b64: btoa(s), bytes: u8.length }; });
+        tryExport('gltf', () => window.__studioExportGltfString && window.__studioExportGltfString());
+        tryExport('stl', () => window.__studioExportSTL && window.__studioExportSTL());
+        tryExport('scene', () => window.__studioExportSceneJson && window.__studioExportSceneJson());
+        return out;
+      });
+      const dir = path.join(OUT, 'deliverables', r.id);
+      fs.mkdirSync(dir, { recursive: true });
+      for (const [k, v] of Object.entries(exported || {})) {
+        try {
+          if (k === 'glb' && v && v.b64) { fs.writeFileSync(path.join(dir, `${r.id}.glb`), Buffer.from(v.b64, 'base64')); deliverable.files.push(`${r.id}.glb (${v.bytes}B)`); }
+          else if (typeof v === 'string' && v.length) { const ext = k === 'gltf' ? 'gltf' : k === 'stl' ? 'stl' : 'json'; fs.writeFileSync(path.join(dir, `${r.id}.${ext}`), v); deliverable.files.push(`${r.id}.${ext} (${v.length}B)`); }
+        } catch (_) { /* keep going */ }
+      }
+      // the render frame is part of the deliverable
+      try { fs.copyFileSync(path.join(OUT, `${r.id}-RENDER.png`), path.join(dir, `${r.id}-render.png`)); deliverable.files.push(`${r.id}-render.png`); } catch (_) {}
+    }
+
+    report.push({ id: r.id, title: r.title, ref: r.ref, passed, stats, finals, render, deliverable });
+    console.log(`[demo:${r.id}] ${passed ? 'PASS' : 'FAIL'} prims=${stats.prims} phys=${stats.physMats} lightsΔ=${stats.lightsDelta} cam=${stats.camMoved} | render=${render.mode}${render.samples ? '@' + render.samples + 'spp' : ''} | deliverable=${deliverable.files.length} files`);
   }
 
   fs.writeFileSync(path.join(OUT, 'demo-report.json'), JSON.stringify(report, null, 1));
