@@ -173,6 +173,13 @@ test('Studio investor demo — plan → drive → visually verify', async () => 
       }
       // the render frame is part of the deliverable
       try { fs.copyFileSync(path.join(OUT, `${r.id}-RENDER.png`), path.join(dir, `${r.id}-render.png`)); deliverable.files.push(`${r.id}-render.png`); } catch (_) {}
+      // the SPEC/PLAN doc is part of the full deliverable — Archie's brain
+      // output (the architecture: brain = spec/plan). Includes the actual
+      // <plan> the model emitted this run + the engineering spec.
+      try {
+        const card = `# ${r.title}\n\nReference: ${r.ref}\n\n## Archie's plan (the spec)\n${r.plan || '(staged build)'}\n\n## Execution\nPrompt: ${r.prompt}\nResult: ${stats.prims} bodies, ${stats.physMats} physical materials, ${stats.lightsDelta} lights, camera framed=${stats.camMoved}\nRender: ${render.mode}${render.samples ? ' @ ' + render.samples + ' spp (M4 Max GPU ray tracing)' : ''}\n`;
+        fs.writeFileSync(path.join(dir, `${r.id}-plan.md`), card); deliverable.files.push(`${r.id}-plan.md`);
+      } catch (_) {}
     }
 
     report.push({ id: r.id, title: r.title, ref: r.ref, passed, stats, finals, render, deliverable });
