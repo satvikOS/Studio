@@ -877,3 +877,14 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* Parity #18 (accessibility / WCAG 2.1 2.4.7 Focus Visible) — keyboard
+ * focus was INVISIBLE app-wide (audit 2026-06-13). :focus-visible shows
+ * the ring ONLY for keyboard/AT focus, never on mouse click, so it adds
+ * no visual noise for pointer users. Scoped to the V3 shell. */
+[data-studio-v3-shell] :focus-visible {
+  outline: 2px solid var(--studio-accent-rim);
+  outline-offset: 1px;
+  border-radius: 2px;
+}
+[data-studio-v3-shell] :focus:not(:focus-visible) { outline: none; }
