@@ -105,13 +105,11 @@ test('Studio investor demo — plan → drive → visually verify', async () => 
     const finals = [];
     if (passed) {
       for (const [name, pos] of ANGLES) {
+        // Use the runtime's own guarded camera op (handles missing
+        // controls.target via lookAt) instead of poking vp internals.
         await win.evaluate(([p]) => {
-          const vp = window.__archdiscViewport;
-          if (vp?.camera && vp?.controls) {
-            vp.camera.position.set(p[0], p[1], p[2]);
-            vp.controls.target.set(0, 0.5, 0);
-            vp.controls.update();
-            vp.camera.updateMatrixWorldInverse?.();
+          if (typeof window.__studioMainCameraLook === 'function') {
+            window.__studioMainCameraLook(p, [0, 0.5, 0]);
           }
         }, [pos]);
         await win.waitForTimeout(350);
@@ -154,13 +152,17 @@ test('Studio investor demo — plan → drive → visually verify', async () => 
       // PUBLISH — full deliverable: glb + STL + scene JSON + the render
       // PNG (above). Export ops return data to the page; write to disk +
       // verify non-empty (the publish go/no-go).
-      const exported = await win.evaluate(() => {
+      const exported = await win.evaluate(async () => {
         const out = {};
-        const tryExport = (key, fn) => { try { const v = fn(); if (v != null) out[key] = v; } catch (_) {} };
-        tryExport('glb', () => { const b = window.__studioExportGlbBinary && window.__studioExportGlbBinary(); if (!b) return null; const u8 = b instanceof Uint8Array ? b : new Uint8Array(b); let s = ''; for (let i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]); return { b64: btoa(s), bytes: u8.length }; });
-        tryExport('gltf', () => window.__studioExportGltfString && window.__studioExportGltfString());
-        tryExport('stl', () => window.__studioExportSTL && window.__studioExportSTL());
-        tryExport('scene', () => window.__studioExportSceneJson && window.__studioExportSceneJson());
+        // glb: ASYNC, returns {ok, buffer: ArrayBuffer}
+        try {
+          const g = window.__studioExportGlbBinary && await window.__studioExportGlbBinary();
+          if (g && g.ok && g.buffer) { const u8 = new Uint8Array(g.buffer); let s = ''; for (let i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]); out.glb = { b64: btoa(s), bytes: u8.length }; }
+        } catch (_) {}
+        // gltf: ASYNC, returns the JSON string (or null)
+        try { const gt = window.__studioExportGltfString && await window.__studioExportGltfString(); if (typeof gt === 'string' && gt.length) out.gltf = gt; } catch (_) {}
+        // scene: SYNC, returns {ok, json}
+        try { const sc = window.__studioExportSceneJson && window.__studioExportSceneJson(); if (sc && sc.ok && sc.json) out.scene = sc.json; } catch (_) {}
         return out;
       });
       const dir = path.join(OUT, 'deliverables', r.id);
