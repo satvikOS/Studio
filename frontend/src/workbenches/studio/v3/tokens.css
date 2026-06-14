@@ -861,3 +861,19 @@
   100% { opacity: 0; }
 }
 
+
+/* Parity #18 (accessibility / WCAG 2.1 2.3.3) — honour the OS
+ * reduced-motion setting; mirrors Forge tokens.css. Scoped to the V3
+ * shell so it can't leak into embedded third-party surfaces. No effect
+ * unless the user has the setting on; also eases the remote-desktop
+ * (Windows→Mac) session the user works in. */
+@media (prefers-reduced-motion: reduce) {
+  [data-studio-v3-shell] *,
+  [data-studio-v3-shell] *::before,
+  [data-studio-v3-shell] *::after {
+    transition: none !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+}
