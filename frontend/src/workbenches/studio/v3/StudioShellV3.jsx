@@ -7461,6 +7461,13 @@ const _VERIFIER_SYSTEM =
 function _verifyCoherenceRules(bodies) {
   for (let i = 0; i < bodies.length; i++) {
     const b = bodies[i];
+    // Adversarial fix (2026-06-13): guard null/non-object holes before
+    // touching b.scale — a single null in bodies[] used to crash the whole
+    // gate (mirrors the coherenceGate.js A1 fix). Skip + report.
+    if (!b || typeof b !== 'object') {
+      return { verdict: 'incoherent', reason: 'malformed body (not an object)' };
+    }
+    if (!Array.isArray(b.scale)) continue;
     for (let k = 0; k < 3; k++) {
       const v = b.scale[k];
       if (!Number.isFinite(v)) return { verdict: 'incoherent', reason: `body "${b.kind}" has non-finite scale on axis ${k}` };
