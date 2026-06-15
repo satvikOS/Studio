@@ -8318,6 +8318,20 @@ async function executeToolCall(call) {
     el.click();
     return { ok: true, summary: `action ${id}` };
   }
+  if (name === 'sculpt-organic') {
+    // 1:1 organic brush-sculpt op (builders/organicSculpt.js). One call →
+    // a real high-res organic mesh (rock/skull/stump/vessel/creature),
+    // mirroring the furniture composer's one-call integration.
+    const form = String(args.form || args.id || 'rock').toLowerCase();
+    const seed = Number(args.seed) || 7;
+    if (typeof window.__studioSculptOrganic !== 'function') return { ok: false, summary: 'organic sculpt unavailable' };
+    const valid = Array.isArray(window.__studioOrganicForms) ? window.__studioOrganicForms : ['rock', 'skull', 'stump', 'vessel', 'creature'];
+    if (!valid.includes(form)) return { ok: false, summary: `unknown organic form "${form}" (have: ${valid.join(', ')})` };
+    try {
+      const r = window.__studioSculptOrganic(form, seed);
+      return { ok: true, summary: `sculpt-organic ${form} → ${r && r.stats ? r.stats.verts : '?'} verts` };
+    } catch (err) { return { ok: false, summary: `sculpt-organic threw: ${String(err && err.message || err)}` }; }
+  }
   if (name === 'fn') {
     const fname = String(args.name || '');
     const fargs = Array.isArray(args.args) ? args.args : [];
