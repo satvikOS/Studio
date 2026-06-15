@@ -286,6 +286,15 @@ function TransformLayer({ selected, mode }) {
 // Theme-aware grid + lighting.
 // -----------------------------------------------------------------------
 function SceneStaticsLayer({ theme }) {
+  // Hide the grid in presentation mode (clean hero renders). Mirrors the
+  // DOM chrome that the 'studio-presentation-toggle' event hides via CSS;
+  // the grid is a 3D object so it needs a visibility toggle, not CSS.
+  const [gridHidden, setGridHidden] = useState(false);
+  useEffect(() => {
+    const onTog = () => setGridHidden((v) => !v);
+    window.addEventListener('studio-presentation-toggle', onTog);
+    return () => window.removeEventListener('studio-presentation-toggle', onTog);
+  }, []);
   // Slice 951g — drei's <Grid> is an infinite-feeling fading floor:
   // no visible far edge, no horizon stripe. cellColor / sectionColor
   // are tuned to the slice-950 monochrome palette (no chromatic
@@ -305,6 +314,7 @@ function SceneStaticsLayer({ theme }) {
           keeps the grid clearly readable from horizon to camera
           without abruptly clipping. */}
       <Grid
+        visible={!gridHidden}
         args={[10, 10]}
         cellSize={0.1}
         cellThickness={1.0}

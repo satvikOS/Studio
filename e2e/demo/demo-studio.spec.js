@@ -133,14 +133,43 @@ test('Studio investor demo — plan → drive → visually verify', async () => 
       try { fs.unlinkSync(renderPath); } catch (_) {}
       render = await win.evaluate(async () => {
         try {
-          window.__studioFrameAll?.();
-          await new Promise((res) => setTimeout(res, 250));
-          window.__studioFrameAll?.(); // second pass after controls settle
-          return { mode: 'raster-viewport' };
+          // Enter presentation mode (hides editor chrome where wired).
+          try { window.dispatchEvent(new CustomEvent('studio-presentation-toggle')); } catch (_) {}
+          const s = window.__archdiscScene || (window.__archdiscViewport && window.__archdiscViewport.scene);
+          const vp = window.__archdiscViewport;
+          if (!s || !vp || !vp.camera) { window.__studioFrameAll?.(); return { mode: 'raster-fallback' }; }
+          // Explicit bbox framing — frameAll leaves CAD-micro-scale scenes
+          // tiny, so compute the prim bounding box in world space and place
+          // a 3/4 hero camera at 2.6× its radius (fills the view at any scale).
+          let mn = [1e9, 1e9, 1e9], mx = [-1e9, -1e9, -1e9], any = false;
+          s.traverse((o) => {
+            if (o && o.isMesh && o.geometry && o.userData && o.userData.archdiscStudioPrimitive) {
+              o.updateWorldMatrix && o.updateWorldMatrix(true, false);
+              if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+              const bb = o.geometry.boundingBox; if (!bb) return;
+              for (let i = 0; i < 8; i++) {
+                const p = vp.camera.position.clone();
+                p.set(i & 1 ? bb.max.x : bb.min.x, i & 2 ? bb.max.y : bb.min.y, i & 4 ? bb.max.z : bb.min.z);
+                p.applyMatrix4(o.matrixWorld);
+                mn = [Math.min(mn[0], p.x), Math.min(mn[1], p.y), Math.min(mn[2], p.z)];
+                mx = [Math.max(mx[0], p.x), Math.max(mx[1], p.y), Math.max(mx[2], p.z)];
+                any = true;
+              }
+            }
+          });
+          if (!any) { window.__studioFrameAll?.(); return { mode: 'raster-noprims' }; }
+          const ctr = [(mn[0] + mx[0]) / 2, (mn[1] + mx[1]) / 2, (mn[2] + mx[2]) / 2];
+          const r = Math.max(Math.hypot(mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]) / 2, 1e-3);
+          const d = r * 2.6;
+          const pos = [ctr[0] + d * 0.62, ctr[1] + d * 0.5, ctr[2] + d * 0.78];
+          if (typeof window.__studioMainCameraLook === 'function') window.__studioMainCameraLook(pos, ctr);
+          else { vp.camera.position.set(pos[0], pos[1], pos[2]); vp.camera.lookAt(ctr[0], ctr[1], ctr[2]); if (vp.controls) { vp.controls.target.set(ctr[0], ctr[1], ctr[2]); vp.controls.update && vp.controls.update(); } }
+          return { mode: 'raster-framed', radius: +r.toFixed(3) };
         } catch (e) { return { mode: 'error', error: String(e && e.message || e) }; }
       });
-      await win.waitForTimeout(700);
+      await win.waitForTimeout(800);
       await win.screenshot({ path: renderPath });
+      await win.evaluate(() => { try { window.dispatchEvent(new CustomEvent('studio-presentation-toggle')); } catch (_) {} }).catch(() => {});
 
       // PUBLISH — full deliverable: glb + STL + scene JSON + the render
       // PNG (above). Export ops return data to the page; write to disk +

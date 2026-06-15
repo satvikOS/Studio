@@ -888,3 +888,16 @@
   border-radius: 2px;
 }
 [data-studio-v3-shell] :focus:not(:focus-visible) { outline: none; }
+
+/* Presentation mode — hide ALL editor chrome so a screenshot is a clean
+   hero frame (just the viewport). Toggled via the 'studio-presentation-
+   toggle' event which sets data-studio-v3-presentation="true" on the shell. */
+[data-studio-v3-presentation="true"] .studio-topbar,
+[data-studio-v3-presentation="true"] .studio-qat,
+[data-studio-v3-presentation="true"] .studio-wb-rail,
+[data-studio-v3-presentation="true"] .studio-toolbar,
+[data-studio-v3-presentation="true"] .studio-right,
+[data-studio-v3-presentation="true"] .studio-statusbar,
+[data-studio-v3-presentation="true"] .studio-cmdbar {
+  display: none !important;
+}
