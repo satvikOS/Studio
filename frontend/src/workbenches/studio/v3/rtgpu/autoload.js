@@ -10,6 +10,10 @@
 // category 'rt' entries (sitting alongside the slice-684 CPU tracer).
 
 import { installRTGPU } from './index.js';
+// Side-effect import: registers window.__studioRunPathTracedOffscreenRender
+// (headless clean hero-frame render — no editor chrome, no grid, framed on
+// the part bounding box). Used by the demo harness / render queue.
+import './offscreenRender.js';
 
 try {
   if (typeof window !== 'undefined') {

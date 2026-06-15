@@ -123,31 +123,24 @@ test('Studio investor demo — plan → drive → visually verify', async () => 
     let render = { mode: 'skipped' };
     let deliverable = { files: [] };
     if (passed) {
-      // RENDER — progressive GPU path tracer (M4 Max). Soft-fails to the
-      // rasterized viewport if RT is unsupported on the box (per rtgpu
-      // brief), so the demo always yields a hero frame.
+      // RENDER — VISIBLE lit hero frame from the on-screen PBR raster
+      // viewport (the scene's MeshPhysicalMaterials + Archie's light rig).
+      // We do NOT use the offscreen RTGPU tracer: in this headless Electron
+      // context its float-target readback returns zeros → a black frame.
+      // The raster viewport is reliably lit + shows the scene Archie built.
+      // Frame the whole build first so it fills the view (scale-independent).
+      const renderPath = path.join(OUT, `${r.id}-RENDER.png`);
+      try { fs.unlinkSync(renderPath); } catch (_) {}
       render = await win.evaluate(async () => {
         try {
-          if (typeof window.__studioRTGPURebuildScene === 'function') window.__studioRTGPURebuildScene();
-          const start = window.__studioRTGPUStart
-            ? window.__studioRTGPUStart({ samplesPerFrame: 8, maxBounces: 4 }) : { ok: false };
-          if (start && start.ok && start.active !== false) {
-            const target = 256; const t0 = Date.now();
-            while (Date.now() - t0 < 25000) {
-              const st = window.__studioRTGPUGetState ? window.__studioRTGPUGetState() : null;
-              if (st && (st.samples || 0) >= target) break;
-              await new Promise((res) => setTimeout(res, 400));
-            }
-            const st = window.__studioRTGPUGetState ? window.__studioRTGPUGetState() : {};
-            return { mode: 'rtgpu', samples: st.samples || 0, supported: true };
-          }
-          // fallback: single path-trace pass or clay
-          if (typeof window.__studioPathTraceRender === 'function') { await window.__studioPathTraceRender(); return { mode: 'pathtrace-cpu' }; }
-          return { mode: 'raster', supported: !!(start && start.supported) };
+          window.__studioFrameAll?.();
+          await new Promise((res) => setTimeout(res, 250));
+          window.__studioFrameAll?.(); // second pass after controls settle
+          return { mode: 'raster-viewport' };
         } catch (e) { return { mode: 'error', error: String(e && e.message || e) }; }
       });
-      await win.waitForTimeout(600);
-      await win.screenshot({ path: path.join(OUT, `${r.id}-RENDER.png`) });
+      await win.waitForTimeout(700);
+      await win.screenshot({ path: renderPath });
 
       // PUBLISH — full deliverable: glb + STL + scene JSON + the render
       // PNG (above). Export ops return data to the page; write to disk +
