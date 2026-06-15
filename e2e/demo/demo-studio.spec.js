@@ -111,6 +111,18 @@ test('Studio investor demo — plan → drive → visually verify', async () => 
       }
       await win.waitForTimeout(2500);
     }
+    // Let the turn FINISH streaming before any render: expect() trips as soon
+    // as the body count is met, but the turn keeps emitting tool_calls — a
+    // late spawn re-selects a primitive AFTER our deselect, leaving the
+    // transform gizmo over the hero frame. Wait until the prim count is stable.
+    if (passed) {
+      let prev = -1, stable = 0;
+      for (let i = 0; i < 14 && stable < 2; i++) {
+        const s = await sceneStats(win, before);
+        if (s.prims === prev) stable++; else { stable = 0; prev = s.prims; }
+        await win.waitForTimeout(2500);
+      }
+    }
     await win.screenshot({ path: path.join(OUT, `${r.id}.png`) });
 
     // Multi-cam finals only for a PASSED build (don't showcase a fail).
