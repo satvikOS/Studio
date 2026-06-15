@@ -46,4 +46,19 @@ export const STUDIO_RECIPES = [
     prompt: 'cozy neighborhood cafe interior, warm pendant lighting',
     layout: 'cafe', seed: 0xCAFE, env: 'warm',
   },
+  {
+    id: 'home-office', title: 'Home office — desk + storage', ref: 'staged interior',
+    plan: 'Desk + office chair + wardrobe + bookshelf + side table + plant; daylight IBL.',
+    prompt: 'a modern home office with a desk and storage', layout: 'office', seed: 0x0FF1CE, env: 'daylight',
+  },
+  {
+    id: 'dining-room', title: 'Dining room — long table + chairs', ref: 'staged interior',
+    plan: 'Long pedestal dining table + 6 chairs + pendant + dresser; warm IBL.',
+    prompt: 'an elegant dining room with a long table and six chairs', layout: 'dining', seed: 0xD1217, env: 'warm',
+  },
+  {
+    id: 'kitchen', title: 'Kitchen — island + cabinets', ref: 'staged DoD-7',
+    plan: 'Kitchen island + cabinet run + bar stools + pendants; daylight IBL.',
+    prompt: 'a modern kitchen with an island and bar stools', layout: 'kitchen', seed: 0xC0FFEE, env: 'daylight',
+  },
 ];

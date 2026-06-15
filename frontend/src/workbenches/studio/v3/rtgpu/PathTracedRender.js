@@ -28,6 +28,7 @@ const TILE_M = {
   'wood-oak': 0.6, 'wood-walnut': 0.6, 'fabric-grey': 0.16, 'fabric-linen': 0.16,
   'leather-tan': 0.32, 'marble-white': 1.1, 'steel-brushed': 0.4, 'concrete': 0.85,
   'ceramic-white': 0.5,
+  'oak-worn': 0.7, 'steel-anisotropic': 0.4, 'velvet': 0.22, 'terracotta': 0.6,
 };
 
 // Assign procedural color/roughness/normal maps to a material, UV-repeat scaled

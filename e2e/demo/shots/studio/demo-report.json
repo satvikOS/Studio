@@ -78,5 +78,65 @@
     "cafe-interior-plan.md"
    ]
   }
+ },
+ {
+  "id": "home-office",
+  "title": "Home office — desk + storage",
+  "passed": true,
+  "bodies": 68,
+  "renders": {
+   "hero": 120,
+   "front": 80,
+   "profile": 80
+  },
+  "deliverable": {
+   "files": [
+    "home-office.glb (3047788B)",
+    "home-office-hero.png",
+    "home-office-front.png",
+    "home-office-profile.png",
+    "home-office-plan.md"
+   ]
+  }
+ },
+ {
+  "id": "dining-room",
+  "title": "Dining room — long table + chairs",
+  "passed": true,
+  "bodies": 89,
+  "renders": {
+   "hero": 120,
+   "front": 80,
+   "profile": 80
+  },
+  "deliverable": {
+   "files": [
+    "dining-room.glb (2535956B)",
+    "dining-room-hero.png",
+    "dining-room-front.png",
+    "dining-room-profile.png",
+    "dining-room-plan.md"
+   ]
+  }
+ },
+ {
+  "id": "kitchen",
+  "title": "Kitchen — island + cabinets",
+  "passed": true,
+  "bodies": 103,
+  "renders": {
+   "hero": 120,
+   "front": 80,
+   "profile": 80
+  },
+  "deliverable": {
+   "files": [
+    "kitchen.glb (2269352B)",
+    "kitchen-hero.png",
+    "kitchen-front.png",
+    "kitchen-profile.png",
+    "kitchen-plan.md"
+   ]
+  }
  }
 ]

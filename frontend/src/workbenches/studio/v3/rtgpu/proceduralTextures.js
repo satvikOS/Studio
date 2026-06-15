@@ -1371,6 +1371,764 @@ const GENERATORS = {
 
   return { map: mapTexture, normalMap: normalTexture, roughnessMap: roughnessTexture };
 },
+  "oak-worn": function(THREE, size = 512) {
+  function hash(x, y, seed = 0) {
+    let h = seed + x * 73856093 ^ y * 19349663;
+    h = (h ^ (h >> 13)) * 1274126177;
+    return (h ^ (h >> 16)) & 0x7fffffff;
+  }
+
+  function noise2D(x, y, seed = 0) {
+    const xi = Math.floor(x);
+    const yi = Math.floor(y);
+    const xf = x - xi;
+    const yf = y - yi;
+
+    const u = xf * xf * (3.0 - 2.0 * xf);
+    const v = yf * yf * (3.0 - 2.0 * yf);
+
+    const h00 = hash(xi, yi, seed);
+    const h10 = hash(xi + 1, yi, seed);
+    const h01 = hash(xi, yi + 1, seed);
+    const h11 = hash(xi + 1, yi + 1, seed);
+
+    const n00 = (h00 % 256) / 256 * 2 - 1;
+    const n10 = (h10 % 256) / 256 * 2 - 1;
+    const n01 = (h01 % 256) / 256 * 2 - 1;
+    const n11 = (h11 % 256) / 256 * 2 - 1;
+
+    const nx0 = n00 * (1 - u) + n10 * u;
+    const nx1 = n01 * (1 - u) + n11 * u;
+    return nx0 * (1 - v) + nx1 * v;
+  }
+
+  function fbm(x, y, octaves = 4, seed = 0) {
+    let value = 0, amplitude = 1, frequency = 1, maxValue = 0;
+    for (let i = 0; i < octaves; i++) {
+      value += amplitude * noise2D(x * frequency, y * frequency, seed + i);
+      maxValue += amplitude;
+      amplitude *= 0.5;
+      frequency *= 2;
+    }
+    return value / maxValue;
+  }
+
+  const canvas = typeof OffscreenCanvas !== 'undefined' 
+    ? new OffscreenCanvas(size, size) 
+    : document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+  const baseColor = { r: 210, g: 160, b: 110 };
+  const darkColor = { r: 145, g: 100, b: 60 };
+  const lightColor = { r: 240, g: 195, b: 145 };
+  const wornColor = { r: 100, g: 70, b: 40 };
+
+  const mapData = ctx.createImageData(size, size);
+  const mapPixels = mapData.data;
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const idx = (y * size + x) * 4;
+      const ny = y / size;
+      const nx = x / size;
+
+      const grain = fbm(nx * 9, ny * 4, 5, 42);
+      const grainDir = Math.sin(ny * Math.PI * 2 * 0.9 + grain * 2.2) * 0.35 + grain;
+      
+      const ringDist = Math.sqrt((nx - 0.5) ** 2 + (ny * 2 - 1) ** 2);
+      const rings = Math.sin(ringDist * 18 - grainDir * 2.5) * 0.5 + 0.5;
+      
+      const largeMod = fbm(nx * 2.2, ny * 1.2, 3, 100) * 0.6;
+      
+      const wearPattern = Math.max(0, Math.sin((nx * 3 - ny * 2) * Math.PI) * 0.5 + 0.3);
+      const wearAmount = fbm(nx * 4, ny * 3, 3, 500) * 0.4;
+      
+      const woodValue = grainDir * 0.65 + rings * 0.2 + largeMod * 0.1 + wearAmount * 0.05;
+      const woodClamped = Math.max(0, Math.min(1, woodValue));
+      const wornIntensity = Math.max(0, Math.min(1, wearPattern * wearAmount));
+
+      let r, g, b;
+      if (woodClamped < 0.4) {
+        const t = woodClamped / 0.4;
+        r = Math.round(darkColor.r * (1 - t) + baseColor.r * t);
+        g = Math.round(darkColor.g * (1 - t) + baseColor.g * t);
+        b = Math.round(darkColor.b * (1 - t) + baseColor.b * t);
+      } else if (woodClamped < 0.7) {
+        const t = (woodClamped - 0.4) / 0.3;
+        r = Math.round(baseColor.r * (1 - t) + lightColor.r * t);
+        g = Math.round(baseColor.g * (1 - t) + lightColor.g * t);
+        b = Math.round(baseColor.b * (1 - t) + lightColor.b * t);
+      } else {
+        const t = (woodClamped - 0.7) / 0.3;
+        r = Math.round(lightColor.r * (1 - t) + baseColor.r * t);
+        g = Math.round(lightColor.g * (1 - t) + baseColor.g * t);
+        b = Math.round(lightColor.b * (1 - t) + baseColor.b * t);
+      }
+      
+      r = Math.round(r * (1 - wornIntensity * 0.6) + wornColor.r * (wornIntensity * 0.6));
+      g = Math.round(g * (1 - wornIntensity * 0.6) + wornColor.g * (wornIntensity * 0.6));
+      b = Math.round(b * (1 - wornIntensity * 0.6) + wornColor.b * (wornIntensity * 0.6));
+
+      mapPixels[idx] = r;
+      mapPixels[idx + 1] = g;
+      mapPixels[idx + 2] = b;
+      mapPixels[idx + 3] = 255;
+    }
+  }
+  ctx.putImageData(mapData, 0, 0);
+
+  const normalCanvas = typeof OffscreenCanvas !== 'undefined' 
+    ? new OffscreenCanvas(size, size) 
+    : document.createElement('canvas');
+  normalCanvas.width = normalCanvas.height = size;
+  const nCtx = normalCanvas.getContext('2d', { willReadFrequently: true });
+
+  const normalData = nCtx.createImageData(size, size);
+  const normalPixels = normalData.data;
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const idx = (y * size + x) * 4;
+      const ny = y / size;
+      const nx = x / size;
+
+      const grainNoise = fbm(nx * 14, ny * 7, 4, 200);
+      const grainGradient = fbm((nx + 0.008) * 14, ny * 7, 4, 200) - grainNoise;
+      
+      const scratchPattern = Math.abs(Math.sin(nx * Math.PI * 4) * Math.cos(ny * Math.PI * 6));
+      const scratches = fbm(nx * 25, ny * 15, 3, 202) * scratchPattern * 0.25;
+      
+      let normalX = grainGradient * 0.55 + fbm(nx * 8, ny * 4, 3, 201) * 0.25 + scratches * 0.2;
+      let normalY = grainNoise * 0.75 + scratches * 0.15;
+      let normalZ = Math.sqrt(Math.max(0, 1 - normalX * normalX - normalY * normalY));
+
+      const len = Math.sqrt(normalX * normalX + normalY * normalY + normalZ * normalZ);
+      if (len > 0) {
+        normalX /= len;
+        normalY /= len;
+        normalZ /= len;
+      }
+
+      normalPixels[idx] = Math.round((normalX + 1) * 127.5);
+      normalPixels[idx + 1] = Math.round((normalY + 1) * 127.5);
+      normalPixels[idx + 2] = Math.round((normalZ + 1) * 127.5);
+      normalPixels[idx + 3] = 255;
+    }
+  }
+  nCtx.putImageData(normalData, 0, 0);
+
+  const roughCanvas = typeof OffscreenCanvas !== 'undefined' 
+    ? new OffscreenCanvas(size, size) 
+    : document.createElement('canvas');
+  roughCanvas.width = roughCanvas.height = size;
+  const rCtx = roughCanvas.getContext('2d', { willReadFrequently: true });
+
+  const roughData = rCtx.createImageData(size, size);
+  const roughPixels = roughData.data;
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const idx = (y * size + x) * 4;
+      const ny = y / size;
+      const nx = x / size;
+
+      const grainDef = fbm(nx * 11, ny * 6, 4, 300);
+      const pores = fbm(nx * 22, ny * 22, 3, 301) * 0.35;
+      
+      const scratchDef = Math.abs(Math.sin(nx * Math.PI * 5) * Math.cos(ny * Math.PI * 7)) * fbm(nx * 18, ny * 12, 3, 302) * 0.2;
+      const wear = fbm(nx * 3, ny * 2.5, 2, 303) * 0.25;
+      
+      const roughValue = 0.48 + grainDef * 0.22 + pores * 0.12 + scratchDef * 0.15 + wear * 0.1;
+      const roughClamped = Math.max(0.4, Math.min(0.75, roughValue));
+      const roughByte = Math.round(roughClamped * 255);
+
+      roughPixels[idx] = roughByte;
+      roughPixels[idx + 1] = roughByte;
+      roughPixels[idx + 2] = roughByte;
+      roughPixels[idx + 3] = 255;
+    }
+  }
+  rCtx.putImageData(roughData, 0, 0);
+
+  const mapTexture = new THREE.CanvasTexture(canvas);
+  mapTexture.wrapS = mapTexture.wrapT = THREE.RepeatWrapping;
+  mapTexture.colorSpace = THREE.SRGBColorSpace;
+  mapTexture.magFilter = THREE.LinearFilter;
+  mapTexture.minFilter = THREE.LinearMipmapLinearFilter;
+
+  const normalTexture = new THREE.CanvasTexture(normalCanvas);
+  normalTexture.wrapS = normalTexture.wrapT = THREE.RepeatWrapping;
+  normalTexture.colorSpace = THREE.NoColorSpace;
+  normalTexture.magFilter = THREE.LinearFilter;
+  normalTexture.minFilter = THREE.LinearMipmapLinearFilter;
+
+  const roughnessTexture = new THREE.CanvasTexture(roughCanvas);
+  roughnessTexture.wrapS = roughnessTexture.wrapT = THREE.RepeatWrapping;
+  roughnessTexture.colorSpace = THREE.LinearSRGBColorSpace;
+  roughnessTexture.magFilter = THREE.LinearFilter;
+  roughnessTexture.minFilter = THREE.LinearMipmapLinearFilter;
+
+  return {
+    map: mapTexture,
+    normalMap: normalTexture,
+    roughnessMap: roughnessTexture
+  };
+},
+  "steel-anisotropic": function(THREE, size = 512) {
+  function hash(x, y, seed = 0) {
+    let h = seed + x * 73856093 ^ y * 19349663;
+    h = (h ^ (h >> 13)) * 1274126177;
+    return (h ^ (h >> 16)) & 0x7fffffff;
+  }
+
+  function noise2D(x, y, seed = 0) {
+    const xi = Math.floor(x);
+    const yi = Math.floor(y);
+    const xf = x - xi;
+    const yf = y - yi;
+
+    const u = xf * xf * (3.0 - 2.0 * xf);
+    const v = yf * yf * (3.0 - 2.0 * yf);
+
+    const h00 = hash(xi, yi, seed);
+    const h10 = hash(xi + 1, yi, seed);
+    const h01 = hash(xi, yi + 1, seed);
+    const h11 = hash(xi + 1, yi + 1, seed);
+
+    const n00 = (h00 % 256) / 256 * 2 - 1;
+    const n10 = (h10 % 256) / 256 * 2 - 1;
+    const n01 = (h01 % 256) / 256 * 2 - 1;
+    const n11 = (h11 % 256) / 256 * 2 - 1;
+
+    const nx0 = n00 * (1 - u) + n10 * u;
+    const nx1 = n01 * (1 - u) + n11 * u;
+    return nx0 * (1 - v) + nx1 * v;
+  }
+
+  function fbm(x, y, octaves = 4, seed = 0) {
+    let value = 0, amplitude = 1, frequency = 1, maxValue = 0;
+    for (let i = 0; i < octaves; i++) {
+      value += amplitude * noise2D(x * frequency, y * frequency, seed + i);
+      maxValue += amplitude;
+      amplitude *= 0.5;
+      frequency *= 2;
+    }
+    return value / maxValue;
+  }
+
+  const canvas = typeof OffscreenCanvas !== 'undefined' 
+    ? new OffscreenCanvas(size, size) 
+    : document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+  const baseR = 85, baseG = 92, baseB = 102;
+  const lightR = 120, lightG = 128, lightB = 140;
+  const darkR = 55, darkG = 60, darkB = 70;
+
+  const mapData = ctx.createImageData(size, size);
+  const mapPixels = mapData.data;
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const idx = (y * size + x) * 4;
+      const ny = y / size;
+      const nx = x / size;
+
+      const brushNoise = fbm(nx * 2, ny * 20, 3, 500);
+      const brushStrength = Math.abs(Math.sin((ny + brushNoise * 0.3) * Math.PI * 8));
+      const microVar = fbm(nx * 15, ny * 8, 4, 501) * 0.5;
+      
+      const colorBase = 0.5 + brushStrength * 0.3 + microVar * 0.2;
+      const r = Math.round(darkR + (lightR - darkR) * colorBase);
+      const g = Math.round(darkG + (lightG - darkG) * colorBase);
+      const b = Math.round(darkB + (lightB - darkB) * colorBase);
+
+      mapPixels[idx] = r;
+      mapPixels[idx + 1] = g;
+      mapPixels[idx + 2] = b;
+      mapPixels[idx + 3] = 255;
+    }
+  }
+  ctx.putImageData(mapData, 0, 0);
+
+  const normalCanvas = typeof OffscreenCanvas !== 'undefined' 
+    ? new OffscreenCanvas(size, size) 
+    : document.createElement('canvas');
+  normalCanvas.width = normalCanvas.height = size;
+  const nCtx = normalCanvas.getContext('2d', { willReadFrequently: true });
+
+  const normalData = nCtx.createImageData(size, size);
+  const normalPixels = normalData.data;
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const idx = (y * size + x) * 4;
+      const ny = y / size;
+      const nx = x / size;
+
+      const brushPattern = fbm(nx * 3, ny * 25, 3, 600);
+      const brushGradient = fbm((nx + 0.005) * 3, ny * 25, 3, 600) - brushPattern;
+      
+      const microPattern = fbm(nx * 20, ny * 12, 3, 601);
+      const microGradX = fbm((nx + 0.003) * 20, ny * 12, 3, 601) - microPattern;
+      const microGradY = fbm(nx * 20, (ny + 0.003) * 12, 3, 601) - microPattern;
+      
+      let normalX = brushGradient * 0.7 + microGradX * 0.3;
+      let normalY = fbm(nx * 10, ny * 8, 3, 602) * 0.4;
+      let normalZ = Math.sqrt(Math.max(0, 1 - normalX * normalX - normalY * normalY));
+
+      const len = Math.sqrt(normalX * normalX + normalY * normalY + normalZ * normalZ);
+      if (len > 0) {
+        normalX /= len;
+        normalY /= len;
+        normalZ /= len;
+      }
+
+      normalPixels[idx] = Math.round((normalX + 1) * 127.5);
+      normalPixels[idx + 1] = Math.round((normalY + 1) * 127.5);
+      normalPixels[idx + 2] = Math.round((normalZ + 1) * 127.5);
+      normalPixels[idx + 3] = 255;
+    }
+  }
+  nCtx.putImageData(normalData, 0, 0);
+
+  const roughCanvas = typeof OffscreenCanvas !== 'undefined' 
+    ? new OffscreenCanvas(size, size) 
+    : document.createElement('canvas');
+  roughCanvas.width = roughCanvas.height = size;
+  const rCtx = roughCanvas.getContext('2d', { willReadFrequently: true });
+
+  const roughData = rCtx.createImageData(size, size);
+  const roughPixels = roughData.data;
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const idx = (y * size + x) * 4;
+      const ny = y / size;
+      const nx = x / size;
+
+      const brushDir = fbm(nx * 2, ny * 22, 3, 700);
+      const brushAlign = Math.abs(Math.sin((ny + brushDir * 0.2) * Math.PI * 10)) * 0.4;
+      const scratches = fbm(nx * 18, ny * 5, 3, 701) * 0.3;
+      const microRough = fbm(nx * 25, ny * 25, 2, 702) * 0.15;
+      
+      const roughValue = 0.35 + brushAlign * 0.25 + scratches * 0.25 + microRough * 0.15;
+      const roughClamped = Math.max(0.25, Math.min(0.65, roughValue));
+      const roughByte = Math.round(roughClamped * 255);
+
+      roughPixels[idx] = roughByte;
+      roughPixels[idx + 1] = roughByte;
+      roughPixels[idx + 2] = roughByte;
+      roughPixels[idx + 3] = 255;
+    }
+  }
+  rCtx.putImageData(roughData, 0, 0);
+
+  const mapTexture = new THREE.CanvasTexture(canvas);
+  mapTexture.wrapS = mapTexture.wrapT = THREE.RepeatWrapping;
+  mapTexture.colorSpace = THREE.SRGBColorSpace;
+  mapTexture.magFilter = THREE.LinearFilter;
+  mapTexture.minFilter = THREE.LinearMipmapLinearFilter;
+
+  const normalTexture = new THREE.CanvasTexture(normalCanvas);
+  normalTexture.wrapS = normalTexture.wrapT = THREE.RepeatWrapping;
+  normalTexture.colorSpace = THREE.NoColorSpace;
+  normalTexture.magFilter = THREE.LinearFilter;
+  normalTexture.minFilter = THREE.LinearMipmapLinearFilter;
+
+  const roughnessTexture = new THREE.CanvasTexture(roughCanvas);
+  roughnessTexture.wrapS = roughnessTexture.wrapT = THREE.RepeatWrapping;
+  roughnessTexture.colorSpace = THREE.LinearSRGBColorSpace;
+  roughnessTexture.magFilter = THREE.LinearFilter;
+  roughnessTexture.minFilter = THREE.LinearMipmapLinearFilter;
+
+  return {
+    map: mapTexture,
+    normalMap: normalTexture,
+    roughnessMap: roughnessTexture
+  };
+},
+  "velvet": function(THREE, size = 512) {
+  function hash(x, y, seed = 0) {
+    let h = seed + x * 73856093 ^ y * 19349663;
+    h = (h ^ (h >> 13)) * 1274126177;
+    return (h ^ (h >> 16)) & 0x7fffffff;
+  }
+
+  function noise2D(x, y, seed = 0) {
+    const xi = Math.floor(x);
+    const yi = Math.floor(y);
+    const xf = x - xi;
+    const yf = y - yi;
+
+    const u = xf * xf * (3.0 - 2.0 * xf);
+    const v = yf * yf * (3.0 - 2.0 * yf);
+
+    const h00 = hash(xi, yi, seed);
+    const h10 = hash(xi + 1, yi, seed);
+    const h01 = hash(xi, yi + 1, seed);
+    const h11 = hash(xi + 1, yi + 1, seed);
+
+    const n00 = (h00 % 256) / 256 * 2 - 1;
+    const n10 = (h10 % 256) / 256 * 2 - 1;
+    const n01 = (h01 % 256) / 256 * 2 - 1;
+    const n11 = (h11 % 256) / 256 * 2 - 1;
+
+    const nx0 = n00 * (1 - u) + n10 * u;
+    const nx1 = n01 * (1 - u) + n11 * u;
+    return nx0 * (1 - v) + nx1 * v;
+  }
+
+  function fbm(x, y, octaves = 4, seed = 0) {
+    let value = 0, amplitude = 1, frequency = 1, maxValue = 0;
+    for (let i = 0; i < octaves; i++) {
+      value += amplitude * noise2D(x * frequency, y * frequency, seed + i);
+      maxValue += amplitude;
+      amplitude *= 0.5;
+      frequency *= 2;
+    }
+    return value / maxValue;
+  }
+
+  const canvas = typeof OffscreenCanvas !== 'undefined' 
+    ? new OffscreenCanvas(size, size) 
+    : document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+  const baseR = 40, baseG = 25, baseB = 50;
+  const darkR = 20, darkG = 12, darkB = 28;
+  const sheenR = 100, sheenG = 80, sheenB = 110;
+
+  const mapData = ctx.createImageData(size, size);
+  const mapPixels = mapData.data;
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const idx = (y * size + x) * 4;
+      const ny = y / size;
+      const nx = x / size;
+
+      const napDir = fbm(nx * 8, ny * 12, 3, 800);
+      const napFlow = Math.sin((ny + napDir * 0.4) * Math.PI * 6) * 0.5 + 0.5;
+      const napDensity = fbm(nx * 16, ny * 16, 3, 801) * 0.6;
+      
+      const colorShift = napFlow * 0.3 + napDensity * 0.2;
+      
+      const baseVal = 0.5 + colorShift;
+      const r = Math.round(darkR + (baseR - darkR) * baseVal);
+      const g = Math.round(darkG + (baseG - darkG) * baseVal);
+      const b = Math.round(darkB + (baseB - darkB) * baseVal);
+
+      mapPixels[idx] = Math.max(0, Math.min(255, r));
+      mapPixels[idx + 1] = Math.max(0, Math.min(255, g));
+      mapPixels[idx + 2] = Math.max(0, Math.min(255, b));
+      mapPixels[idx + 3] = 255;
+    }
+  }
+  ctx.putImageData(mapData, 0, 0);
+
+  const normalCanvas = typeof OffscreenCanvas !== 'undefined' 
+    ? new OffscreenCanvas(size, size) 
+    : document.createElement('canvas');
+  normalCanvas.width = normalCanvas.height = size;
+  const nCtx = normalCanvas.getContext('2d', { willReadFrequently: true });
+
+  const normalData = nCtx.createImageData(size, size);
+  const normalPixels = normalData.data;
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const idx = (y * size + x) * 4;
+      const ny = y / size;
+      const nx = x / size;
+
+      const napPattern = fbm(nx * 12, ny * 18, 4, 900);
+      const napGradX = fbm((nx + 0.004) * 12, ny * 18, 4, 900) - napPattern;
+      const napGradY = fbm(nx * 12, (ny + 0.004) * 18, 4, 900) - napPattern;
+      
+      const fiberDir = fbm(nx * 10, ny * 14, 3, 901);
+      const fiberGrad = Math.sin((fiberDir + napPattern) * Math.PI * 4) * 0.3;
+      
+      let normalX = napGradX * 0.5 + fiberGrad * 0.5;
+      let normalY = napGradY * 0.6 + fiberDir * 0.3;
+      let normalZ = Math.sqrt(Math.max(0, 1 - normalX * normalX - normalY * normalY));
+
+      const len = Math.sqrt(normalX * normalX + normalY * normalY + normalZ * normalZ);
+      if (len > 0) {
+        normalX /= len;
+        normalY /= len;
+        normalZ /= len;
+      }
+
+      normalPixels[idx] = Math.round((normalX + 1) * 127.5);
+      normalPixels[idx + 1] = Math.round((normalY + 1) * 127.5);
+      normalPixels[idx + 2] = Math.round((normalZ + 1) * 127.5);
+      normalPixels[idx + 3] = 255;
+    }
+  }
+  nCtx.putImageData(normalData, 0, 0);
+
+  const roughCanvas = typeof OffscreenCanvas !== 'undefined' 
+    ? new OffscreenCanvas(size, size) 
+    : document.createElement('canvas');
+  roughCanvas.width = roughCanvas.height = size;
+  const rCtx = roughCanvas.getContext('2d', { willReadFrequently: true });
+
+  const roughData = rCtx.createImageData(size, size);
+  const roughPixels = roughData.data;
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const idx = (y * size + x) * 4;
+      const ny = y / size;
+      const nx = x / size;
+
+      const napDir = fbm(nx * 8, ny * 14, 3, 1000);
+      const napAlign = Math.abs(Math.sin((ny + napDir * 0.3) * Math.PI * 8)) * 0.5;
+      const napVar = fbm(nx * 18, ny * 18, 3, 1001) * 0.35;
+      const threadVar = fbm(nx * 6, ny * 9, 2, 1002) * 0.25;
+      
+      const roughValue = 0.68 + napAlign * 0.15 + napVar * 0.1 + threadVar * 0.05;
+      const roughClamped = Math.max(0.65, Math.min(0.88, roughValue));
+      const roughByte = Math.round(roughClamped * 255);
+
+      roughPixels[idx] = roughByte;
+      roughPixels[idx + 1] = roughByte;
+      roughPixels[idx + 2] = roughByte;
+      roughPixels[idx + 3] = 255;
+    }
+  }
+  rCtx.putImageData(roughData, 0, 0);
+
+  const mapTexture = new THREE.CanvasTexture(canvas);
+  mapTexture.wrapS = mapTexture.wrapT = THREE.RepeatWrapping;
+  mapTexture.colorSpace = THREE.SRGBColorSpace;
+  mapTexture.magFilter = THREE.LinearFilter;
+  mapTexture.minFilter = THREE.LinearMipmapLinearFilter;
+
+  const normalTexture = new THREE.CanvasTexture(normalCanvas);
+  normalTexture.wrapS = normalTexture.wrapT = THREE.RepeatWrapping;
+  normalTexture.colorSpace = THREE.NoColorSpace;
+  normalTexture.magFilter = THREE.LinearFilter;
+  normalTexture.minFilter = THREE.LinearMipmapLinearFilter;
+
+  const roughnessTexture = new THREE.CanvasTexture(roughCanvas);
+  roughnessTexture.wrapS = roughnessTexture.wrapT = THREE.RepeatWrapping;
+  roughnessTexture.colorSpace = THREE.LinearSRGBColorSpace;
+  roughnessTexture.magFilter = THREE.LinearFilter;
+  roughnessTexture.minFilter = THREE.LinearMipmapLinearFilter;
+
+  return {
+    map: mapTexture,
+    normalMap: normalTexture,
+    roughnessMap: roughnessTexture
+  };
+},
+  "terracotta": function(THREE, size = 512) {
+  function hash(x, y, seed = 0) {
+    let h = seed + x * 73856093 ^ y * 19349663;
+    h = (h ^ (h >> 13)) * 1274126177;
+    return (h ^ (h >> 16)) & 0x7fffffff;
+  }
+
+  function noise2D(x, y, seed = 0) {
+    const xi = Math.floor(x);
+    const yi = Math.floor(y);
+    const xf = x - xi;
+    const yf = y - yi;
+
+    const u = xf * xf * (3.0 - 2.0 * xf);
+    const v = yf * yf * (3.0 - 2.0 * yf);
+
+    const h00 = hash(xi, yi, seed);
+    const h10 = hash(xi + 1, yi, seed);
+    const h01 = hash(xi, yi + 1, seed);
+    const h11 = hash(xi + 1, yi + 1, seed);
+
+    const n00 = (h00 % 256) / 256 * 2 - 1;
+    const n10 = (h10 % 256) / 256 * 2 - 1;
+    const n01 = (h01 % 256) / 256 * 2 - 1;
+    const n11 = (h11 % 256) / 256 * 2 - 1;
+
+    const nx0 = n00 * (1 - u) + n10 * u;
+    const nx1 = n01 * (1 - u) + n11 * u;
+    return nx0 * (1 - v) + nx1 * v;
+  }
+
+  function fbm(x, y, octaves = 4, seed = 0) {
+    let value = 0, amplitude = 1, frequency = 1, maxValue = 0;
+    for (let i = 0; i < octaves; i++) {
+      value += amplitude * noise2D(x * frequency, y * frequency, seed + i);
+      maxValue += amplitude;
+      amplitude *= 0.5;
+      frequency *= 2;
+    }
+    return value / maxValue;
+  }
+
+  const canvas = typeof OffscreenCanvas !== 'undefined' 
+    ? new OffscreenCanvas(size, size) 
+    : document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+  const baseColor = { r: 205, g: 120, b: 80 };
+  const darkColor = { r: 155, g: 85, b: 50 };
+  const lightColor = { r: 235, g: 150, b: 105 };
+  const claySpotColor = { r: 180, g: 95, b: 65 };
+
+  const mapData = ctx.createImageData(size, size);
+  const mapPixels = mapData.data;
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const idx = (y * size + x) * 4;
+      const ny = y / size;
+      const nx = x / size;
+
+      const baseTone = fbm(nx * 3, ny * 2.5, 3, 1100) * 0.6;
+      const clayParticles = fbm(nx * 18, ny * 18, 4, 1101) * 0.7;
+      const ironSpots = Math.pow(Math.abs(fbm(nx * 14, ny * 12, 3, 1102) - 0.6), 1.5) * 0.8;
+      
+      const spotIntensity = ironSpots > 0.55 ? (ironSpots - 0.55) / 0.45 : 0;
+      const particleIntensity = clayParticles > 0.65 ? (clayParticles - 0.65) / 0.35 : 0;
+      
+      const colorValue = 0.5 + baseTone * 0.4;
+      
+      let r, g, b;
+      if (colorValue < 0.4) {
+        const t = colorValue / 0.4;
+        r = Math.round(darkColor.r * (1 - t) + baseColor.r * t);
+        g = Math.round(darkColor.g * (1 - t) + baseColor.g * t);
+        b = Math.round(darkColor.b * (1 - t) + baseColor.b * t);
+      } else if (colorValue < 0.7) {
+        const t = (colorValue - 0.4) / 0.3;
+        r = Math.round(baseColor.r * (1 - t) + lightColor.r * t);
+        g = Math.round(baseColor.g * (1 - t) + lightColor.g * t);
+        b = Math.round(baseColor.b * (1 - t) + lightColor.b * t);
+      } else {
+        const t = (colorValue - 0.7) / 0.3;
+        r = Math.round(lightColor.r * (1 - t) + baseColor.r * t);
+        g = Math.round(lightColor.g * (1 - t) + baseColor.g * t);
+        b = Math.round(lightColor.b * (1 - t) + baseColor.b * t);
+      }
+      
+      r = Math.round(r * (1 - spotIntensity * 0.4) + claySpotColor.r * (spotIntensity * 0.4));
+      g = Math.round(g * (1 - spotIntensity * 0.4) + claySpotColor.g * (spotIntensity * 0.4));
+      b = Math.round(b * (1 - spotIntensity * 0.4) + claySpotColor.b * (spotIntensity * 0.4));
+      
+      r = Math.round(r * (1 - particleIntensity * 0.3) + darkColor.r * (particleIntensity * 0.3));
+      g = Math.round(g * (1 - particleIntensity * 0.3) + darkColor.g * (particleIntensity * 0.3));
+      b = Math.round(b * (1 - particleIntensity * 0.3) + darkColor.b * (particleIntensity * 0.3));
+
+      mapPixels[idx] = r;
+      mapPixels[idx + 1] = g;
+      mapPixels[idx + 2] = b;
+      mapPixels[idx + 3] = 255;
+    }
+  }
+  ctx.putImageData(mapData, 0, 0);
+
+  const normalCanvas = typeof OffscreenCanvas !== 'undefined' 
+    ? new OffscreenCanvas(size, size) 
+    : document.createElement('canvas');
+  normalCanvas.width = normalCanvas.height = size;
+  const nCtx = normalCanvas.getContext('2d', { willReadFrequently: true });
+
+  const normalData = nCtx.createImageData(size, size);
+  const normalPixels = normalData.data;
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const idx = (y * size + x) * 4;
+      const ny = y / size;
+      const nx = x / size;
+
+      const clayPattern = fbm(nx * 20, ny * 20, 4, 1200);
+      const clayGradX = fbm((nx + 0.003) * 20, ny * 20, 4, 1200) - clayPattern;
+      const clayGradY = fbm(nx * 20, (ny + 0.003) * 20, 4, 1200) - clayPattern;
+      
+      const spotPattern = fbm(nx * 16, ny * 14, 3, 1201);
+      const spotGrad = Math.abs(Math.sin((spotPattern - 0.6) * Math.PI * 8)) * 0.25;
+      
+      let normalX = clayGradX * 0.6 + spotGrad * 0.2;
+      let normalY = clayGradY * 0.6 + fbm(nx * 12, ny * 10, 3, 1202) * 0.2;
+      let normalZ = Math.sqrt(Math.max(0, 1 - normalX * normalX - normalY * normalY));
+
+      const len = Math.sqrt(normalX * normalX + normalY * normalY + normalZ * normalZ);
+      if (len > 0) {
+        normalX /= len;
+        normalY /= len;
+        normalZ /= len;
+      }
+
+      normalPixels[idx] = Math.round((normalX + 1) * 127.5);
+      normalPixels[idx + 1] = Math.round((normalY + 1) * 127.5);
+      normalPixels[idx + 2] = Math.round((normalZ + 1) * 127.5);
+      normalPixels[idx + 3] = 255;
+    }
+  }
+  nCtx.putImageData(normalData, 0, 0);
+
+  const roughCanvas = typeof OffscreenCanvas !== 'undefined' 
+    ? new OffscreenCanvas(size, size) 
+    : document.createElement('canvas');
+  roughCanvas.width = roughCanvas.height = size;
+  const rCtx = roughCanvas.getContext('2d', { willReadFrequently: true });
+
+  const roughData = rCtx.createImageData(size, size);
+  const roughPixels = roughData.data;
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const idx = (y * size + x) * 4;
+      const ny = y / size;
+      const nx = x / size;
+
+      const clayRough = fbm(nx * 22, ny * 22, 4, 1300) * 0.4;
+      const particleBump = fbm(nx * 20, ny * 18, 3, 1301) * 0.35;
+      const sinterPattern = Math.abs(Math.sin((nx + ny) * Math.PI * 4)) * fbm(nx * 8, ny * 6, 2, 1302) * 0.15;
+      const matteBase = 0.65;
+      
+      const roughValue = matteBase + clayRough * 0.2 + particleBump * 0.1 + sinterPattern * 0.05;
+      const roughClamped = Math.max(0.58, Math.min(0.82, roughValue));
+      const roughByte = Math.round(roughClamped * 255);
+
+      roughPixels[idx] = roughByte;
+      roughPixels[idx + 1] = roughByte;
+      roughPixels[idx + 2] = roughByte;
+      roughPixels[idx + 3] = 255;
+    }
+  }
+  rCtx.putImageData(roughData, 0, 0);
+
+  const mapTexture = new THREE.CanvasTexture(canvas);
+  mapTexture.wrapS = mapTexture.wrapT = THREE.RepeatWrapping;
+  mapTexture.colorSpace = THREE.SRGBColorSpace;
+  mapTexture.magFilter = THREE.LinearFilter;
+  mapTexture.minFilter = THREE.LinearMipmapLinearFilter;
+
+  const normalTexture = new THREE.CanvasTexture(normalCanvas);
+  normalTexture.wrapS = normalTexture.wrapT = THREE.RepeatWrapping;
+  normalTexture.colorSpace = THREE.NoColorSpace;
+  normalTexture.magFilter = THREE.LinearFilter;
+  normalTexture.minFilter = THREE.LinearMipmapLinearFilter;
+
+  const roughnessTexture = new THREE.CanvasTexture(roughCanvas);
+  roughnessTexture.wrapS = roughnessTexture.wrapT = THREE.RepeatWrapping;
+  roughnessTexture.colorSpace = THREE.LinearSRGBColorSpace;
+  roughnessTexture.magFilter = THREE.LinearFilter;
+  roughnessTexture.minFilter = THREE.LinearMipmapLinearFilter;
+
+  return {
+    map: mapTexture,
+    normalMap: normalTexture,
+    roughnessMap: roughnessTexture
+  };
+},
 };
 
 const _cache = {};

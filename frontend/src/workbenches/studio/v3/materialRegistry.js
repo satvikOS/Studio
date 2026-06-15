@@ -9,6 +9,10 @@
 // forge-v4/materialRegistry.js (same ids) for cross-app consistency.
 
 export const MATERIALS = {
+  'oak-worn':         { color: 0xb39468, metalness: 0.0, roughness: 0.72 },
+  'steel-anisotropic':{ color: 0xa8acb4, metalness: 0.9, roughness: 0.34 },
+  'velvet':           { color: 0x5a4a6a, metalness: 0.0, roughness: 0.9 },
+  'terracotta':       { color: 0xc4663f, metalness: 0.0, roughness: 0.82 },
   'steel-brushed':   { color: 0xc9ced6, metalness: 0.92, roughness: 0.28, clearcoat: 0.1 },
   'steel-polished':  { color: 0xd2d6dc, metalness: 0.95, roughness: 0.12 },
   'aluminium':       { color: 0xc6c2bb, metalness: 0.88, roughness: 0.38 },
