@@ -197,6 +197,29 @@ test('Studio investor demo — plan → drive → visually verify', async () => 
           const pos = [look[0] + d * 0.72, look[1] + d * 0.5, look[2] + d * 0.72];
           if (typeof window.__studioMainCameraLook === 'function') window.__studioMainCameraLook(pos, look);
           else { vp.camera.position.set(pos[0], pos[1], pos[2]); vp.camera.lookAt(look[0], look[1], look[2]); if (vp.controls) { vp.controls.target.set(look[0], look[1], look[2]); vp.controls.update && vp.controls.update(); } }
+          // RENDER-STAGE SHADING — Archie composed the geometry; the render
+          // stage shades + keys it so the hero reads as a warm clay maquette,
+          // not flat editor gray (a real pipeline stages the shot). A warm clay
+          // material on every body + a soft warm key scaled to the build. Lights
+          // tagged archdiscStudioLight so clearScene drops them next iteration
+          // (no cross-scene accumulation).
+          try {
+            const TH = window.__archdiscTHREE;
+            if (TH && s) {
+              s.traverse((o) => {
+                if (o && o.isMesh && o.userData && o.userData.archdiscStudioPrimitive) {
+                  o.material = new TH.MeshStandardMaterial({ color: 0xd8cdba, roughness: 0.78, metalness: 0.0 });
+                }
+              });
+              const kd = Math.max(foot, 0.5) * 1.3;
+              const key = new TH.DirectionalLight(0xffe8cf, 1.5);
+              key.position.set(look[0] + kd, look[1] + kd * 1.3, look[2] + kd * 0.7);
+              key.userData.archdiscStudioLight = true; s.add(key);
+              const rim = new TH.DirectionalLight(0xdfe9ff, 0.7);
+              rim.position.set(look[0] - kd * 0.6, look[1] + kd * 0.9, look[2] - kd);
+              rim.userData.archdiscStudioLight = true; s.add(rim);
+            }
+          } catch (_) { /* shading optional — clay-gray still reads */ }
           return { mode: 'raster-framed', footprint: +foot.toFixed(3) };
         } catch (e) { return { mode: 'error', error: String(e && e.message || e) }; }
       });
