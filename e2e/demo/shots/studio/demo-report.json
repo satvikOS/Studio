@@ -1,0 +1,104 @@
+[
+ {
+  "id": "scandi-living-room",
+  "title": "Scandinavian living-room hero shot (golden hour)",
+  "ref": "V-505/staged DoD-1",
+  "passed": true,
+  "stats": {
+   "prims": 6,
+   "lights": 3,
+   "physMats": 0,
+   "offOrigin": 6,
+   "cam": [
+    0.3,
+    0.2,
+    0.3
+   ],
+   "camMoved": false,
+   "lightsDelta": 0
+  },
+  "finals": [
+   "front",
+   "iso",
+   "right",
+   "top",
+   "close"
+  ],
+  "render": {
+   "mode": "raster-framed",
+   "footprint": 8.693
+  },
+  "deliverable": {
+   "files": [
+    "scandi-living-room.glb (73080B)",
+    "scandi-living-room.gltf (83133B)",
+    "scandi-living-room-render.png",
+    "scandi-living-room-plan.md"
+   ]
+  }
+ },
+ {
+  "id": "bedroom-minimalist",
+  "title": "Modern minimalist bedroom (warm accent)",
+  "ref": "staged DoD-4",
+  "passed": true,
+  "stats": {
+   "prims": 5,
+   "lights": 3,
+   "physMats": 0,
+   "offOrigin": 5,
+   "cam": [
+    6.77,
+    6.55,
+    7.24
+   ],
+   "camMoved": false,
+   "lightsDelta": 0
+  },
+  "finals": [
+   "front",
+   "iso",
+   "right",
+   "top",
+   "close"
+  ],
+  "render": {
+   "mode": "raster-framed",
+   "footprint": 6.244
+  },
+  "deliverable": {
+   "files": [
+    "bedroom-minimalist.glb (44668B)",
+    "bedroom-minimalist.gltf (45330B)",
+    "bedroom-minimalist-render.png",
+    "bedroom-minimalist-plan.md"
+   ]
+  }
+ },
+ {
+  "id": "product-pedestal",
+  "title": "Hero product shot on a pedestal (high-key)",
+  "ref": "V-825-class product viz",
+  "passed": false,
+  "stats": {
+   "prims": 3,
+   "lights": 3,
+   "physMats": 0,
+   "offOrigin": 3,
+   "cam": [
+    5.22,
+    4.92,
+    5.19
+   ],
+   "camMoved": false,
+   "lightsDelta": 0
+  },
+  "finals": [],
+  "render": {
+   "mode": "skipped"
+  },
+  "deliverable": {
+   "files": []
+  }
+ }
+]

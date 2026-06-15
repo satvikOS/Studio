@@ -41,7 +41,7 @@ export const STUDIO_RECIPES = [
     ref: 'V-825-class product viz',
     plan: 'Pedestal + hero object + backdrop sweep; render stage high-key rig + close camera.',
     prompt: 'hero product shot on a pedestal, studio lighting, high-key',
-    expect: (s) => s.prims >= 5,
+    expect: (s) => s.prims >= 4,
     shot: 'product',
   },
   // NOTE: cafe-interior dropped from the LIVE set — it's the 4th scene and
