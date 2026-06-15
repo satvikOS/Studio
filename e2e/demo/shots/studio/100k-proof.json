@@ -1,0 +1,19 @@
+{
+ "buildMs": 38,
+ "instMeshes": 12,
+ "totalInst": 109416,
+ "stats": {
+  "totalInstances": 36472,
+  "activeMeshes": 12,
+  "chunks": 64,
+  "chunkSize": 50
+ },
+ "extent": [
+  407,
+  21,
+  406
+ ],
+ "drawCalls": 15,
+ "tris": 8941120,
+ "fps": 60
+}

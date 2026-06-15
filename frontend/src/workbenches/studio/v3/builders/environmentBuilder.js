@@ -356,7 +356,7 @@ function selectLOD(distanceSq) {
 // ───────────────────────────────────────────────────────────────────────────
 
 export function buildEnvironment({ preset = 'forest', count = 100000, seed = 42 } = {}) {
-  const scene = (typeof window !== 'undefined') && (window.__archdiscScene || (window.__archdiscViewport?.scene?.()));
+  const scene = (typeof window !== 'undefined') && (window.__archdiscScene || (window.__archdiscViewport?.scene));
   if (!scene) throw new Error('buildEnvironment: no scene');
 
   const rng = makeRng(seed);
@@ -507,7 +507,7 @@ export function buildEnvironment({ preset = 'forest', count = 100000, seed = 42 
 // ───────────────────────────────────────────────────────────────────────────
 
 function installEnvironmentUpdateLoop(env) {
-  const camera = (typeof window !== 'undefined') && window.__archdiscViewport?.camera?.();
+  const camera = (typeof window !== 'undefined') && window.__archdiscViewport?.camera;
   if (!camera) return;
 
   // Attach update to r3f frame loop via window callback
