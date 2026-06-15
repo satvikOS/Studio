@@ -35,6 +35,7 @@
 
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { Canvas, useThree, useFrame } from '@react-three/fiber';
+import { AAAPost } from '../workbenches/studio/v3/rtgpu/postStack.jsx';
 import { Grid, OrbitControls, TransformControls as DreiTransformControls,
          GizmoHelper, GizmoViewport, Line } from '@react-three/drei';
 import * as THREE from 'three';
@@ -394,6 +395,7 @@ function Viewport3D() {
             />
           </GizmoHelper>
         )}
+        {presenting && <AAAPost />}
       </Canvas>
       {/* Slice 951i — Frame-All centre button. Pinned to viewport
           bottom-right just above the navigation cube. Click reframes

@@ -38,25 +38,41 @@ test('100k environment proof', async () => {
   console.log('[100k] build: ' + JSON.stringify(built).slice(0, 600));
   if (built.error) { console.log('[100k] BUILD FAILED'); await app.close(); throw new Error(built.error); }
 
-  // FRAME an aerial 3/4 over the environment + measure draw calls on render
+  // CLEAN HERO: presentation mode (hides editor chrome via CSS + mounts the AAA
+  // post-FX stack via the viewport `presenting` flag), deselect, cinematic
+  // low drone camera skimming the canopy toward the horizon.
   const view = await win.evaluate(async () => {
+    try { window.dispatchEvent(new CustomEvent('studio-presentation-toggle')); } catch (_) {}
+    try { window.__studioDeselect && window.__studioDeselect(); } catch (_) {}
     const s = window.__archdiscScene; const vp = window.__archdiscViewport;
     const TH = window.__archdiscTHREE;
     const box = new TH.Box3().setFromObject(s);
     const c = box.getCenter(new TH.Vector3()); const sz = box.getSize(new TH.Vector3());
-    const r = Math.max(sz.x, sz.z) * 0.55;
-    const pos = [c.x + r * 0.9, c.y + r * 0.6, c.z + r * 0.9];
-    const look = [c.x, c.y + sz.y * 0.1, c.z];
+    const r = Math.max(sz.x, sz.z) * 0.5;
+    // DAYLIGHT — outdoor env needs a real sun + sky (editor lights are dim).
+    const sun = new TH.DirectionalLight(0xfff2dc, 3.2);
+    sun.position.set(c.x + r, c.y + r * 1.2, c.z + r * 0.6);
+    sun.userData.archdiscStudioLight = true; s.add(sun);
+    const sky = new TH.HemisphereLight(0xbfd4ff, 0x4a5a3a, 1.1);
+    sky.userData.archdiscStudioLight = true; s.add(sky);
+    // sky dome colour + atmospheric fog → horizon reads as sky (not black void)
+    // and distant instances fade into haze (depth cue + hides the LOD edge).
+    const SKY = new TH.Color(0x9fbce0);
+    s.userData._prevBg = s.background; s.background = SKY;
+    s.userData._prevFog = s.fog; s.fog = new TH.Fog(SKY, r * 0.6, r * 2.2);
+    // elevated 3/4 drone over the canopy (higher → reads the full field, not dark floor)
+    const pos = [c.x - r * 0.8, c.y + r * 0.5, c.z - r * 0.8];
+    const look = [c.x + r * 0.25, c.y + sz.y * 0.4, c.z + r * 0.25];
     if (window.__studioMainCameraLook) window.__studioMainCameraLook(pos, look);
     else if (vp?.camera) { vp.camera.position.set(...pos); vp.camera.lookAt(...look); }
-    // draw calls: force a render + read renderer.info
     const rend = vp?.renderer; let drawCalls = null, tris = null;
     if (rend && vp.camera) { rend.render(s, vp.camera); drawCalls = rend.info.render.calls; tris = rend.info.render.triangles; }
     return { extent: [Math.round(sz.x), Math.round(sz.y), Math.round(sz.z)], drawCalls, tris };
   });
   console.log('[100k] view: ' + JSON.stringify(view));
 
-  await win.waitForTimeout(600);
+  // let the post-FX composer (N8AO/bloom/SMAA/ACES) mount + converge
+  await win.waitForTimeout(1500);
 
   // FPS: count animation frames over 2s (raster real-time proxy; 60 = vsync-capped)
   const fps = await win.evaluate(() => new Promise((res) => {
