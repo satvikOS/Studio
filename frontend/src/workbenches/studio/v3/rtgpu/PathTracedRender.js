@@ -20,6 +20,38 @@ import {
   BlurredEnvMapGenerator,
 } from 'three-gpu-pathtracer';
 import { MATERIALS, resolveMaterial } from '../materialRegistry.js';
+import { texturesFor } from './proceduralTextures.js';
+
+// Real-world tile size (metres per texture repeat) per material → UV repeat is
+// scaled to each body's actual size so grain/weave reads at a believable scale.
+const TILE_M = {
+  'wood-oak': 0.6, 'wood-walnut': 0.6, 'fabric-grey': 0.16, 'fabric-linen': 0.16,
+  'leather-tan': 0.32, 'marble-white': 1.1, 'steel-brushed': 0.4, 'concrete': 0.85,
+  'ceramic-white': 0.5,
+};
+
+// Assign procedural color/roughness/normal maps to a material, UV-repeat scaled
+// to the body's world size. Textures are cloned per body (shared image source →
+// the path tracer dedupes the bitmap, but per-body repeat is honoured).
+function applyProceduralTexture(THREE, mat, geo, matId) {
+  const tex = texturesFor(matId);
+  if (!tex) return;
+  if (!geo.boundingBox) geo.computeBoundingBox();
+  const sz = geo.boundingBox.getSize(new THREE.Vector3());
+  const tile = TILE_M[matId] || 0.5;
+  const ru = Math.max(1, Math.round(Math.max(sz.x, sz.z) / tile));
+  const rv = Math.max(1, Math.round(Math.max(sz.y, (sz.x + sz.z) / 2) / tile));
+  const assign = (slot, t) => {
+    if (!t) return;
+    const c = t.clone(); c.needsUpdate = true;
+    c.wrapS = c.wrapT = THREE.RepeatWrapping; c.repeat.set(ru, rv);
+    mat[slot] = c;
+  };
+  assign('map', tex.map);
+  assign('roughnessMap', tex.roughnessMap);
+  assign('normalMap', tex.normalMap);
+  if (mat.normalMap) { mat.normalScale = new THREE.Vector2(0.7, 0.7); try { geo.computeTangents(); } catch (_) { mat.normalMap = null; } }
+}
 
 // Interior-friendly procedural environments (gradient equirect → IBL).
 const ENV_PRESETS = Object.freeze({
@@ -100,8 +132,11 @@ function harvestScene() {
   for (const m of live) {
     if (!m || !m.geometry) continue;
     const tag = m.userData && m.userData.studioMaterial;
-    const spec = tag ? resolveMaterial(tag) : MATERIALS[FALLBACK_PALETTE[pi++ % FALLBACK_PALETTE.length]];
-    const clone = new THREE.Mesh(m.geometry.clone(), physMatFrom(spec));
+    const matId = tag || FALLBACK_PALETTE[pi++ % FALLBACK_PALETTE.length];
+    const geo = m.geometry.clone();
+    const mat = physMatFrom(resolveMaterial(matId));
+    applyProceduralTexture(THREE, mat, geo, matId);
+    const clone = new THREE.Mesh(geo, mat);
     if (m.matrixWorld) clone.applyMatrix4(m.matrixWorld);
     else { clone.position.copy(m.position); clone.quaternion.copy(m.quaternion); clone.scale.copy(m.scale); }
     clone.castShadow = true; clone.receiveShadow = true;
@@ -118,10 +153,10 @@ function harvestScene() {
   out.userData.sceneRadius = Math.max(size.length() / 2, 0.5);
   out.userData.sceneFootprint = Math.max(size.x, size.z, 0.5);
   const span = Math.max(size.x, size.z) * 4 + 2;
-  const floor = new THREE.Mesh(
-    new THREE.PlaneGeometry(span, span),
-    physMatFrom({ color: 0x9b9389, metalness: 0.0, roughness: 0.92 }),
-  );
+  const floorGeo = new THREE.PlaneGeometry(span, span);
+  const floorMat = physMatFrom({ color: 0xb8a888, metalness: 0.0, roughness: 0.7 });
+  applyProceduralTexture(THREE, floorMat, floorGeo, 'wood-oak');  // warm wood floor
+  const floor = new THREE.Mesh(floorGeo, floorMat);
   floor.rotation.x = -Math.PI / 2;
   floor.position.set(center.x, box.min.y - 0.002, center.z);
   floor.receiveShadow = true;
