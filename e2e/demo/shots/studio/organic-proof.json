@@ -1,0 +1,77 @@
+{
+ "rock": {
+  "stats": {
+   "form": "rock",
+   "verts": 10242,
+   "tris": 20480,
+   "seed": 7
+  },
+  "extent": [
+   5.02,
+   4.65,
+   4.93
+  ],
+  "drawCalls": 1,
+  "tris": 20480
+ },
+ "skull": {
+  "stats": {
+   "form": "skull",
+   "verts": 10242,
+   "tris": 20480,
+   "seed": 7
+  },
+  "extent": [
+   4.44,
+   5.1,
+   4.54
+  ],
+  "drawCalls": 1,
+  "tris": 20480
+ },
+ "stump": {
+  "stats": {
+   "form": "stump",
+   "verts": 10242,
+   "tris": 20480,
+   "seed": 7
+  },
+  "extent": [
+   4.52,
+   6.62,
+   4.5
+  ],
+  "drawCalls": 1,
+  "tris": 20480
+ },
+ "vessel": {
+  "stats": {
+   "form": "vessel",
+   "verts": 10242,
+   "tris": 20480,
+   "seed": 7
+  },
+  "extent": [
+   4.6,
+   5.85,
+   4.59
+  ],
+  "drawCalls": 1,
+  "tris": 20480
+ },
+ "creature": {
+  "stats": {
+   "form": "creature",
+   "verts": 10242,
+   "tris": 20480,
+   "seed": 7
+  },
+  "extent": [
+   6.55,
+   5.04,
+   4.92
+  ],
+  "drawCalls": 1,
+  "tris": 20480
+ }
+}
