@@ -16,6 +16,7 @@ import * as THREE from 'three';
 import { countPrimitives, clearPrimitives, spawnPrimitive } from './spawn';
 import { installStudioPathTracer } from './rtgpu/PathTracedRender.js';
 import { installStudioComposer } from './builders/sceneComposer.js';
+import { installEnvironmentBuilder } from './builders/environmentBuilder.js';
 
 // ─── Edit-mode state (slice 376/377 V2 equivalent) ───────────────────────
 const validEditModes = new Set(['object', 'vertex', 'edge', 'face', 'sculpt']);
@@ -156,6 +157,7 @@ export function registerV3Api() {
   // parametric furniture composer (window.__studioComposeScene).
   try { installStudioPathTracer(); } catch (_) {}
   try { installStudioComposer(); } catch (_) {}
+  try { installEnvironmentBuilder(); } catch (_) {}
 
   // Edit-mode state.
   if (!window.__studioEditModeRef) window.__studioEditModeRef = { current: 'object' };
