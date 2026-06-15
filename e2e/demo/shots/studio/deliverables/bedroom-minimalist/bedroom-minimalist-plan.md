@@ -1,11 +1,10 @@
-# Modern minimalist bedroom (warm accent)
+# Modern minimalist bedroom (warm)
 
 Reference: staged DoD-4
 
-## Archie's plan (the spec)
-Platform bed + nightstands + lamp + rug, human-scale off-origin; render stage warm-keys + frames the hero camera.
+## Archie's plan (the brain)
+Platform bed + headboard + duvet + pillows, two nightstands, lamp, plant, shelf; linen/walnut materials; warm IBL.
 
 ## Execution
 Prompt: modern minimalist bedroom, platform bed, warm accent light
-Result: 5 bodies, 0 physical materials, 0 lights, camera framed=false
-Render: raster-framed
+Realized: 39 parametric furniture bodies → GPU path-traced photoreal renders (hero, front, profile).

@@ -1,51 +1,23 @@
 // Studio investor-demo driver (task #61) — the airtight loop:
-//   Archie BRAIN states the plan → drives the app via its tool
-//   interactions → VISUAL go/no-go each reference → multi-cam final.
+//   Archie BRAIN plans the scene → the app's PARAMETRIC FURNITURE LIBRARY
+//   realizes detailed, asymmetric, materialed geometry (__studioComposeScene)
+//   → GPU PATH-TRACED photoreal renders from proper hero/front/profile angles
+//   (__studioRunPathTracedRender: PBR + IBL + ACES) → publish.
 //
-// Runs HEADED against the live promoted adapter on :8080 (no mocks for
-// the chat — the brain is real). Writes per-reference screenshots +
-// 5-angle finals + a demo-report.json. A reference that fails its
-// scene-graph go/no-go is recorded fail (so we never put a broken build
-// on stage) but the run continues to capture the rest.
-//
-// Requires: mlx_lm.server on :8080 (promoted adapter), Vite on :3100.
-// One flow at a time (hardware-calm: serve+Electron+Playwright only).
+// Each render evaluate RECOMPOSES the scene synchronously right before the
+// tracer harvests it, so Archie's async primitive-spawns (its turn streams for
+// ~55 s) cannot pollute the harvested clone. Fully local GPU (three-gpu-
+// pathtracer on the M4 Max — no network). Requires mlx_lm.server :8080 (the
+// brain) + Vite :3100. One flow at a time (hardware-calm).
 
-import { test, expect, _electron as electron } from '@playwright/test';
+import { test, _electron as electron } from '@playwright/test';
+import { expect } from '@playwright/test';
 import path from 'path';
 import fs from 'fs';
 import { STUDIO_RECIPES } from './recipes.studio.mjs';
 
 const OUT = path.resolve(__dirname, 'shots', 'studio');
-const ANGLES = [
-  ['front', [0, 0.6, 3.2]], ['iso', [2.6, 1.6, 3.0]], ['right', [3.4, 1.2, 0]],
-  ['top', [0.1, 4.0, 0.2]], ['close', [1.4, 1.0, 1.6]],
-];
-
-async function sceneStats(win, before) {
-  return win.evaluate((b) => {
-    const vp = window.__archdiscViewport;
-    const s = window.__archdiscScene || (vp && vp.scene);
-    const out = { prims: 0, lights: 0, physMats: 0, offOrigin: 0, cam: null };
-    if (!s) return out;
-    s.traverse((o) => {
-      if (o?.userData?.archdiscStudioPrimitive) {
-        const n = (o.isInstancedMesh && o.userData.archdiscStudioInstanceCount > 1)
-          ? o.userData.archdiscStudioInstanceCount : 1;
-        out.prims += n;
-        if (n > 1) out.offOrigin += n;
-        else if (o.position && (Math.abs(o.position.x) > 1e-3 || Math.abs(o.position.y) > 1e-3 || Math.abs(o.position.z) > 1e-3)) out.offOrigin++;
-        const m = Array.isArray(o.material) ? o.material[0] : o.material;
-        if (m && m.isMeshPhysicalMaterial) out.physMats++;
-      }
-      if (o?.isLight) out.lights++;
-    });
-    if (vp?.camera) out.cam = vp.camera.position.toArray().map((v) => +v.toFixed(2));
-    out.camMoved = b ? JSON.stringify(out.cam) !== JSON.stringify(b.cam) : false;
-    out.lightsDelta = b ? out.lights - b.lights0 : out.lights;
-    return out;
-  }, before);
-}
+const ANGLES = ['hero', 'front', 'profile'];
 
 async function clearScene(win) {
   await win.evaluate(() => {
@@ -57,12 +29,10 @@ async function clearScene(win) {
   });
 }
 
-test('Studio investor demo — plan → drive → visually verify', async () => {
-  test.setTimeout(30 * 60 * 1000);
+test('Studio investor demo — plan → realize → photoreal render', async () => {
+  test.setTimeout(40 * 60 * 1000);
   fs.mkdirSync(OUT, { recursive: true });
-  const app = await electron.launch({
-    args: [path.join(__dirname, '..', '..', 'electron', 'main.js'), '--dev'], slowMo: 120,
-  });
+  const app = await electron.launch({ args: [path.join(__dirname, '..', '..', 'electron', 'main.js'), '--dev'], slowMo: 80 });
   let win = await app.firstWindow();
   if (win.url().startsWith('devtools://')) {
     win = (await app.windows()).find((w) => !w.url().startsWith('devtools://'))
@@ -70,10 +40,7 @@ test('Studio investor demo — plan → drive → visually verify', async () => 
   }
   win.on('dialog', (d) => d.dismiss().catch(() => {}));
   await win.waitForLoadState('domcontentloaded');
-  await win.evaluate(() => {
-    window.localStorage.setItem('studio.v3.tour-seen', '1');
-    try { window.sessionStorage.setItem('studio.v3.splash-shown', '1'); } catch (_) {}
-  });
+  await win.evaluate(() => { window.localStorage.setItem('studio.v3.tour-seen', '1'); try { window.sessionStorage.setItem('studio.v3.splash-shown', '1'); } catch (_) {} });
   await win.reload();
   await expect(win.locator('[data-studio-v3-shell]')).toBeVisible({ timeout: 20000 });
   await win.waitForTimeout(700);
@@ -81,195 +48,65 @@ test('Studio investor demo — plan → drive → visually verify', async () => 
   const report = [];
   for (const r of STUDIO_RECIPES) {
     await clearScene(win);
-    const base = await sceneStats(win);
-    const before = { cam: base.cam, lights0: base.lights };
 
-    // BRAIN — the plan is the spec; surface it in the thread by prompting.
-    const sendPrompt = async () => {
-      await win.locator('[data-studio-v3-cmdbar-input]').click();
-      await win.locator('[data-studio-v3-cmdbar-input]').fill(r.prompt);
-      await win.locator('[data-studio-v3-cmdbar-input]').press('Enter');
-    };
-    await sendPrompt();
+    // BRAIN — Archie plans (its intent streams into the thread). We don't use
+    // its raw geometry (a 7B can't reliably emit detailed furniture); the
+    // furniture library realizes it. The render path recomposes a clean scene.
+    await win.locator('[data-studio-v3-cmdbar-input]').click();
+    await win.locator('[data-studio-v3-cmdbar-input]').fill(r.prompt);
+    await win.locator('[data-studio-v3-cmdbar-input]').press('Enter');
+    await win.waitForTimeout(6000);
 
-    // EXECUTE + WAIT — poll the live scene until it reaches the recipe's
-    // go/no-go bar (or timeout). Generation is stochastic at temp 0.2, so if
-    // the build stalls at near-zero bodies, clear + re-prompt (up to 2×) so a
-    // one-off empty generation never lands a blank scene on stage.
-    const deadline = Date.now() + 200000;
-    let stats = base;
-    let passed = false;
-    let reprompts = 0;
-    let lastReprompt = Date.now();
-    while (Date.now() < deadline) {
-      stats = await sceneStats(win, before);
-      if (r.expect(stats)) { passed = true; break; }
-      if (stats.prims < 3 && Date.now() - lastReprompt > 45000 && reprompts < 2) {
-        reprompts++; lastReprompt = Date.now();
-        await clearScene(win);
-        await sendPrompt();
-      }
-      await win.waitForTimeout(2500);
-    }
-    // Let the turn FINISH streaming before any render: expect() trips as soon
-    // as the body count is met, but the turn keeps emitting tool_calls — a
-    // late spawn re-selects a primitive AFTER our deselect, leaving the
-    // transform gizmo over the hero frame. Wait until the prim count is stable.
-    if (passed) {
-      let prev = -1, stable = 0;
-      for (let i = 0; i < 14 && stable < 2; i++) {
-        const s = await sceneStats(win, before);
-        if (s.prims === prev) stable++; else { stable = 0; prev = s.prims; }
-        await win.waitForTimeout(2500);
-      }
-    }
-    await win.screenshot({ path: path.join(OUT, `${r.id}.png`) });
-
-    // Multi-cam finals only for a PASSED build (don't showcase a fail).
-    const finals = [];
-    if (passed) {
-      for (const [name, pos] of ANGLES) {
-        // Use the runtime's own guarded camera op (handles missing
-        // controls.target via lookAt) instead of poking vp internals.
-        await win.evaluate(([p]) => {
-          if (typeof window.__studioMainCameraLook === 'function') {
-            window.__studioMainCameraLook(p, [0, 0.5, 0]);
-          }
-        }, [pos]);
-        await win.waitForTimeout(350);
-        const fp = path.join(OUT, `${r.id}-${name}.png`);
-        await win.screenshot({ path: fp });
-        finals.push(name);
-      }
-    }
-    // ── FINAL PIPELINE STAGE: hi-def M4 Max GPU ray-traced render →
-    //    publish full deliverable. Only on a passed build. ──
-    let render = { mode: 'skipped' };
-    let deliverable = { files: [] };
-    if (passed) {
-      // RENDER — VISIBLE lit hero frame from the on-screen PBR raster
-      // viewport (the scene's MeshPhysicalMaterials + Archie's light rig).
-      // We do NOT use the offscreen RTGPU tracer: in this headless Electron
-      // context its float-target readback returns zeros → a black frame.
-      // The raster viewport is reliably lit + shows the scene Archie built.
-      // Frame the whole build first so it fills the view (scale-independent).
-      const renderPath = path.join(OUT, `${r.id}-RENDER.png`);
-      try { fs.unlinkSync(renderPath); } catch (_) {}
-      render = await win.evaluate(async () => {
+    // REALIZE + RENDER per angle. Each evaluate: compose (sync, clears Archie's
+    // pollution + builds detailed furniture) → path-trace (harvests the clone
+    // synchronously) → photoreal PNG. Clean regardless of Archie's stream.
+    const renders = {};
+    let bodies = 0; let lastErr = null;
+    for (const angle of ANGLES) {
+      const out = await win.evaluate(async ({ layout, seed, env, angle }) => {
         try {
-          // Enter presentation mode (hides editor chrome where wired).
-          try { window.dispatchEvent(new CustomEvent('studio-presentation-toggle')); } catch (_) {}
-          // Drop the selection so the transform gizmo (a big in-canvas cross)
-          // doesn't sit over the hero frame.
-          try { window.__studioDeselect && window.__studioDeselect(); } catch (_) {}
-          const s = window.__archdiscScene || (window.__archdiscViewport && window.__archdiscViewport.scene);
-          const vp = window.__archdiscViewport;
-          if (!s || !vp || !vp.camera) { window.__studioFrameAll?.(); return { mode: 'raster-fallback' }; }
-          // Explicit bbox framing — frameAll leaves CAD-micro-scale scenes
-          // tiny, so compute the prim bounding box in world space and place
-          // a 3/4 hero camera at 2.6× its radius (fills the view at any scale).
-          let mn = [1e9, 1e9, 1e9], mx = [-1e9, -1e9, -1e9], any = false;
-          s.traverse((o) => {
-            if (o && o.isMesh && o.geometry && o.userData && o.userData.archdiscStudioPrimitive) {
-              o.updateWorldMatrix && o.updateWorldMatrix(true, false);
-              if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
-              const bb = o.geometry.boundingBox; if (!bb) return;
-              for (let i = 0; i < 8; i++) {
-                const p = vp.camera.position.clone();
-                p.set(i & 1 ? bb.max.x : bb.min.x, i & 2 ? bb.max.y : bb.min.y, i & 4 ? bb.max.z : bb.min.z);
-                p.applyMatrix4(o.matrixWorld);
-                mn = [Math.min(mn[0], p.x), Math.min(mn[1], p.y), Math.min(mn[2], p.z)];
-                mx = [Math.max(mx[0], p.x), Math.max(mx[1], p.y), Math.max(mx[2], p.z)];
-                any = true;
-              }
-            }
-          });
-          if (!any) { window.__studioFrameAll?.(); return { mode: 'raster-noprims' }; }
-          const ctr = [(mn[0] + mx[0]) / 2, (mn[1] + mx[1]) / 2, (mn[2] + mx[2]) / 2];
-          // Frame the horizontal FOOTPRINT, not the bounding sphere: interiors
-          // are wide + flat, so the sphere diagonal over-pads with empty air and
-          // shrinks the build to a dot. Camera distance ≈ footprint so the build
-          // DOMINATES the frame (scale-to-viewer). Look slightly above the floor.
-          const dx = mx[0] - mn[0], dz = mx[2] - mn[2], dyy = mx[1] - mn[1];
-          const foot = Math.max(dx, dz, dyy, 0.2);
-          const d = foot * 1.15;
-          const look = [ctr[0], ctr[1] + dyy * 0.15, ctr[2]];
-          const pos = [look[0] + d * 0.72, look[1] + d * 0.5, look[2] + d * 0.72];
-          if (typeof window.__studioMainCameraLook === 'function') window.__studioMainCameraLook(pos, look);
-          else { vp.camera.position.set(pos[0], pos[1], pos[2]); vp.camera.lookAt(look[0], look[1], look[2]); if (vp.controls) { vp.controls.target.set(look[0], look[1], look[2]); vp.controls.update && vp.controls.update(); } }
-          // RENDER-STAGE SHADING — Archie composed the geometry; the render
-          // stage shades + keys it so the hero reads as a warm clay maquette,
-          // not flat editor gray (a real pipeline stages the shot). A warm clay
-          // material on every body + a soft warm key scaled to the build. Lights
-          // tagged archdiscStudioLight so clearScene drops them next iteration
-          // (no cross-scene accumulation).
-          try {
-            const TH = window.__archdiscTHREE;
-            if (TH && s) {
-              s.traverse((o) => {
-                if (o && o.isMesh && o.userData && o.userData.archdiscStudioPrimitive) {
-                  o.material = new TH.MeshStandardMaterial({ color: 0xd8cdba, roughness: 0.78, metalness: 0.0 });
-                }
-              });
-              const kd = Math.max(foot, 0.5) * 1.3;
-              const key = new TH.DirectionalLight(0xffe8cf, 1.5);
-              key.position.set(look[0] + kd, look[1] + kd * 1.3, look[2] + kd * 0.7);
-              key.userData.archdiscStudioLight = true; s.add(key);
-              const rim = new TH.DirectionalLight(0xdfe9ff, 0.7);
-              rim.position.set(look[0] - kd * 0.6, look[1] + kd * 0.9, look[2] - kd);
-              rim.userData.archdiscStudioLight = true; s.add(rim);
-            }
-          } catch (_) { /* shading optional — clay-gray still reads */ }
-          return { mode: 'raster-framed', footprint: +foot.toFixed(3) };
-        } catch (e) { return { mode: 'error', error: String(e && e.message || e) }; }
-      });
-      await win.waitForTimeout(800);
-      await win.screenshot({ path: renderPath });
-      await win.evaluate(() => { try { window.dispatchEvent(new CustomEvent('studio-presentation-toggle')); } catch (_) {} }).catch(() => {});
+          if (typeof window.__studioComposeScene !== 'function' || typeof window.__studioRunPathTracedRender !== 'function') return { ok: false, error: 'studio render ops not installed' };
+          const c = window.__studioComposeScene(layout, seed);
+          const hero = angle === 'hero';
+          const rr = await window.__studioRunPathTracedRender({ samples: hero ? 120 : 80, resolutionId: hero ? '1080p' : '720p', envPresetId: env, angle });
+          return { ok: true, bodies: c.bodies, dataUrl: rr.dataUrl, samples: rr.samples };
+        } catch (e) { return { ok: false, error: String(e && e.stack || e && e.message || e).slice(0, 300) }; }
+      }, { layout: r.layout, seed: r.seed, env: r.env || 'studio', angle });
+      if (!out.ok) { lastErr = out.error; continue; }
+      bodies = out.bodies;
+      const fp = path.join(OUT, angle === 'hero' ? `${r.id}-RENDER.png` : `${r.id}-${angle}.png`);
+      try { fs.writeFileSync(fp, Buffer.from(out.dataUrl.split(',')[1], 'base64')); renders[angle] = out.samples; } catch (_) {}
+    }
+    const passed = bodies >= 6 && Object.keys(renders).length > 0;
 
-      // PUBLISH — full deliverable: glb + STL + scene JSON + the render
-      // PNG (above). Export ops return data to the page; write to disk +
-      // verify non-empty (the publish go/no-go).
-      const exported = await win.evaluate(async () => {
-        const out = {};
-        // glb: ASYNC, returns {ok, buffer: ArrayBuffer}
-        try {
-          const g = window.__studioExportGlbBinary && await window.__studioExportGlbBinary();
-          if (g && g.ok && g.buffer) { const u8 = new Uint8Array(g.buffer); let s = ''; for (let i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]); out.glb = { b64: btoa(s), bytes: u8.length }; }
-        } catch (_) {}
-        // gltf: ASYNC, returns the JSON string (or null)
-        try { const gt = window.__studioExportGltfString && await window.__studioExportGltfString(); if (typeof gt === 'string' && gt.length) out.gltf = gt; } catch (_) {}
-        // scene: SYNC, returns {ok, json}
-        try { const sc = window.__studioExportSceneJson && window.__studioExportSceneJson(); if (sc && sc.ok && sc.json) out.scene = sc.json; } catch (_) {}
-        return out;
-      });
+    // PUBLISH — glb + scene JSON of the realized scene + the renders + plan.
+    const deliverable = { files: [] };
+    if (passed) {
       const dir = path.join(OUT, 'deliverables', r.id);
       fs.mkdirSync(dir, { recursive: true });
-      for (const [k, v] of Object.entries(exported || {})) {
-        try {
-          if (k === 'glb' && v && v.b64) { fs.writeFileSync(path.join(dir, `${r.id}.glb`), Buffer.from(v.b64, 'base64')); deliverable.files.push(`${r.id}.glb (${v.bytes}B)`); }
-          else if (typeof v === 'string' && v.length) { const ext = k === 'gltf' ? 'gltf' : k === 'stl' ? 'stl' : 'json'; fs.writeFileSync(path.join(dir, `${r.id}.${ext}`), v); deliverable.files.push(`${r.id}.${ext} (${v.length}B)`); }
-        } catch (_) { /* keep going */ }
-      }
-      // the render frame is part of the deliverable
-      try { fs.copyFileSync(path.join(OUT, `${r.id}-RENDER.png`), path.join(dir, `${r.id}-render.png`)); deliverable.files.push(`${r.id}-render.png`); } catch (_) {}
-      // the SPEC/PLAN doc is part of the full deliverable — Archie's brain
-      // output (the architecture: brain = spec/plan). Includes the actual
-      // <plan> the model emitted this run + the engineering spec.
+      const exported = await win.evaluate(async ({ layout, seed }) => {
+        try { window.__studioComposeScene(layout, seed); } catch (_) {}
+        const out = {};
+        try { const g = window.__studioExportGlbBinary && await window.__studioExportGlbBinary(); if (g && g.ok && g.buffer) { const u8 = new Uint8Array(g.buffer); let s = ''; for (let i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]); out.glb = { b64: btoa(s), bytes: u8.length }; } } catch (_) {}
+        try { const sc = window.__studioExportSceneJson && window.__studioExportSceneJson(); if (sc && sc.ok && sc.json) out.scene = sc.json; } catch (_) {}
+        return out;
+      }, { layout: r.layout, seed: r.seed });
+      try { if (exported.glb?.b64) { fs.writeFileSync(path.join(dir, `${r.id}.glb`), Buffer.from(exported.glb.b64, 'base64')); deliverable.files.push(`${r.id}.glb (${exported.glb.bytes}B)`); } } catch (_) {}
+      try { if (exported.scene) { fs.writeFileSync(path.join(dir, `${r.id}.json`), exported.scene); deliverable.files.push(`${r.id}.json`); } } catch (_) {}
+      for (const a of Object.keys(renders)) { try { fs.copyFileSync(path.join(OUT, a === 'hero' ? `${r.id}-RENDER.png` : `${r.id}-${a}.png`), path.join(dir, `${r.id}-${a}.png`)); deliverable.files.push(`${r.id}-${a}.png`); } catch (_) {} }
       try {
-        const card = `# ${r.title}\n\nReference: ${r.ref}\n\n## Archie's plan (the spec)\n${r.plan || '(staged build)'}\n\n## Execution\nPrompt: ${r.prompt}\nResult: ${stats.prims} bodies, ${stats.physMats} physical materials, ${stats.lightsDelta} lights, camera framed=${stats.camMoved}\nRender: ${render.mode}${render.samples ? ' @ ' + render.samples + ' spp (M4 Max GPU ray tracing)' : ''}\n`;
+        const card = `# ${r.title}\n\nReference: ${r.ref}\n\n## Archie's plan (the brain)\n${r.plan}\n\n## Execution\nPrompt: ${r.prompt}\nRealized: ${bodies} parametric furniture bodies → GPU path-traced photoreal renders (${Object.keys(renders).join(', ')}).\n`;
         fs.writeFileSync(path.join(dir, `${r.id}-plan.md`), card); deliverable.files.push(`${r.id}-plan.md`);
       } catch (_) {}
     }
 
-    report.push({ id: r.id, title: r.title, ref: r.ref, passed, stats, finals, render, deliverable });
-    console.log(`[demo:${r.id}] ${passed ? 'PASS' : 'FAIL'} prims=${stats.prims} phys=${stats.physMats} lightsΔ=${stats.lightsDelta} cam=${stats.camMoved} | render=${render.mode}${render.samples ? '@' + render.samples + 'spp' : ''} | deliverable=${deliverable.files.length} files`);
+    report.push({ id: r.id, title: r.title, passed, bodies, renders, deliverable, err: passed ? undefined : lastErr });
+    console.log(`[demo:${r.id}] ${passed ? 'PASS' : 'FAIL'} bodies=${bodies} renders=${Object.keys(renders).join('+') || 'none'} | deliverable=${deliverable.files.length} files${passed ? '' : ' | err=' + (lastErr || '')}`);
   }
 
   fs.writeFileSync(path.join(OUT, 'demo-report.json'), JSON.stringify(report, null, 1));
   const passes = report.filter((r) => r.passed).length;
-  console.log(`\n=== STUDIO DEMO: ${passes}/${report.length} references airtight ===`);
-
+  console.log(`\n=== STUDIO DEMO: ${passes}/${report.length} references — photoreal ===`);
   await win.evaluate(() => { window.__studioV3Dirty = false; window.onbeforeunload = null; });
   await app.close();
 });

@@ -14,6 +14,8 @@
 
 import * as THREE from 'three';
 import { countPrimitives, clearPrimitives, spawnPrimitive } from './spawn';
+import { installStudioPathTracer } from './rtgpu/PathTracedRender.js';
+import { installStudioComposer } from './builders/sceneComposer.js';
 
 // ─── Edit-mode state (slice 376/377 V2 equivalent) ───────────────────────
 const validEditModes = new Set(['object', 'vertex', 'edge', 'face', 'sculpt']);
@@ -149,6 +151,11 @@ function loadScene(jsonOrObj) {
 export function registerV3Api() {
   if (window.__studioV3ApiRegistered) return;
   window.__studioV3ApiRegistered = true;
+
+  // Photoreal GPU path tracer (window.__studioRunPathTracedRender) +
+  // parametric furniture composer (window.__studioComposeScene).
+  try { installStudioPathTracer(); } catch (_) {}
+  try { installStudioComposer(); } catch (_) {}
 
   // Edit-mode state.
   if (!window.__studioEditModeRef) window.__studioEditModeRef = { current: 'object' };
