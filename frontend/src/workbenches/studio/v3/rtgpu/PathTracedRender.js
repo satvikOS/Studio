@@ -33,12 +33,12 @@ const TILE_M = {
 // Assign procedural color/roughness/normal maps to a material, UV-repeat scaled
 // to the body's world size. Textures are cloned per body (shared image source →
 // the path tracer dedupes the bitmap, but per-body repeat is honoured).
-function applyProceduralTexture(THREE, mat, geo, matId) {
+function applyProceduralTexture(THREE, mat, geo, matId, tileMult = 1) {
   const tex = texturesFor(matId);
   if (!tex) return;
   if (!geo.boundingBox) geo.computeBoundingBox();
   const sz = geo.boundingBox.getSize(new THREE.Vector3());
-  const tile = TILE_M[matId] || 0.5;
+  const tile = (TILE_M[matId] || 0.5) * tileMult;
   const ru = Math.max(1, Math.round(Math.max(sz.x, sz.z) / tile));
   const rv = Math.max(1, Math.round(Math.max(sz.y, (sz.x + sz.z) / 2) / tile));
   const assign = (slot, t) => {
@@ -55,10 +55,10 @@ function applyProceduralTexture(THREE, mat, geo, matId) {
 
 // Interior-friendly procedural environments (gradient equirect → IBL).
 const ENV_PRESETS = Object.freeze({
-  studio:  { top: new THREE.Color(0xffffff), bottom: new THREE.Color(0x3a3a3c), exponent: 1.0, intensity: 1.5 },
-  golden:  { top: new THREE.Color(0xffe6c0), bottom: new THREE.Color(0x3a2a1c), exponent: 1.5, intensity: 1.6 },
-  daylight:{ top: new THREE.Color(0xdfe9ff), bottom: new THREE.Color(0x303338), exponent: 1.1, intensity: 1.4 },
-  warm:    { top: new THREE.Color(0xffd9a8), bottom: new THREE.Color(0x2a2422), exponent: 1.6, intensity: 1.3 },
+  studio:  { top: new THREE.Color(0xffffff), bottom: new THREE.Color(0x70707a), exponent: 0.85, intensity: 2.6 },
+  golden:  { top: new THREE.Color(0xfff0d6), bottom: new THREE.Color(0x6a5640), exponent: 1.1, intensity: 2.7 },
+  daylight:{ top: new THREE.Color(0xeef4ff), bottom: new THREE.Color(0x5c6068), exponent: 0.95, intensity: 2.5 },
+  warm:    { top: new THREE.Color(0xffe7c4), bottom: new THREE.Color(0x584a40), exponent: 1.15, intensity: 2.4 },
 });
 export const STUDIO_ENV_IDS = Object.keys(ENV_PRESETS);
 
@@ -95,6 +95,7 @@ function makeOfflineRenderer() {
   canvas.width = 1280; canvas.height = 720;
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false, powerPreference: 'high-performance' });
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.35; // lift the textured-albedo dimness
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   const wrapper = { canvas, renderer, disposed: false, dispose() { this.disposed = true; try { renderer.dispose(); } catch (_) {} } };
   _rendererSingleton = wrapper;
@@ -155,7 +156,7 @@ function harvestScene() {
   const span = Math.max(size.x, size.z) * 4 + 2;
   const floorGeo = new THREE.PlaneGeometry(span, span);
   const floorMat = physMatFrom({ color: 0xb8a888, metalness: 0.0, roughness: 0.7 });
-  applyProceduralTexture(THREE, floorMat, floorGeo, 'wood-oak');  // warm wood floor
+  applyProceduralTexture(THREE, floorMat, floorGeo, 'wood-oak', 2.6);  // warm wood floor, larger planks
   const floor = new THREE.Mesh(floorGeo, floorMat);
   floor.rotation.x = -Math.PI / 2;
   floor.position.set(center.x, box.min.y - 0.002, center.z);
@@ -211,6 +212,7 @@ export async function runStudioPathTracedRender({ envPresetId = 'studio', sample
   const camera = frameCamera(scene, res.w / res.h, 38, angle);
   const env = buildEnvTexture(envPresetId, renderer);
   scene.environment = env.tex; scene.background = env.tex;
+  scene.environmentIntensity = env.intensity; // IBL brightness (honored by the PT)
 
   const pt = new WebGLPathTracer(renderer);
   pt.tiles.set(3, 3);
