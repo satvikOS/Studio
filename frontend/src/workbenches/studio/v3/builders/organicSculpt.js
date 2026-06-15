@@ -169,17 +169,28 @@ const FORMS = {
   },
   skull(seed) {
     const rng = mulberry32(seed); const S = new SculptSession(1, 5);
-    S.stroke({ brush: 'grab', center: [0, 0.4, 0.2], dir: [0, 0.35, 0.25], radius: 1.3, strength: 1 });   // cranium up/forward
-    S.stroke({ brush: 'grab', center: [0, -0.7, 0.4], dir: [0, -0.35, 0.45], radius: 0.9, strength: 1 });  // jaw/snout fwd-down
-    S.symStroke({ brush: 'crease', center: [0.32, 0.05, 0.78], radius: 0.34, strength: 0.7, hardness: 2.6 }); // eye sockets
+    S.stroke({ brush: 'grab', center: [0, 0.45, 0.15], dir: [0, 0.45, 0.2], radius: 1.35, strength: 1 });    // tall cranium
+    S.stroke({ brush: 'grab', center: [0, -0.75, 0.45], dir: [0, -0.45, 0.5], radius: 0.95, strength: 1 });  // jaw/snout fwd-down
+    S.stroke({ brush: 'flatten', center: [0, -0.2, 1.05], dir: [0, 0, 1], radius: 0.7, strength: 0.45 });    // flatten the face plane
     S.recomputeNormals();
-    S.symStroke({ brush: 'clay', center: [0.34, 0.28, 0.7], radius: 0.3, strength: 0.28 });                 // brow ridge
-    S.symStroke({ brush: 'scrape', center: [0.55, -0.25, 0.5], dir: [0.7, -0.1, 0.5], radius: 0.45, strength: 0.5 }); // cheek hollow
-    S.symStroke({ brush: 'clay', center: [0.18, -0.5, 0.95], radius: 0.22, strength: 0.22 });                // muzzle
+    // deep eye sockets — crease in, then carve with a small grab inward
+    S.symStroke({ brush: 'crease', center: [0.33, 0.08, 0.82], radius: 0.36, strength: 1.0, hardness: 3.2 });
+    S.symStroke({ brush: 'grab', center: [0.33, 0.08, 0.9], dir: [0, 0, -0.28], radius: 0.3, strength: 1 });
     S.recomputeNormals();
-    S.stroke({ brush: 'crease', center: [0, -0.55, 1.0], radius: 0.3, strength: 0.5, hardness: 2.2 });        // mouth line
-    S.erodeAll({ strength: 0.035, freq: 8, seed, octaves: 4 });
-    S.stroke({ brush: 'polish', center: [0, 0.3, 0.9], radius: 0.9, strength: 0.25 });
+    S.symStroke({ brush: 'clay', center: [0.36, 0.34, 0.74], radius: 0.32, strength: 0.34 });                // brow ridge
+    S.symStroke({ brush: 'crease', center: [0.62, 0.12, 0.55], radius: 0.34, strength: 0.55, hardness: 2.8 }); // temple hollow
+    S.symStroke({ brush: 'scrape', center: [0.55, -0.3, 0.55], dir: [0.7, -0.1, 0.5], radius: 0.42, strength: 0.55 }); // cheek hollow
+    S.symStroke({ brush: 'clay', center: [0.5, -0.35, 0.6], radius: 0.26, strength: 0.26 });                  // cheekbone
+    S.recomputeNormals();
+    S.stroke({ brush: 'crease', center: [0, -0.05, 1.08], radius: 0.18, strength: 0.55, hardness: 3.2 });     // nasal ridge
+    S.symStroke({ brush: 'crease', center: [0.12, -0.18, 1.06], radius: 0.13, strength: 0.7, hardness: 3.5 });// nostril hint
+    S.stroke({ brush: 'crease', center: [0, -0.62, 1.02], radius: 0.34, strength: 0.7, hardness: 2.6 });      // mouth line
+    S.symStroke({ brush: 'crease', center: [0.16, -0.62, 1.0], radius: 0.06, strength: 0.5, hardness: 4 });   // teeth gaps
+    S.symStroke({ brush: 'crease', center: [0.3, -0.62, 0.96], radius: 0.06, strength: 0.5, hardness: 4 });
+    S.recomputeNormals();
+    S.erodeAll({ strength: 0.03, freq: 9, seed, octaves: 4 });
+    S.erodeAll({ strength: 0.012, freq: 24, seed: seed + 5, octaves: 2 }); // fine bone-pore micro-detail
+    S.stroke({ brush: 'polish', center: [0, 0.35, 0.85], radius: 0.8, strength: 0.22 });                       // polish the dome only
     return S;
   },
   stump(seed) {
@@ -215,6 +226,7 @@ const FORMS = {
     S.symStroke({ brush: 'crease', center: [0.3, 0.5, 0.9], radius: 0.26, strength: 0.6, hardness: 2.6 });    // eyes
     S.stroke({ brush: 'crease', center: [0, 0.1, 1.05], radius: 0.3, strength: 0.55, hardness: 2.2 });         // mouth
     S.erodeAll({ strength: 0.05, freq: 7, seed, octaves: 4 });
+    S.erodeAll({ strength: 0.018, freq: 22, seed: seed + 7, octaves: 2 }); // fine skin micro-detail
     return S;
   },
 };
