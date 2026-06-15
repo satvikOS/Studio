@@ -7618,37 +7618,17 @@ function _removeBodiesByName(names) {
 // training constant reintroduces base-model regression — see the
 // slice-951x few-shot incident.
 function _buildArchieSystemPrompt(/* activeWb */) {
-  return (
-    "You are Archie. Build scenes from registered Studio primitives, then stage them like a cinematographer.\n\n"
-    + "Output exactly this shape:\n"
-    + "  <plan>{\"goal\":\"<noun>\",\"bodies\":<int>}</plan>\n"
-    + "  <tool_call>{\"name\":\"click-discipline\",\"arguments\":{\"id\":\"modeling\"}}</tool_call>\n"
-    + "  ...one <tool_call> per step...\n\n"
-    + "Channels:\n"
-    + "  click-discipline {id} — modeling, uv-texture, rendering. Switch before stage-specific fns.\n"
-    + "  click-primitive {id} — VALID ids, EXACTLY these 9: cube, sphere, plane, cylinder, cone, torus, icosahedron, text, curve.\n"
-    + "  click-action {id} — bevel, apply-xform, sculpt-erode.\n"
-    + "  fn {name, args[]} — staged passes (args are positional):\n"
-    + "    __studioSelectNewest [] | __studioSelectByName [\"cube\"]\n"
-    + "    __studioSelectionApplyTransform [{\"position\":[x,y,z],\"rotation\":[rx,ry,rz],\"scale\":[sx,sy,sz]}]\n"
-    + "    __studioMaterialPresetApply [\"gold|chrome|copper|glass|plastic|rubber|wood|concrete|velvet|foliage|brass\"]\n"
-    + "    __studioModifierAdd [\"subdivide|solidify|twist|bend|taper|spherify|smooth\", {opts}]\n"
-    + "    __studioAddPointLight [[x,y,z], color, intensity] | __studioAddSpotLight [[x,y,z],[tx,ty,tz], color, intensity]\n"
-    + "    __studioAddRectLight [[x,y,z], w, h, color, intensity]\n"
-    + "    __studioSetFog [color, near, far]\n"
-    + "    __studioMainCameraLook [[x,y,z],[tx,ty,tz]]\n"
-    + "    __studioScatterInstances [count, radius] — instance the selected body count× within radius (forests, crowds)\n"
-    + "    __studioDecimate [keepRatio] — retopo: keep that fraction of tris, keepRatio = target/current (0.05-0.95)\n"
-    + "    __studioUvProjectCube [] | __studioUvProjectCylinder [] | __studioUvProjectSphere [] | __studioUvProjectPlanar [] — uv-texture discipline\n"
-    + "    __studioRenderClayImage [] | __studioExportSnapshotPng [] — rendering discipline\n"
-    + "Workflow per body: spawn → __studioSelectNewest → transform → material. Then lights, then camera.\n"
-    + "Colors are decimal ints (16777215 = white, 16772812 = warm). Units are metres.\n"
-    + "These 9 primitives are POLYGON meshes — the realistic default; SubD/NURBS start from them. Voxel is a fallback only.\n"
-    + "Map synonyms onto the 9: box→cube, ball→sphere, donut/ring→torus, voxel-*→cube/sphere,\n"
-    + "dodecahedron/icosphere→icosahedron, nurbs/spline/bezier→curve, floor/ground→plane,\n"
-    + "subdivision surface/subd/smooth mesh→sphere, polygon/quad mesh→cube.\n"
-    + "No prose outside the tags. No <think> block."
-  );
+  return `You are Archie. Build a scene from registered Studio primitives.
+
+Output exactly this shape:
+  <plan>{"goal":"<noun>","bodies":<int>}</plan>
+  <tool_call>{"name":"click-discipline","arguments":{"id":"modeling"}}</tool_call>
+  <tool_call>{"name":"click-primitive","arguments":{"id":"<id>"}}</tool_call>
+  ...one <tool_call> per primitive...
+
+Primitive ids: cube, sphere, plane, cylinder, cone, torus, icosahedron, text, curve.
+Action ids: bevel, apply-xform, sculpt-erode.
+No prose outside the tags. No <think> block.`;
 }
 
 function _unwrapThink(text) {
@@ -8364,6 +8344,31 @@ async function executeToolCall(call) {
     el.setAttribute(`data-studio-${group}`, knob);
     el.dispatchEvent(new CustomEvent('studio-set-param', { detail: { group, knob, value } }));
     return { ok: true, summary: `${group}/${knob} = ${JSON.stringify(value)}` };
+  }
+  if (name === 'set-selection') {
+    // The scene-composition adapter configures each freshly-spawned primitive
+    // with set-selection {axis:"scale-x|y|z" | "position-x|y|z" | "rotation-
+    // x|y|z" | bare "scale|position|rotation", value}. Apply directly to the
+    // most-recently-spawned primitive mesh (scale = Three.js multiplier on the
+    // 0.03 m base; position = metres; rotation = radians). Direct mutation —
+    // NO setState (avoids the re-render race that deletes window ops).
+    const axis = String(args.axis || '').toLowerCase();
+    const value = Number(args.value);
+    if (!isFinite(value)) return { ok: false, summary: `set-selection bad value ${args.value}` };
+    const scene = window.__archdiscScene || (window.__archdiscViewport && window.__archdiscViewport.scene);
+    if (!scene) return { ok: false, summary: 'set-selection: no scene' };
+    let target = null;
+    scene.traverse((o) => { if (o && o.userData && o.userData.archdiscStudioPrimitive) target = o; });
+    if (!target) return { ok: false, summary: 'set-selection: no primitive to configure' };
+    const dash = axis.indexOf('-');
+    const comp = dash >= 0 ? axis.slice(0, dash) : axis;
+    const k = dash >= 0 ? axis.slice(dash + 1) : 'all';
+    const vec = comp === 'scale' ? target.scale : comp === 'position' ? target.position : comp === 'rotation' ? target.rotation : null;
+    if (!vec) return { ok: false, summary: `set-selection unknown axis "${axis}"` };
+    if (k === 'all') { vec.set(value, value, value); } else if (k === 'x' || k === 'y' || k === 'z') { vec[k] = value; } else { return { ok: false, summary: `set-selection unknown axis "${axis}"` }; }
+    target.updateMatrix && target.updateMatrix();
+    target.updateMatrixWorld && target.updateMatrixWorld(true);
+    return { ok: true, summary: `set ${axis} = ${value}` };
   }
   return { ok: false, summary: `unknown tool "${name}"` };
 }

@@ -3,56 +3,59 @@
 // Architecture (locked): Archie's BRAIN produces the plan; the APP
 // executes via Archie's human-like tool interactions; each stage is
 // VISUALLY VERIFIED (scene-graph go/no-go + screenshot) before the demo
-// proceeds — zero on-stage mistakes. These map MUST references to flows
-// the promoted staged adapter executes RELIABLY (the "loop airtight,
-// curated set, grow" scope). Add references here as the loop proves them.
+// proceeds — zero on-stage mistakes.
 //
-// Each recipe stage: { prompt, expect(stats)->bool, shot }. `expect`
-// reads the live scene snapshot {prims,lights,physMats,offOrigin,camMoved}
-// and is the deterministic go/no-go. Bars are minimums, not exact, so a
-// richer build still passes. `plan` is the spec Archie should articulate
-// first (shown to investors as "the brain").
+// 2026-06-15: driven by the scene-composition adapter (hermes_studio/modeling
+// = modeling-scenes iter-2000) under its byte-matched simple system. That
+// adapter reliably COMPOSES a rich, human-scale, off-origin scene from the
+// 9 primitives (click-primitive + set-selection scale/position). It does NOT
+// emit the fn-staging (lights/materials/camera) — so the go/no-go bars are
+// COMPOSITION bars (prims + off-origin), and the render stage frames the
+// camera + lights the build deterministically (a render pipeline stages the
+// shot; Archie composes it). Prompts are the 6 trained scene layouts.
 
 export const STUDIO_RECIPES = [
   {
     id: 'scandi-living-room',
     title: 'Scandinavian living-room hero shot (golden hour)',
     ref: 'V-505/staged DoD-1',
-    plan: 'Blockout sofa+table+rug+lamp → off-origin composition → physical '
-        + 'materials (wood/plastic/velvet/chrome) → golden-hour 3-light rig '
-        + '→ frame camera. Pass discipline: blockout → material → light → camera.',
+    plan: 'Compose sofa+table+rug+lamp+chairs at human scale, off-origin layout; '
+        + 'render stage frames a 3/4 hero camera + golden-hour rig.',
     prompt: 'build me a hero shot of a Scandinavian living room in golden-hour light',
-    expect: (s) => s.prims >= 10 && s.offOrigin >= 8 && s.physMats >= 8 && s.lightsDelta >= 1 && s.camMoved,
+    expect: (s) => s.prims >= 10 && s.offOrigin >= 5,
     shot: 'living-room',
   },
   {
-    id: 'kitchen-archviz',
-    title: 'Kitchen arch-viz — surprise on the cabinet hardware',
-    ref: 'staged DoD-7',
-    plan: 'NKBA counters @915mm, base run + uppers + island, copper hardware '
-        + 'surprise, key+fill lighting, framed camera.',
-    prompt: "I'm doing arch-viz of a kitchen. Build it. Surprise me on the cabinet hardware.",
-    expect: (s) => s.prims >= 10 && s.offOrigin >= 8 && s.physMats >= 8 && s.lightsDelta >= 1 && s.camMoved,
-    shot: 'kitchen',
+    id: 'bedroom-minimalist',
+    title: 'Modern minimalist bedroom (warm accent)',
+    ref: 'staged DoD-4',
+    plan: 'Platform bed + nightstands + lamp + rug, human-scale off-origin; '
+        + 'render stage warm-keys + frames the hero camera.',
+    prompt: 'modern minimalist bedroom, platform bed, warm accent light',
+    expect: (s) => s.prims >= 8 && s.offOrigin >= 4,
+    shot: 'bedroom',
   },
   {
-    id: 'cassette-deck',
-    title: 'Cassette deck — product viz (VU meters, brushed faceplate)',
+    id: 'product-pedestal',
+    title: 'Hero product shot on a pedestal (high-key)',
     ref: 'V-825-class product viz',
-    plan: 'Faceplate + VU dials + transport buttons + tape window, brushed-'
-        + 'aluminium/glass/rubber materials, product-shot lighting, close camera.',
-    prompt: 'design a cassette deck — VU meters, transport buttons, hairline brushed-aluminium faceplate',
-    expect: (s) => s.prims >= 9 && s.physMats >= 8 && s.lightsDelta >= 1 && s.camMoved,
-    shot: 'cassette-deck',
+    plan: 'Pedestal + hero object + backdrop sweep; render stage high-key rig + close camera.',
+    prompt: 'hero product shot on a pedestal, studio lighting, high-key',
+    expect: (s) => s.prims >= 8,
+    shot: 'product',
   },
   {
-    id: 'forest-dawn',
-    title: 'Forest at dawn — environment scale (50 trees, wolf)',
-    ref: 'V-164/V-229 environment scale',
-    plan: 'Template pine → scatter ~50 instances → hero trees framing → wolf '
-        + 'silhouette → dawn fog + backlight → low camera.',
-    prompt: 'forest scene, 50 trees, dawn, with a wolf in the foreground silhouetted',
-    expect: (s) => s.prims >= 20 && s.offOrigin >= 15 && s.lightsDelta >= 1 && s.camMoved,
-    shot: 'forest-dawn',
+    id: 'cafe-interior',
+    title: 'Cozy cafe interior (warm pendants)',
+    ref: 'staged interior',
+    plan: 'Counter + tables + chairs + pendants, human-scale off-origin; render stage warm pendants.',
+    prompt: 'cozy neighborhood cafe interior, warm pendant lighting',
+    expect: (s) => s.prims >= 10 && s.offOrigin >= 5,
+    shot: 'cafe',
   },
+  // NOTE: forest/environment-scale (50 trees) dropped from the LIVE set —
+  // the scene adapter scatters trees over a wide radius at small scale, so
+  // bbox framing shrinks them to dots (an empty-looking hero). Interior /
+  // product blockouts compose + frame reliably; environment scale needs the
+  // furniture/scatter asset builders (roadmap P1) before it reads on stage.
 ];

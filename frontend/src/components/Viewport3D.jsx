@@ -47,6 +47,14 @@ import { useViewport } from '../contexts/ViewportContext';
 // 50 mm long so they're legible at the default camera (300 mm orbit).
 function OriginAxes() {
   const L = 0.05;
+  // Hide on presentation (clean hero render) — same toggle the grid uses.
+  const [hidden, setHidden] = useState(false);
+  useEffect(() => {
+    const onTog = () => setHidden((v) => !v);
+    window.addEventListener('studio-presentation-toggle', onTog);
+    return () => window.removeEventListener('studio-presentation-toggle', onTog);
+  }, []);
+  if (hidden) return null;
   return (
     <group renderOrder={2}>
       <Line points={[[0, 0, 0], [L, 0, 0]]} color="#e26a6a" lineWidth={1.5} />
@@ -346,6 +354,13 @@ function Viewport3D() {
   const vpCtx = useViewport ? (() => { try { return useViewport(); } catch (_) { return null; } })() : null;
   const theme = (vpCtx && vpCtx.theme) || 'dark';
   const gizmoMode = (vpCtx && vpCtx.gizmoMode) || 'translate';
+  // Hide the bottom-right nav-cube gizmo in presentation (clean hero render).
+  const [presenting, setPresenting] = useState(false);
+  useEffect(() => {
+    const onTog = () => setPresenting((v) => !v);
+    window.addEventListener('studio-presentation-toggle', onTog);
+    return () => window.removeEventListener('studio-presentation-toggle', onTog);
+  }, []);
 
   return (
     <div
@@ -371,12 +386,14 @@ function Viewport3D() {
         />
         <SelectionLayer selectedRef={selectedRef} setSelected={setSelectedAndRef} />
         <TransformLayer selected={selected} mode={gizmoMode} />
-        <GizmoHelper alignment="bottom-right" margin={[56, 56]}>
-          <GizmoViewport
-            axisColors={['#e26a6a', '#5cc88f', '#4aa0e1']}
-            labelColor="#f0eee6"
-          />
-        </GizmoHelper>
+        {!presenting && (
+          <GizmoHelper alignment="bottom-right" margin={[56, 56]}>
+            <GizmoViewport
+              axisColors={['#e26a6a', '#5cc88f', '#4aa0e1']}
+              labelColor="#f0eee6"
+            />
+          </GizmoHelper>
+        )}
       </Canvas>
       {/* Slice 951i — Frame-All centre button. Pinned to viewport
           bottom-right just above the navigation cube. Click reframes

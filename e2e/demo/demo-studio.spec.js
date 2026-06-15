@@ -85,18 +85,30 @@ test('Studio investor demo — plan → drive → visually verify', async () => 
     const before = { cam: base.cam, lights0: base.lights };
 
     // BRAIN — the plan is the spec; surface it in the thread by prompting.
-    await win.locator('[data-studio-v3-cmdbar-input]').click();
-    await win.locator('[data-studio-v3-cmdbar-input]').fill(r.prompt);
-    await win.locator('[data-studio-v3-cmdbar-input]').press('Enter');
+    const sendPrompt = async () => {
+      await win.locator('[data-studio-v3-cmdbar-input]').click();
+      await win.locator('[data-studio-v3-cmdbar-input]').fill(r.prompt);
+      await win.locator('[data-studio-v3-cmdbar-input]').press('Enter');
+    };
+    await sendPrompt();
 
     // EXECUTE + WAIT — poll the live scene until it reaches the recipe's
-    // go/no-go bar (or timeout). This is the "visually tested to go ahead".
-    const deadline = Date.now() + 170000;
+    // go/no-go bar (or timeout). Generation is stochastic at temp 0.2, so if
+    // the build stalls at near-zero bodies, clear + re-prompt (up to 2×) so a
+    // one-off empty generation never lands a blank scene on stage.
+    const deadline = Date.now() + 200000;
     let stats = base;
     let passed = false;
+    let reprompts = 0;
+    let lastReprompt = Date.now();
     while (Date.now() < deadline) {
       stats = await sceneStats(win, before);
       if (r.expect(stats)) { passed = true; break; }
+      if (stats.prims < 3 && Date.now() - lastReprompt > 45000 && reprompts < 2) {
+        reprompts++; lastReprompt = Date.now();
+        await clearScene(win);
+        await sendPrompt();
+      }
       await win.waitForTimeout(2500);
     }
     await win.screenshot({ path: path.join(OUT, `${r.id}.png`) });
@@ -135,6 +147,9 @@ test('Studio investor demo — plan → drive → visually verify', async () => 
         try {
           // Enter presentation mode (hides editor chrome where wired).
           try { window.dispatchEvent(new CustomEvent('studio-presentation-toggle')); } catch (_) {}
+          // Drop the selection so the transform gizmo (a big in-canvas cross)
+          // doesn't sit over the hero frame.
+          try { window.__studioDeselect && window.__studioDeselect(); } catch (_) {}
           const s = window.__archdiscScene || (window.__archdiscViewport && window.__archdiscViewport.scene);
           const vp = window.__archdiscViewport;
           if (!s || !vp || !vp.camera) { window.__studioFrameAll?.(); return { mode: 'raster-fallback' }; }
@@ -159,12 +174,18 @@ test('Studio investor demo — plan → drive → visually verify', async () => 
           });
           if (!any) { window.__studioFrameAll?.(); return { mode: 'raster-noprims' }; }
           const ctr = [(mn[0] + mx[0]) / 2, (mn[1] + mx[1]) / 2, (mn[2] + mx[2]) / 2];
-          const r = Math.max(Math.hypot(mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]) / 2, 1e-3);
-          const d = r * 2.6;
-          const pos = [ctr[0] + d * 0.62, ctr[1] + d * 0.5, ctr[2] + d * 0.78];
-          if (typeof window.__studioMainCameraLook === 'function') window.__studioMainCameraLook(pos, ctr);
-          else { vp.camera.position.set(pos[0], pos[1], pos[2]); vp.camera.lookAt(ctr[0], ctr[1], ctr[2]); if (vp.controls) { vp.controls.target.set(ctr[0], ctr[1], ctr[2]); vp.controls.update && vp.controls.update(); } }
-          return { mode: 'raster-framed', radius: +r.toFixed(3) };
+          // Frame the horizontal FOOTPRINT, not the bounding sphere: interiors
+          // are wide + flat, so the sphere diagonal over-pads with empty air and
+          // shrinks the build to a dot. Camera distance ≈ footprint so the build
+          // DOMINATES the frame (scale-to-viewer). Look slightly above the floor.
+          const dx = mx[0] - mn[0], dz = mx[2] - mn[2], dyy = mx[1] - mn[1];
+          const foot = Math.max(dx, dz, dyy, 0.2);
+          const d = foot * 1.15;
+          const look = [ctr[0], ctr[1] + dyy * 0.15, ctr[2]];
+          const pos = [look[0] + d * 0.72, look[1] + d * 0.5, look[2] + d * 0.72];
+          if (typeof window.__studioMainCameraLook === 'function') window.__studioMainCameraLook(pos, look);
+          else { vp.camera.position.set(pos[0], pos[1], pos[2]); vp.camera.lookAt(look[0], look[1], look[2]); if (vp.controls) { vp.controls.target.set(look[0], look[1], look[2]); vp.controls.update && vp.controls.update(); } }
+          return { mode: 'raster-framed', footprint: +foot.toFixed(3) };
         } catch (e) { return { mode: 'error', error: String(e && e.message || e) }; }
       });
       await win.waitForTimeout(800);

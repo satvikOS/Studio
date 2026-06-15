@@ -898,6 +898,14 @@
 [data-studio-v3-presentation="true"] .studio-toolbar,
 [data-studio-v3-presentation="true"] .studio-right,
 [data-studio-v3-presentation="true"] .studio-statusbar,
+[data-studio-v3-presentation="true"] .studio-archie-overlay,
+[data-studio-v3-presentation="true"] [data-studio-v3-archie-status],
+[data-studio-v3-presentation="true"] .studio-vp-hud,
+[data-studio-v3-presentation="true"] .studio-vp-axes,
+[data-studio-v3-presentation="true"] [data-studio-v3-viewport-stats],
+[data-studio-v3-presentation="true"] [data-studio-v3-watermark],
+[data-studio-v3-presentation="true"] [data-studio-v3-presentation-banner],
+[data-studio-v3-presentation="true"] [data-studio-v3-frame-all],
 [data-studio-v3-presentation="true"] .studio-cmdbar {
   display: none !important;
 }
