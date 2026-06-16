@@ -7802,6 +7802,13 @@ function _summariseDispatch(calls) {
     if (name === 'click-discipline' && id) discipline = id.replace('-', ' ');
     else if (name === 'click-primitive' && id) primCount[id] = (primCount[id] || 0) + 1;
     else if (name === 'click-action' && id) actions.push(id.replace(/-/g, ' '));
+    // Staged-scene verbs the original summary ignored (→ raw prose leaked).
+    else if (name === 'sculpt-organic') actions.push(`sculpted ${(c.arguments && (c.arguments.form || c.arguments.id)) || 'an organic form'}`);
+    else if (name === 'light') actions.push(`lit the scene (${(c.arguments && (c.arguments.preset || c.arguments.id)) || 'studio'})`);
+    else if (name === 'animate') actions.push(`animated a ${(c.arguments && (c.arguments.preset || c.arguments.id)) || 'camera move'}`);
+    else if (name === 'set-selection') actions.push('positioned it');
+    else if (name === 'set-param') actions.push('tuned a parameter');
+    else if (name === 'fn') actions.push(`ran ${(c.arguments && c.arguments.name) || 'a tool'}`);
   }
   const parts = [];
   if (discipline) parts.push(`Switched to the ${discipline} discipline`);
@@ -9349,11 +9356,17 @@ export function StudioShellV3({ mode = 'dark' }) {
         setThread((t) => {
           const last = t[t.length - 1];
           if (!last || last.role !== 'archie' || !last.pending) return t;
-          // Strip <think>…</think> from the visible stream so the user
-          // doesn't see the chain-of-thought — show only emerging
-          // content. Empty after strip means stay on the placeholder.
-          const visible = (acc || '').replace(/<think>[\s\S]*?(<\/think>|$)/g, '').trim();
-          return [...t.slice(0, -1), { ...last, text: visible || '…thinking…' }];
+          // Strip the WHOLE internal protocol (think/plan/tool_call) from the
+          // live stream so the user never sees raw XML/JSON scroll by
+          // (conversational-layer rule 2026-06-16). Show the model's own
+          // conversational lead if it emits one (post-fold), else "Working…".
+          const visible = (acc || '')
+            .replace(/<think>[\s\S]*?(<\/think>|$)/g, '')
+            .replace(/<plan>[\s\S]*?(<\/plan>|$)/g, '')
+            .replace(/<tool_call>[\s\S]*?(<\/tool_call>|$)/g, '')
+            .replace(/<[^>]*>/g, '')
+            .trim();
+          return [...t.slice(0, -1), { ...last, text: visible || 'Working…' }];
         });
       };
       // Slice 951t/951w — speculative tool-call dispatch. Every time
