@@ -19,6 +19,7 @@ import { installStudioComposer } from './builders/sceneComposer.js';
 import { installEnvironmentBuilder } from './builders/environmentBuilder.js';
 import { installOrganicSculpt } from './builders/organicSculpt.js';
 import { installAnimationDirector } from './builders/animationDirector.js';
+import { installRigDirector } from './builders/rigDirector.js';
 
 // ─── Edit-mode state (slice 376/377 V2 equivalent) ───────────────────────
 const validEditModes = new Set(['object', 'vertex', 'edge', 'face', 'sculpt']);
@@ -162,6 +163,7 @@ export function registerV3Api() {
   try { installEnvironmentBuilder(); } catch (_) {}
   try { installOrganicSculpt(); } catch (_) {} // window.__studioSculptOrganic (1:1 organic brush-sculpt forms)
   try { installAnimationDirector(); } catch (_) {} // window.__studioAnimate (camera-path animation: turntable/dolly/product-reveal → frame sequence)
+  try { installRigDirector(); } catch (_) {} // window.__studioRig (skinned-armature rigging + organic movement → frame sequence)
 
   // Edit-mode state.
   if (!window.__studioEditModeRef) window.__studioEditModeRef = { current: 'object' };
