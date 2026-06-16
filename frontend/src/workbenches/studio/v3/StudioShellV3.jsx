@@ -7628,6 +7628,8 @@ Output exactly this shape:
 
 Primitive ids: cube, sphere, plane, cylinder, cone, torus, icosahedron, text, curve.
 Action ids: bevel, apply-xform, sculpt-erode.
+For an ORGANIC sculpted form (rock, skull, stump, vessel, creature), emit ONE call:
+  <tool_call>{"name":"sculpt-organic","arguments":{"form":"<rock|skull|stump|vessel|creature>"}}</tool_call>
 No prose outside the tags. No <think> block.`;
 }
 
