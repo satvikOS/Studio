@@ -7630,6 +7630,8 @@ Primitive ids: cube, sphere, plane, cylinder, cone, torus, icosahedron, text, cu
 Action ids: bevel, apply-xform, sculpt-erode.
 For an ORGANIC sculpted form (rock, skull, stump, vessel, creature), emit ONE call:
   <tool_call>{"name":"sculpt-organic","arguments":{"form":"<rock|skull|stump|vessel|creature>"}}</tool_call>
+For an ANIMATION / ad / commercial / movie shot, build the scene then emit ONE camera move:
+  <tool_call>{"name":"animate","arguments":{"preset":"<turntable|orbit|dolly-in|crane-down|product-reveal>","frames":48}}</tool_call>
 No prose outside the tags. No <think> block.`;
 }
 
@@ -8333,6 +8335,20 @@ async function executeToolCall(call) {
       const r = window.__studioSculptOrganic(form, seed);
       return { ok: true, summary: `sculpt-organic ${form} → ${r && r.stats ? r.stats.verts : '?'} verts` };
     } catch (err) { return { ok: false, summary: `sculpt-organic threw: ${String(err && err.message || err)}` }; }
+  }
+  if (name === 'animate') {
+    // Camera-path animation (movies/ads/commercials): turntable | orbit | dolly-in |
+    // crane-down | product-reveal → frame sequence via the animation director.
+    const preset = String(args.preset || args.id || 'product-reveal').toLowerCase();
+    const frames = Math.max(8, Math.min(240, Number(args.frames) || 48));
+    const resolution = String(args.resolution || '1080p');
+    if (typeof window.__studioAnimate !== 'function') return { ok: false, summary: 'animation unavailable' };
+    const valid = Array.isArray(window.__studioAnimationPresets) ? window.__studioAnimationPresets : ['turntable', 'orbit', 'dolly-in', 'crane-down', 'product-reveal'];
+    if (!valid.includes(preset)) return { ok: false, summary: `unknown animation preset "${preset}" (have: ${valid.join(', ')})` };
+    // kick the render (heavy — N frames); don't block the chat thread on the full sequence.
+    try { Promise.resolve(window.__studioAnimate({ preset, frames, resolution })).catch(() => {}); }
+    catch (err) { return { ok: false, summary: `animate threw: ${String(err && err.message || err)}` }; }
+    return { ok: true, summary: `animate ${preset} ${frames}f @ ${resolution}` };
   }
   if (name === 'fn') {
     const fname = String(args.name || '');

@@ -67,6 +67,8 @@ const RESOLUTIONS = Object.freeze({
   '720p':  { w: 1280, h: 720 },
   '1080p': { w: 1920, h: 1080 },
   '1440p': { w: 2560, h: 1440 },
+  '4k':    { w: 3840, h: 2160 },   // full 4K photoreal hero frame
+  'uhd':   { w: 3840, h: 2160 },
 });
 
 function detectWebGL2Compute() {

@@ -18,6 +18,7 @@ import { installStudioPathTracer } from './rtgpu/PathTracedRender.js';
 import { installStudioComposer } from './builders/sceneComposer.js';
 import { installEnvironmentBuilder } from './builders/environmentBuilder.js';
 import { installOrganicSculpt } from './builders/organicSculpt.js';
+import { installAnimationDirector } from './builders/animationDirector.js';
 
 // ─── Edit-mode state (slice 376/377 V2 equivalent) ───────────────────────
 const validEditModes = new Set(['object', 'vertex', 'edge', 'face', 'sculpt']);
@@ -160,6 +161,7 @@ export function registerV3Api() {
   try { installStudioComposer(); } catch (_) {}
   try { installEnvironmentBuilder(); } catch (_) {}
   try { installOrganicSculpt(); } catch (_) {} // window.__studioSculptOrganic (1:1 organic brush-sculpt forms)
+  try { installAnimationDirector(); } catch (_) {} // window.__studioAnimate (camera-path animation: turntable/dolly/product-reveal → frame sequence)
 
   // Edit-mode state.
   if (!window.__studioEditModeRef) window.__studioEditModeRef = { current: 'object' };
