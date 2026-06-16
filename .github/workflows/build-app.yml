@@ -108,6 +108,14 @@ jobs:
         run: npm install --no-audit --no-fund
         working-directory: frontend
 
+      # Guard the build-break class that took CI red on #841–#848: a source
+      # file imported a package installed locally but never added to the
+      # committed package.json (the lock is gitignored, so CI resolves fresh
+      # and Rollup fails). Fails fast with the exact package + file.
+      - name: Verify all imports are declared
+        run: node test/deps-declared.test.js
+        working-directory: frontend
+
       - name: Build frontend (Vite)
         run: npx vite build
         working-directory: frontend
