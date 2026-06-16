@@ -7632,6 +7632,8 @@ For an ORGANIC sculpted form (rock, skull, stump, vessel, creature), emit ONE ca
   <tool_call>{"name":"sculpt-organic","arguments":{"form":"<rock|skull|stump|vessel|creature>"}}</tool_call>
 For an ANIMATION / ad / commercial / movie shot, build the scene then emit ONE camera move:
   <tool_call>{"name":"animate","arguments":{"preset":"<turntable|orbit|dolly-in|crane-down|product-reveal>","frames":48}}</tool_call>
+ALWAYS finish a scene with cinematic lighting + PBR materials (a lit FINAL, never grey clay):
+  <tool_call>{"name":"light","arguments":{"preset":"<studio-softbox|product-hero|golden-hour|blue-hour|dramatic-noir|overcast>"}}</tool_call>
 No prose outside the tags. No <think> block.`;
 }
 
@@ -8335,6 +8337,15 @@ async function executeToolCall(call) {
       const r = window.__studioSculptOrganic(form, seed);
       return { ok: true, summary: `sculpt-organic ${form} → ${r && r.stats ? r.stats.verts : '?'} verts` };
     } catch (err) { return { ok: false, summary: `sculpt-organic threw: ${String(err && err.message || err)}` }; }
+  }
+  if (name === 'light') {
+    // Cinematic lighting rig + PBR material upgrade → a lit FINAL (studio-softbox |
+    // product-hero | golden-hour | blue-hour | dramatic-noir | overcast).
+    const preset = String(args.preset || args.id || 'studio-softbox').toLowerCase();
+    const valid = Array.isArray(window.__studioLightPresets) ? window.__studioLightPresets : ['studio-softbox', 'product-hero', 'golden-hour', 'blue-hour', 'dramatic-noir', 'overcast'];
+    if (!valid.includes(preset)) return { ok: false, summary: `unknown light preset "${preset}" (have: ${valid.join(', ')})` };
+    try { if (typeof window.__studioLookdevMaterials === 'function') window.__studioLookdevMaterials(); const r = window.__studioLight ? window.__studioLight(preset) : null; return { ok: !!(r && r.ok), summary: `light ${preset} + PBR materials` }; }
+    catch (err) { return { ok: false, summary: `light threw: ${String(err && err.message || err)}` }; }
   }
   if (name === 'animate') {
     // Camera-path animation (movies/ads/commercials): turntable | orbit | dolly-in |
