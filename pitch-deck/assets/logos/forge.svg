@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 116" width="120" height="116">
+  <defs>
+    <linearGradient id="steel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#454b54"/>
+      <stop offset="50%" stop-color="#262b32"/>
+      <stop offset="100%" stop-color="#0e1116"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#fff6d8"/>
+      <stop offset="38%" stop-color="#ffd24a" stop-opacity="0.65"/>
+      <stop offset="100%" stop-color="#ffd24a" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="starg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fff3c4"/>
+      <stop offset="100%" stop-color="#ffc23a"/>
+    </linearGradient>
+  </defs>
+  <!-- star glow -->
+  <circle cx="90" cy="24" r="22" fill="url(#glow)"/>
+  <!-- anvil: pointed horn (left), wide flat top, narrow waist, flared base -->
+  <path d="M8 66
+           L40 58 L40 52 L98 52 L98 67 L66 67 L66 78
+           C78 78 80 80 82 88 L88 100 L30 100 L36 88
+           C38 80 40 78 52 78 L52 67 L26 67 L20 63 Z"
+        fill="url(#steel)" stroke="#07090c" stroke-width="1.6" stroke-linejoin="round"/>
+  <!-- top face highlight -->
+  <path d="M42 54 L96 54" stroke="#5a626d" stroke-width="2.2" stroke-linecap="round" opacity="0.7"/>
+  <path d="M14 64 L38 57" stroke="#5a626d" stroke-width="1.6" stroke-linecap="round" opacity="0.5"/>
+  <!-- shining star -->
+  <path d="M90 5 L94.5 18 L108 19.5 L98 28 L101.5 41 L90 33.5 L78.5 41 L82 28 L72 19.5 L85.5 18 Z"
+        fill="url(#starg)" stroke="#fffaf0" stroke-width="1.1" stroke-linejoin="round"/>
+  <!-- sparkle rays -->
+  <g stroke="#fff6d8" stroke-width="1.6" stroke-linecap="round" opacity="0.85">
+    <path d="M90 -2 L90 7"/><path d="M90 39 L90 48"/>
+    <path d="M67 23 L76 23"/><path d="M104 23 L113 23"/>
+  </g>
+</svg>

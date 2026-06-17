@@ -162,3 +162,20 @@ body{
 .sheet.ink .vrule{ background:var(--on-ink-line); }
 .hatch{ background-image:repeating-linear-gradient(45deg, var(--ink) 0 1px, transparent 1px 6px); }
 .sheet.ink .hatch{ background-image:repeating-linear-gradient(45deg, var(--on-ink) 0 1px, transparent 1px 6px); }
+
+/* ---- image-forward rebuild: logos, wordmarks, framed renders --------- */
+.archie-mark{ font-family:var(--disp); font-weight:800; letter-spacing:-.03em; color:var(--ink); }
+.sheet.ink .archie-mark{ color:var(--on-ink); }
+.lockup{ display:inline-flex; align-items:center; gap:10px; font-family:var(--disp); font-weight:700; letter-spacing:-.012em; }
+.lockup .x{ font-family:var(--mono); font-weight:400; opacity:.55; font-size:.82em; }
+.imgframe{ position:relative; border:1px solid var(--line-strong); overflow:hidden; background:#15181c; }
+.sheet.ink .imgframe{ border-color:var(--on-ink-line-strong); }
+.imgframe img{ width:100%; height:100%; object-fit:cover; display:block; }
+.imgframe .cap{ position:absolute; left:0; bottom:0; font-family:var(--mono); font-size:10px; letter-spacing:.1em;
+  text-transform:uppercase; color:#ecebe7; background:rgba(8,10,13,.7); padding:5px 10px; }
+.bigh{ font-family:var(--disp); font-weight:600; letter-spacing:-.038em; line-height:1.0; color:var(--ink); }
+.sheet.ink .bigh{ color:var(--on-ink); }
+.bigh .g{ color:#565b63; }
+.sheet.ink .bigh .g{ color:var(--on-ink-soft); }
+.wordmark{ font-family:var(--mono); font-size:14px; letter-spacing:.34em; font-weight:500; color:var(--ink); }
+.sheet.ink .wordmark{ color:var(--on-ink); }

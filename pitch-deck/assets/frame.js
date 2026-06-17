@@ -46,7 +46,7 @@
   tb.className = 'titleblock';
   const cells = [
     ['PROJECT', d.project || 'ARCHDISC PLATFORM', true],
-    ['SHEET', (d.sheet || '01') + ' / ' + (d.total || '13'), false],
+    ['SHEET', (d.sheet || '01') + ' / ' + (d.total || '07'), false],
     ['SCALE', d.scale || 'NTS', false],
     ['REV', d.rev || 'A', false],
     ['DRAWN BY', d.drawn || 'ARCHIE', false],

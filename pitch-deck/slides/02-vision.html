@@ -1,44 +1,37 @@
 <!doctype html><html><head><meta charset="utf-8">
 <link rel="stylesheet" href="../assets/deck.css">
 <style>
-  .center{ flex:1; display:flex; flex-direction:column; justify-content:center; }
-  .vh{ font-family:var(--disp); font-weight:600; font-size:56px; line-height:1.0; letter-spacing:-.038em; color:var(--ink); }
-  .vh .g{ color:#565b63; }
-  .turn{ font-family:var(--mono); font-size:13px; letter-spacing:.16em; color:var(--muted); margin-top:16px; text-transform:uppercase; }
-  .vlead{ font-size:17px; line-height:1.58; color:var(--ink-soft); max-width:700px; margin-top:18px; letter-spacing:-.008em; }
-  .vlead b{ color:var(--ink); font-weight:600; }
-  .prog{ display:flex; border:1.2px solid var(--ink); margin-top:auto; }
-  .prog .cell{ flex:1; padding:13px 18px; border-right:1px solid var(--line-strong); position:relative; }
-  .prog .cell:last-child{ border-right:none; }
-  .prog .n{ font-family:var(--mono); font-size:9.5px; letter-spacing:.18em; color:var(--faint); }
-  .prog .t{ font-family:var(--disp); font-weight:600; font-size:18px; color:var(--ink); margin:4px 0 5px; letter-spacing:-.015em; }
-  .prog .d{ font-size:12px; line-height:1.42; color:var(--ink-mid); }
-  .prog .arrow{ position:absolute; right:-7px; top:50%; transform:translateY(-50%) rotate(45deg); z-index:6; width:12px; height:12px; background:var(--paper); border-top:1.2px solid var(--ink); border-right:1.2px solid var(--ink); }
-  .closer{ display:flex; align-items:center; gap:13px; margin-top:14px; }
-  .closer .lab{ font-family:var(--mono); font-size:10px; letter-spacing:.16em; color:var(--muted); white-space:nowrap; }
-  .closer .t{ font-size:15px; color:var(--ink); letter-spacing:-.008em; font-weight:500; }
+  .body-row{ flex:1; display:flex; gap:40px; align-items:center; }
+  .left{ width:580px; flex:none; }
+  .eyebrow-mono{ font-family:var(--mono); font-size:12px; letter-spacing:.24em; color:var(--muted); margin-bottom:20px; }
+  .bigh{ font-size:50px; }
+  .turn{ font-family:var(--mono); font-size:12px; letter-spacing:.16em; color:var(--muted); margin-top:14px; text-transform:uppercase; }
+  .lead{ font-size:16px; line-height:1.55; color:var(--ink-soft); margin-top:18px; max-width:520px; letter-spacing:-.008em; }
+  .lead b{ color:var(--ink); font-weight:600; }
+  .right{ flex:1; height:380px; }
+  .imgframe{ height:100%; }
+  .mission{ display:flex; align-items:center; gap:13px; margin-top:auto; padding-top:16px; border-top:1.4px solid var(--ink); }
+  .mission .lab{ font-family:var(--mono); font-size:10px; letter-spacing:.16em; color:var(--muted); white-space:nowrap; }
+  .mission .t{ font-size:15px; color:var(--ink); font-weight:500; letter-spacing:-.008em; }
 </style></head>
 <body>
 <div class="sheet" data-sheet="02" data-rev="A" data-scale="1:1">
   <div class="stage">
     <div class="sheet-head">
-      <span class="u-label"><span class="eyebrow"><span class="dot"></span>VISION · WHY WE EXIST</span></span>
+      <span class="u-label"><span class="eyebrow"><span class="dot"></span>VISION</span></span>
       <span class="u-spec" style="color:var(--muted)">MANIFESTO</span>
     </div>
-
-    <div class="center">
-      <div class="vh">Everyone can imagine it.<br><span class="g">Almost no one can build it.</span></div>
-      <div class="turn">— until now</div>
-      <div class="vlead">Turning a thought into a real, precise thing — a part, a product, a whole world — has always demanded years of CAD and 3D mastery. So most dreamers never cross the gap. <b>ArchDisc is built for them:</b> describe what you see, and Archie builds it — real, editable, manufacturable, yours. No twenty-year apprenticeship. Just the idea.</div>
+    <div class="body-row">
+      <div class="left">
+        <div class="bigh">Everyone can imagine&nbsp;it.<br><span class="g">Almost no one can build&nbsp;it.</span></div>
+        <div class="turn">— until now</div>
+        <div class="lead">For dreamers and the imaginative — no CAD degree, no 20-year apprenticeship. <b>Say what you see, and Archie builds it</b> — real, editable, yours.</div>
+      </div>
+      <div class="right">
+        <div class="imgframe"><img src="../assets/shots/studio-kitchen.png"><span class="cap">Studio · a scene, described in one sentence</span></div>
+      </div>
     </div>
-
-    <div class="prog">
-      <div class="cell"><div class="n">01</div><div class="t">Dream it</div><div class="d">A part, a product, a scene — the world in your head.</div><div class="arrow"></div></div>
-      <div class="cell"><div class="n">02</div><div class="t">Say it</div><div class="d">In plain language. No menus, no manuals, no degree.</div><div class="arrow"></div></div>
-      <div class="cell"><div class="n">03</div><div class="t">Build it</div><div class="d">Archie does the technical work, step by step.</div><div class="arrow"></div></div>
-      <div class="cell"><div class="n">04</div><div class="t">Make it real</div><div class="d">A validated solid or a staged world — ready to make.</div></div>
-    </div>
-    <div class="closer">
+    <div class="mission">
       <span class="lab">MISSION</span>
       <span class="t">Put the power to create — from dreaming to making — in everyone’s hands.</span>
     </div>
