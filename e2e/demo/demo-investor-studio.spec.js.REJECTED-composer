@@ -1,0 +1,183 @@
+// ArchDisc Studio — INVESTOR DEMO hero renders (pillar 1, the visual wow).
+//
+// Three genuinely DISTINCT curated scenes (vary-prompts rule), each lit + PBR-
+// materialed + composed, then rendered at the highest fidelity the pipeline
+// gives — BOTH a path-traced (GI) hero still at 1440p AND a Mac/Metal WebGPU
+// ray-traced still. Reference targets:
+//   1. product / product-hero  → luxury product viz (V-825 Hublot bar).
+//   2. living-room / golden-hour → architectural interior viz.
+//   3. cafe / blue-hour          → cinematic environment.
+//
+// Each scene is its own test() so it gets its own (generous) timeout and a
+// failure in one scene does not block the others. The headed Electron window
+// (slowMo ~30) plays back the compose → lookdev → light → render → screenshot
+// sequence for a human watcher.
+//
+// Renderer notes that drive the sequencing:
+//   * __studioGPURTRender frames the viewport camera onto the scene bbox
+//     INTERNALLY (slice 951+ framing fix) and refreshes its matrices, so it is
+//     robust on its own AND leaves vp.camera framed for whatever runs next.
+//   * __studioPathTraceRender (CPU GI tracer) does NOT frame — it reads
+//     vp.camera as-is. So we run the Metal-RT render FIRST (frames the camera),
+//     then run the path tracer using that exact framed 3/4 hero pose. Both use
+//     a 16:9 aspect so the framing is consistent across renderers.
+
+import { test, _electron as electron } from '@playwright/test';
+import { expect } from '@playwright/test';
+import path from 'path';
+import fs from 'fs';
+
+const OUT = path.resolve(__dirname, 'shots', 'investor');
+
+// --- PNG validators (same as demo-metal-rt.spec.js) ------------------------
+
+// Pull width/height from the IHDR chunk so we can assert the decoded image
+// actually matches the requested render dimensions.
+function pngDimensions(buf) {
+  if (buf.length < 24 || buf.toString('ascii', 12, 16) !== 'IHDR') return null;
+  return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
+}
+
+// Reject a flat / single-colour frame: count distinct byte values across the
+// PNG payload as a cheap proxy for tonal variety. A real lit/shaded render
+// compresses to a high-variety IDAT; a flat frame collapses to a low-variety one.
+function byteVariety(buf) {
+  const seen = new Set();
+  for (let i = 0; i < buf.length; i++) seen.add(buf[i]);
+  return seen.size;
+}
+
+// --- launch boilerplate (modeled on demo-metal-rt.spec.js) -----------------
+// We launch WITHOUT --dev so Electron loads the already-BUILT frontend/dist
+// (which carries the Metal-RT framing fix) directly — no Vite dev server, no
+// extra GPU/CPU load. The localStorage guard suppresses the tour/splash.
+async function launchStudio() {
+  const app = await electron.launch({
+    args: [path.join(__dirname, '..', '..', 'electron', 'main.js')],
+    slowMo: 30,
+  });
+  let win = await app.firstWindow();
+  if (win.url().startsWith('devtools://')) {
+    win = (await app.windows()).find((w) => !w.url().startsWith('devtools://'))
+      || await app.waitForEvent('window', { predicate: (w) => !w.url().startsWith('devtools://') });
+  }
+  win.on('dialog', (d) => d.dismiss().catch(() => {}));
+  await win.waitForLoadState('domcontentloaded');
+  await win.waitForFunction(
+    () => location.protocol === 'http:' || location.protocol === 'https:' || location.protocol === 'file:',
+    { timeout: 15000 },
+  ).catch(() => {});
+  await win.evaluate(() => {
+    try { window.localStorage.setItem('studio.v3.tour-seen', '1'); } catch (_) {}
+    try { window.sessionStorage.setItem('studio.v3.splash-shown', '1'); } catch (_) {}
+  });
+  await win.reload();
+  await expect(win.locator('[data-studio-v3-shell]')).toBeVisible({ timeout: 25000 });
+  await win.waitForFunction(
+    () => typeof window.__studioComposeScene === 'function'
+      && typeof window.__studioGPURTRender === 'function'
+      && typeof window.__studioPathTraceRender === 'function'
+      && typeof window.__studioLookdevMaterials === 'function'
+      && typeof window.__studioLight === 'function'
+      && !!window.__archdiscViewport,
+    { timeout: 25000 },
+  );
+  return { app, win };
+}
+
+// Curated, genuinely-distinct (scene, lightPreset) pairs + a fresh seed each.
+const SHOTS = [
+  { id: 'product',     light: 'product-hero', seed: 825, ref: 'luxury product viz (V-825 Hublot)' },
+  { id: 'living-room', light: 'golden-hour',  seed: 412, ref: 'architectural interior viz' },
+  { id: 'cafe',        light: 'blue-hour',    seed: 718, ref: 'cinematic environment' },
+];
+
+// Requested fidelity.
+const PT  = { width: 2560, height: 1440, samples: 96, maxBounces: 6 }; // path-traced GI hero
+const RT  = { width: 1280, height: 720,  samples: 64, maxBounces: 3 }; // Mac/Metal WebGPU RT
+
+function writePng(file, dataUrl) {
+  const png = Buffer.from(dataUrl.split(',')[1], 'base64');
+  fs.writeFileSync(file, png);
+  return png;
+}
+
+function assertPng(png, expW, expH, label) {
+  expect(png, `${label}: no PNG`).not.toBeNull();
+  const dims = pngDimensions(png);
+  expect(dims, `${label}: not a PNG`).not.toBeNull();
+  expect(dims.width, `${label}: width`).toBe(expW);
+  expect(dims.height, `${label}: height`).toBe(expH);
+  // Non-trivial size + real tonal variety (not a flat / empty frame).
+  expect(png.length, `${label}: too small (${png.length}B)`).toBeGreaterThan(12000);
+  expect(byteVariety(png), `${label}: too flat`).toBeGreaterThan(64);
+}
+
+for (const shot of SHOTS) {
+  test(`investor hero — ${shot.id} / ${shot.light} (${shot.ref})`, async () => {
+    test.setTimeout(50 * 60 * 1000); // PT @ 2560x1440x96spp ≈ 30 min worst case.
+    fs.mkdirSync(OUT, { recursive: true });
+    const { app, win } = await launchStudio();
+
+    // 1. Compose → PBR upgrade → cinematic light, then run the Metal-RT render
+    //    (which FRAMES the camera onto the scene). The path tracer that follows
+    //    inherits that framed 3/4 hero pose.
+    const rt = await win.evaluate(async ({ id, light, seed, RT }) => {
+      const composed = window.__studioComposeScene(id, seed);
+      const mats = window.__studioLookdevMaterials();        // PBR upgrade
+      const lit = window.__studioLight(light);               // cinematic rig
+      const has = await window.__studioGPURTHasGPU();
+      if (!has.hasGPU) return { ok: false, hasGPU: false, error: has.error, composed, mats, lit };
+      const res = await window.__studioGPURTRender(RT);      // frames camera internally
+      const out = { ...res, composed, materialsApplied: mats.applied, lightPreset: lit.preset, hasGPU: true };
+      return out;
+    }, { id: shot.id, light: shot.light, seed: shot.seed, RT });
+
+    let rtPng = null;
+    if (rt.ok && rt.dataUrl) {
+      rtPng = writePng(path.join(OUT, `${shot.id}-metal-rt.png`), rt.dataUrl);
+      delete rt.dataUrl;
+    }
+    console.log(`[investor] RT ${shot.id} ${JSON.stringify(rt)}`);
+
+    // Capture the live viewport (the framed, lit raster view) for the deck.
+    await win.locator('[data-studio-v3-shell]').screenshot({
+      path: path.join(OUT, `${shot.id}-viewport.png`),
+    }).catch(() => {});
+
+    // 2. Path-traced GI hero still at 1440p, using the framed pose from step 1.
+    const pt = await win.evaluate(async ({ PT }) => {
+      const t0 = performance.now();
+      const res = window.__studioPathTraceRender(PT);
+      return { ...res, wallMs: performance.now() - t0 };
+    }, { PT });
+
+    let ptPng = null;
+    if (pt.ok && pt.dataUrl) {
+      ptPng = writePng(path.join(OUT, `${shot.id}-pathtraced.png`), pt.dataUrl);
+      delete pt.dataUrl;
+    }
+    console.log(`[investor] PT ${shot.id} ${JSON.stringify(pt)}`);
+
+    console.log(`\n=== INVESTOR HERO: ${shot.id} / ${shot.light} (${shot.ref}) ===`);
+    console.log(`  Metal-RT : ${rt.ok ? `${rt.width}x${rt.height}@${rt.samples}spp, ${rt.triCount} tris, ${rt.nodeCount} BVH nodes, framed=${rt.framed}, device=${rt.device}, ${Math.round(rt.elapsed)}ms` : 'FAILED: ' + (rt.error || '')}`);
+    console.log(`  PathTrace: ${pt.ok ? `${pt.width || PT.width}x${PT.height}@${pt.samples}spp, ${Math.round(pt.elapsed)}ms` : 'FAILED: ' + (pt.error || '')}`);
+
+    await win.evaluate(() => { window.__studioV3Dirty = false; window.onbeforeunload = null; });
+    await app.close();
+
+    // --- assertions --------------------------------------------------------
+    // Metal-RT: real WebGPU path, substantial mesh, framed onto the scene.
+    expect(rt.ok, `RT ${shot.id}`).toBe(true);
+    expect(rt.device).toBe('gpu');
+    expect(rt.triCount).toBeGreaterThan(100);
+    expect(rt.framed).toBe(true);
+    expect(rt.materialsApplied).toBeGreaterThan(0);
+    expect(rt.lightPreset).toBe(shot.light);
+    assertPng(rtPng, RT.width, RT.height, `RT ${shot.id}`);
+
+    // Path-traced GI hero: non-trivial photoreal still at the requested 1440p.
+    expect(pt.ok, `PT ${shot.id}`).toBe(true);
+    assertPng(ptPng, PT.width, PT.height, `PT ${shot.id}`);
+  });
+}

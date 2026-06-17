@@ -7618,22 +7618,31 @@ function _removeBodiesByName(names) {
 // training constant reintroduces base-model regression — see the
 // slice-951x few-shot incident.
 function _buildArchieSystemPrompt(/* activeWb */) {
-  return `You are Archie. Build a scene from registered Studio primitives.
+  // Genuine-CUA SYSTEM (2026-06-17): Archie DRIVES the real UI step by step —
+  // spawn each primitive, ARRANGE it with set-selection, then CLICK a real
+  // stage-lighting preset. No window.__studio* composer ops (light/animate/
+  // sculpt-organic bypass the UI). MUST be byte-identical to the SYSTEM in
+  // archdisc-Models/scripts/synth_studio_cua_staged.py (byte-drift reintroduces
+  // base-model regression — slice-951z few-shot incident).
+  return `You are Archie. You operate ArchDisc Studio like a senior 3D designer — by driving the real UI, one step at a time.
 
 Output exactly this shape:
   <plan>{"goal":"<noun>","bodies":<int>}</plan>
   <tool_call>{"name":"click-discipline","arguments":{"id":"modeling"}}</tool_call>
   <tool_call>{"name":"click-primitive","arguments":{"id":"<id>"}}</tool_call>
-  ...one <tool_call> per primitive...
+  ...one <tool_call> per step...
 
-Primitive ids: cube, sphere, plane, cylinder, cone, torus, icosahedron, text, curve.
-Action ids: bevel, apply-xform, sculpt-erode.
-For an ORGANIC sculpted form (rock, skull, stump, vessel, creature), emit ONE call:
-  <tool_call>{"name":"sculpt-organic","arguments":{"form":"<rock|skull|stump|vessel|creature>"}}</tool_call>
-For an ANIMATION / ad / commercial / movie shot, build the scene then emit ONE camera move:
-  <tool_call>{"name":"animate","arguments":{"preset":"<turntable|orbit|dolly-in|crane-down|product-reveal>","frames":48}}</tool_call>
-ALWAYS finish a scene with cinematic lighting + PBR materials (a lit FINAL, never grey clay):
-  <tool_call>{"name":"light","arguments":{"preset":"<studio-softbox|product-hero|golden-hour|blue-hour|dramatic-noir|overcast>"}}</tool_call>
+Primitive ids: cube, sphere, plane, cylinder, cone, torus, icosahedron, text, curve, empty.
+Work in this order, like a designer at the controls:
+  1. click-discipline {"id":"modeling"} to enter the modeling workbench.
+  2. For EACH part: click-primitive {"id":"<id>"} to spawn it, then ARRANGE it with set-selection
+     {"axis":"<scale-x|scale-y|scale-z|position-x|position-y|position-z|rotation-y>","value":<number>}.
+     scale is a multiplier on the 0.03 m base; position is metres. Lay parts out in a real-world
+     arrangement — floor/ground down first, furniture on the floor, objects resting on surfaces —
+     NEVER piled at the origin.
+  3. Finish with cinematic lighting by CLICKING a real stage preset:
+     <tool_call>{"name":"click-stage-preset","arguments":{"id":"<workshop|showroom|sunset|night>"}}</tool_call>
+Never emit light, animate, or sculpt-organic — those are composer ops that bypass the UI; lighting is done by clicking a stage preset.
 No prose outside the tags. No <think> block.`;
 }
 
@@ -8330,6 +8339,17 @@ async function executeToolCall(call) {
     if (!el) return { ok: false, summary: `unknown action "${id}"` };
     el.click();
     return { ok: true, summary: `action ${id}` };
+  }
+  if (name === 'click-stage-preset') {
+    // Genuine-CUA cinematic lighting: click the REAL Stage Preset button
+    // (data-studio-v3-stage-preset) — its onClick applies HDRI + ambient/key
+    // intensity + sun azimuth/elevation. This is a real DOM click on a real
+    // control, NOT the window.__studioLight composer (which bypasses the UI).
+    const id = String(args.id || args.preset || '').toLowerCase();
+    const el = document.querySelector(`[data-studio-v3-stage-preset="${id}"]`);
+    if (!el) return { ok: false, summary: `unknown stage preset "${id}"` };
+    el.click();
+    return { ok: true, summary: `stage lighting ${id}` };
   }
   if (name === 'sculpt-organic') {
     // 1:1 organic brush-sculpt op (builders/organicSculpt.js). One call →
