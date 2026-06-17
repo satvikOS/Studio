@@ -7417,7 +7417,12 @@ const STUDIO_TO_TRAINED_DISCIPLINE = {
 // Hermes LoRAs land. Keeping the per-workbench helper signature so the
 // downstream discipline-aware tools/UI stay unchanged.
 function _archieAdapterPath(/* activeWb */) {
-  return 'adapters/archie/hermes_studio/modeling';
+  // 2026-06-17 — genuine-CUA fold: modeling-cua-staged-20260617 resumes
+  // hermes_studio/modeling and adds the staged UI-driving workflow (build →
+  // arrange via set-selection → click a real stage-lighting preset), trained
+  // on a 99.75%-coherent pure-DOM-op corpus (no composer ops). The SYSTEM in
+  // _buildArchieSystemPrompt is byte-identical to that fold's training SYSTEM.
+  return 'adapters/archie/hermes_studio/modeling-cua-staged-20260617';
 }
 
 // Slice 952 — §6 failure-mode catalog client. Every Archie failure
@@ -7800,17 +7805,31 @@ const _PRIMITIVE_LABEL = {
   cone: 'cone', torus: 'torus', icosahedron: 'icosahedron',
   text: 'text body', curve: 'curve', empty: 'empty group',
 };
+// Natural phrase for each Stage Preset id (click-stage-preset op).
+const _STAGE_PRESET_PHRASE = {
+  workshop: 'workshop stage preset',
+  showroom: 'showroom stage preset',
+  sunset: 'sunset stage preset',
+  night: 'night stage preset',
+};
 function _summariseDispatch(calls) {
   if (!Array.isArray(calls) || calls.length === 0) return '';
   const primCount = {};
   let discipline = null;
   const actions = [];
+  const stagePhrases = [];
   for (const c of calls) {
     const name = (c && c.name) || '';
     const id = (c && c.arguments && c.arguments.id) || '';
     if (name === 'click-discipline' && id) discipline = id.replace('-', ' ');
     else if (name === 'click-primitive' && id) primCount[id] = (primCount[id] || 0) + 1;
     else if (name === 'click-action' && id) actions.push(id.replace(/-/g, ' '));
+    // Stage Preset (click-stage-preset) → cinematic lighting; reads as its
+    // own clause so it isn't squashed under the "applied …" prefix.
+    else if (name === 'click-stage-preset') {
+      const sid = String((c.arguments && (c.arguments.id || c.arguments.preset)) || '').toLowerCase();
+      stagePhrases.push(`lit the scene with the ${_STAGE_PRESET_PHRASE[sid] || `${sid} stage preset`}`);
+    }
     // Staged-scene verbs the original summary ignored (→ raw prose leaked).
     else if (name === 'sculpt-organic') actions.push(`sculpted ${(c.arguments && (c.arguments.form || c.arguments.id)) || 'an organic form'}`);
     else if (name === 'light') actions.push(`lit the scene (${(c.arguments && (c.arguments.preset || c.arguments.id)) || 'studio'})`);
@@ -7827,6 +7846,7 @@ function _summariseDispatch(calls) {
     parts.push(n === 1 ? `spawned a ${label}` : `spawned ${n} ${label}s`);
   }
   for (const a of actions.slice(0, 3)) parts.push(`applied ${a}`);
+  for (const s of stagePhrases) parts.push(s);
   if (parts.length === 0) return '';
   // Capitalise the first letter; join with ", " + a final " and ".
   const head = parts[0][0].toUpperCase() + parts[0].slice(1);
@@ -7856,6 +7876,10 @@ function _humanizeCall(call, result) {
     return `Added a ${label}.`;
   }
   if (name === 'click-action') return `Applied ${id.replace(/-/g, ' ')}.`;
+  if (name === 'click-stage-preset') {
+    const sid = String(id || args.preset || '').toLowerCase();
+    return `Lit the scene with the ${_STAGE_PRESET_PHRASE[sid] || `${sid} stage preset`}.`;
+  }
   if (name === 'set-param') return `Set ${args.group || ''}.${args.knob || ''} = ${JSON.stringify(args.value)}.`;
   if (name === 'fn') return `Called ${args.name || 'op'}.`;
   return `${name}${id ? ' ' + id : ''}.`;

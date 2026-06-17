@@ -39,7 +39,7 @@ test('Archie drives the UI to a coherent, lit scene + light camera orbit (genuin
   test.setTimeout(10 * 60 * 1000);
   fs.mkdirSync(STEPS, { recursive: true });
   fs.mkdirSync(ORBIT, { recursive: true });
-  const app = await electron.launch({ args: [path.join(__dirname, '..', '..', 'electron', 'main.js'), '--dev'], slowMo: 60 });
+  const app = await electron.launch({ args: [path.join(__dirname, '..', '..', 'electron', 'main.js')], slowMo: 60 });
   let win = await app.firstWindow();
   if (win.url().startsWith('devtools://')) win = (await app.windows()).find((w) => !w.url().startsWith('devtools://')) || await app.waitForEvent('window', { predicate: (w) => !w.url().startsWith('devtools://') });
   win.on('dialog', (d) => d.dismiss().catch(() => {}));
@@ -70,15 +70,19 @@ test('Archie drives the UI to a coherent, lit scene + light camera orbit (genuin
   await win.screenshot({ path: path.join(STEPS, 'step-01-typed.png') });
   await input.press('Enter');
 
-  // capture the UI building + arranging + lighting step by step
-  let last = before; const trace = [];
-  for (let i = 0; i < 22; i++) {
-    await win.waitForTimeout(1300);
+  // capture the UI building + arranging + lighting step by step. Archie streams
+  // ~70 tool_calls for a 10-part scene (build → arrange → light), which takes
+  // ~30-60s to generate + dispatch — so WAIT for the build to genuinely settle
+  // (no new bodies for ~14s, with a real scene present) rather than breaking on
+  // a transient plateau while the model is still arranging the current part.
+  let last = before; let lastChangeAt = Date.now(); const trace = [];
+  for (let i = 0; i < 60; i++) {            // up to ~120s
+    await win.waitForTimeout(2000);
     const info = await sceneInfo();
     trace.push(info.n);
-    await win.screenshot({ path: path.join(STEPS, `step-${String(i + 2).padStart(2, '0')}-build-${info.n}.png`) });
-    if (info.n > 0 && info.n === last && i > 7) break;
-    last = info.n;
+    await win.screenshot({ path: path.join(STEPS, `step-${String(i).padStart(2, '0')}-build-${info.n}.png`) });
+    if (info.n !== last) { last = info.n; lastChangeAt = Date.now(); }
+    if (info.n >= 4 && (Date.now() - lastChangeAt) > 14000) break;  // settled
   }
   const built = await sceneInfo();
   console.log(`[cua] bodies ${before}→${built.n} | spreadX=${built.spreadX.toFixed(2)} spreadZ=${built.spreadZ.toFixed(2)} | trace=${JSON.stringify(trace)}`);
@@ -93,20 +97,30 @@ test('Archie drives the UI to a coherent, lit scene + light camera orbit (genuin
   // (3) LIGHT camera orbit on the LIVE viewport (no path trace, no WebGPU) →
   // cinematic motion that cannot OOM the Mac. Pose the camera on a circle around
   // the scene centre and screenshot each frame.
+  // Disable OrbitControls so it can't override the camera pose we set per frame,
+  // and frame ONLY the built primitive meshes (excluding grid/gizmo/lights, which
+  // would otherwise inflate the bbox and shrink the scene to a speck). Sphere-fit
+  // the camera distance to the fov so the scene FILLS the frame (scale-to-viewer).
+  await win.evaluate(() => { const vp = window.__archdiscViewport; if (vp && vp.controls) vp.controls.enabled = false; });
   const FRAMES = 24;
   for (let f = 0; f < FRAMES; f++) {
     await win.evaluate((frac) => {
       const s = window.__archdiscScene, TH = window.__archdiscTHREE, vp = window.__archdiscViewport;
-      if (!s || !TH) return;
-      const box = new TH.Box3().setFromObject(s);
-      const c = box.getCenter(new TH.Vector3()); const sz = box.getSize(new TH.Vector3());
-      const R = Math.max(sz.x, sz.z, sz.y) * 1.4 || 5;
+      if (!s || !TH || !vp || !vp.camera) return;
+      const box = new TH.Box3();
+      s.traverse((o) => { if (o.isMesh && o.userData && o.userData.archdiscStudioPrimitive) box.expandByObject(o); });
+      if (box.isEmpty()) return;
+      const c = box.getCenter(new TH.Vector3());
+      const sph = box.getBoundingSphere(new TH.Sphere()); const R = sph.radius || 1;
+      const cam = vp.camera;
+      const fov = ((cam.fov || 50) * Math.PI) / 180;
+      const dist = (R / Math.sin(fov / 2)) * 1.05;   // fit the bounding sphere + small margin
       const a = frac * Math.PI * 2;
-      const pos = [c.x + Math.cos(a) * R, c.y + sz.y * 0.55 + R * 0.25, c.z + Math.sin(a) * R];
-      const look = [c.x, c.y + sz.y * 0.15, c.z];
-      if (window.__studioMainCameraLook) window.__studioMainCameraLook(pos, look);
-      else if (vp && vp.camera) { vp.camera.position.set(...pos); vp.camera.lookAt(...look); }
-      if (vp && vp.controls && vp.controls.target) { vp.controls.target.set(c.x, c.y, c.z); if (vp.controls.update) vp.controls.update(); }
+      cam.position.set(c.x + Math.cos(a) * dist, c.y + R * 0.45, c.z + Math.sin(a) * dist);
+      cam.up.set(0, 1, 0);
+      cam.lookAt(c.x, c.y, c.z);
+      cam.near = Math.max(0.01, dist - R * 2); cam.far = dist + R * 4;
+      cam.updateProjectionMatrix(); cam.updateMatrixWorld();
     }, f / FRAMES);
     await win.waitForTimeout(120);
     await win.screenshot({ path: path.join(ORBIT, `orbit-${String(f).padStart(2, '0')}.png`) });
