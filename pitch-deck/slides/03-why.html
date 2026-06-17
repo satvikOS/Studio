@@ -1,0 +1,57 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link rel="stylesheet" href="../assets/deck.css">
+<style>
+  .head-row{ display:flex; align-items:flex-end; justify-content:space-between; margin-top:6px; }
+  .h2{ font-family:var(--disp); font-weight:600; font-size:44px; line-height:1.02; letter-spacing:-.032em; color:var(--ink); max-width:760px; }
+  .h2 em{ font-style:normal; color:#50555d; }
+  .faultline{ position:relative; height:1px; margin:26px 0 0; background:repeating-linear-gradient(90deg,var(--ink-mid) 0 14px, transparent 14px 22px); }
+  .faultline .tag{ position:absolute; right:0; top:-9px; background:var(--paper); padding-left:10px; }
+  .cols{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:0; margin-top:34px; flex:1; }
+  .pcol{ padding:0 30px; border-left:1px solid var(--line-strong); }
+  .pcol:first-child{ padding-left:0; border-left:none; }
+  .pcol .k{ display:flex; align-items:baseline; gap:10px; margin-bottom:14px; }
+  .pcol .kn{ font-family:var(--mono); font-size:11px; color:var(--faint); letter-spacing:.12em; }
+  .pcol h3{ font-family:var(--disp); font-weight:600; font-size:18px; letter-spacing:-.02em; color:var(--ink); }
+  .pcol p{ font-size:14.5px; line-height:1.6; color:var(--ink-soft); }
+  .pcol p b{ color:var(--ink); font-weight:600; }
+  .marketbar{ display:flex; align-items:center; gap:16px; margin-top:8px; padding:14px 0 0; border-top:1.4px solid var(--ink); }
+  .marketbar .lab{ font-family:var(--mono); font-size:10.5px; letter-spacing:.16em; color:var(--muted); white-space:nowrap; }
+  .marketbar .txt{ font-size:14.5px; color:var(--ink-soft); letter-spacing:-.006em; }
+  .marketbar .txt b{ color:var(--ink); font-weight:600; }
+</style></head>
+<body>
+<div class="sheet" data-sheet="03" data-rev="A" data-scale="1:1">
+  <div class="stage">
+    <div class="sheet-head">
+      <span class="u-label"><span class="eyebrow"><span class="dot"></span>THE THESIS · WHY NOW</span></span>
+      <span class="u-spec" style="color:var(--muted)">SECTION A–A</span>
+    </div>
+
+    <div class="head-row">
+      <div class="h2">The tools that design everything we build <em>still can't reason about what they're building.</em></div>
+    </div>
+    <div class="faultline"><span class="tag u-label" style="color:var(--muted)">FAULT LINE — A</span></div>
+
+    <div class="cols">
+      <div class="pcol">
+        <div class="k"><span class="kn">01</span><h3>The split</h3></div>
+        <p>Design lives in two disconnected worlds. <b>Creative 3D</b> — Blender, Maya, Houdini — and <b>mechanical CAD</b> — SolidWorks, NX, Creo. Fifteen-plus tools, no shared model, no shared brain. Intent is re-typed by hand at every boundary.</p>
+      </div>
+      <div class="pcol">
+        <div class="k"><span class="kn">02</span><h3>The false start</h3></div>
+        <p>The first wave of “text-to-CAD” hands you a <b>disposable script</b> from a black box — tessellated approximations, in the cloud, with your IP. Nothing you can open in a feature tree, edit by dimension, or send to a machine shop.</p>
+      </div>
+      <div class="pcol">
+        <div class="k"><span class="kn">03</span><h3>The opening</h3></div>
+        <p>Open-weight reasoning models now run on <b>Apple Silicon</b>, and native geometry kernels are open source. For the first time, a <b>local</b> copilot can drive a <b>real</b> kernel — private, precise, and yours.</p>
+      </div>
+    </div>
+
+    <div class="marketbar">
+      <span class="lab">MARKET</span>
+      <span class="txt">Mechanical CAD and 3D content creation are two large, entrenched software categories — <b>both being re-platformed by AI at the same moment.</b></span>
+    </div>
+  </div>
+</div>
+<script src="../assets/frame.js"></script>
+</body></html>

@@ -1,0 +1,89 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link rel="stylesheet" href="../assets/deck.css">
+<style>
+  .h2{ font-family:var(--disp); font-weight:600; font-size:38px; line-height:1; letter-spacing:-.03em; color:var(--ink); margin-top:4px; }
+  .h2 em{ font-style:normal; color:#50555d; }
+  .sub{ font-size:14.5px; color:var(--ink-mid); margin-top:9px; letter-spacing:-.006em; }
+  .tiers{ flex:1; display:flex; gap:0; margin-top:22px; border:1px solid var(--line-strong); }
+  .tier{ flex:1; display:flex; flex-direction:column; border-right:1px solid var(--line-strong); }
+  .tier:last-child{ border-right:none; }
+  .tier.feat{ background:var(--ink); }
+  .tier-h{ padding:15px 20px 14px; border-bottom:1px solid var(--line-strong); }
+  .tier.feat .tier-h{ border-bottom-color:var(--on-ink-line); }
+  .tier-name{ font-family:var(--disp); font-weight:600; font-size:20px; letter-spacing:-.02em; color:var(--ink); }
+  .tier.feat .tier-name{ color:var(--on-ink); }
+  .tier-who{ font-family:var(--mono); font-size:9.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); margin-top:5px; }
+  .tier.feat .tier-who{ color:var(--on-ink-faint); }
+  .tier-price{ font-family:var(--mono); font-size:15px; color:var(--ink); margin-top:12px; font-variant-numeric:tabular-nums; }
+  .tier.feat .tier-price{ color:var(--on-ink); }
+  .tier-price .ph{ color:var(--faint); }
+  .tier.feat .tier-price .ph{ color:var(--on-ink-faint); }
+  .tier-body{ padding:14px 20px; flex:1; }
+  .frow{ display:flex; gap:9px; padding:6px 0; font-size:12.5px; line-height:1.4; color:var(--ink-mid); }
+  .tier.feat .frow{ color:var(--on-ink-soft); }
+  .frow .mk{ color:var(--ink); }
+  .tier.feat .frow .mk{ color:var(--on-ink); }
+  .tag{ display:inline-block; font-family:var(--mono); font-size:8.5px; letter-spacing:.13em; padding:3px 7px; border:1px solid var(--on-ink-line-strong); color:var(--on-ink); margin-top:11px; }
+  .motion{ margin-top:14px; display:flex; align-items:center; gap:13px; }
+  .motion .lab{ font-family:var(--mono); font-size:10px; letter-spacing:.16em; color:var(--muted); white-space:nowrap; }
+  .motion .t{ font-size:13.5px; color:var(--ink-soft); letter-spacing:-.006em; }
+  .motion .t b{ color:var(--ink); font-weight:600; }
+</style></head>
+<body>
+<div class="sheet" data-sheet="10" data-rev="A" data-scale="NTS">
+  <div class="stage">
+    <div class="sheet-head">
+      <span class="u-label"><span class="eyebrow"><span class="dot"></span>BUSINESS MODEL · OPEN CORE</span></span>
+      <span class="u-spec" style="color:var(--muted)">MODEL</span>
+    </div>
+    <div class="h2">Free where it’s personal. <em>Paid where it’s shared.</em></div>
+    <div class="sub">Open source wins the user; collaboration, governance and scale win the revenue. The model is the moat.</div>
+
+    <div class="tiers">
+      <div class="tier">
+        <div class="tier-h">
+          <div class="tier-name">Free</div>
+          <div class="tier-who">Individuals · makers · students</div>
+          <div class="tier-price">$0 <span class="ph">· forever</span></div>
+        </div>
+        <div class="tier-body">
+          <div class="frow"><span class="mk">+</span>Both apps and the unified model</div>
+          <div class="frow"><span class="mk">+</span>Fully local — open source, open weights</div>
+          <div class="frow"><span class="mk">+</span>Unlimited personal use, nothing leaves your machine</div>
+        </div>
+      </div>
+      <div class="tier feat">
+        <div class="tier-h">
+          <div class="tier-name">Team</div>
+          <div class="tier-who">Studios · engineering teams</div>
+          <div class="tier-price">Per seat <span class="ph">/ mo</span></div>
+        </div>
+        <div class="tier-body">
+          <div class="frow"><span class="mk">+</span>Shared cloud projects + real-time collaboration</div>
+          <div class="frow"><span class="mk">+</span>Versioned PDM vault, roles &amp; permissions</div>
+          <div class="frow"><span class="mk">+</span>Managed Archie fleet — no local GPU required</div>
+          <span class="tag">THE CONVERSION ENGINE</span>
+        </div>
+      </div>
+      <div class="tier">
+        <div class="tier-h">
+          <div class="tier-name">Enterprise</div>
+          <div class="tier-who">Organizations at scale</div>
+          <div class="tier-price">Custom</div>
+        </div>
+        <div class="tier-body">
+          <div class="frow"><span class="mk">+</span>SSO, on-prem / private deployment</div>
+          <div class="frow"><span class="mk">+</span>Security, audit &amp; compliance, SLAs</div>
+          <div class="frow"><span class="mk">+</span>Custom discipline LoRAs &amp; managed training</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="motion">
+      <span class="lab">MOTION</span>
+      <span class="t">Land <b>bottom-up</b> through the free, open apps → <b>convert teams</b> when the work turns collaborative → <b>expand to enterprise</b> for security, support and custom models.</span>
+    </div>
+  </div>
+</div>
+<script src="../assets/frame.js"></script>
+</body></html>
