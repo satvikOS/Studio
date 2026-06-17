@@ -1,21 +1,27 @@
-# ArchDisc — Investor Pitch (ClawComp × Link Ventures)
+# ArchDisc — Pitch Deck (ClawComp × Link Ventures)
 
-Bespoke **7-slide** pitch deck for the **ArchDisc platform** — two standalone apps
-(**Studio** + **Forge**) driven by one unified, open-source AI model (**Archie**).
+A **9-slide**, warm "vibe-design" pitch for the **ArchDisc platform** — two standalone
+apps (**Studio** + **Forge**) driven by one unified AI model (**Archie**).
 
-**Deliverable:** [`out/ArchDisc-LinkVentures.pptx`](out/ArchDisc-LinkVentures.pptx) — 16:9, 7 slides, with a **real demo video embedded** on slide 4 (plays in presentation mode).
+**Deliverable:** [`out/ArchDisc-LinkVentures.pptx`](out/ArchDisc-LinkVentures.pptx) — 16:9, 9 slides, with a **real demo video embedded** on slide 4 (plays in presentation mode).
 
 ## Slides
-`01 Cover · 02 Vision · 03 Platform (Studio+Forge+Archie) · 04 Demo (▶ embedded) · 05 Why we win · 06 Business model · 07 Team + Ask`
+`01 Cover · 02 Vision · 03 Platform (triangular Studio·Forge·Archie) · 04 Demo (▶) ·
+05 Why we win · 06 Business model · 07 Go-to-market · 08 Team + Ask · 09 Dream-quote`
 
 ## Design
-A refined, dull-monochrome "engineering drawing set" (drafting border, zone ticks,
-title block) — image-forward, minimal text. Color comes from the product logos and
-the real Studio renders. Fonts: Space Grotesk · Geist · Geist Mono.
+Warm, sun-faded earth palette; atmospheric, irregular art-direction with real 3D
+renders bleeding in faded off the side of each sheet; airy footer (no rigid grid).
+Fonts: Space Grotesk · Geist · Geist Mono.
 
-Product logos (`assets/logos/`): Studio = spectrum **S**, Forge = anvil + shining star,
-Archie = bold wordmark. ClawComp + Link Ventures lockups are typographic stand-ins —
-drop the real logo files in `assets/logos/` to swap them in.
+Logos (`assets/logos/`): **Studio** = smushed muted spectrum-S; **Forge** = strong
+anvil + sharp asymmetrical star (top-centre); **Archie** = bold wordmark.
+ClawComp + Link Ventures are typographic stand-ins — drop the real logo files in
+`assets/logos/` to swap them in.
+
+## Business model
+Free **to use** (not open source) — like Vercel / GitHub: free for individuals,
+students and dreamers; "let's talk" for studios & enterprises.
 
 ## Rebuild
 ```bash
@@ -24,7 +30,7 @@ python3 -m venv .venv && ./.venv/bin/pip install python-pptx Pillow
 ./.venv/bin/python build_pptx.py    # render/*.png + assets/demo.mp4 -> out/*.pptx
 ```
 
-## To finalize before circulation
+## To finalize
 - Swap in real ClawComp + Link Ventures logos (`assets/logos/`).
 - Replace the demo clip (`assets/demo.mp4`) with the best build recording.
-- Confirm raise ($1.5M seed · SAFE), Jeff's role, and the market figures.
+- Confirm the raise ($1.5M seed · SAFE), Jeff's role, and the market figure.

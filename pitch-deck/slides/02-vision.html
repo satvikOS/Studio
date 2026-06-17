@@ -1,41 +1,26 @@
 <!doctype html><html><head><meta charset="utf-8">
 <link rel="stylesheet" href="../assets/deck.css">
 <style>
-  .body-row{ flex:1; display:flex; gap:40px; align-items:center; }
-  .left{ width:580px; flex:none; }
-  .eyebrow-mono{ font-family:var(--mono); font-size:12px; letter-spacing:.24em; color:var(--muted); margin-bottom:20px; }
-  .bigh{ font-size:50px; }
-  .turn{ font-family:var(--mono); font-size:12px; letter-spacing:.16em; color:var(--muted); margin-top:14px; text-transform:uppercase; }
-  .lead{ font-size:16px; line-height:1.55; color:var(--ink-soft); margin-top:18px; max-width:520px; letter-spacing:-.008em; }
+  .eyebrow-mono{ position:absolute; right:60px; top:50px; z-index:6; font-family:var(--mono); font-size:11px; letter-spacing:.24em; color:var(--clay); }
+  .wrap{ position:absolute; left:548px; right:60px; top:172px; z-index:6; }
+  .bigh{ font-size:52px; }
+  .bigh .g{ color:var(--ink-mid); }
+  .turn{ font-family:var(--mono); font-size:12px; letter-spacing:.16em; color:var(--muted); margin-top:16px; text-transform:uppercase; }
+  .lead{ font-size:16.5px; line-height:1.55; color:var(--ink-soft); margin-top:20px; letter-spacing:-.008em; max-width:520px; }
   .lead b{ color:var(--ink); font-weight:600; }
-  .right{ flex:1; height:380px; }
-  .imgframe{ height:100%; }
-  .mission{ display:flex; align-items:center; gap:13px; margin-top:auto; padding-top:16px; border-top:1.4px solid var(--ink); }
-  .mission .lab{ font-family:var(--mono); font-size:10px; letter-spacing:.16em; color:var(--muted); white-space:nowrap; }
-  .mission .t{ font-size:15px; color:var(--ink); font-weight:500; letter-spacing:-.008em; }
+  .mission{ position:absolute; left:548px; right:60px; bottom:76px; z-index:6; font-size:15px; color:var(--clay); font-weight:500; letter-spacing:-.006em; }
+  .mlab{ font-family:var(--mono); font-size:10px; letter-spacing:.18em; color:var(--muted); display:block; margin-bottom:6px; }
 </style></head>
 <body>
-<div class="sheet" data-sheet="02" data-rev="A" data-scale="1:1">
-  <div class="stage">
-    <div class="sheet-head">
-      <span class="u-label"><span class="eyebrow"><span class="dot"></span>VISION</span></span>
-      <span class="u-spec" style="color:var(--muted)">MANIFESTO</span>
-    </div>
-    <div class="body-row">
-      <div class="left">
-        <div class="bigh">Everyone can imagine&nbsp;it.<br><span class="g">Almost no one can build&nbsp;it.</span></div>
-        <div class="turn">— until now</div>
-        <div class="lead">For dreamers and the imaginative — no CAD degree, no 20-year apprenticeship. <b>Say what you see, and Archie builds it</b> — real, editable, yours.</div>
-      </div>
-      <div class="right">
-        <div class="imgframe"><img src="../assets/shots/studio-kitchen.png"><span class="cap">Studio · a scene, described in one sentence</span></div>
-      </div>
-    </div>
-    <div class="mission">
-      <span class="lab">MISSION</span>
-      <span class="t">Put the power to create — from dreaming to making — in everyone’s hands.</span>
-    </div>
+<div class="sheet" data-sheet="02" data-foot="VISION">
+  <div class="bgmodel left"><img src="../assets/shots/studio-bedroom.png"></div>
+  <div class="eyebrow-mono">VISION · WHY WE EXIST</div>
+  <div class="wrap">
+    <div class="bigh">Everyone can imagine it.<br><span class="g">Almost no one can build it.</span></div>
+    <div class="turn">— until now</div>
+    <div class="lead">For dreamers and the imaginative — no CAD degree, no twenty-year apprenticeship. <b>Say what you see, and Archie builds it</b> — real, editable, yours.</div>
   </div>
+  <div class="mission"><span class="mlab">MISSION</span>Put the power to create — from dreaming to making — in everyone’s hands.</div>
 </div>
 <script src="../assets/frame.js"></script>
 </body></html>

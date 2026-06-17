@@ -3,10 +3,10 @@
 window.ADraw = (function () {
   const NS = 'http://www.w3.org/2000/svg';
   const THEMES = {
-    paper: { ink: '#26292e', mid: '#5b5f66', faint: '#9c9fa4', line: '#c2c1bc',
-      fTop: '#deddd9', fL: '#cdccc7', fR: '#bbbab5', sphHi: '#efeeea', sphMid: '#cbcac6', sphLo: '#b2b1ac' },
-    ink: { ink: '#ecebe7', mid: 'rgba(236,235,231,.74)', faint: 'rgba(236,235,231,.54)', line: 'rgba(236,235,231,.28)',
-      fTop: 'rgba(236,235,231,.18)', fL: 'rgba(236,235,231,.10)', fR: 'rgba(236,235,231,.04)', sphHi: 'rgba(236,235,231,.40)', sphMid: 'rgba(236,235,231,.14)', sphLo: 'rgba(236,235,231,.04)' },
+    paper: { ink: '#2b2420', mid: '#6e5f50', faint: '#a99880', line: '#cbbda3',
+      fTop: '#e0d5c0', fL: '#d0c3a9', fR: '#bfb094', sphHi: '#f4ecdc', sphMid: '#cdbfa4', sphLo: '#b3a487' },
+    ink: { ink: '#efe7d6', mid: 'rgba(239,231,214,.76)', faint: 'rgba(239,231,214,.56)', line: 'rgba(239,231,214,.3)',
+      fTop: 'rgba(239,231,214,.18)', fL: 'rgba(239,231,214,.1)', fR: 'rgba(239,231,214,.04)', sphHi: 'rgba(239,231,214,.4)', sphMid: 'rgba(239,231,214,.14)', sphLo: 'rgba(239,231,214,.04)' },
   };
   let P = THEMES.paper;
   function setTheme(name) { P = THEMES[name] || THEMES.paper; }

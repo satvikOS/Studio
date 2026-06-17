@@ -14,7 +14,7 @@ prs.slide_width = Emu(EMU_W); prs.slide_height = Emu(EMU_H)
 blank = prs.slide_layouts[6]
 
 pngs = sorted(glob.glob(os.path.join(BD, 'render', '0[0-9]-*.png')))
-assert len(pngs) == 7, f'expected 7 slides, got {len(pngs)}: {[os.path.basename(p) for p in pngs]}'
+assert len(pngs) == 9, f'expected 9 slides, got {len(pngs)}: {[os.path.basename(p) for p in pngs]}'
 
 # demo video frame rect in logical px (must match .vframe in 04-demo.html)
 VF = dict(left=260, top=190, w=760, h=428)

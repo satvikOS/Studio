@@ -1,18 +1,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
   <defs>
-    <linearGradient id="sp" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#ff2d55"/>
-      <stop offset="20%" stop-color="#ff9500"/>
-      <stop offset="42%" stop-color="#ffd60a"/>
-      <stop offset="62%" stop-color="#34c759"/>
-      <stop offset="82%" stop-color="#0a84ff"/>
-      <stop offset="100%" stop-color="#bf5af2"/>
+    <linearGradient id="ms" x1="0.05" y1="0.05" x2="0.95" y2="0.95">
+      <stop offset="0%" stop-color="#c98e7a"/>
+      <stop offset="26%" stop-color="#cba36b"/>
+      <stop offset="50%" stop-color="#a7ae8e"/>
+      <stop offset="74%" stop-color="#94a0b4"/>
+      <stop offset="100%" stop-color="#b196a6"/>
     </linearGradient>
+    <filter id="smush" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="3.4"/>
+    </filter>
   </defs>
-  <!-- depth shadow -->
-  <path d="M74 30 C74 16 31 16 31 34 C31 50 71 48 71 68 C71 88 28 88 28 71"
-        fill="none" stroke="#11151c" stroke-opacity="0.18" stroke-width="15" stroke-linecap="round" transform="translate(2.5,3)"/>
-  <!-- spectrum S -->
-  <path d="M72 28 C72 14 29 14 29 32 C29 48 69 46 69 66 C69 86 26 86 26 69"
-        fill="none" stroke="url(#sp)" stroke-width="15" stroke-linecap="round"/>
+  <!-- smushed soft halo (non-vibrant blend) -->
+  <path d="M71 29 C71 16 30 16 30 33 C30 48 68 47 68 66 C68 85 27 85 27 69"
+        fill="none" stroke="url(#ms)" stroke-width="18" stroke-linecap="round" filter="url(#smush)" opacity="0.7"/>
+  <!-- crisp muted S over the smush -->
+  <path d="M71 29 C71 16 30 16 30 33 C30 48 68 47 68 66 C68 85 27 85 27 69"
+        fill="none" stroke="url(#ms)" stroke-width="15.5" stroke-linecap="round" opacity="0.92"/>
 </svg>

@@ -1,71 +1,56 @@
 <!doctype html><html><head><meta charset="utf-8">
 <link rel="stylesheet" href="../assets/deck.css">
 <style>
-  .h2{ font-family:var(--disp); font-weight:600; font-size:34px; line-height:1.04; letter-spacing:-.03em; color:var(--ink); margin-top:6px; }
-  .h2 .g{ color:#565b63; }
-  .sub{ font-size:14px; color:var(--ink-mid); margin-top:8px; letter-spacing:-.006em; }
-  .cols{ flex:1; display:flex; gap:0; margin-top:20px; }
-  .col{ flex:1; padding:0 26px; border-right:1px solid var(--line-strong); display:flex; flex-direction:column; }
-  .col:first-child{ padding-left:0; }
-  .col:last-child{ border-right:none; padding-right:0; }
-  .chead{ display:flex; align-items:center; gap:13px; margin-bottom:5px; }
-  .cname{ font-family:var(--disp); font-weight:700; font-size:23px; color:var(--ink); letter-spacing:-.02em; }
-  .crole{ font-family:var(--mono); font-size:9.5px; letter-spacing:.13em; color:var(--muted); text-transform:uppercase; margin-bottom:14px; }
-  .cart{ flex:1; display:flex; align-items:center; justify-content:center; min-height:0; }
-  .imgframe{ width:100%; height:188px; }
-  .cline{ font-size:13px; line-height:1.45; color:var(--ink-mid); margin-top:14px; }
-  .cline b{ color:var(--ink); font-weight:600; }
-  .trace{ width:100%; }
-  .trow{ display:flex; gap:10px; padding:6px 11px; border-bottom:1px solid var(--line); font-family:var(--mono); font-size:11px; align-items:center; }
-  .trow:last-child{ border-bottom:none; }
-  .trow .v{ color:var(--ink); } .trow .a{ color:var(--muted); margin-left:auto; }
-  .trow .ok{ color:var(--ink); border:1px solid var(--line-strong); font-size:8.5px; padding:1px 5px; letter-spacing:.08em; }
-  .archie-mark{ font-size:24px; }
+  .eyebrow-mono{ position:absolute; left:60px; top:50px; z-index:6; font-family:var(--mono); font-size:11px; letter-spacing:.24em; color:var(--clay); }
+  .htext{ position:absolute; left:60px; top:236px; z-index:6; max-width:430px; }
+  .bigh{ font-size:40px; }
+  .bigh .g{ color:var(--ink-mid); }
+  .sub{ font-size:15px; line-height:1.5; color:var(--ink-soft); margin-top:16px; letter-spacing:-.006em; }
+  .sub b{ color:var(--ink); font-weight:600; }
+  .node{ position:absolute; z-index:6; width:210px; }
+  .node .lg{ display:flex; align-items:center; gap:12px; }
+  .node .nm{ font-family:var(--disp); font-weight:700; font-size:22px; color:var(--ink); letter-spacing:-.02em; }
+  .node .archie-mark{ font-size:24px; }
+  .node .rl{ font-family:var(--mono); font-size:9px; letter-spacing:.12em; color:var(--muted); text-transform:uppercase; margin-top:7px; }
+  .node .ds{ font-size:12px; line-height:1.4; color:var(--ink-mid); margin-top:7px; }
+  .n-studio{ left:560px; top:150px; }
+  .n-forge{ left:902px; top:330px; }
+  .n-archie{ left:628px; top:452px; }
 </style></head>
 <body>
-<div class="sheet" data-sheet="03" data-rev="A" data-scale="NTS">
-  <div class="stage">
-    <div class="sheet-head">
-      <span class="u-label"><span class="eyebrow"><span class="dot"></span>THE PLATFORM</span></span>
-      <span class="u-spec" style="color:var(--muted)">ONE UNIVERSE · ONE COPILOT</span>
-    </div>
-    <div class="h2">Two standalone apps. <span class="g">One unified model.</span></div>
-    <div class="sub">Archie is the spine; Studio and Forge are the surfaces it acts on. You change intent, not tools.</div>
+<div class="sheet" data-sheet="03" data-foot="PLATFORM">
+  <div class="bgmodel right wide" style="opacity:.16"><img src="../assets/shots/studio-scandi.png"></div>
+  <svg style="position:absolute;inset:0;z-index:3" width="1280" height="720" viewBox="0 0 1280 720">
+    <!-- irregular triangle between the three node centres -->
+    <polygon points="665,210 1007,392 733,512" fill="rgba(176,114,79,.05)" stroke="var(--line-strong)" stroke-width="1.2" stroke-dasharray="7 6"/>
+    <circle cx="665" cy="210" r="3" fill="var(--clay)"/>
+    <circle cx="1007" cy="392" r="3" fill="var(--clay)"/>
+    <circle cx="733" cy="512" r="3" fill="var(--clay)"/>
+    <text x="690" y="372" fill="var(--muted)" font-family="Geist Mono,monospace" font-size="10" letter-spacing="1.5">drives ↗</text>
+    <text x="852" y="468" fill="var(--muted)" font-family="Geist Mono,monospace" font-size="10" letter-spacing="1.5">↖ drives</text>
+  </svg>
 
-    <div class="cols">
-      <div class="col">
-        <div class="chead"><img src="../assets/logos/studio.svg" width="40" height="40"><span class="cname">Studio</span></div>
-        <div class="crole">CREATIVE 3D · STANDALONE APP</div>
-        <div class="cart"><div class="imgframe"><img src="../assets/shots/studio-scandi.png"><span class="cap">Studio · staged scene</span></div></div>
-        <div class="cline"><b>Blender · Maya · Houdini-class</b> 3D — model, sculpt, light, render.</div>
-      </div>
-      <div class="col">
-        <div class="chead"><img src="../assets/logos/forge.svg" width="44" height="43"><span class="cname">Forge</span></div>
-        <div class="crole">MECHANICAL CAD · STANDALONE APP</div>
-        <div class="cart"><svg id="forgeart" width="300" height="188" viewBox="0 0 300 188"></svg></div>
-        <div class="cline"><b>Native B-rep kernel</b> — parametric solids, simulation, manufacturable drawings.</div>
-      </div>
-      <div class="col">
-        <div class="chead"><span class="archie-mark">Archie</span></div>
-        <div class="crole">UNIFIED MODEL · DRIVES BOTH APPS</div>
-        <div class="cart"><div class="trace">
-          <div class="trow"><span class="v">sketch.rect</span><span class="a">100×40</span><span class="ok">OK</span></div>
-          <div class="trow"><span class="v">part.extrude</span><span class="a">d=4</span><span class="ok">OK</span></div>
-          <div class="trow"><span class="v">part.holes</span><span class="a">2×M6</span><span class="ok">OK</span></div>
-          <div class="trow"><span class="v">part.fillet</span><span class="a">r3</span><span class="ok">OK</span></div>
-          <div class="trow"><span class="v">checkValidity</span><span class="a">manifold</span><span class="ok">VALID</span></div>
-        </div></div>
-        <div class="cline"><b>Plain language in</b>, validated geometry out — local, open weights.</div>
-      </div>
-    </div>
+  <div class="eyebrow-mono">THE PLATFORM · ONE UNIVERSE, ONE COPILOT</div>
+  <div class="htext">
+    <div class="bigh">Two standalone apps.<br><span class="g">One unified model.</span></div>
+    <div class="sub">Archie is the spine — <b>Studio and Forge are the surfaces it acts on.</b> You change intent, not tools.</div>
+  </div>
+
+  <div class="node n-studio">
+    <div class="lg"><img src="../assets/logos/studio.svg" width="44" height="44"><span class="nm">Studio</span></div>
+    <div class="rl">CREATIVE 3D · STANDALONE APP</div>
+    <div class="ds">Blender · Maya · Houdini-class — model, sculpt, light, render.</div>
+  </div>
+  <div class="node n-forge">
+    <div class="lg"><img src="../assets/logos/forge.svg" width="46" height="47"><span class="nm">Forge</span></div>
+    <div class="rl">MECHANICAL CAD · STANDALONE APP</div>
+    <div class="ds">Native B-rep kernel — parametric solids, simulation, drawings.</div>
+  </div>
+  <div class="node n-archie">
+    <div class="lg"><span class="archie-mark">Archie</span></div>
+    <div class="rl">UNIFIED MODEL · DRIVES BOTH</div>
+    <div class="ds">Plain language in, validated geometry out — local &amp; private.</div>
   </div>
 </div>
 <script src="../assets/frame.js"></script>
-<script src="../assets/draw.js"></script>
-<script>
-  ADraw.setTheme('paper');
-  const svg=document.getElementById('forgeart');
-  ADraw.boltCircle(svg, 150, 86, 60, 8, 6);
-  ADraw.dimH(svg, 150-82, 150+82, 168, 'Ø80');
-</script>
 </body></html>

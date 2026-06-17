@@ -1,39 +1,36 @@
 <!doctype html><html><head><meta charset="utf-8">
 <link rel="stylesheet" href="../assets/deck.css">
 <style>
-  .head{ display:flex; justify-content:space-between; align-items:center; }
-  .lockup{ color:var(--on-ink); font-size:18px; }
-  .lockup .sub{ font-family:var(--mono); font-weight:400; font-size:10px; letter-spacing:.14em; color:var(--on-ink-faint); display:block; }
-  .center{ flex:1; display:flex; flex-direction:column; justify-content:center; }
-  .eyebrow-mono{ font-family:var(--mono); font-size:12px; letter-spacing:.26em; color:var(--on-ink-soft); margin-bottom:22px; }
-  .bigh{ font-size:88px; }
-  .sub{ font-size:18px; color:var(--on-ink-soft); margin-top:24px; letter-spacing:-.01em; }
-  .logorow{ display:flex; align-items:flex-end; gap:0; margin-top:auto; border-top:1px solid var(--on-ink-line); padding-top:20px; }
-  .prod{ flex:1; display:flex; align-items:center; gap:14px; border-right:1px solid var(--on-ink-line); }
-  .prod:last-child{ border-right:none; padding-left:34px; }
-  .prod:not(:first-child){ padding-left:34px; }
-  .prod .nm{ font-family:var(--disp); font-weight:700; font-size:22px; color:var(--on-ink); letter-spacing:-.02em; }
-  .prod .rl{ font-family:var(--mono); font-size:10px; letter-spacing:.14em; color:var(--on-ink-faint); text-transform:uppercase; display:block; margin-top:3px; }
-  .archie-mark{ font-size:26px; }
+  .topL{ position:absolute; left:54px; top:46px; z-index:6; }
+  .topR{ position:absolute; right:54px; top:46px; z-index:6; text-align:right; }
+  .lockup{ font-size:17px; color:var(--ink); }
+  .lockup .sub{ display:block; font-family:var(--mono); font-weight:400; font-size:9px; letter-spacing:.16em; color:var(--faint); margin-top:4px; }
+  .eyebrow-mono{ position:absolute; left:66px; top:212px; z-index:6; font-family:var(--mono); font-size:11px; letter-spacing:.26em; color:var(--clay); }
+  .bigh{ position:absolute; left:64px; top:244px; z-index:6; font-size:86px; }
+  .bigh .g{ color:var(--ink-mid); }
+  .tagline{ position:absolute; left:66px; top:470px; z-index:6; font-size:18px; color:var(--ink-soft); max-width:560px; letter-spacing:-.008em; }
+  .tagline b{ color:var(--ink); font-weight:600; }
+  /* loose, irregular product-logo cluster, lower area */
+  .lg{ position:absolute; z-index:6; display:flex; align-items:center; gap:11px; }
+  .lg .nm{ font-family:var(--disp); font-weight:700; font-size:17px; color:var(--ink); letter-spacing:-.02em; }
+  .lg.studio{ left:760px; top:300px; }
+  .lg.forge{ left:880px; top:430px; }
+  .lg.archie{ left:700px; top:470px; }
+  .lg .archie-mark{ font-size:22px; }
 </style></head>
 <body>
-<div class="sheet ink" data-sheet="01" data-rev="A" data-scale="NTS">
-  <div class="stage">
-    <div class="head">
-      <span class="wordmark">ARCHDISC</span>
-      <span class="lockup">ClawComp <span class="x">×</span> Link&nbsp;Ventures<span class="sub">— logos to be supplied —</span></span>
-    </div>
-    <div class="center">
-      <div class="eyebrow-mono">OPEN-SOURCE AI DESIGN PLATFORM</div>
-      <div class="bigh">Describe it.<br><span class="g">Archie builds it.</span></div>
-      <div class="sub">Two standalone apps. One unified model. Open source, local, yours.</div>
-    </div>
-    <div class="logorow">
-      <div class="prod"><img src="../assets/logos/studio.svg" width="56" height="56"><div><span class="nm">Studio</span><span class="rl">Create</span></div></div>
-      <div class="prod"><img src="../assets/logos/forge.svg" width="62" height="60"><div><span class="nm">Forge</span><span class="rl">Engineer</span></div></div>
-      <div class="prod"><div><span class="archie-mark">Archie</span><span class="rl">The unified copilot</span></div></div>
-    </div>
-  </div>
+<div class="sheet" data-sheet="01" data-foot="ARCHDISC">
+  <div class="bgmodel right tall"><img src="../assets/shots/studio-skull.png"></div>
+  <div class="topL"><span class="wordmark">ARCHDISC</span></div>
+  <div class="topR"><span class="lockup">ClawComp <span class="x">×</span> Link&nbsp;Ventures<span class="sub">— host & venue —</span></span></div>
+
+  <div class="eyebrow-mono">FREE-TO-USE AI DESIGN PLATFORM</div>
+  <div class="bigh">Describe it.<br><span class="g">Archie builds it.</span></div>
+  <div class="tagline">Two standalone apps, one unified model — free to use, local, private. <b>The beginning of vibe designing.</b></div>
+
+  <div class="lg studio"><img src="../assets/logos/studio.svg" width="42" height="42"><span class="nm">Studio</span></div>
+  <div class="lg forge"><img src="../assets/logos/forge.svg" width="44" height="45"><span class="nm">Forge</span></div>
+  <div class="lg archie"><span class="archie-mark">Archie</span></div>
 </div>
 <script src="../assets/frame.js"></script>
 </body></html>

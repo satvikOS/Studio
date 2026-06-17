@@ -10,14 +10,16 @@
 @font-face{font-family:"Geist Mono";src:url("fonts/GeistMono.ttf") format("truetype");font-weight:100 900;font-display:block}
 
 :root{
-  /* monochrome palette — dulled for eye comfort: darker-white paper + charcoal ink, soft contrast */
-  --paper:#e6e5e1; --surface:#efeeea;
-  --ink:#26292e; --ink-soft:#3c4047; --ink-mid:#5b5f66;
-  --muted:#787c82; --faint:#9c9fa4;
-  --line:#d3d2ce; --line-strong:#c2c1bc;
-  /* inverted (ink sheet) — dull white on charcoal */
-  --on-ink:#ecebe7; --on-ink-soft:rgba(236,235,231,.82); --on-ink-faint:rgba(236,235,231,.58);
-  --on-ink-line:rgba(236,235,231,.18); --on-ink-line-strong:rgba(236,235,231,.34);
+  /* WARM "vibe-design" palette — sun-faded earth tones that harmonize */
+  --paper:#ece3d2; --surface:#f4ecdc;
+  --ink:#2b2420; --ink-soft:#4a3f36; --ink-mid:#6e5f50;
+  --muted:#8c7c66; --faint:#a99880;
+  --line:#dccfb8; --line-strong:#cbbda3;
+  /* warm accent family (use sparingly) */
+  --clay:#b0724f; --amber:#c2914c; --rose:#bd8b77; --olive:#8c8252; --plum:#7a4e44;
+  /* inverted (warm-dark sheet) — warm cream on espresso */
+  --on-ink:#efe7d6; --on-ink-soft:rgba(239,231,214,.84); --on-ink-faint:rgba(239,231,214,.58);
+  --on-ink-line:rgba(239,231,214,.18); --on-ink-line-strong:rgba(239,231,214,.34);
   --disp:"Space Grotesk", ui-sans-serif, system-ui, sans-serif;
   --sans:"Geist", ui-sans-serif, system-ui, -apple-system, sans-serif;
   --mono:"Geist Mono", ui-monospace, "SF Mono", monospace;
@@ -40,19 +42,14 @@ body{
 }
 .sheet.ink{ background:var(--ink); color:var(--on-ink); }
 
-/* ultra-faint drafting grid */
+/* warm vignette breath (replaces the drafting grid) */
 .sheet::before{
-  content:""; position:absolute; inset:0; pointer-events:none; z-index:0;
-  background-image:
-    linear-gradient(var(--line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--line) 1px, transparent 1px);
-  background-size:32px 32px; opacity:.45;
+  content:""; position:absolute; inset:0; pointer-events:none; z-index:1;
+  background:radial-gradient(120% 90% at 50% 0%, rgba(255,247,230,.18), transparent 55%),
+             radial-gradient(90% 80% at 100% 100%, rgba(123,78,68,.06), transparent 60%);
 }
 .sheet.ink::before{
-  background-image:
-    linear-gradient(rgba(236,235,231,.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(236,235,231,.05) 1px, transparent 1px);
-  opacity:1;
+  background:radial-gradient(120% 90% at 50% 0%, rgba(255,233,190,.05), transparent 55%);
 }
 
 /* drawing border — inset keyline rectangle */
@@ -99,7 +96,7 @@ body{
 .sheet.ink .body{ color:var(--on-ink-soft); }
 
 /* ---- Content stage (inside the border) ---------------------------------- */
-.stage{ position:absolute; inset:26px; z-index:4; padding:40px 50px 78px; display:flex; flex-direction:column; }
+.stage{ position:absolute; inset:0; z-index:4; padding:54px 66px 58px; display:flex; flex-direction:column; }
 
 /* sheet header: eyebrow left, sheet id right */
 .sheet-head{ display:flex; justify-content:space-between; align-items:flex-start; }
@@ -179,3 +176,25 @@ body{
 .sheet.ink .bigh .g{ color:var(--on-ink-soft); }
 .wordmark{ font-family:var(--mono); font-size:14px; letter-spacing:.34em; font-weight:500; color:var(--ink); }
 .sheet.ink .wordmark{ color:var(--on-ink); }
+
+/* ---- vibe-design: atmospheric faded side-models + airy footer ------- */
+.bgmodel{ position:absolute; top:0; bottom:0; z-index:0; pointer-events:none; opacity:.28;
+  filter:sepia(.55) saturate(1.3) brightness(1.05) contrast(.93); }
+.bgmodel img{ width:100%; height:100%; object-fit:cover; display:block; }
+.bgmodel.right{ right:0; width:54%;
+  -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 62%); mask-image:linear-gradient(90deg,transparent 0,#000 62%); }
+.bgmodel.left{ left:0; width:54%;
+  -webkit-mask-image:linear-gradient(270deg,transparent 0,#000 62%); mask-image:linear-gradient(270deg,transparent 0,#000 62%); }
+.bgmodel.wide{ width:66%; }
+.bgmodel.tall{ width:46%; }
+.sheet.ink .bgmodel{ opacity:.40; filter:sepia(.5) saturate(1.25) brightness(.95) contrast(1.02); }
+/* soft warm flares for atmosphere */
+.flare{ position:absolute; z-index:1; pointer-events:none; border-radius:50%;
+  background:radial-gradient(circle, rgba(194,145,76,.18), transparent 68%); filter:blur(10px); }
+
+.deck-footer{ position:absolute; left:0; right:0; bottom:0; height:40px; z-index:8;
+  display:flex; align-items:center; justify-content:space-between; padding:0 46px;
+  font-family:var(--mono); font-size:9.5px; letter-spacing:.2em; color:var(--faint); }
+.sheet.ink .deck-footer{ color:var(--on-ink-faint); }
+.ft-l{ font-weight:500; color:var(--muted); letter-spacing:.34em; }
+.sheet.ink .ft-l{ color:var(--on-ink-soft); }
