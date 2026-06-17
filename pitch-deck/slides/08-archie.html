@@ -1,0 +1,100 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link rel="stylesheet" href="../assets/deck.css">
+<style>
+  .h2{ font-family:var(--disp); font-weight:600; font-size:40px; line-height:1; letter-spacing:-.03em; color:var(--on-ink); }
+  .sub{ font-size:15px; color:var(--on-ink-soft); margin-top:10px; letter-spacing:-.006em; }
+  .main{ flex:1; display:flex; gap:34px; margin-top:18px; }
+  .left{ width:560px; flex:none; display:flex; flex-direction:column; }
+  .blk-cap{ display:flex; justify-content:space-between; margin-bottom:7px; }
+  .tracebox{ font-family:var(--mono); border:1px solid var(--on-ink-line); }
+  .trow{ display:flex; align-items:center; gap:12px; padding:7.5px 14px; border-bottom:1px solid var(--on-ink-line); font-size:12.5px; }
+  .trow:last-child{ border-bottom:none; }
+  .trow .v{ color:var(--on-ink); font-weight:500; }
+  .trow .a{ color:var(--on-ink-faint); font-variant-numeric:tabular-nums slashed-zero; }
+  .trow .s{ margin-left:auto; font-size:9.5px; letter-spacing:.1em; color:var(--on-ink); border:1px solid var(--on-ink-line-strong); padding:2px 6px; }
+  .trow.plan{ background:rgba(244,245,246,.04); }
+  .trow.plan .v{ font-family:var(--sans); font-style:italic; color:var(--on-ink-soft); font-weight:400; }
+  .tracenote{ font-size:12px; color:var(--on-ink-faint); margin-top:9px; letter-spacing:-.004em; }
+  .right{ flex:1; display:flex; flex-direction:column; }
+  .stats{ display:grid; grid-template-columns:1fr 1fr; border:1px solid var(--on-ink-line-strong); }
+  .stat{ padding:13px 15px; border-right:1px solid var(--on-ink-line); border-bottom:1px solid var(--on-ink-line); }
+  .stat:nth-child(2n){ border-right:none; }
+  .stat:nth-child(n+3){ border-bottom:none; }
+  .stat .v{ font-family:var(--mono); font-weight:500; font-size:25px; letter-spacing:-.02em; color:var(--on-ink); font-variant-numeric:tabular-nums slashed-zero; }
+  .stat .l{ font-size:11px; line-height:1.35; color:var(--on-ink-soft); margin-top:5px; }
+  .moats{ margin-top:16px; display:flex; flex-direction:column; gap:0; border-top:1px solid var(--on-ink-line); }
+  .mrow{ display:grid; grid-template-columns:130px 1fr; gap:14px; padding:12px 0; border-bottom:1px solid var(--on-ink-line); }
+  .mrow:last-child{ border-bottom:none; }
+  .mk{ font-family:var(--mono); font-size:11px; letter-spacing:.12em; color:var(--on-ink); }
+  .mv{ font-size:12.5px; line-height:1.45; color:var(--on-ink-soft); }
+  .mv b{ color:var(--on-ink); font-weight:600; }
+</style></head>
+<body>
+<div class="sheet ink" data-sheet="08" data-rev="A" data-scale="NTS">
+  <div class="stage">
+    <div class="sheet-head">
+      <span class="u-label"><span class="eyebrow"><span class="dot"></span>PILLAR 03 · ARCHIE — THE UNIFIED MODEL</span></span>
+      <span class="u-spec" style="color:var(--on-ink-faint)">DETAIL D · INTELLIGENCE</span>
+    </div>
+    <div class="h2">The copilot that builds geometry you can trust.</div>
+    <div class="sub">One model. Both apps. Nothing leaves your machine — and it’s not a black box.</div>
+
+    <div class="main">
+      <div class="left">
+        <div class="blk-cap"><span class="u-label" style="color:var(--on-ink)">ONE MODEL · TWO APPS</span><span class="u-spec" style="color:var(--on-ink-faint);font-size:11px">ROUTING</span></div>
+        <svg id="art" width="556" height="138" viewBox="0 0 556 138"></svg>
+        <div class="blk-cap" style="margin-top:18px"><span class="u-label" style="color:var(--on-ink)">ARCHIE · BUILD TRACE</span><span class="u-spec" style="color:var(--on-ink-faint);font-size:11px">FORGE · adapters: mech/part</span></div>
+        <div class="tracebox">
+          <div class="trow plan"><span class="v">“a 100 mm wall bracket, two M6 holes 60 mm apart, 4 mm wall.”</span></div>
+          <div class="trow"><span class="v">sketch.rect</span><span class="a">100 × 40</span><span class="s">OK</span></div>
+          <div class="trow"><span class="v">part.extrude</span><span class="a">d = 4</span><span class="s">OK</span></div>
+          <div class="trow"><span class="v">part.holes</span><span class="a">2 × M6 @ 60</span><span class="s">OK</span></div>
+          <div class="trow"><span class="v">part.filletEdges</span><span class="a">inner · r3</span><span class="s">OK</span></div>
+          <div class="trow"><span class="v">heal.checkValidity</span><span class="a">manifold solid</span><span class="s">VALID</span></div>
+        </div>
+        <div class="tracenote">Every call is readable. Every dimension is editable. Every solid is gated before it renders — you get an editable feature tree, not a disposable script.</div>
+      </div>
+
+      <div class="right">
+        <div class="stats">
+          <div class="stat"><div class="v">7B</div><div class="l">DeepSeek-R1-Distill base, fine-tuned &amp; quantized for MLX</div></div>
+          <div class="stat"><div class="v">14</div><div class="l">Hot-swap LoRA adapters, routed per discipline at request time</div></div>
+          <div class="stat"><div class="v">~17M</div><div class="l">Training samples — math · logic · tool-calls · geometry</div></div>
+          <div class="stat"><div class="v">$0</div><div class="l">Per-token inference cost — runs on Apple Silicon</div></div>
+        </div>
+        <div class="moats">
+          <div class="mrow"><div class="mk">OPEN SOURCE</div><div class="mv"><b>Both apps and the model</b> — open code, open weights. Inspect it, fine-tune it, self-host it. No closed model, no lock-in.</div></div>
+          <div class="mrow"><div class="mk">NATIVE KERNEL</div><div class="mv">Calls dispatch into a <b>real B-rep kernel</b>, not a renderer. The output is editable, validated, manufacturable.</div></div>
+          <div class="mrow"><div class="mk">LOCAL</div><div class="mv"><b>Nothing leaves your machine.</b> No API keys, no rate limits, no egress of your designs.</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="../assets/frame.js"></script>
+<script src="../assets/draw.js"></script>
+<script>
+  ADraw.setTheme('ink');
+  const svg = document.getElementById('art');
+  const E=ADraw.el, INK=ADraw.INK(), FAINT=ADraw.FAINT(), MID=ADraw.MID(), LINE=ADraw.LINE();
+  function node(x,y,w,h,title,sub,strong){
+    svg.appendChild(E('rect',{x,y,width:w,height:h,fill:'none',stroke:INK,'stroke-width':strong?1.8:1.2}));
+    const t=E('text',{x:x+13,y:y+h/2-2,fill:INK,'font-family':'Space Grotesk, sans-serif','font-size':15,'font-weight':600}); t.textContent=title; svg.appendChild(t);
+    const s=E('text',{x:x+13,y:y+h/2+15,fill:FAINT,'font-family':'Geist Mono, monospace','font-size':10,'letter-spacing':'.04em'}); s.textContent=sub; svg.appendChild(s);
+  }
+  // ARCHIE trunk (left)
+  node(8,40,176,58,'Archie','one unified model',true);
+  // app nodes (right)
+  node(372,4,176,46,'Forge','standalone app');
+  node(372,88,176,46,'Studio','standalone app');
+  // connectors with arrowheads
+  function conn(x1,y1,x2,y2,label){
+    const mx=(x1+x2)/2;
+    svg.appendChild(E('path',{d:`M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`,fill:'none',stroke:MID,'stroke-width':1.2}));
+    svg.appendChild(E('path',{d:`M ${x2} ${y2} l -8 -3.5 M ${x2} ${y2} l -8 3.5`,stroke:INK,'stroke-width':1.2,fill:'none'}));
+    const t=E('text',{x:mx,y:(y1+y2)/2-6,'text-anchor':'middle',fill:FAINT,'font-family':'Geist Mono, monospace','font-size':10}); t.textContent=label; svg.appendChild(t);
+  }
+  conn(184,62,372,27,'adapters: mech/*');
+  conn(184,76,372,111,'adapters: studio/*');
+</script>
+</body></html>

@@ -1,0 +1,103 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link rel="stylesheet" href="../assets/deck.css">
+<style>
+  .h2{ font-family:var(--disp); font-weight:600; font-size:40px; line-height:1; letter-spacing:-.03em; color:var(--ink); }
+  .sub{ font-size:15px; color:var(--ink-mid); margin-top:10px; max-width:560px; letter-spacing:-.006em; }
+  .main{ flex:1; display:flex; gap:30px; margin-top:18px; }
+  .draw{ width:430px; flex:none; border-right:1px solid var(--line-strong); padding-right:24px; display:flex; flex-direction:column; }
+  .draw .cap{ display:flex; justify-content:space-between; margin-bottom:6px; }
+  .vp{ position:relative; border:1.2px solid var(--ink); height:236px; }
+  .vp .tick{ position:absolute; width:12px; height:12px; }
+  .vp .tl{ left:-1px; top:-1px; border-left:2px solid var(--ink); border-top:2px solid var(--ink); }
+  .vp .tr{ right:-1px; top:-1px; border-right:2px solid var(--ink); border-top:2px solid var(--ink); }
+  .vp .bl{ left:-1px; bottom:-1px; border-left:2px solid var(--ink); border-bottom:2px solid var(--ink); }
+  .vp .br{ right:-1px; bottom:-1px; border-right:2px solid var(--ink); border-bottom:2px solid var(--ink); }
+  .vp .vlabel{ position:absolute; left:10px; top:8px; }
+  .passes{ display:flex; gap:0; margin-top:10px; border:1px solid var(--line-strong); }
+  .passes .p{ flex:1; text-align:center; padding:7px 2px; border-right:1px solid var(--line); font-family:var(--mono); font-size:9.5px; letter-spacing:.08em; color:var(--muted); }
+  .passes .p:last-child{ border-right:none; }
+  .passes .p.on{ background:var(--ink); color:var(--on-ink); }
+  .right{ flex:1; display:flex; flex-direction:column; }
+  .stats{ display:grid; grid-template-columns:1fr 1fr; border:1px solid var(--line-strong); }
+  .stat{ padding:14px 16px; border-right:1px solid var(--line); border-bottom:1px solid var(--line); }
+  .stat:nth-child(2n){ border-right:none; }
+  .stat:nth-child(n+3){ border-bottom:none; }
+  .stat .v{ font-family:var(--mono); font-weight:500; font-size:27px; letter-spacing:-.02em; color:var(--ink); font-variant-numeric:tabular-nums slashed-zero; }
+  .stat .l{ font-size:11.5px; line-height:1.35; color:var(--ink-mid); margin-top:5px; }
+  .caps{ margin-top:16px; flex:1; }
+  .cap-row{ display:grid; grid-template-columns:128px 1fr; gap:14px; padding:8px 0; border-bottom:1px solid var(--line); }
+  .cap-row:last-child{ border-bottom:none; }
+  .cap-k{ font-family:var(--mono); font-size:10.5px; letter-spacing:.08em; color:var(--ink); text-transform:uppercase; padding-top:2px; }
+  .cap-v{ font-size:12.5px; line-height:1.45; color:var(--ink-mid); }
+  .cap-v b{ color:var(--ink); font-weight:600; }
+  .moat{ margin-top:14px; padding:13px 16px; background:var(--ink); color:var(--on-ink); display:flex; gap:13px; align-items:baseline; }
+  .moat .ml{ font-family:var(--mono); font-size:10px; letter-spacing:.16em; color:var(--on-ink-faint); white-space:nowrap; }
+  .moat .mt{ font-size:13.5px; line-height:1.45; color:var(--on-ink); letter-spacing:-.006em; }
+  .moat .mt b{ font-weight:600; }
+</style></head>
+<body>
+<div class="sheet" data-sheet="07" data-rev="A" data-scale="NTS">
+  <div class="stage">
+    <div class="sheet-head">
+      <span class="u-label"><span class="eyebrow"><span class="dot"></span>PILLAR 02 · STUDIO — STANDALONE APP</span></span>
+      <span class="u-spec" style="color:var(--muted)">DETAIL C · CREATIVE 3D</span>
+    </div>
+    <div class="h2">A whole studio. Speak, and it sculpts.</div>
+    <div class="sub">Blender-, Maya-, and Houdini-class breadth — modeling to render — collapsed into one AI-driven surface.</div>
+
+    <div class="main">
+      <div class="draw">
+        <div class="cap"><span class="u-label" style="color:var(--ink)">VIEWPORT · BEAUTY + PASSES</span><span class="u-spec" style="color:var(--faint);font-size:11px">GPU PT</span></div>
+        <div class="vp">
+          <span class="tick tl"></span><span class="tick tr"></span><span class="tick bl"></span><span class="tick br"></span>
+          <span class="vlabel u-spec" style="color:var(--faint);font-size:10px">persp · f/2.8 · 50mm</span>
+          <svg id="art" width="404" height="236" viewBox="0 0 404 236"></svg>
+        </div>
+        <div class="passes">
+          <span class="p on">BEAUTY</span><span class="p">DIFFUSE</span><span class="p">SPEC</span><span class="p">CRYPTO</span><span class="p">DEPTH</span>
+        </div>
+      </div>
+      <div class="right">
+        <div class="stats">
+          <div class="stat"><div class="v">200+</div><div class="l">DCC capabilities verified across the toolset</div></div>
+          <div class="stat"><div class="v">300+</div><div class="l">Procedural, sim &amp; rendering feature modules</div></div>
+          <div class="stat"><div class="v">~11</div><div class="l">Pro suites targeted — Blender to Houdini to ZBrush</div></div>
+          <div class="stat"><div class="v">GPU</div><div class="l">Real path-traced rendering, on-device</div></div>
+        </div>
+        <div class="caps">
+          <div class="cap-row"><div class="cap-k">Model · Sculpt</div><div class="cap-v">Poly modeling, <b>multiresolution sculpt layers</b>, retopo, dynamesh, booleans.</div></div>
+          <div class="cap-row"><div class="cap-k">UV · Shade</div><div class="cap-v">Unwrap, <b>PBR texture paint</b>, node shader graph, HDRI environments.</div></div>
+          <div class="cap-row"><div class="cap-k">Rig · Animate</div><div class="cap-v">Skeletons, motion <b>retarget</b>, keyframe sequencer, cinematic camera.</div></div>
+          <div class="cap-row"><div class="cap-k">Simulate</div><div class="cap-v"><b>Cloth, pyro/fire, fluids, strand grooming</b>, fracture — physically based.</div></div>
+          <div class="cap-row"><div class="cap-k">Render · Comp</div><div class="cap-v"><b>GPU path tracer</b>, render passes, cryptomatte, color grade, compositor.</div></div>
+        </div>
+        <div class="moat">
+          <span class="ml">MOAT</span>
+          <span class="mt"><b>Ask Archie to stage a scene</b> — it composes the layout and emits the tool-calls across modeling, lighting and render passes. Breadth driven by intent, not 400 hotkeys.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="../assets/frame.js"></script>
+<script src="../assets/draw.js"></script>
+<script>
+  ADraw.setTheme('paper');
+  const svg = document.getElementById('art');
+  const E=ADraw.el, INK=ADraw.INK(), FAINT=ADraw.FAINT(), MID=ADraw.MID();
+  const cx=202, cy=120, r=82;
+  // shaded 3D sphere (monochrome volume) with wireframe over it
+  ADraw.sphereShade(svg, cx, cy, r);
+  svg.appendChild(E('circle',{cx,cy,r,fill:'none',stroke:INK,'stroke-width':1.4}));
+  for(const f of [-0.62,-0.3,0,0.3,0.62]){ const ry=Math.max(3,r*0.34*(1-Math.abs(f)*0.2)); const yy=cy+f*r*0.96; const rx=r*Math.sqrt(Math.max(0,1-f*f));
+    svg.appendChild(E('ellipse',{cx,cy:yy,rx,ry,fill:'none',stroke:(f===0?INK:MID),'stroke-width':f===0?1.1:0.8})); }
+  for(const a of [0,36,72,108,144]){ const rx=Math.max(4,r*Math.abs(Math.cos(a*Math.PI/180)));
+    svg.appendChild(E('ellipse',{cx,cy,rx,ry:r,fill:'none',stroke:MID,'stroke-width':0.8})); }
+  // a couple of vertex handles + a dimension
+  svg.appendChild(E('rect',{x:cx-3,y:cy-r-3,width:6,height:6,fill:'none',stroke:INK,'stroke-width':1.2}));
+  svg.appendChild(E('rect',{x:cx+r-3,y:cy-3,width:6,height:6,fill:'none',stroke:INK,'stroke-width':1.2}));
+  ADraw.dimV(svg, cy-r, cy+r, cx-r-26, 'Ø3.0', {color:MID});
+  // tool-call tag
+  ADraw.leader(svg, cx+r*0.7, cy-r*0.7, cx+118, 34, 'mesh.subdivide · L2', {color:INK});
+</script>
+</body></html>
