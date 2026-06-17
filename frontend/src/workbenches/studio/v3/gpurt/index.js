@@ -56,6 +56,75 @@ function _collectMeshes() {
   return meshes;
 }
 
+// Frame the viewport camera onto the supplied meshes' world-space bbox and
+// refresh its matrices, so the inverse-view-projection the kernel reads
+// always points AT the scene — never at empty space.
+//
+// This is the robustness fix (slice 951+): the RT used to depend entirely on
+// the caller having framed `vp.camera` first. `__studioMainCameraLook` (and
+// ad-hoc callers) set position/lookAt but could leave the camera staring past
+// the geometry, and any caller that forgot to call updateProjectionMatrix() /
+// updateMatrixWorld(true) handed us a stale inverse-VP → empty / fragment
+// images. We now FIT here, against the exact merged geometry we ray-trace, so
+// the packed inverse-VP is guaranteed consistent with what the BVH contains.
+//
+// Returns the THREE.Box3 used (for diagnostics), or null if THREE / camera
+// unavailable (in which case we leave the camera untouched and still update
+// its matrices in _packUniforms).
+function _frameCameraToScene(THREE, camera, meshes) {
+  if (!THREE || !camera || !meshes || !meshes.length) return null;
+  const box = new THREE.Box3();
+  let hasAny = false;
+  for (const m of meshes) {
+    if (!m || !m.geometry) continue;
+    m.updateWorldMatrix(true, false);
+    box.expandByObject(m);
+    hasAny = true;
+  }
+  if (!hasAny || box.isEmpty()) return null;
+  const center = box.getCenter(new THREE.Vector3());
+  const size = box.getSize(new THREE.Vector3());
+  // Bounding-sphere radius of the bbox (covers all 8 corners), floored so a
+  // degenerate / single-point scene still gets a sane framing distance.
+  const radius = Math.max(0.5 * size.length(), 0.001);
+
+  // Distance so the sphere fits inside BOTH the vertical and horizontal FOV.
+  const fovY = (camera.fov || 45) * Math.PI / 180;
+  const aspect = camera.aspect || 1;
+  const fovX = 2 * Math.atan(Math.tan(fovY / 2) * aspect);
+  const fitFov = Math.min(fovY, fovX);
+  const dist = (radius / Math.sin(fitFov / 2)) * 1.15; // 15 % margin
+
+  // 3/4 hero direction (right, slightly above, in front) — same family as
+  // __studioFrameAll, so the RT and the live viewport agree on composition.
+  const dir = new THREE.Vector3(1, 0.55, 1).normalize();
+  camera.position.copy(center).add(dir.multiplyScalar(dist));
+  camera.up.set(0, 1, 0);
+  camera.lookAt(center);
+
+  // Keep the geometry comfortably between the near/far planes for this dist.
+  camera.near = Math.max(dist - radius * 1.5, dist * 0.01, 0.001);
+  camera.far = dist + radius * 4;
+
+  // CRITICAL: refresh projection + world matrices NOW so the inverse-VP packed
+  // in _packUniforms reflects this exact framed pose. Without these two calls
+  // the cached matrices (matrixWorldInverse / projectionMatrix) are stale and
+  // the kernel rays miss the scene.
+  camera.updateProjectionMatrix();
+  camera.updateMatrixWorld(true);
+
+  // If OrbitControls is present, keep its target in sync so subsequent manual
+  // orbiting starts from the framed center (per the BVH-raycast lessons —
+  // stale controls targets break later interaction).
+  try {
+    const vp = window.__archdiscViewport;
+    const controls = vp && (typeof vp.controls === 'function' ? vp.controls() : vp.controls);
+    if (controls && controls.target) { controls.target.copy(center); controls.update && controls.update(); }
+  } catch (_) { /* controls optional */ }
+
+  return box;
+}
+
 function _toneMap(rgb) {
   // Filmic tone-map (Reinhard with whitepoint = 4) + sRGB encode.
   const W = 4.0;
@@ -117,7 +186,7 @@ function _packUniforms(camera, width, height, sampleIdx, maxBounces, nodeCount, 
   return buf;
 }
 
-async function _render({ width = 512, height = 384, samples = 8, maxBounces = 1 } = {}) {
+async function _render({ width = 512, height = 384, samples = 8, maxBounces = 1, frame = true } = {}) {
   // Clamp + sanitise.
   width = Math.max(8, Math.min(2048, width | 0));
   height = Math.max(8, Math.min(2048, height | 0));
@@ -148,13 +217,28 @@ async function _render({ width = 512, height = 384, samples = 8, maxBounces = 1 
 
   // Stash THREE globally so _packUniforms can build the inverse VP — the
   // pathtrace module already requires THREE in its imports, but here we
-  // need it without re-importing (keeps the module surface tight).
+  // need it without re-importing (keeps the module surface tight). Prefer the
+  // viewport's live THREE so we share the same class identity as the scene.
   if (!window.THREE) {
-    try {
-      // dynamic import keeps THREE off the synchronous critical path
-      const T = await import('three');
-      window.THREE = T;
-    } catch (_) { /* will fall back to identity in _packUniforms */ }
+    if (window.__archdiscTHREE) {
+      window.THREE = window.__archdiscTHREE;
+    } else {
+      try {
+        // dynamic import keeps THREE off the synchronous critical path
+        const T = await import('three');
+        window.THREE = T;
+      } catch (_) { /* will fall back to identity in _packUniforms */ }
+    }
+  }
+
+  // 2b. Frame the camera ONTO the exact geometry we just packed for the BVH,
+  // then refresh its matrices. This is the robustness guarantee: whatever the
+  // caller did (or didn't do) to vp.camera, the inverse-VP we pack below now
+  // points at the scene. Callers that have already composed a bespoke shot can
+  // opt out with { frame: false }.
+  let framedBox = null;
+  if (frame !== false) {
+    framedBox = _frameCameraToScene(window.THREE, camera, meshes);
   }
 
   // 3. GPU buffer creation
@@ -303,14 +387,25 @@ async function _render({ width = 512, height = 384, samples = 8, maxBounces = 1 
   readBuf.destroy?.();
 
   const elapsed = performance.now() - t0;
-  return {
+  const result = {
     ok: true,
     dataUrl: canvas.toDataURL('image/png'),
     width, height, samples, maxBounces, elapsed,
     device: 'gpu',
     nodeCount: resources.nodeCount,
     triCount: resources.triCount,
+    framed: !!framedBox,
   };
+  if (framedBox) {
+    const sz = framedBox.getSize(new window.THREE.Vector3());
+    result.sceneExtent = [+sz.x.toFixed(3), +sz.y.toFixed(3), +sz.z.toFixed(3)];
+    result.cameraPosition = [
+      +camera.position.x.toFixed(3),
+      +camera.position.y.toFixed(3),
+      +camera.position.z.toFixed(3),
+    ];
+  }
+  return result;
 }
 
 // IEEE-754 half-float → float decoder. Used to interpret rgba16float
