@@ -8,7 +8,7 @@
   f.className = 'deck-footer';
   const l = document.createElement('span'); l.className = 'ft-l'; l.textContent = d.foot || 'ARCHDISC';
   const r = document.createElement('span'); r.className = 'ft-r';
-  r.textContent = (d.sheet || '01') + ' / ' + (d.total || '09') + '   ·   CLAWCOMP × LINK VENTURES';
+  r.textContent = (d.sheet || '01') + ' / ' + (d.total || '10') + '   ·   CLAWCOMP × LINK VENTURES';
   f.appendChild(l); f.appendChild(r);
   sheet.appendChild(f);
   document.documentElement.setAttribute('data-frame-ready', '1');
