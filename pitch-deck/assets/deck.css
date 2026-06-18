@@ -10,16 +10,16 @@
 @font-face{font-family:"Geist Mono";src:url("fonts/GeistMono.ttf") format("truetype");font-weight:100 900;font-display:block}
 
 :root{
-  /* WARM "vibe-design" palette — sun-faded earth tones that harmonize */
-  --paper:#ece3d2; --surface:#f4ecdc;
-  --ink:#2b2420; --ink-soft:#4a3f36; --ink-mid:#6e5f50;
-  --muted:#8c7c66; --faint:#a99880;
-  --line:#dccfb8; --line-strong:#cbbda3;
-  /* warm accent family (use sparingly) */
-  --clay:#b0724f; --amber:#c2914c; --rose:#bd8b77; --olive:#8c8252; --plum:#7a4e44;
-  /* inverted (warm-dark sheet) — warm cream on espresso */
-  --on-ink:#efe7d6; --on-ink-soft:rgba(239,231,214,.84); --on-ink-faint:rgba(239,231,214,.58);
-  --on-ink-line:rgba(239,231,214,.18); --on-ink-line-strong:rgba(239,231,214,.34);
+  /* WARM, DULL, MUTED earth palette — not too dark, not too bright */
+  --paper:#e8dcc4; --surface:#f0e8d4;
+  --ink:#3a2c1f; --ink-soft:#574734; --ink-mid:#7b6850;
+  --muted:#9a886c; --faint:#b6a585;
+  --line:#dccdb1; --line-strong:#c9bb9a;
+  /* muted warm accents (dusty, never neon) */
+  --clay:#a6724d; --amber:#bd955a; --rose:#b98a72; --olive:#8a8050; --plum:#73483a;
+  /* inverted (warm-brown sheet) — cream on muted brown, not near-black */
+  --on-ink:#f1e8d4; --on-ink-soft:rgba(241,232,212,.85); --on-ink-faint:rgba(241,232,212,.6);
+  --on-ink-line:rgba(241,232,212,.2); --on-ink-line-strong:rgba(241,232,212,.36);
   --disp:"Space Grotesk", ui-sans-serif, system-ui, sans-serif;
   --sans:"Geist", ui-sans-serif, system-ui, -apple-system, sans-serif;
   --mono:"Geist Mono", ui-monospace, "SF Mono", monospace;

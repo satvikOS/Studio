@@ -9,14 +9,16 @@ const x = cv.getContext('2d');
 // seeded rng
 let s = V*9301+49297; function rnd(){ s=(s*9301+49297)%233280; return s/233280; }
 function rr(a,b){ return a+(b-a)*rnd(); }
-const PAL = [ ['#f3dcae','#5b3c26'], ['#e7b889','#6e3f2b'], ['#dcc6a0','#3a2a20'], ['#caa07a','#46301f'], ['#efe1c4','#7a5436'] ];
+const PAL = [ ['#d8bd95','#574030'], ['#cda982','#5c3f2d'], ['#c9b896','#473629'], ['#bfa07a','#4a3526'], ['#dccbb0','#6c543a'] ];
 function blob(cx,cy,r,pal,rot){
   const g = x.createRadialGradient(cx-r*0.30, cy-r*0.36, r*0.06, cx, cy, r*1.08);
   g.addColorStop(0, mix(pal[0],pal[1],0.28)); g.addColorStop(0.6, mix(pal[0],pal[1],0.62)); g.addColorStop(1, pal[1]);
+  const ar = 0.6 + 0.7*rnd();   // per-form aspect for organic elongation
   x.save(); x.translate(cx,cy); x.rotate(rot);
   x.beginPath();
-  const n=14, pts=[];
-  for(let i=0;i<n;i++){ const a=i/n*Math.PI*2; const rad=r*(0.9+0.14*rnd()); pts.push([Math.cos(a)*rad, Math.sin(a)*rad*0.94]); }
+  const n=18, pts=[]; let pr=1;
+  for(let i=0;i<n;i++){ const a=i/n*Math.PI*2; pr=pr*0.6 + (0.8+0.4*rnd())*0.4; const rad=r*pr;
+    pts.push([Math.cos(a)*rad, Math.sin(a)*rad*ar]); }
   x.moveTo(pts[0][0],pts[0][1]);
   for(let i=0;i<n;i++){ const p=pts[i], q1=pts[(i+1)%n]; const mx=(p[0]+q1[0])/2, my=(p[1]+q1[1])/2; x.quadraticCurveTo(p[0],p[1],mx,my); }
   x.closePath(); x.fillStyle=g; x.shadowColor='rgba(20,12,8,.4)'; x.shadowBlur=r*0.5; x.shadowOffsetX=r*0.06; x.shadowOffsetY=r*0.12;
@@ -24,11 +26,11 @@ function blob(cx,cy,r,pal,rot){
 }
 function mix(a,b,t){ const pa=hex(a),pb=hex(b); return `rgb(${Math.round(pa[0]+(pb[0]-pa[0])*t)},${Math.round(pa[1]+(pb[1]-pa[1])*t)},${Math.round(pa[2]+(pb[2]-pa[2])*t)})`; }
 function hex(h){ h=h.replace('#',''); return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)]; }
-// compose 3-5 overlapping forms
-const N = 3 + Math.floor(rnd()*3);
+// compose many overlapping organic forms
+const N = 5 + Math.floor(rnd()*3);
 for(let i=0;i<N;i++){
-  const r = rr(W*0.22, W*0.5);
-  blob(rr(W*0.2,W*0.8), rr(H*0.2,H*0.8), r, PAL[Math.floor(rnd()*PAL.length)], rr(-0.6,0.6));
+  const r = rr(W*0.2, W*0.46);
+  blob(rr(W*0.12,W*0.88), rr(H*0.14,H*0.86), r, PAL[Math.floor(rnd()*PAL.length)], rr(-1.2,1.2));
 }
 // soft warm flares
 for(let i=0;i<3;i++){ const g=x.createRadialGradient(rr(0,W),rr(0,H),0,rr(0,W),rr(0,H),rr(120,300));
