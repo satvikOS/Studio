@@ -1,55 +1,51 @@
 <!doctype html><html><head><meta charset="utf-8">
 <link rel="stylesheet" href="../assets/deck.css">
 <style>
-  .eyebrow-mono{ position:absolute; left:60px; top:50px; z-index:6; font-family:var(--mono); font-size:11px; letter-spacing:.24em; color:var(--clay); }
-  .htext{ position:absolute; left:60px; top:236px; z-index:6; max-width:430px; }
-  .bigh{ font-size:40px; }
+  .eyebrow-mono{ position:absolute; left:60px; top:50px; z-index:6; font-family:var(--mono); font-size:12px; letter-spacing:.24em; color:var(--clay); }
+  .htext{ position:absolute; left:60px; top:230px; z-index:6; max-width:420px; }
+  .bigh{ font-size:56px; }
   .bigh .g{ color:var(--ink-mid); }
-  .sub{ font-size:15px; line-height:1.5; color:var(--ink-soft); margin-top:16px; letter-spacing:-.006em; }
+  .sub{ font-size:17px; line-height:1.5; color:var(--ink-soft); margin-top:18px; }
   .sub b{ color:var(--ink); font-weight:600; }
-  .node{ position:absolute; z-index:6; width:210px; }
-  .node .lg{ display:flex; align-items:center; gap:12px; }
-  .node .nm{ font-family:var(--disp); font-weight:700; font-size:22px; color:var(--ink); letter-spacing:-.02em; }
-  .node .archie-mark{ font-size:24px; }
-  .node .rl{ font-family:var(--mono); font-size:9px; letter-spacing:.12em; color:var(--muted); text-transform:uppercase; margin-top:7px; }
-  .node .ds{ font-size:12px; line-height:1.4; color:var(--ink-mid); margin-top:7px; }
-  .n-studio{ left:560px; top:150px; }
-  .n-forge{ left:902px; top:330px; }
-  .n-archie{ left:628px; top:452px; }
+  .node{ position:absolute; z-index:6; width:236px; }
+  .node .lg{ display:flex; align-items:center; gap:14px; }
+  .node .nm{ font-family:var(--disp); font-weight:700; font-size:27px; color:var(--ink); letter-spacing:-.02em; }
+  .node .archie-mark{ font-size:30px; }
+  .node .ds{ font-size:14px; line-height:1.45; color:var(--ink-mid); margin-top:10px; }
+  .node .ds b{ color:var(--ink); font-weight:600; }
+  .n-studio{ left:556px; top:132px; }
+  .n-forge{ left:912px; top:322px; }
+  .n-archie{ left:612px; top:452px; }
 </style></head>
 <body>
-<div class="sheet" data-sheet="03" data-foot="PLATFORM">
-  <div class="bgmodel right wide" style="opacity:.16"><img src="../assets/shots/studio-scandi.png"></div>
+<div class="sheet" data-sheet="03" data-foot="THE PLATFORM">
+  <div class="bgmodel right art wide" style="opacity:.12"><img src="../assets/abstract/abs1.png"></div>
   <svg style="position:absolute;inset:0;z-index:3" width="1280" height="720" viewBox="0 0 1280 720">
-    <!-- irregular triangle between the three node centres -->
-    <polygon points="665,210 1007,392 733,512" fill="rgba(176,114,79,.05)" stroke="var(--line-strong)" stroke-width="1.2" stroke-dasharray="7 6"/>
-    <circle cx="665" cy="210" r="3" fill="var(--clay)"/>
-    <circle cx="1007" cy="392" r="3" fill="var(--clay)"/>
-    <circle cx="733" cy="512" r="3" fill="var(--clay)"/>
-    <text x="690" y="372" fill="var(--muted)" font-family="Geist Mono,monospace" font-size="10" letter-spacing="1.5">drives ↗</text>
-    <text x="852" y="468" fill="var(--muted)" font-family="Geist Mono,monospace" font-size="10" letter-spacing="1.5">↖ drives</text>
+    <polygon points="666,196 1012,378 720,512" fill="rgba(176,114,79,.05)" stroke="var(--line-strong)" stroke-width="1.3" stroke-dasharray="7 6"/>
+    <circle cx="666" cy="196" r="3.5" fill="var(--clay)"/>
+    <circle cx="1012" cy="378" r="3.5" fill="var(--clay)"/>
+    <circle cx="720" cy="512" r="3.5" fill="var(--clay)"/>
+    <text x="678" y="368" fill="var(--muted)" font-family="Geist Mono,monospace" font-size="11" letter-spacing="1.5">builds ↗</text>
+    <text x="858" y="470" fill="var(--muted)" font-family="Geist Mono,monospace" font-size="11" letter-spacing="1.5">↖ builds</text>
   </svg>
 
-  <div class="eyebrow-mono">THE PLATFORM · ONE UNIVERSE, ONE COPILOT</div>
+  <div class="eyebrow-mono">THE PLATFORM</div>
   <div class="htext">
-    <div class="bigh">Two standalone apps.<br><span class="g">One unified model.</span></div>
-    <div class="sub">Archie is the spine — <b>Studio and Forge are the surfaces it acts on.</b> You change intent, not tools.</div>
+    <div class="bigh">Two apps.<br><span class="g">One model.</span></div>
+    <div class="sub">Archie is the spine. <b>Studio and Forge are the surfaces it acts on.</b> You change what you want, not the tool.</div>
   </div>
 
   <div class="node n-studio">
-    <div class="lg"><img src="../assets/logos/studio.svg" width="44" height="44"><span class="nm">Studio</span></div>
-    <div class="rl">CREATIVE 3D · STANDALONE APP</div>
-    <div class="ds">Blender · Maya · Houdini-class — model, sculpt, light, render.</div>
+    <div class="lg"><img src="../assets/logos/studio.svg" width="58" height="58"><span class="nm">Studio</span></div>
+    <div class="ds"><b>The range of Blender, Maya and Houdini.</b> Model, sculpt, light and render.</div>
   </div>
   <div class="node n-forge">
-    <div class="lg"><img src="../assets/logos/forge.svg" width="46" height="47"><span class="nm">Forge</span></div>
-    <div class="rl">MECHANICAL CAD · STANDALONE APP</div>
-    <div class="ds">Native B-rep kernel — parametric solids, simulation, drawings.</div>
+    <div class="lg"><img src="../assets/logos/forge.svg" width="60" height="63"><span class="nm">Forge</span></div>
+    <div class="ds"><b>A real CAD kernel.</b> Solid parts, simulation and drawings you can manufacture.</div>
   </div>
   <div class="node n-archie">
     <div class="lg"><span class="archie-mark">Archie</span></div>
-    <div class="rl">UNIFIED MODEL · DRIVES BOTH</div>
-    <div class="ds">Plain language in, validated geometry out — local &amp; private.</div>
+    <div class="ds"><b>You speak. It plans and builds.</b> Local, private, and fast.</div>
   </div>
 </div>
 <script src="../assets/frame.js"></script>

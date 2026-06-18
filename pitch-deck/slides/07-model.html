@@ -1,0 +1,53 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link rel="stylesheet" href="../assets/deck.css">
+<style>
+  /* diagonal espresso zone (lower-right) */
+  .diag{ position:absolute; inset:0; z-index:1; background:var(--ink);
+    clip-path:polygon(62% 0, 100% 0, 100% 100%, 22% 100%); }
+  .diag-line{ position:absolute; inset:0; z-index:2; }
+  .eyebrow-mono{ position:absolute; left:60px; top:50px; z-index:6; font-family:var(--mono); font-size:12px; letter-spacing:.24em; color:var(--clay); }
+  .htext{ position:absolute; left:60px; top:100px; z-index:6; max-width:560px; }
+  .bigh{ font-size:46px; }
+  .bigh .g{ color:var(--ink-mid); }
+  .sub{ font-size:17px; line-height:1.5; color:var(--ink-soft); margin-top:14px; }
+  .sub b{ color:var(--ink); font-weight:600; }
+  /* free block, light side */
+  .free{ position:absolute; left:60px; top:330px; width:420px; z-index:6; }
+  .tname{ font-family:var(--disp); font-weight:600; font-size:40px; letter-spacing:-.02em; }
+  .twho{ font-family:var(--mono); font-size:11px; letter-spacing:.12em; text-transform:uppercase; margin-top:6px; }
+  .tbody{ font-size:16px; line-height:1.5; margin-top:16px; }
+  .free .tname{ color:var(--ink); } .free .twho{ color:var(--muted); } .free .tbody{ color:var(--ink-soft); }
+  .free .tbody b{ color:var(--ink); font-weight:600; }
+  .free .price{ font-family:var(--disp); font-weight:600; font-size:30px; color:var(--clay); margin-top:4px; }
+  /* paid block, dark side */
+  .paid{ position:absolute; right:62px; top:230px; width:400px; z-index:6; text-align:right; }
+  .paid .tname{ color:var(--on-ink); } .paid .twho{ color:var(--on-ink-faint); } .paid .tbody{ color:var(--on-ink-soft); }
+  .paid .tbody b{ color:var(--on-ink); font-weight:600; }
+  .paid .price{ font-family:var(--disp); font-weight:600; font-size:30px; color:var(--amber); margin-top:4px; }
+</style></head>
+<body>
+<div class="sheet" data-sheet="07" data-foot="BUSINESS MODEL">
+  <div class="diag"></div>
+  <svg class="diag-line" width="1280" height="720"><line x1="794" y1="0" x2="282" y2="720" stroke="var(--amber)" stroke-width="1.5" opacity="0.5"/></svg>
+  <div class="eyebrow-mono">BUSINESS MODEL</div>
+  <div class="htext">
+    <div class="bigh">Free for dreamers. <span class="g">Built for teams.</span></div>
+    <div class="sub">The same idea as GitHub and Vercel. <b>Free to use for anyone creating on their own.</b> Paid when a team needs to work together.</div>
+  </div>
+
+  <div class="free">
+    <div class="tname">Free</div>
+    <div class="twho">For dreamers, students and hobbyists</div>
+    <div class="price">$0, always</div>
+    <div class="tbody">Both apps and the full model, yours to use on your machine at no cost. <b>You build anything with it. The source stays ours.</b></div>
+  </div>
+
+  <div class="paid">
+    <div class="tname">Studios and Enterprises</div>
+    <div class="twho">For teams shipping together</div>
+    <div class="price">Let’s talk</div>
+    <div class="tbody">Shared projects, private deployment, security, support, and custom models <b>trained for your work.</b></div>
+  </div>
+</div>
+<script src="../assets/frame.js"></script>
+</body></html>

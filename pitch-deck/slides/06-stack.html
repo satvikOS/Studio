@@ -1,0 +1,59 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link rel="stylesheet" href="../assets/deck.css">
+<style>
+  .eyebrow-mono{ position:absolute; left:60px; top:50px; z-index:6; font-family:var(--mono); font-size:12px; letter-spacing:.24em; color:var(--clay); }
+  .bigh{ position:absolute; left:60px; top:100px; z-index:6; font-size:44px; }
+  .bigh .g{ color:var(--ink-mid); }
+  .cols{ position:absolute; left:60px; right:60px; top:214px; z-index:6; display:flex; gap:0; }
+  .col{ flex:1; padding:0 30px; border-left:1px solid var(--line-strong); }
+  .col:first-child{ padding-left:0; border-left:none; }
+  .chead{ display:flex; align-items:center; gap:13px; margin-bottom:20px; height:56px; }
+  .cname{ font-family:var(--disp); font-weight:700; font-size:26px; color:var(--ink); letter-spacing:-.02em; }
+  .archie-mark{ font-size:30px; }
+  .chips{ display:flex; flex-wrap:wrap; gap:8px; }
+  .chip{ font-family:var(--mono); font-size:13px; letter-spacing:.01em; color:var(--ink-soft);
+    border:1px solid var(--line-strong); background:rgba(244,236,220,.4); padding:6px 11px; border-radius:2px; }
+  .chip.key{ color:var(--ink); border-color:var(--clay); }
+  .trained{ margin-top:18px; }
+  .tlab{ font-family:var(--mono); font-size:10px; letter-spacing:.16em; color:var(--muted); margin-bottom:8px; }
+  .ttext{ font-size:13.5px; line-height:1.55; color:var(--ink-mid); }
+  .ttext b{ color:var(--ink); font-weight:600; }
+</style></head>
+<body>
+<div class="sheet" data-sheet="06" data-foot="THE STACK">
+  <div class="bgmodel left art" style="opacity:.1"><img src="../assets/abstract/abs3.png"></div>
+  <div class="eyebrow-mono">BUILT WITH</div>
+  <div class="bigh">Real engineering <span class="g">under the magic.</span></div>
+
+  <div class="cols">
+    <div class="col">
+      <div class="chead"><img src="../assets/logos/studio.svg" width="46" height="46"><span class="cname">Studio</span></div>
+      <div class="chips">
+        <span class="chip key">Three.js</span><span class="chip">React 19</span><span class="chip">React Three Fiber</span>
+        <span class="chip key">GPU Path Tracer</span><span class="chip">Mesh BVH</span><span class="chip">Manifold</span>
+        <span class="chip">Electron</span><span class="chip">Vite</span>
+      </div>
+    </div>
+    <div class="col">
+      <div class="chead"><img src="../assets/logos/forge.svg" width="48" height="50"><span class="cname">Forge</span></div>
+      <div class="chips">
+        <span class="chip key">OCCT 7.9.3 kernel</span><span class="chip key">Native C++</span><span class="chip">Node API</span>
+        <span class="chip">planegcs solver</span><span class="chip">Eigen</span><span class="chip">Three.js</span>
+        <span class="chip">React</span><span class="chip">Electron</span>
+      </div>
+    </div>
+    <div class="col">
+      <div class="chead"><span class="archie-mark">Archie</span></div>
+      <div class="chips">
+        <span class="chip key">MLX on Apple Silicon</span><span class="chip key">DeepSeek R1 Distill 7B</span>
+        <span class="chip">Qwen2.5 VL</span><span class="chip">Hermes 3</span><span class="chip key">14 LoRA adapters</span><span class="chip">Python</span>
+      </div>
+      <div class="trained">
+        <div class="tlab">TRAINED ON</div>
+        <div class="ttext">Hermes function calling, NuminaMath, OpenR1, Geo170K, NVIDIA Cosmos, and <b>millions of our own CAD and 3D samples.</b></div>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="../assets/frame.js"></script>
+</body></html>

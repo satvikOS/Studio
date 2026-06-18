@@ -1,32 +1,32 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 124" width="120" height="124">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 124 132" width="124" height="132">
   <defs>
     <linearGradient id="steel" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#5c5149"/>
-      <stop offset="48%" stop-color="#322a25"/>
-      <stop offset="100%" stop-color="#120e0b"/>
+      <stop offset="0%" stop-color="#6a5f55"/>
+      <stop offset="46%" stop-color="#352c26"/>
+      <stop offset="100%" stop-color="#120d0a"/>
     </linearGradient>
     <radialGradient id="glow" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#ffe7ad"/>
-      <stop offset="42%" stop-color="#e7a64a" stop-opacity="0.5"/>
-      <stop offset="100%" stop-color="#e7a64a" stop-opacity="0"/>
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="34%" stop-color="#fff3d6" stop-opacity="0.7"/>
+      <stop offset="100%" stop-color="#fff3d6" stop-opacity="0"/>
     </radialGradient>
-    <linearGradient id="star" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#fff1cc"/>
-      <stop offset="100%" stop-color="#e8a948"/>
+    <linearGradient id="spark" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#fbe9c0"/>
     </linearGradient>
   </defs>
-  <!-- glow behind the star, top-centre -->
-  <circle cx="60" cy="22" r="21" fill="url(#glow)"/>
-  <!-- sharp, thin, ASYMMETRICAL 4-point star, top-centre above the anvil -->
-  <path d="M60 2 L62.4 23 L60 41 L57.9 23 Z" fill="url(#star)"/>
-  <path d="M40 21 L58.5 24 L80 19.5 L58.5 27 Z" fill="url(#star)" opacity="0.95"/>
-  <circle cx="60" cy="23" r="2.1" fill="#fff6e0"/>
-  <!-- STRONGER anvil: bolder, wider top + horn, defined waist + flared feet -->
-  <path d="M10 72 L44 63 L44 56 L101 56 L101 73 L70 73 L70 85
-           C85 85 87 90 89 100 L97 113 L23 113 L33 100
-           C35 90 37 85 52 85 L52 73 L27 73 Z"
-        fill="url(#steel)" stroke="#0a0705" stroke-width="2.4" stroke-linejoin="round"/>
+  <!-- bright white glow behind the spark, top-centre -->
+  <circle cx="66" cy="24" r="24" fill="url(#glow)"/>
+  <!-- sharp, thin, asymmetrical white spark, top-centre -->
+  <path d="M66 2 L68.6 25 L66 45 L63.6 25 Z" fill="url(#spark)"/>
+  <path d="M44 22 L64 26 L88 20.5 L64 30 Z" fill="url(#spark)" opacity="0.96"/>
+  <circle cx="66" cy="25.5" r="2.4" fill="#ffffff"/>
+  <!-- BULKIER, heavier anvil -->
+  <path d="M8 60 L42 50 L42 46 L108 46 L108 70 L74 70 L74 82
+           C90 82 92 88 96 102 L102 116 L22 116 L28 102
+           C32 88 34 82 50 82 L50 70 L34 70 Z"
+        fill="url(#steel)" stroke="#080605" stroke-width="2.6" stroke-linejoin="round"/>
   <!-- top-face + horn highlights -->
-  <path d="M46 58.5 L99 58.5" stroke="#6e6056" stroke-width="2.6" stroke-linecap="round" opacity="0.75"/>
-  <path d="M14 70 L42 62" stroke="#6e6056" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+  <path d="M44 48.5 L106 48.5" stroke="#7c6f63" stroke-width="3" stroke-linecap="round" opacity="0.8"/>
+  <path d="M12 58 L40 49" stroke="#7c6f63" stroke-width="2.2" stroke-linecap="round" opacity="0.55"/>
 </svg>

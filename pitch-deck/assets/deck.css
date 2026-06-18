@@ -161,8 +161,13 @@ body{
 .sheet.ink .hatch{ background-image:repeating-linear-gradient(45deg, var(--on-ink) 0 1px, transparent 1px 6px); }
 
 /* ---- image-forward rebuild: logos, wordmarks, framed renders --------- */
-.archie-mark{ font-family:var(--disp); font-weight:800; letter-spacing:-.03em; color:var(--ink); }
-.sheet.ink .archie-mark{ color:var(--on-ink); }
+.archie-mark{ display:inline-block; font-family:var(--sans); font-weight:900; letter-spacing:-.05em;
+  background:linear-gradient(96deg, #170f0b 0%, #4a3a2c 62%, #6e5a45 100%);
+  -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent; }
+.archie-mark::after{ content:"."; -webkit-text-fill-color:var(--clay); color:var(--clay); }
+.sheet.ink .archie-mark{ background:linear-gradient(96deg, #fbf4e6 0%, #e3d4b8 70%, #d2bd97 100%);
+  -webkit-background-clip:text; background-clip:text; }
+.sheet.ink .archie-mark::after{ -webkit-text-fill-color:var(--amber); color:var(--amber); }
 .lockup{ display:inline-flex; align-items:center; gap:10px; font-family:var(--disp); font-weight:700; letter-spacing:-.012em; }
 .lockup .x{ font-family:var(--mono); font-weight:400; opacity:.55; font-size:.82em; }
 .imgframe{ position:relative; border:1px solid var(--line-strong); overflow:hidden; background:#15181c; }
@@ -187,6 +192,8 @@ body{
   -webkit-mask-image:linear-gradient(270deg,transparent 0,#000 62%); mask-image:linear-gradient(270deg,transparent 0,#000 62%); }
 .bgmodel.wide{ width:66%; }
 .bgmodel.tall{ width:46%; }
+.bgmodel.art{ filter:saturate(1.06) brightness(1.04); }
+.sheet.ink .bgmodel.art{ filter:saturate(1.1) brightness(1.12); }
 .sheet.ink .bgmodel{ opacity:.40; filter:sepia(.5) saturate(1.25) brightness(.95) contrast(1.02); }
 /* soft warm flares for atmosphere */
 .flare{ position:absolute; z-index:1; pointer-events:none; border-radius:50%;
