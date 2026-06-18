@@ -237,6 +237,25 @@ const XF = {
   ceilingPendant: function(rng, p={}) { const g = new THREE.Group(); const canopyR = p.canopyRadius || 0.15; const canopy = cyl(canopyR, canopyR, 0.05, 'brass', 10); place(canopy, 0, 0, 0, 0); g.add(canopy); const chainSeg = 10; const linkR = 0.004; for(let link = 0; link < chainSeg; link++) { const chainLink = cyl(linkR, linkR, 0.03, 'brass', 4); place(chainLink, rng() * 0.01 - 0.005, -(link * 0.035), rng() * 0.01 - 0.005, rng() * Math.PI); g.add(chainLink); } const shadeR = p.shadeRadius || 0.18; const shadeH = p.shadeHeight || 0.25; const shade = cyl(shadeR, shadeR * 0.8, shadeH, 'fabric-grey', 12); place(shade, 0, -(chainSeg * 0.035 + shadeH/2), 0, 0); g.add(shade); const innerDiffuse = cyl(shadeR - 0.02, shadeR * 0.75, shadeH - 0.02, 'ceramic-white', 12); place(innerDiffuse, 0, -(chainSeg * 0.035 + shadeH/2), 0, 0); g.add(innerDiffuse); const bulbR = 0.02; const bulb = ball(bulbR, 'glass-clear'); place(bulb, 0, -(chainSeg * 0.035 + shadeH + 0.01), 0, 0); g.add(bulb); const bulbFilament = cyl(0.001, 0.001, 0.03, 'gold-polished', 3); place(bulbFilament, 0, -(chainSeg * 0.035 + shadeH + 0.01), 0, 0); g.add(bulbFilament); return g; },
   kitchenIsland: function(rng, p={}) { const g = new THREE.Group(); const w = p.width || 1.5, d = p.depth || 0.9, h = p.height || 0.95; const topH = 0.05; const body = box(w - 0.02, h - topH, d - 0.02, 'wood-oak'); place(body, 0, (h - topH)/2, 0, 0); g.add(body); const top = box(w, topH, d, 'marble-white'); place(top, 0, h, 0, rng() * 0.06 - 0.03); g.add(top); const drawerCount = 3; const drawerH = (h - topH - 0.05) / drawerCount; for(let dr = 0; dr < drawerCount; dr++) { const drawerY = 0.05 + (dr + 0.5) * drawerH; const drawerFront = box(w - 0.08, drawerH - 0.008, 0.06, 'wood-walnut'); place(drawerFront, 0, drawerY, d/2 - 0.02, 0); g.add(drawerFront); const handleL = cyl(0.007, 0.007, 0.12, 'copper', 5); place(handleL, -w/4, drawerY, d/2 + 0.03, Math.PI/2); g.add(handleL); const handleR = cyl(0.007, 0.007, 0.12, 'copper', 5); place(handleR, w/4, drawerY, d/2 + 0.03, Math.PI/2); g.add(handleR); } const legW = 0.08; const legD = 0.08; for(let i = 0; i < 2; i++) { const legX = ((i - 0.5) * 2) * (w/2 - 0.15); const legPair = box(legW, h, legD, 'wood-oak'); place(legPair, legX, h/2, 0, 0); g.add(legPair); } for(let i = 0; i < 2; i++) { const angle = (i / 2) * Math.PI; const supportX = Math.cos(angle) * (w/2 - 0.2); const supportZ = Math.sin(angle) * (d/2 - 0.1); const support = cyl(0.025, 0.025, h - 0.1, 'steel-brushed', 8); place(support, supportX, h/2, supportZ, 0); g.add(support); } const overhang = 0.08; const overTop = box(w + overhang * 2, 0.04, d + overhang, 'marble-white'); place(overTop, 0, h + 0.025, 0, 0); g.add(overTop); return g; },
   kitchenCabinetRun: function(rng, p={}) { const g = new THREE.Group(); const unitW = p.unitWidth || 0.6; const units = p.units || 3; const totalW = unitW * units; const h = p.height || 0.9; const d = p.depth || 0.65; const topH = 0.04; for(let u = 0; u < units; u++) { const unitX = -(totalW/2) + unitW/2 + u * unitW; const body = box(unitW - 0.01, h - topH, d - 0.01, 'wood-oak'); place(body, unitX, (h - topH)/2, 0, 0); g.add(body); const doorW = (unitW - 0.06) / 2; const doorH = h - topH - 0.05; const doorL = box(doorW, doorH, 0.04, 'wood-walnut'); place(doorL, unitX - doorW/2 - 0.015, h/2, d/2 + 0.02, rng() * 0.05); g.add(doorL); const doorR = box(doorW, doorH, 0.04, 'wood-walnut'); place(doorR, unitX + doorW/2 + 0.015, h/2, d/2 + 0.02, -rng() * 0.05); g.add(doorR); const handleL = cyl(0.006, 0.006, 0.1, 'brass', 5); place(handleL, unitX - doorW/2, h - 0.25, d/2 + 0.05, Math.PI/2); g.add(handleL); const handleR = cyl(0.006, 0.006, 0.1, 'brass', 5); place(handleR, unitX + doorW/2, h - 0.25, d/2 + 0.05, Math.PI/2); g.add(handleR); } const top = box(totalW, topH, d, 'marble-white'); place(top, 0, h, 0, 0); g.add(top); const backSplash = box(totalW, 0.35, 0.03, 'ceramic-white'); place(backSplash, 0, h + 0.25, -d/2 - 0.01, 0); g.add(backSplash); const baseBoard = box(totalW, 0.06, 0.08, 'wood-oak'); place(baseBoard, 0, 0.03, 0, 0); g.add(baseBoard); for(let u = 0; u < units + 1; u++) { const divX = -(totalW/2) + u * unitW; const divider = box(0.01, h - 0.06, d - 0.02, 'wood-oak'); place(divider, divX, h/2, 0, 0); g.add(divider); } return g; },
+
+  // ── office: a flat desktop monitor on a stand (screen + bezel + neck + foot) ──
+  monitor: function(rng, p={}) { const g = new THREE.Group(); const scrW = p.width || 0.62, scrH = p.height || 0.38; const bezel = 0.015; const panel = box(scrW, scrH, 0.03, 'plastic-matte'); place(panel, 0, scrH/2 + 0.18, 0, 0); g.add(panel); const screen = box(scrW - bezel*2, scrH - bezel*2, 0.004, 'glass-clear'); place(screen, 0, scrH/2 + 0.18, 0.018, 0); g.add(screen); const neck = box(0.05, 0.18, 0.04, 'aluminium'); place(neck, 0, 0.1, -0.02, 0); g.add(neck); const foot = box(0.24, 0.02, 0.18, 'aluminium'); place(foot, 0, 0.01, 0, rng()*0.04 - 0.02); g.add(foot); return g; },
+  // ── compact desk lamp: weighted base, jointed arm, cone head ──
+  deskLamp: function(rng, p={}) { const g = new THREE.Group(); const base = cyl(0.09, 0.1, 0.03, 'steel-brushed', 16); place(base, 0, 0.015, 0, 0); g.add(base); const lowerH = 0.32; const lower = cyl(0.012, 0.012, lowerH, 'steel-brushed', 8); place(lower, 0, 0.03 + lowerH/2, 0, rng()*0.1 - 0.05); lower.rotation.z = 0.25; g.add(lower); const upperH = 0.3; const upper = cyl(0.012, 0.012, upperH, 'steel-brushed', 8); const ux = Math.sin(0.25) * lowerH; place(upper, ux, 0.03 + Math.cos(0.25)*lowerH, 0, 0); upper.rotation.z = -0.6; g.add(upper); const headX = ux + Math.sin(-0.6) * upperH * 0.5; const head = cyl(0.05, 0.08, 0.1, 'brass', 12); place(head, headX, 0.03 + Math.cos(0.25)*lowerH + upperH*0.4, 0, 0); head.rotation.z = -1.1; g.add(head); const bulb = ball(0.025, 'ceramic-white'); place(bulb, headX, 0.03 + Math.cos(0.25)*lowerH + upperH*0.4 - 0.04, 0, 0); g.add(bulb); return g; },
+  // ── espresso machine block: hopper body, group heads, drip tray, portafilter ──
+  espressoMachine: function(rng, p={}) { const g = new THREE.Group(); const w = p.width || 0.7, h = p.height || 0.5, d = p.depth || 0.45; const body = box(w, h, d, 'steel-polished'); place(body, 0, h/2, 0, 0); g.add(body); const topTray = box(w - 0.06, 0.04, d - 0.06, 'steel-brushed'); place(topTray, 0, h + 0.02, 0, 0); g.add(topTray); for(let cup = 0; cup < 3; cup++) { const ccx = -w/4 + cup * (w/4); const cupMug = cyl(0.04, 0.035, 0.08, 'ceramic-white', 12); place(cupMug, ccx, h + 0.08, 0, rng()*0.2); g.add(cupMug); } for(let gh = 0; gh < 2; gh++) { const ghx = (gh - 0.5) * 0.3; const groupHead = cyl(0.045, 0.05, 0.12, 'steel-polished', 12); place(groupHead, ghx, h - 0.18, d/2 - 0.02, 0); g.add(groupHead); const portafilter = box(0.18, 0.025, 0.045, 'rubber-black'); place(portafilter, ghx, h - 0.27, d/2 + 0.08, 0); g.add(portafilter); const handle = cyl(0.012, 0.012, 0.1, 'rubber-black', 6); place(handle, ghx, h - 0.27, d/2 + 0.16, Math.PI/2); g.add(handle); } const steamWand = cyl(0.008, 0.008, 0.22, 'steel-polished', 6); place(steamWand, -w/2 + 0.05, h - 0.12, d/2 - 0.05, 0); steamWand.rotation.x = 0.3; g.add(steamWand); const dripTray = box(w - 0.08, 0.03, d - 0.1, 'steel-brushed'); place(dripTray, 0, 0.02, d/2 - 0.06, 0); g.add(dripTray); const gauge = cyl(0.04, 0.04, 0.015, 'brass', 16); place(gauge, w/2 - 0.12, h - 0.1, d/2 + 0.01, Math.PI/2); g.add(gauge); return g; },
+  // ── sideboard / credenza: low cabinet on splayed legs with doors + handles ──
+  sideboard: function(rng, p={}) { const g = new THREE.Group(); const w = p.width || 1.6, h = p.height || 0.8, d = p.depth || 0.45; const legH = 0.12, topH = 0.04; const body = box(w - 0.04, h - topH - legH, d - 0.04, 'wood-walnut'); place(body, 0, legH + (h - topH - legH)/2, 0, 0); g.add(body); const top = box(w, topH, d, 'wood-oak'); place(top, 0, h - topH/2, 0, rng()*0.04 - 0.02); g.add(top); const doors = 3; const doorW = (w - 0.1) / doors; for(let dr = 0; dr < doors; dr++) { const dx = -(w/2) + 0.05 + doorW/2 + dr * doorW; const door = box(doorW - 0.02, h - topH - legH - 0.04, 0.03, 'wood-oak'); place(door, dx, legH + (h - topH - legH)/2, d/2 - 0.01, rng()*0.04 - 0.02); g.add(door); const handle = cyl(0.006, 0.006, 0.12, 'brass', 6); place(handle, dx, legH + (h - topH - legH)/2, d/2 + 0.03, 0); g.add(handle); } for(let leg = 0; leg < 4; leg++) { const lx = ((leg % 2) - 0.5) * (w - 0.2); const lz = (Math.floor(leg/2) - 0.5) * (d - 0.12); const legGeom = cyl(0.02, 0.03, legH, 'wood-walnut', 8); place(legGeom, lx, legH/2, lz, 0); legGeom.rotation.x = lz > 0 ? 0.12 : -0.12; legGeom.rotation.z = lx > 0 ? -0.12 : 0.12; g.add(legGeom); } return g; },
+  // ── mannequin block: torso + head + plinth (retail dress form) ──
+  mannequin: function(rng, p={}) { const g = new THREE.Group(); const plinth = cyl(0.18, 0.2, 0.05, 'steel-brushed', 20); place(plinth, 0, 0.025, 0, 0); g.add(plinth); const pole = cyl(0.02, 0.02, 0.55, 'steel-polished', 10); place(pole, 0, 0.05 + 0.275, 0, 0); g.add(pole); const torso = box(0.34, 0.62, 0.22, 'fabric-linen'); place(torso, 0, 1.05, 0, rng()*0.08 - 0.04); g.add(torso); const shoulderL = ball(0.09, 'fabric-linen'); place(shoulderL, -0.17, 1.32, 0, 0); g.add(shoulderL); const shoulderR = ball(0.09, 'fabric-linen'); place(shoulderR, 0.17, 1.32, 0, 0); g.add(shoulderR); const neck = cyl(0.045, 0.05, 0.08, 'fabric-linen', 12); place(neck, 0, 1.42, 0, 0); g.add(neck); const head = ball(0.085, 'ceramic-white'); place(head, 0, 1.52, 0, rng()*0.15 - 0.075); g.add(head); const waist = cyl(0.16, 0.12, 0.14, 'fabric-grey', 16); place(waist, 0, 0.74, 0, 0); g.add(waist); return g; },
+  // ── clothing rack: rail on two legs, hung garments as draped boxes ──
+  clothingRack: function(rng, p={}) { const g = new THREE.Group(); const w = p.width || 1.3, h = p.height || 1.6; const railR = 0.012; const rail = cyl(railR, railR, w, 'steel-polished', 10); place(rail, 0, h, 0, 0); rail.rotation.z = Math.PI/2; g.add(rail); for(let leg = 0; leg < 2; leg++) { const lx = (leg - 0.5) * w; const post = cyl(0.02, 0.02, h, 'steel-brushed', 8); place(post, lx, h/2, 0, 0); g.add(post); const footBar = box(0.04, 0.03, 0.5, 'steel-brushed'); place(footBar, lx, 0.02, 0, 0); g.add(footBar); for(const fz of [-1, 1]) { const wheel = cyl(0.03, 0.03, 0.02, 'rubber-black', 10); place(wheel, lx, 0.03, fz * 0.22, Math.PI/2); g.add(wheel); } } const garments = p.garments || 7; const mats = ['fabric-grey', 'fabric-linen', 'leather-tan', 'wood-walnut', 'velvet']; for(let gar = 0; gar < garments; gar++) { const gx = -w/2 + 0.12 + gar * ((w - 0.24) / (garments - 1)); const hangerW = 0.06 + rng()*0.02; const hook = cyl(0.004, 0.004, 0.08, 'steel-polished', 6); place(hook, gx, h - 0.02, 0, 0); g.add(hook); const shoulder = box(hangerW * 3, 0.01, 0.02, 'plastic-matte'); place(shoulder, gx, h - 0.07, 0, rng()*0.1 - 0.05); g.add(shoulder); const garmentH = 0.7 + rng()*0.4; const garment = box(0.22 + rng()*0.06, garmentH, 0.06, mats[gar % mats.length]); place(garment, gx, h - 0.07 - garmentH/2, 0, rng()*0.06 - 0.03); g.add(garment); } return g; },
+  // ── bathroom vanity: cabinet + countertop + vessel basin + faucet + mirror ──
+  vanity: function(rng, p={}) { const g = new THREE.Group(); const w = p.width || 1.1, h = p.height || 0.82, d = p.depth || 0.5; const topH = 0.04; const cabinet = box(w - 0.04, h - topH, d - 0.04, 'wood-walnut'); place(cabinet, 0, (h - topH)/2, 0, 0); g.add(cabinet); const top = box(w, topH, d, 'marble-white'); place(top, 0, h, 0, rng()*0.03 - 0.015); g.add(top); for(let dr = 0; dr < 2; dr++) { const dx = (dr - 0.5) * (w/2 - 0.05); const door = box(w/2 - 0.06, h - topH - 0.06, 0.03, 'wood-oak'); place(door, dx, (h - topH)/2, d/2 - 0.01, rng()*0.04 - 0.02); g.add(door); const handle = cyl(0.005, 0.005, 0.1, 'brass', 6); place(handle, dx + (dr - 0.5) * 0.18, (h - topH)/2, d/2 + 0.03, 0); g.add(handle); } const basin = cyl(0.18, 0.14, 0.12, 'ceramic-white', 24); place(basin, 0, h + 0.06, 0, 0); g.add(basin); const basinInner = cyl(0.15, 0.1, 0.1, 'ceramic-white', 24); place(basinInner, 0, h + 0.09, 0, 0); g.add(basinInner); const faucetBase = cyl(0.025, 0.03, 0.04, 'steel-polished', 12); place(faucetBase, 0, h + 0.05, -d/2 + 0.12, 0); g.add(faucetBase); const faucetNeck = cyl(0.012, 0.012, 0.22, 'steel-polished', 10); place(faucetNeck, 0, h + 0.16, -d/2 + 0.12, 0); faucetNeck.rotation.x = -0.4; g.add(faucetNeck); const faucetSpout = cyl(0.01, 0.01, 0.08, 'steel-polished', 10); place(faucetSpout, 0, h + 0.26, -d/2 + 0.18, 0); faucetSpout.rotation.x = Math.PI/2; g.add(faucetSpout); const mirror = box(w * 0.7, 0.9, 0.02, 'glass-clear'); place(mirror, 0, h + 0.75, -d/2 + 0.02, 0); g.add(mirror); const mirrorFrame = box(w * 0.74, 0.94, 0.015, 'brass'); place(mirrorFrame, 0, h + 0.75, -d/2 + 0.005, 0); g.add(mirrorFrame); return g; },
+  // ── freestanding bathtub: oval shell + inner bowl + clawed feet + filler ──
+  bathtub: function(rng, p={}) { const g = new THREE.Group(); const w = p.width || 0.78, len = p.length || 1.7, h = p.height || 0.6; const shell = box(w, h - 0.1, len, 'ceramic-white'); place(shell, 0, 0.1 + (h - 0.1)/2, 0, 0); g.add(shell); const rim = box(w + 0.04, 0.06, len + 0.04, 'ceramic-white'); place(rim, 0, h, 0, 0); g.add(rim); const inner = box(w - 0.14, 0.3, len - 0.18, 'ceramic-white'); place(inner, 0, h - 0.12, 0, 0); g.add(inner); const water = box(w - 0.18, 0.02, len - 0.22, 'glass-clear'); place(water, 0, h - 0.16, 0, 0); g.add(water); for(let foot = 0; foot < 4; foot++) { const fx = ((foot % 2) - 0.5) * (w - 0.1); const fz = (Math.floor(foot/2) - 0.5) * (len - 0.2); const claw = cyl(0.04, 0.06, 0.1, 'brass', 10); place(claw, fx, 0.05, fz, 0); g.add(claw); } const filler = cyl(0.015, 0.015, 0.3, 'steel-polished', 10); place(filler, 0, h + 0.15, -len/2 + 0.1, 0); g.add(filler); const fillerSpout = cyl(0.012, 0.012, 0.1, 'steel-polished', 10); place(fillerSpout, 0, h + 0.3, -len/2 + 0.15, 0); fillerSpout.rotation.x = Math.PI/2; g.add(fillerSpout); return g; },
+  // ── towel rack: wall ladder rail with draped folded towels ──
+  towelRack: function(rng, p={}) { const g = new THREE.Group(); const w = p.width || 0.6, h = p.height || 1.0; for(const side of [-1, 1]) { const post = cyl(0.012, 0.012, h, 'steel-brushed', 8); place(post, side * w/2, h/2, 0, 0); g.add(post); } const rungs = 4; for(let r = 0; r < rungs; r++) { const ry = 0.15 + r * ((h - 0.2) / rungs); const rung = cyl(0.01, 0.01, w, 'steel-brushed', 8); place(rung, 0, ry, 0, 0); rung.rotation.z = Math.PI/2; g.add(rung); if(r % 2 === 0) { const towel = box(w * 0.6, 0.4, 0.04, r === 0 ? 'fabric-linen' : 'fabric-grey'); place(towel, rng()*0.04 - 0.02, ry - 0.18, 0.05, 0); g.add(towel); } } return g; },
 };
 
 const LAYOUTS = {
@@ -264,37 +283,6 @@ const LAYOUTS = {
     addJittered(scene, pedestal(rng, {}), 0, 0, 0, rng);
     const hero = productHero(rng); hero.position.y = 0.95; addJittered(scene, hero, 0, 0, 0, rng, 0, 0);
   },
-  'cafe': (scene, rng) => {
-    addJittered(scene, counter(rng, {}), -1.6, -1.2, 0.15, rng);
-    for (let i = 0; i < 3; i++) {
-      const tx = -0.6 + i * 1.0;
-      addJittered(scene, coffeeTable(rng, { w: 0.7, d: 0.7, h: 0.74, top: 'wood-walnut' }), tx, 0.6, 0, rng);
-      addJittered(scene, chair(rng, {}), tx - 0.5, 1.05, Math.PI / 2, rng);
-      addJittered(scene, chair(rng, {}), tx + 0.5, 0.15, -Math.PI / 2, rng);
-      addJittered(scene, pendant(rng, { y: 2.0 }), tx, 0.6, 0, rng);
-    }
-    addJittered(scene, plant(rng, {}), 1.9, -1.2, 0, rng);
-  },
-  'office': (scene, rng) => {
-    addJittered(scene, rug(rng, { w: 2.6, d: 1.9 }), 0, 0.2, 0, rng);
-    addJittered(scene, XF.desk(rng, {}), 0, -0.8, 0, rng);
-    addJittered(scene, XF.officeChair(rng, {}), 0, 0.0, Math.PI, rng);
-    addJittered(scene, XF.wardrobe(rng, {}), 1.95, -1.2, -0.35, rng);
-    addJittered(scene, bookshelf(rng, {}), -1.95, -1.1, 0.35, rng);
-    addJittered(scene, XF.sideTable(rng, {}), 1.5, 1.0, 0, rng);
-    addJittered(scene, plant(rng, {}), -1.8, 1.1, 0, rng);
-  },
-  'dining': (scene, rng) => {
-    addJittered(scene, rug(rng, { w: 3.0, d: 2.0 }), 0, 0, 0, rng);
-    addJittered(scene, XF.diningTableLong(rng, {}), 0, 0, 0, rng);
-    for (let i = 0; i < 3; i++) {
-      addJittered(scene, chair(rng, {}), -0.8 + i * 0.8, 0.78, 0, rng);
-      addJittered(scene, chair(rng, {}), -0.8 + i * 0.8, -0.78, Math.PI, rng);
-    }
-    addJittered(scene, XF.ceilingPendant(rng, {}), 0, 0, 0, rng);
-    addJittered(scene, XF.dresser(rng, {}), 1.95, -1.3, -0.3, rng);
-    addJittered(scene, plant(rng, {}), -2.0, 1.0, 0, rng);
-  },
   'kitchen': (scene, rng) => {
     addJittered(scene, XF.kitchenCabinetRun(rng, {}), 0, -1.7, 0, rng);
     addJittered(scene, XF.kitchenIsland(rng, {}), 0, 0.4, 0, rng);
@@ -302,6 +290,69 @@ const LAYOUTS = {
     addJittered(scene, XF.ceilingPendant(rng, {}), -0.5, 0.4, 0, rng);
     addJittered(scene, XF.ceilingPendant(rng, {}), 0.5, 0.4, 0, rng);
     addJittered(scene, plant(rng, {}), 1.9, -1.0, 0, rng);
+  },
+  // ─── new layouts (6) ───
+  'office': (scene, rng) => {
+    addJittered(scene, rug(rng, { w: 2.6, d: 1.9 }), 0, 0.2, 0, rng);
+    addJittered(scene, XF.desk(rng, { width: 1.5, depth: 0.7 }), 0, -0.9, 0, rng);          // desk against back
+    addJittered(scene, XF.monitor(rng, {}), 0, -1.05, 0, rng);                              // monitor on desk
+    addJittered(scene, XF.deskLamp(rng, {}), 0.55, -1.0, 0, rng);                           // desk lamp corner
+    addJittered(scene, XF.officeChair(rng, {}), 0, -0.15, Math.PI, rng);                    // chair facing desk
+    addJittered(scene, bookshelf(rng, { w: 1.1, h: 1.95 }), -1.95, -1.0, Math.PI / 2, rng); // bookshelf left wall
+    addJittered(scene, plant(rng, {}), 1.9, -1.2, 0, rng);                                  // plant corner
+  },
+  'cafe': (scene, rng) => {
+    addJittered(scene, counter(rng, { w: 2.4 }), -1.7, -1.25, 0.18, rng);                   // service counter
+    addJittered(scene, XF.espressoMachine(rng, {}), -1.7, -1.05, 0, rng);                   // espresso block on counter
+    addJittered(scene, bookshelf(rng, { w: 0.9, h: 1.6, d: 0.28 }), -2.0, 0.9, Math.PI / 2, rng); // shelf of cups/mugs
+    for (let i = 0; i < 3; i++) {
+      const tx = -0.4 + i * 1.05;
+      addJittered(scene, coffeeTable(rng, { w: 0.7, d: 0.7, h: 0.74, top: 'wood-walnut' }), tx, 0.7, 0, rng); // round-ish table
+      addJittered(scene, chair(rng, {}), tx - 0.5, 1.15, Math.PI / 2, rng);                 // chair one side
+      addJittered(scene, chair(rng, {}), tx + 0.5, 0.25, -Math.PI / 2, rng);                // chair other side
+      addJittered(scene, pendant(rng, { y: 2.05 }), tx, 0.7, 0, rng);                       // pendant over each table
+    }
+    addJittered(scene, plant(rng, {}), 1.95, -1.2, 0, rng);
+  },
+  'dining-room': (scene, rng) => {
+    addJittered(scene, rug(rng, { w: 3.2, d: 2.1 }), 0, 0, 0, rng);
+    addJittered(scene, XF.diningTableLong(rng, { length: 2.4, width: 1.0 }), 0, 0, 0, rng); // table center
+    for (let i = 0; i < 3; i++) {                                                            // 6 chairs, 3 per side
+      addJittered(scene, chair(rng, {}), -0.8 + i * 0.8, 0.8, 0, rng);
+      addJittered(scene, chair(rng, {}), -0.8 + i * 0.8, -0.8, Math.PI, rng);
+    }
+    addJittered(scene, XF.sideboard(rng, {}), 0, -1.95, 0, rng);                            // sideboard back wall
+    addJittered(scene, XF.ceilingPendant(rng, {}), 0, 0, 0, rng);                           // hanging light over table
+    addJittered(scene, plant(rng, { h: 1.2 }), 0, 0.05, 0, rng, 0, 0);                      // centerpiece on table
+  },
+  'lounge': (scene, rng) => {
+    addJittered(scene, rug(rng, { w: 3.0, d: 2.2 }), 0, 0.1, 0, rng);
+    addJittered(scene, sofa(rng, { w: 2.3, fabric: 'velvet' }), 0, -1.0, 0, rng);           // statement sofa
+    addJittered(scene, coffeeTable(rng, { w: 1.3, d: 0.7 }), 0, 0.2, 0, rng);               // coffee table
+    addJittered(scene, armchair(rng, { fabric: 'leather-tan' }), -1.6, 0.6, 0.6, rng);      // armchair L
+    addJittered(scene, armchair(rng, { fabric: 'fabric-linen' }), 1.6, 0.6, -0.6, rng);     // armchair R
+    addJittered(scene, XF.sideTable(rng, {}), 1.45, -0.7, 0, rng);                          // side table
+    addJittered(scene, floorLamp(rng, {}), -1.85, -1.1, 0, rng);                            // floor lamp
+    addJittered(scene, bookshelf(rng, { w: 1.1, h: 1.95 }), 1.95, -1.3, -Math.PI / 2, rng); // bookshelf corner
+  },
+  'retail': (scene, rng) => {
+    addJittered(scene, counter(rng, { w: 1.8, top: 'marble-white', body: 'wood-walnut' }), 0, -1.7, 0, rng); // display/cash counter
+    addJittered(scene, XF.clothingRack(rng, {}), -1.5, 0.3, 0, rng);                        // clothing rack L
+    addJittered(scene, XF.clothingRack(rng, { width: 1.1 }), 1.5, 0.3, 0, rng);             // clothing rack R
+    addJittered(scene, bookshelf(rng, { w: 1.2, h: 1.9, d: 0.34 }), -2.0, -1.2, Math.PI / 2, rng); // shelving wall
+    addJittered(scene, XF.mannequin(rng, {}), 0, 0.9, 0, rng);                              // mannequin display
+    addJittered(scene, XF.ottoman(rng, { width: 0.9 }), 1.4, 1.4, 0, rng);                  // fitting bench
+    addJittered(scene, pendant(rng, { y: 2.2, shade: 'steel-brushed' }), -0.8, 0.0, 0, rng); // spotlight
+    addJittered(scene, pendant(rng, { y: 2.2, shade: 'steel-brushed' }), 0.8, 0.0, 0, rng);  // spotlight
+  },
+  'bathroom-spa': (scene, rng) => {
+    addJittered(scene, rug(rng, { w: 1.4, d: 0.8, mat: 'fabric-linen' }), 0, 1.0, 0, rng);  // bath mat
+    addJittered(scene, XF.vanity(rng, {}), -1.55, -1.2, Math.PI / 2, rng);                  // vanity + sink + mirror, left wall
+    addJittered(scene, XF.bathtub(rng, {}), 1.4, -0.6, Math.PI / 2, rng);                   // freestanding tub, right
+    addJittered(scene, XF.towelRack(rng, {}), -1.95, 0.6, Math.PI / 2, rng);                // towel rack on wall
+    addJittered(scene, plant(rng, { h: 1.2 }), 1.85, 1.2, 0, rng);                          // spa plant
+    addJittered(scene, plant(rng, { h: 0.8 }), -0.4, 1.4, 0, rng);                          // small plant
+    addJittered(scene, pedestal(rng, { mat: 'marble-white', h: 0.55 }), 0.3, 1.3, 0, rng);  // marble accent stool / tiled-floor accent
   },
 };
 

@@ -2131,6 +2131,95 @@ const GENERATORS = {
 },
 };
 
+// ── Parametric metal / hard-surface micro-detail generator ──────────────────
+// The probe gap: the polished metals + plastic/rubber registry ids rendered
+// with FLAT color+metalness+roughness (texturesFor → null). A perfectly
+// uniform metal reads as CG — real surfaces have faint anisotropic streaks,
+// a swirl/orange-peel, and roughness micro-variation that breaks the
+// reflection into believable highlights. This builds map + roughnessMap +
+// normalMap from cheap seeded value-noise, tuned per material. Consumed
+// identically to the hand-written generators above (the path tracer samples
+// map/roughnessMap/normalMap natively). `streak` aligns detail horizontally
+// for brushed/extruded metals; `swirl` adds a spun/orange-peel for casts.
+function makeMicrosurface(THREE, size, opts) {
+  const {
+    base = [180, 180, 185], tintVar = 8, roughMin = 0.15, roughMax = 0.32,
+    streak = 0.6, swirl = 0.0, speckle = 0.0, normalAmp = 6, seed = 7,
+  } = opts || {};
+  const hash = (x, y) => { let n = Math.sin((x * 12.9898 + y * 78.233 + seed) * 1.0) * 43758.5453; return n - Math.floor(n); };
+  const vnoise = (x, y) => {
+    const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi;
+    const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+    const a = hash(xi, yi), b = hash(xi + 1, yi), c = hash(xi, yi + 1), d = hash(xi + 1, yi + 1);
+    return (a + (b - a) * u) + ((c + (d - c) * u) - (a + (b - a) * u)) * v;
+  };
+  const fbm = (x, y) => vnoise(x, y) * 0.55 + vnoise(x * 2.1, y * 2.1) * 0.3 + vnoise(x * 4.3, y * 4.3) * 0.15;
+  const mk = () => { const c = (typeof OffscreenCanvas !== 'undefined') ? new OffscreenCanvas(size, size) : document.createElement('canvas'); c.width = c.height = size; return c; };
+  const canvas = mk(), nCanvas = mk(), rCanvas = mk();
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  const nCtx = nCanvas.getContext('2d', { willReadFrequently: true });
+  const rCtx = rCanvas.getContext('2d', { willReadFrequently: true });
+  const md = ctx.createImageData(size, size), nd = nCtx.createImageData(size, size), rd = rCtx.createImageData(size, size);
+  const mp = md.data, np = nd.data, rp = rd.data;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const idx = (y * size + x) * 4;
+      const u = x / size, vY = y / size;
+      // streak: horizontal grain (low freq in x → fine in y) for brushed look
+      const grain = fbm(u * 4 + 0.5, vY * (4 + streak * 40));
+      // swirl: radial spun pattern for cast/spun metals (orange-peel)
+      const dx = u - 0.5, dy = vY - 0.5, ang = Math.atan2(dy, dx), rad = Math.hypot(dx, dy);
+      const spun = swirl > 0 ? (Math.sin(ang * 90 + rad * 60) * 0.5 + 0.5) : 0.5;
+      const spk = speckle > 0 ? Math.pow(vnoise(u * 64, vY * 64), 3) : 0;
+      const detail = grain * (1 - swirl) + spun * swirl;
+      // albedo: faint per-pixel tint variation (metals are near-uniform)
+      const tv = (detail - 0.5) * tintVar * 2 + spk * speckle * 40;
+      mp[idx]     = Math.max(0, Math.min(255, base[0] + tv));
+      mp[idx + 1] = Math.max(0, Math.min(255, base[1] + tv));
+      mp[idx + 2] = Math.max(0, Math.min(255, base[2] + tv));
+      mp[idx + 3] = 255;
+      // roughness: streak + speckle modulation between roughMin..roughMax
+      const r = roughMin + (roughMax - roughMin) * detail + spk * speckle * 0.5;
+      const rb = Math.max(0, Math.min(255, Math.round(Math.min(1, r) * 255)));
+      rp[idx] = rp[idx + 1] = rp[idx + 2] = rb; rp[idx + 3] = 255;
+      // normal: derivative of detail field, gently scaled
+      const gxA = fbm((u + 1 / size) * 4 + 0.5, vY * (4 + streak * 40));
+      const gyA = fbm(u * 4 + 0.5, (vY + 1 / size) * (4 + streak * 40));
+      np[idx]     = Math.max(0, Math.min(255, Math.round(128 + (gxA - grain) * normalAmp * 255)));
+      np[idx + 1] = Math.max(0, Math.min(255, Math.round(128 + (gyA - grain) * normalAmp * 255 * (1 + streak))));
+      np[idx + 2] = 235;
+      np[idx + 3] = 255;
+    }
+  }
+  ctx.putImageData(md, 0, 0); nCtx.putImageData(nd, 0, 0); rCtx.putImageData(rd, 0, 0);
+  const map = new THREE.CanvasTexture(canvas);
+  map.wrapS = map.wrapT = THREE.RepeatWrapping; map.colorSpace = THREE.SRGBColorSpace;
+  map.magFilter = THREE.LinearFilter; map.minFilter = THREE.LinearMipmapLinearFilter;
+  const normalMap = new THREE.CanvasTexture(nCanvas);
+  normalMap.wrapS = normalMap.wrapT = THREE.RepeatWrapping; normalMap.colorSpace = THREE.NoColorSpace;
+  normalMap.magFilter = THREE.LinearFilter; normalMap.minFilter = THREE.LinearMipmapLinearFilter;
+  const roughnessMap = new THREE.CanvasTexture(rCanvas);
+  roughnessMap.wrapS = roughnessMap.wrapT = THREE.RepeatWrapping; roughnessMap.colorSpace = THREE.LinearSRGBColorSpace;
+  roughnessMap.magFilter = THREE.LinearFilter; roughnessMap.minFilter = THREE.LinearMipmapLinearFilter;
+  return { map, normalMap, roughnessMap };
+}
+
+// Register the previously-flat metal / plastic ids through the parametric
+// microsurface generator (base colors mirror materialRegistry.js).
+const MICRO = {
+  'gold-polished':  { base: [212, 175, 55],  tintVar: 6,  roughMin: 0.06, roughMax: 0.16, streak: 0.2, swirl: 0.0, normalAmp: 3, seed: 11 },
+  'brass':          { base: [185, 151, 91],  tintVar: 8,  roughMin: 0.22, roughMax: 0.40, streak: 0.7, swirl: 0.0, normalAmp: 5, seed: 13 },
+  'copper':         { base: [184, 115, 51],  tintVar: 9,  roughMin: 0.18, roughMax: 0.36, streak: 0.6, swirl: 0.0, normalAmp: 5, seed: 17 },
+  'aluminium':      { base: [198, 194, 187], tintVar: 7,  roughMin: 0.28, roughMax: 0.48, streak: 0.8, swirl: 0.0, normalAmp: 6, seed: 19 },
+  'steel-polished': { base: [210, 214, 220], tintVar: 5,  roughMin: 0.08, roughMax: 0.20, streak: 0.4, swirl: 0.0, normalAmp: 3, seed: 23 },
+  'cast-iron':      { base: [58, 61, 66],    tintVar: 12, roughMin: 0.55, roughMax: 0.78, streak: 0.1, swirl: 0.3, speckle: 0.7, normalAmp: 9, seed: 29 },
+  'plastic-matte':  { base: [44, 47, 51],    tintVar: 4,  roughMin: 0.50, roughMax: 0.66, streak: 0.0, swirl: 0.0, speckle: 0.4, normalAmp: 4, seed: 31 },
+  'rubber-black':   { base: [26, 26, 28],    tintVar: 5,  roughMin: 0.85, roughMax: 0.97, streak: 0.0, swirl: 0.0, speckle: 0.6, normalAmp: 7, seed: 37 },
+};
+for (const id of Object.keys(MICRO)) {
+  if (!GENERATORS[id]) GENERATORS[id] = (THREE, size = 512) => makeMicrosurface(THREE, size, MICRO[id]);
+}
+
 const _cache = {};
 export function texturesFor(id) {
   if (!(id in _cache)) {
@@ -2141,3 +2230,9 @@ export function texturesFor(id) {
   return _cache[id];
 }
 export const TEXTURED_IDS = Object.keys(GENERATORS);
+// Ids whose roughnessMap encodes ABSOLUTE target roughness (not a multiplier on
+// the registry value). The path tracer does `roughness *= roughnessMap.g`, so
+// the consumer must set material.roughness = 1 for these or polished metals
+// would collapse to mirror-sharp. The hand-authored organic generators above
+// intentionally rely on the multiply, so they are excluded.
+export const ABSOLUTE_ROUGHNESS_IDS = new Set(Object.keys(MICRO));

@@ -20,6 +20,7 @@ import { installEnvironmentBuilder } from './builders/environmentBuilder.js';
 import { installOrganicSculpt } from './builders/organicSculpt.js';
 import { installAnimationDirector } from './builders/animationDirector.js';
 import { installRigDirector } from './builders/rigDirector.js';
+import { installHumanoidBuilder } from './builders/humanoid.js';
 import { installLookdevDirector } from './builders/lookdevDirector.js';
 
 // ─── Edit-mode state (slice 376/377 V2 equivalent) ───────────────────────
@@ -165,6 +166,7 @@ export function registerV3Api() {
   try { installOrganicSculpt(); } catch (_) {} // window.__studioSculptOrganic (1:1 organic brush-sculpt forms)
   try { installAnimationDirector(); } catch (_) {} // window.__studioAnimate (camera-path animation: turntable/dolly/product-reveal → frame sequence)
   try { installRigDirector(); } catch (_) {} // window.__studioRig (skinned-armature rigging + organic movement → frame sequence)
+  try { installHumanoidBuilder(); } catch (_) {} // window.__studioBuildHumanoid + __studioPoseHumanoid (rigged biped: 8-head proportions, bipedal skeleton, skinned skin/shirt/trouser shells, posed via bone rotation)
   try { installLookdevDirector(); } catch (_) {} // window.__studioLight + __studioLookdevMaterials (cinematic 3-point rigs + PBR upgrade → lit final)
 
   // Edit-mode state.
