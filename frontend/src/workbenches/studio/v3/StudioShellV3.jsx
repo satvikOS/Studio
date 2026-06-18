@@ -7601,7 +7601,11 @@ function _archieAdapterPath(/* activeWb */) {
   // arrange via set-selection → click a real stage-lighting preset), trained
   // on a 99.75%-coherent pure-DOM-op corpus (no composer ops). The SYSTEM in
   // _buildArchieSystemPrompt is byte-identical to that fold's training SYSTEM.
-  return 'adapters/archie/hermes_studio/modeling-cua-staged-20260617';
+  // 2026-06-17 — PURE-CUA PHOTOREAL fold (modeling-cua-photoreal-20260617): resumes
+  // modeling-cua-staged + adds the real-furniture photoreal workflow (place-furniture →
+  // set-selection arrange → click-stage-preset → render). Gate 3/3: model emits 6-7
+  // place-furniture + arrange + light + render per room prompt, zero composer leak.
+  return 'adapters/archie/hermes_studio/modeling-cua-photoreal-20260617';
 }
 
 // Slice 952 — §6 failure-mode catalog client. Every Archie failure
