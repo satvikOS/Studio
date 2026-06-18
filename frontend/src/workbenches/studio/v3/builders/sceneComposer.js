@@ -16,6 +16,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { MATERIALS } from '../materialRegistry.js';
+import { loadRealFurniture, preloadRealFurniture } from './realFurniture.js';
 
 // Deterministic RNG so renders are reproducible but geometry is asymmetric.
 function makeRng(seed) {
@@ -375,4 +376,126 @@ export const STUDIO_LAYOUT_IDS = Object.keys(LAYOUTS);
 export function installStudioComposer() {
   if (typeof window === 'undefined') return;
   window.__studioComposeScene = (layoutId, seed) => composeScene(layoutId, null, seed);
+  window.__studioComposeRealScene = (layoutId, seed) => composeRealScene(layoutId, null, seed);
+  window.__studioRealLayoutIds = STUDIO_REAL_LAYOUT_IDS;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// REAL-MODEL room composer
+// ════════════════════════════════════════════════════════════════════════════
+// Builds a coherent room by PLACING the downloaded CC0 glTF furniture models
+// (real geometry + real PBR textures, via realFurniture.loadRealFurniture) at
+// sensible real-world positions. The room SHELL (floor + walls + ceiling +
+// window light) is supplied automatically by the path tracer's harvestScene()
+// when __studioRunPathTracedRender({ room:true }) runs, sized to the furniture
+// footprint — so the composer's job is the furniture layout, floor-anchored and
+// non-overlapping. Every loaded mesh is already tagged archdiscStudioPrimitive +
+// archdiscRealMaterial, so the path tracer harvests it AND keeps its real maps.
+//
+// Each placement: { type, x, z, ry } in metres / radians. y is always the floor
+// (loadRealFurniture grounds min.y → 0). A small per-instance jitter keeps
+// multi-instance rows (dining chairs, etc.) from looking stamped.
+
+const REAL_LAYOUTS = {
+  // ── living room: sofa against the back wall, coffee table in front, armchairs
+  //    angled in toward the seating group, bookshelf + lamp + plant on the sides.
+  'living-room': [
+    { type: 'sofa', x: 0.0, z: -1.35, ry: 0 },
+    { type: 'coffee-table', x: 0.0, z: -0.15, ry: 0 },
+    { type: 'armchair', x: -1.55, z: 0.35, ry: 0.7 },
+    { type: 'armchair', x: 1.55, z: 0.35, ry: -0.7 },
+    { type: 'bookshelf', x: 2.2, z: -1.5, ry: -Math.PI / 2 },
+    { type: 'lamp', x: -1.95, z: -1.45, ry: 0.3 },
+    { type: 'plant', x: -2.1, z: 0.9, ry: 0 },
+    { type: 'console', x: 0.0, z: -2.0, ry: 0 },
+  ],
+  // ── bedroom: bed centred against the back wall, nightstand-ish console each
+  //    side (with a lamp on one), bookshelf + plant filling the room.
+  'bedroom': [
+    { type: 'bed', x: 0.0, z: -0.8, ry: 0 },
+    { type: 'console', x: -1.45, z: -1.55, ry: 0 },
+    { type: 'console', x: 1.45, z: -1.55, ry: 0 },
+    { type: 'lamp', x: -1.45, z: -1.55, ry: 0.4 },
+    { type: 'bookshelf', x: 2.1, z: 0.6, ry: -Math.PI / 2 },
+    { type: 'plant', x: -2.0, z: 1.1, ry: 0 },
+    { type: 'plant-alt', x: 1.9, z: 1.3, ry: 0 },
+  ],
+  // ── dining room: long wooden table centred, six wooden chairs (3 per side)
+  //    tucked in, console as a sideboard against the back wall, plant accent.
+  'dining-room': [
+    { type: 'dining-table', x: 0.0, z: 0.0, ry: 0 },
+    { type: 'dining-chair', x: -0.85, z: 0.95, ry: Math.PI },
+    { type: 'dining-chair', x: 0.0, z: 0.95, ry: Math.PI },
+    { type: 'dining-chair', x: 0.85, z: 0.95, ry: Math.PI },
+    { type: 'dining-chair', x: -0.85, z: -0.95, ry: 0 },
+    { type: 'dining-chair', x: 0.0, z: -0.95, ry: 0 },
+    { type: 'dining-chair', x: 0.85, z: -0.95, ry: 0 },
+    { type: 'console', x: 0.0, z: -2.0, ry: 0 },
+    { type: 'plant', x: 2.1, z: -1.6, ry: 0 },
+    { type: 'ceiling-lamp', x: 0.0, z: 0.0, ry: 0, y: 2.3 },
+  ],
+  // ── office: metal desk against the back wall with the lamp on the corner,
+  //    a stool to sit at it, bookshelf on the side wall, plant in the corner.
+  'office': [
+    { type: 'desk', x: 0.0, z: -1.3, ry: 0 },
+    { type: 'lamp', x: 0.55, z: -1.55, ry: -0.5 },
+    { type: 'stool', x: 0.0, z: -0.55, ry: Math.PI },
+    { type: 'bookshelf', x: -2.1, z: -0.8, ry: Math.PI / 2 },
+    { type: 'console', x: 1.9, z: -1.2, ry: -Math.PI / 2 },
+    { type: 'plant', x: 1.95, z: 0.9, ry: 0 },
+    { type: 'plant-alt', x: -1.9, z: 1.1, ry: 0 },
+  ],
+};
+
+export const STUDIO_REAL_LAYOUT_IDS = Object.keys(REAL_LAYOUTS);
+
+// Place one loaded furniture Group into the live scene at floor-anchored coords.
+// The model is already grounded (min.y → 0) + XZ-centred by loadRealFurniture,
+// so we only set the layout transform (+ optional explicit y for ceiling items)
+// and a tiny deterministic jitter. The group is added whole (no re-parenting /
+// geometry baking like the parametric path needs — harvestScene reads world
+// matrices directly), and every child mesh is already tagged.
+function placeReal(scene, group, { x = 0, z = 0, ry = 0, y } = {}, rng) {
+  const jx = (rng() - 0.5) * 0.03, jz = (rng() - 0.5) * 0.03, jr = (rng() - 0.5) * 0.03;
+  group.position.x = x + jx;
+  group.position.z = z + jz;
+  if (typeof y === 'number') group.position.y = y;       // ceiling fixtures etc.
+  group.rotation.y = ry + jr;
+  group.updateMatrixWorld(true);
+  scene.add(group);
+}
+
+// Compose a real-model room layout. AWAITS every model load before returning, so
+// the caller can harvest/render immediately after. Clears any prior composed
+// content (parametric prims + real furniture) first. Returns { layout, bodies }.
+export async function composeRealScene(layoutId, scene, seed = 1337) {
+  scene = scene || (typeof window !== 'undefined' && (window.__archdiscScene || (window.__archdiscViewport && window.__archdiscViewport.scene)));
+  if (!scene) throw new Error('composeRealScene: no scene');
+  const layout = REAL_LAYOUTS[layoutId] || REAL_LAYOUTS['living-room'];
+
+  // Clear prior composed content (both parametric prims and real furniture).
+  const doomed = [];
+  scene.traverse((o) => {
+    if (o && (o.userData?.archdiscStudioPrimitive || o.userData?.archdiscStudioLight || o.userData?.archdiscRealFurniture)) doomed.push(o);
+  });
+  for (const o of doomed) {
+    if (o.userData?.archdiscRealFurniture) continue; // children of a real group — removed with the group below
+    o.geometry?.dispose?.(); o.material?.dispose?.(); o.parent?.remove(o);
+  }
+  // Remove any leftover real-furniture root groups (their meshes carry the flag).
+  const roots = [];
+  scene.children.forEach((c) => { if (c.userData?.archdiscRealFurnitureType) roots.push(c); });
+  for (const r of roots) r.parent?.remove(r);
+
+  // Warm the cache (parallel) then load + place each item (await all).
+  const types = [...new Set(layout.map((p) => p.type))];
+  await preloadRealFurniture(types);
+
+  const rng = makeRng(seed);
+  const groups = await Promise.all(layout.map((p) => loadRealFurniture(p.type)));
+  layout.forEach((p, i) => placeReal(scene, groups[i], p, rng));
+
+  let n = 0;
+  scene.traverse((o) => { if (o.isMesh && o.userData?.archdiscStudioPrimitive) n++; });
+  return { layout: layoutId, bodies: n, items: layout.length };
 }

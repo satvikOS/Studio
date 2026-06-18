@@ -14,12 +14,16 @@
 // → { dataUrl, width, height, samples }. The demo writes the dataUrl to PNG.
 
 import * as THREE from 'three';
+import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import {
   WebGLPathTracer,
   BlurredEnvMapGenerator,
 } from 'three-gpu-pathtracer';
 import { MATERIALS, resolveMaterial } from '../materialRegistry.js';
-import { texturesFor, ABSOLUTE_ROUGHNESS_IDS } from './proceduralTextures.js';
+import {
+  texturesFor, ABSOLUTE_ROUGHNESS_IDS,
+  REAL_PBR_IDS, realPbrSetCached, preloadRealPbr,
+} from './proceduralTextures.js';
 
 // Real-world tile size (metres per texture repeat) per material → UV repeat is
 // scaled to each body's actual size so grain/weave reads at a believable scale.
@@ -37,8 +41,13 @@ const TILE_M = {
 // to the body's world size. Textures are cloned per body (shared image source →
 // the path tracer dedupes the bitmap, but per-body repeat is honoured).
 function applyProceduralTexture(THREE, mat, geo, matId, tileMult = 1) {
-  const tex = texturesFor(matId);
+  // Prefer the downloaded real CC0 PBR scan (must be preloaded via
+  // preloadRealPbr() before render — see runStudioPathTracedRender's prepass);
+  // fall back to the local procedural generator when no real set is loaded.
+  const real = realPbrSetCached(matId);
+  const tex = real || texturesFor(matId);
   if (!tex) return;
+  const isReal = !!real;
   if (!geo.boundingBox) geo.computeBoundingBox();
   const sz = geo.boundingBox.getSize(new THREE.Vector3());
   const tile = (TILE_M[matId] || 0.5) * tileMult;
@@ -47,17 +56,22 @@ function applyProceduralTexture(THREE, mat, geo, matId, tileMult = 1) {
   const assign = (slot, t) => {
     if (!t) return;
     const c = t.clone(); c.needsUpdate = true;
+    c.colorSpace = t.colorSpace;           // clone() drops colorSpace on some THREE builds
+    c.anisotropy = t.anisotropy || 8;      // preserve anisotropic filtering on the real maps
     c.wrapS = c.wrapT = THREE.RepeatWrapping; c.repeat.set(ru, rv);
     mat[slot] = c;
   };
   assign('map', tex.map);
   assign('roughnessMap', tex.roughnessMap);
   assign('normalMap', tex.normalMap);
-  // The PT does `roughness *= roughnessMap.g`. The metal/plastic microsurface
-  // maps encode ABSOLUTE target roughness, so neutralize the scalar to 1 for
-  // those ids (else polished metals collapse to mirror-sharp). The organic
-  // generators intentionally rely on the multiply → leave their scalar alone.
-  if (mat.roughnessMap && ABSOLUTE_ROUGHNESS_IDS.has(matId)) mat.roughness = 1.0;
+  // The PT does `roughness *= roughnessMap.g`. Real scans + the metal/plastic
+  // microsurface maps encode ABSOLUTE target roughness, so neutralize the scalar
+  // to 1 for those ids (else polished surfaces collapse to mirror-sharp). The
+  // organic procedural generators rely on the multiply → leave their scalar alone.
+  if (mat.roughnessMap && (isReal || ABSOLUTE_ROUGHNESS_IDS.has(matId))) mat.roughness = 1.0;
+  // Real scans carry their own albedo colour; drop the registry tint so it isn't
+  // double-multiplied into a muddy result.
+  if (isReal && mat.map) mat.color = new THREE.Color(0xffffff);
   if (mat.normalMap) { mat.normalScale = new THREE.Vector2(0.7, 0.7); try { geo.computeTangents(); } catch (_) { mat.normalMap = null; } }
 }
 
@@ -194,6 +208,51 @@ function buildEnvTexture(presetId, renderer) {
   }
 }
 
+// ── Real downloaded HDRI IBL (Poly Haven, 1k Radiance .hdr) ──────────────────
+// frontend/public/assets/hdri/<id>.hdr → copied verbatim into dist/assets/hdri/.
+// Maps a preset id (after alias resolution) to a real equirect HDRI; loaded via
+// THREE.RGBELoader and used as scene.environment + background, replacing the
+// procedural GradientEquirectTexture. Falls back to the gradient on any failure.
+// Intensity reuses the matching ENV_PRESETS value so brightness stays consistent.
+const HDRI_FILES = Object.freeze({
+  studio: 'studio.hdr',     // Poly Haven studio_small_09 — neutral studio
+  golden: 'golden.hdr',     // Poly Haven brown_photostudio_02 — warm interior/golden
+  daylight: 'daylight.hdr', // Poly Haven lebombo — clear daylight
+});
+function hdriUrl(file) {
+  const base = (typeof document !== 'undefined' && document.baseURI)
+    ? document.baseURI
+    : (typeof location !== 'undefined' ? location.href : 'file:///');
+  try { return new URL('assets/hdri/' + file, base).href; }
+  catch (_) { return 'assets/hdri/' + file; }
+}
+const _hdriCache = {}; // presetKey -> THREE.DataTexture (equirect, FloatType)
+// Await-able: load (once) the real HDRI for a preset id. Resolves to a texture
+// with EquirectangularReflectionMapping, or null when no HDRI maps to the id /
+// the file fails to load (caller then uses the procedural gradient). Never throws.
+function loadRealHDRI(presetId) {
+  const key = ENV_ALIASES[presetId] || presetId;
+  const file = HDRI_FILES[key];
+  if (!file) return Promise.resolve(null);
+  if (key in _hdriCache) return Promise.resolve(_hdriCache[key]);
+  return new Promise((resolve) => {
+    const loader = new RGBELoader();
+    loader.setDataType(THREE.FloatType);
+    loader.load(hdriUrl(file),
+      (tex) => {
+        tex.mapping = THREE.EquirectangularReflectionMapping;
+        _hdriCache[key] = tex;
+        resolve(tex);
+      },
+      undefined,
+      (err) => {
+        if (typeof console !== 'undefined') console.warn('[realHDRI]', key, err && err.message ? err.message : err);
+        _hdriCache[key] = null;
+        resolve(null);
+      });
+  });
+}
+
 let _rendererSingleton = null;
 function makeOfflineRenderer() {
   if (_rendererSingleton && !_rendererSingleton.disposed) return _rendererSingleton;
@@ -308,11 +367,22 @@ function harvestScene({ room = true } = {}) {
   let pi = 0;
   for (const m of live) {
     if (!m || !m.geometry) continue;
-    const tag = m.userData && m.userData.studioMaterial;
-    const matId = tag || FALLBACK_PALETTE[pi++ % FALLBACK_PALETTE.length];
     const geo = m.geometry.clone();
-    const mat = physMatFrom(resolveMaterial(matId));
-    applyProceduralTexture(THREE, mat, geo, matId);
+    let mat;
+    // Real downloaded glTF asset (realFurniture loader): the mesh already carries
+    // its own MeshStandard/Physical material with the scanned map/normalMap/
+    // roughnessMap baked in. Preserve it verbatim (clone so we don't mutate the
+    // live scene's material) — DO NOT synthesize a registry material or apply the
+    // procedural generator, which would erase the real PBR maps.
+    if (m.userData && m.userData.archdiscRealMaterial && m.material) {
+      const src = Array.isArray(m.material) ? m.material[0] : m.material;
+      mat = src && src.clone ? src.clone() : src;
+    } else {
+      const tag = m.userData && m.userData.studioMaterial;
+      const matId = tag || FALLBACK_PALETTE[pi++ % FALLBACK_PALETTE.length];
+      mat = physMatFrom(resolveMaterial(matId));
+      applyProceduralTexture(THREE, mat, geo, matId);
+    }
     const clone = new THREE.Mesh(geo, mat);
     if (m.matrixWorld) clone.applyMatrix4(m.matrixWorld);
     else { clone.position.copy(m.position); clone.quaternion.copy(m.quaternion); clone.scale.copy(m.scale); }
@@ -340,6 +410,10 @@ const ANGLE_DIRS = {
   front:   [0.02, 0.30, 1.0],
   profile: [1.0, 0.32, 0.10],
   top:     [0.28, 1.1, 0.42],
+  // eye-level interior: near-horizontal, low — reads as a real interior photo
+  // (not the high "dollhouse" hero view). Paired with a lower look + closer
+  // pull-in in frameCamera so furniture sits at human eye height.
+  'eye-level': [0.40, 0.06, 0.92],
 };
 
 function frameCamera(scene, aspect, fovDeg = 38, angle = 'hero') {
@@ -355,11 +429,14 @@ function frameCamera(scene, aspect, fovDeg = 38, angle = 'hero') {
   // Tight hero: interiors are wide + flat so the bounding SPHERE over-pads
   // vertically with empty air — pull in to 0.84× so the furniture DOMINATES
   // the frame (clipping only the empty top/bottom of the sphere, not geometry).
-  const d = Math.max(vFit, hFit) * 0.84;
+  const isEye = angle === 'eye-level';
+  const d = Math.max(vFit, hFit) * (isEye ? 0.60 : 0.84);
   const cam = new THREE.PerspectiveCamera(fovDeg, aspect, Math.max(radius * 0.01, 0.02), radius * 200);
   // Eye slightly above the build's vertical mid, looking at centre; the angle
-  // picks the (normalized) view direction, scaled to the fit distance d.
-  const look = center.clone(); look.y += radius * 0.12;
+  // picks the (normalized) view direction, scaled to the fit distance d. For an
+  // eye-level interior shot, look LOWER (furniture height) so the camera reads
+  // as a person standing in the room rather than hovering above it.
+  const look = center.clone(); look.y += radius * (isEye ? -0.14 : 0.12);
   const raw = ANGLE_DIRS[angle] || ANGLE_DIRS.hero;
   const dn = new THREE.Vector3(raw[0], raw[1], raw[2]).normalize();
   cam.position.set(look.x + dn.x * d, look.y + dn.y * d, look.z + dn.z * d);
@@ -378,9 +455,28 @@ export async function runStudioPathTracedRender({ envPresetId = 'studio', sample
   renderer.setSize(res.w, res.h, false);
   canvas.width = res.w; canvas.height = res.h;
 
+  // ── Asset prepass (AWAIT before harvesting/baking) ─────────────────────────
+  // The path tracer bakes geometry + material buffers in setScene(); the real
+  // texture maps and the real HDRI must therefore be in hand BEFORE harvestScene
+  // (which calls applyProceduralTexture → realPbrSetCached) and BEFORE we assign
+  // scene.environment. We preload all real PBR sets (11, ~1K each) so any body —
+  // whatever registry id it resolves to — gets its scan, plus the real HDRI for
+  // this preset. Both fall back gracefully (procedural texture / gradient env).
+  const realHDRIPromise = loadRealHDRI(envPresetId);
+  await preloadRealPbr([...REAL_PBR_IDS]);
+  const realHDRI = await realHDRIPromise;
+
   const scene = harvestScene({ room });
   const camera = frameCamera(scene, res.w / res.h, 38, angle);
+  // Env: prefer the real HDRI (Poly Haven .hdr) for studio/golden/daylight; keep
+  // the procedural gradient as the fallback. environmentIntensity is preserved
+  // from the matching preset so brightness is consistent across both paths.
   const env = buildEnvTexture(envPresetId, renderer);
+  if (realHDRI) {
+    try { env.tex.dispose?.(); } catch (_) {}      // drop the unused gradient
+    env.tex = realHDRI;                              // disposed in the cleanup block below
+    realHDRI.mapping = THREE.EquirectangularReflectionMapping;
+  }
   scene.environment = env.tex; scene.background = env.tex;
   scene.environmentIntensity = env.intensity; // IBL brightness (honored by the PT)
 
@@ -418,7 +514,9 @@ export async function runStudioPathTracedRender({ envPresetId = 'studio', sample
   } catch (_) {}
 
   try { pt.dispose?.(); } catch (_) {}
-  try { env.tex.dispose?.(); } catch (_) {}
+  // Dispose the env texture UNLESS it's the cached real HDRI (kept for reuse
+  // across renders; the gradient is single-use and safe to dispose).
+  try { if (!realHDRI || env.tex !== realHDRI) env.tex.dispose?.(); } catch (_) {}
   scene.traverse((o) => { if (o.isMesh) { o.geometry?.dispose?.(); (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => m?.dispose?.()); } });
   try { renderer.forceContextLoss?.(); } catch (_) {}
   try { wrapper.dispose(); } catch (_) {}

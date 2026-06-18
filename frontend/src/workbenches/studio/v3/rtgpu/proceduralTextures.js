@@ -2236,3 +2236,97 @@ export const TEXTURED_IDS = Object.keys(GENERATORS);
 // would collapse to mirror-sharp. The hand-authored organic generators above
 // intentionally rely on the multiply, so they are excluded.
 export const ABSOLUTE_ROUGHNESS_IDS = new Set(Object.keys(MICRO));
+
+// ── Real downloaded CC0 PBR sets (ambientCG, 1K-JPG) ─────────────────────────
+// Downloaded into frontend/public/assets/pbr/<id>/{albedo,normal,roughness}.jpg.
+// Vite copies public/ verbatim into dist/, so at runtime the files live at
+// <baseURI>/assets/pbr/<id>/*.jpg — in Electron prod `document.baseURI` is
+// file:///…/frontend/dist/index.html → file:///…/dist/assets/pbr/… ; in the
+// vite dev server it is http://localhost:3100/ → http://localhost:3100/assets/…
+// `new URL(rel, document.baseURI)` resolves both without hard-coding a scheme.
+// When a real set exists for an id we use the photo-scanned maps (map+normalMap+
+// roughnessMap); otherwise PathTracedRender falls back to texturesFor()'s
+// procedural generator. Real albedo encodes the true colour, so consumers should
+// reset material.roughness to 1 (the roughnessMap is the absolute roughness).
+const REAL_PBR_IDS = new Set([
+  'wood-oak', 'wood-walnut', 'marble-white', 'fabric-linen', 'fabric-grey',
+  'leather-tan', 'concrete', 'ceramic-white', 'steel-brushed', 'velvet', 'skin-warm',
+]);
+export { REAL_PBR_IDS };
+// Real roughness maps are absolute (JPG greyscale 0..1 = true roughness), so the
+// consumer must neutralise material.roughness to 1 just like the metal microsurfaces.
+export const REAL_ROUGHNESS_IDS = REAL_PBR_IDS;
+
+export function hasRealPbr(id) { return REAL_PBR_IDS.has(id); }
+
+// Resolve a public-asset relative path to an absolute URL that works under both
+// the Electron file:// dist load and the vite dev server. `import.meta.env.BASE_URL`
+// (vite, = './' here) combined with document.baseURI yields the dist root.
+function assetUrl(rel) {
+  const base = (typeof document !== 'undefined' && document.baseURI)
+    ? document.baseURI
+    : (typeof location !== 'undefined' ? location.href : 'file:///');
+  try { return new URL(rel, base).href; }
+  catch (_) { return rel; }
+}
+
+const _realCache = {};   // id -> { map, normalMap, roughnessMap } (resolved)
+const _realPending = {}; // id -> Promise (in-flight load, dedup concurrent calls)
+const _realLoader = (typeof THREE !== 'undefined') ? new THREE.TextureLoader() : null;
+
+function _loadTex(url, colorSpace) {
+  return new Promise((resolve, reject) => {
+    _realLoader.load(url, (t) => {
+      t.colorSpace = colorSpace;
+      t.wrapS = t.wrapT = THREE.RepeatWrapping;
+      t.magFilter = THREE.LinearFilter;
+      t.minFilter = THREE.LinearMipmapLinearFilter;
+      t.generateMipmaps = true;
+      t.anisotropy = 8;
+      t.needsUpdate = true;
+      resolve(t);
+    }, undefined, (e) => reject(e || new Error('texture load failed: ' + url)));
+  });
+}
+
+// Await-able: load (once) the real albedo/normal/roughness for an id. Resolves to
+// the cached set, or null when no real set exists / a file fails to load (caller
+// then falls back to the procedural generator). Never throws.
+export async function loadRealPbrSet(id) {
+  if (!REAL_PBR_IDS.has(id) || !_realLoader) return null;
+  if (id in _realCache) return _realCache[id];
+  if (id in _realPending) return _realPending[id];
+  const dir = `assets/pbr/${id}/`;
+  const p = (async () => {
+    try {
+      const [map, normalMap, roughnessMap] = await Promise.all([
+        _loadTex(assetUrl(dir + 'albedo.jpg'), THREE.SRGBColorSpace),
+        _loadTex(assetUrl(dir + 'normal.jpg'), THREE.NoColorSpace),
+        _loadTex(assetUrl(dir + 'roughness.jpg'), THREE.NoColorSpace),
+      ]);
+      const set = { map, normalMap, roughnessMap };
+      _realCache[id] = set;
+      return set;
+    } catch (e) {
+      if (typeof console !== 'undefined') console.warn('[realPbr]', id, e && e.message);
+      _realCache[id] = null;   // negative-cache so we don't retry every body
+      return null;
+    } finally {
+      delete _realPending[id];
+    }
+  })();
+  _realPending[id] = p;
+  return p;
+}
+
+// Synchronous accessor for the already-loaded set (null if not loaded / absent).
+export function realPbrSetCached(id) {
+  return (id in _realCache) ? _realCache[id] : null;
+}
+
+// Await-able bulk preload — call before building the path-tracer scene so every
+// material has its maps in hand before the BVH/material buffers are baked.
+export async function preloadRealPbr(ids) {
+  const want = [...new Set(ids)].filter((id) => REAL_PBR_IDS.has(id));
+  await Promise.all(want.map((id) => loadRealPbrSet(id)));
+}

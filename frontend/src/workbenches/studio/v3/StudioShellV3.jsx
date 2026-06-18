@@ -30,6 +30,13 @@ import { registerSelectionOps, unregisterSelectionOps } from './selectionops';
 import { registerMarkerOps, unregisterMarkerOps } from './markerops';
 import { registerUtilOps, unregisterUtilOps } from './utilops';
 import { registerDisplayOps, unregisterDisplayOps } from './displayops';
+// Slice 1010 — CUA-only photoreal scene authoring. The agent (executeToolCall)
+// places furniture ONE PIECE PER CLICK and renders by clicking a control; it
+// MUST NOT call the __studioComposeRealScene composer. These imports back the
+// REAL onClick handlers on the FurnitureLibrarySection buttons + the render
+// button — the composer-free path the agent reaches by .click()ing the DOM.
+import { loadRealFurniture, REAL_FURNITURE_TYPES } from './builders/realFurniture.js';
+import { runStudioPathTracedRender } from './rtgpu/PathTracedRender.js';
 // Slice 951 — Studio Tool Registry powers the discipline-aware <tools>
 // block in Archie's system prompt. The local LoRAs (studio_v16/<disc>)
 // were trained against this exact catalogue per [[archie-fleet-schema]];
@@ -4279,6 +4286,10 @@ function RightPanel({ collapsed, onToggle, activeWb, editMode, selection }) {
             <LightingSection />
             {/* Slice 562 — Stage mood presets. */}
             <StagePresets />
+            {/* Slice 1010 — Furniture library (one real model per click) +
+                path-traced Render button. The CUA-only photoreal authoring
+                surface: the agent clicks these, never the composer. */}
+            <FurnitureLibrarySection />
             {/* Slice 516 — Per-workbench Notes textarea. */}
             <NotesSection activeWb={activeWb} />
             {/* Slice 518 — Recent undo history list. */}
@@ -5929,6 +5940,174 @@ function StagePresets() {
           >{p.id}</button>
         ))}
       </div>
+    </div>
+  );
+}
+
+// Slice 1010 — Furniture Library + Render controls (CUA-only photoreal scenes).
+//
+// The whole point of this slice: the agent must AUTHOR a photoreal scene the way
+// a human does — placing one real model per click, then clicking Render — NOT by
+// invoking the __studioComposeRealScene composer (which spawns an entire room in
+// one call; FORBIDDEN as the agent action). These two controls ARE the allowed
+// implementation surface: their onClick handlers do the real work; the agent
+// (executeToolCall) only .click()s them via the data-studio-v3-furniture /
+// data-studio-v3-render attributes. No setState in the handlers (the
+// window-API-no-setState discipline — a re-render must never race the ops).
+
+// The canonical 12 real-furniture types this library exposes. Every entry is a
+// key of realFurniture.TYPE_MAP so loadRealFurniture(type) resolves to a real
+// downloaded CC0 glTF model (real PBR maps intact). Kept as an explicit ordered
+// list (not Object.keys(TYPE_MAP)) so the library shows the curated set the task
+// names — sofa…console — without the -alt / ceiling aliases.
+export const STUDIO_FURNITURE_LIBRARY = Object.freeze([
+  { type: 'sofa',         label: 'Sofa' },
+  { type: 'armchair',     label: 'Armchair' },
+  { type: 'coffee-table', label: 'Coffee table' },
+  { type: 'dining-chair', label: 'Dining chair' },
+  { type: 'dining-table', label: 'Dining table' },
+  { type: 'bed',          label: 'Bed' },
+  { type: 'desk',         label: 'Desk' },
+  { type: 'bookshelf',    label: 'Bookshelf' },
+  { type: 'lamp',         label: 'Lamp' },
+  { type: 'plant',        label: 'Plant' },
+  { type: 'stool',        label: 'Stool' },
+  { type: 'console',      label: 'Console' },
+]);
+export const STUDIO_FURNITURE_TYPES = STUDIO_FURNITURE_LIBRARY.map((f) => f.type);
+
+// Expose the curated type set + the (composer-free) helpers on window so tests
+// and the executeToolCall validator can read the live list. These are data /
+// pure functions only — NOT React state setters (window-API-no-setState).
+if (typeof window !== 'undefined') {
+  window.__studioFurnitureTypes = STUDIO_FURNITURE_TYPES;
+  // __studioPlaceFurniturePiece / __studioRenderLastImage assigned after their
+  // function declarations below (hoisted function refs are bound at module load).
+}
+
+// Resolve the live scene the same way every other shell op does.
+function _studioScene() {
+  return (typeof window !== 'undefined')
+    ? (window.__archdiscScene || (window.__archdiscViewport && window.__archdiscViewport.scene))
+    : null;
+}
+
+// Load ONE real-furniture model and add it to the live scene, tagged so the path
+// tracer harvests it AND keeps its real PBR material. loadRealFurniture already
+// tags every child mesh archdiscStudioPrimitive + archdiscRealMaterial; we
+// re-assert on the group root + offset placement so multiple clicks don't stack
+// identical models at the origin. Returns the added Group (awaitable). NO
+// setState — pure scene mutation. This is the onClick the agent reaches by
+// clicking [data-studio-v3-furniture].
+let _studioFurniturePlaceCount = 0;
+async function placeRealFurniturePiece(type) {
+  const scene = _studioScene();
+  if (!scene) throw new Error('place-furniture: no scene');
+  const group = await loadRealFurniture(type);            // real model + real PBR, grounded + XZ-centred
+  // Re-assert the harvest tags on the root + every mesh (idempotent — keeps the
+  // path tracer's real-material path even if a future loader change drops them).
+  group.userData.archdiscStudioPrimitive = true;
+  group.userData.archdiscRealMaterial = true;
+  group.traverse((o) => {
+    if (o.isMesh) {
+      o.userData.archdiscStudioPrimitive = true;
+      o.userData.archdiscRealMaterial = true;
+      o.castShadow = true; o.receiveShadow = true;
+    }
+  });
+  // Spread successive pieces along a gentle spiral so per-click placement reads as
+  // distinct objects, not one mesh stacked N times. Deterministic (count-based).
+  const n = _studioFurniturePlaceCount++;
+  const ang = n * 2.39996;                                // golden-angle spread
+  const rad = 0.55 * Math.sqrt(n);                        // grows outward
+  group.position.x += Math.cos(ang) * rad;
+  group.position.z += Math.sin(ang) * rad;
+  group.rotation.y = ang;
+  group.updateMatrixWorld(true);
+  scene.add(group);
+  // Record as the arrange target so set-selection moves THIS group's root
+  // (not a child mesh) when the agent positions it next.
+  if (typeof window !== 'undefined') window.__studioLastPlacedGroup = group;
+  if (typeof window !== 'undefined' && window.__studioToast) window.__studioToast(`Placed ${type}`, 'ok');
+  return group;
+}
+
+// Render the live scene with the GPU path tracer (room walls/floor + real HDRI +
+// real PBR) and stash the dataURL on window.__studioLastRender. NO setState. This
+// is the onClick the agent reaches by clicking [data-studio-v3-render].
+async function runStudioLibraryRender() {
+  if (typeof window !== 'undefined') window.__studioLastRender = null; // signal "in flight"
+  const { canvas, width, height, samples } = await runStudioPathTracedRender({
+    room: true, resolutionId: '1440p', samples: 128, envPresetId: 'daylight', angle: 'eye-level',
+  });
+  const dataUrl = canvas.toDataURL('image/png');
+  if (typeof window !== 'undefined') {
+    window.__studioLastRender = { dataUrl, width, height, samples };
+    if (window.__studioToast) window.__studioToast(`Rendered ${width}×${height} @ ${samples}spp`, 'ok');
+  }
+  return window.__studioLastRender;
+}
+
+// Bind the composer-free helpers on window (data/pure-function refs only). These
+// let tests drive the SAME code the buttons run, but the AGENT path
+// (executeToolCall) still reaches them only through .click() on the DOM controls.
+if (typeof window !== 'undefined') {
+  window.__studioPlaceFurniturePiece = placeRealFurniturePiece;
+  window.__studioRenderLastImage = runStudioLibraryRender;
+}
+
+// Furniture library panel — one clickable button per real-furniture type. Each
+// button carries data-studio-v3-furniture="<type>"; its onClick LOADS the real
+// model and adds it to the scene (placeRealFurniturePiece). The Render button
+// carries data-studio-v3-render; its onClick path-traces + stashes the result.
+function FurnitureLibrarySection() {
+  return (
+    <div className="studio-right-section" data-studio-v3-furniture-library>
+      <div className="studio-right-section-title">Furniture library</div>
+      <div className="studio-right-row" style={{ flexWrap: 'wrap', gap: 4 }}>
+        {STUDIO_FURNITURE_LIBRARY.map((f) => (
+          <button
+            key={f.type}
+            type="button"
+            data-studio-v3-furniture={f.type}
+            title={`Place a real ${f.label.toLowerCase()} (real model + PBR)`}
+            onClick={() => {
+              // Real work happens here — load + add one model. The agent reaches
+              // this by .click(); a human reaches it by tapping the button.
+              Promise.resolve(placeRealFurniturePiece(f.type)).catch((err) => {
+                if (typeof window !== 'undefined' && window.__studioToast) {
+                  window.__studioToast(`Place ${f.type} failed: ${String(err && err.message || err)}`, 'warn');
+                }
+              });
+            }}
+            style={{
+              flex: '1 1 calc(50% - 4px)', minWidth: 80,
+              padding: '4px 6px', fontSize: 11,
+              background: 'var(--studio-canvas-3, #141414)',
+              color: 'var(--studio-ink, #f0eee6)',
+              border: '1px solid var(--studio-rail-edge, #1d2027)',
+              borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit',
+            }}
+          >{f.label}</button>
+        ))}
+      </div>
+      <button
+        type="button"
+        data-studio-v3-render
+        title="Path-trace the scene → window.__studioLastRender (1440p, 128 spp, daylight, eye-level)"
+        onClick={() => {
+          Promise.resolve(runStudioLibraryRender()).catch((err) => {
+            if (typeof window !== 'undefined' && window.__studioToast) {
+              window.__studioToast(`Render failed: ${String(err && err.message || err)}`, 'warn');
+            }
+          });
+        }}
+        style={{
+          width: '100%', marginTop: 6,
+          background: 'var(--studio-accent, #ebecef)', border: 0, color: '#000000',
+          fontWeight: 600, padding: '5px', borderRadius: 3, fontSize: 11, cursor: 'pointer',
+        }}
+      >Render (path-traced)</button>
     </div>
   );
 }
@@ -8452,7 +8631,11 @@ async function executeToolCall(call) {
     const scene = window.__archdiscScene || (window.__archdiscViewport && window.__archdiscViewport.scene);
     if (!scene) return { ok: false, summary: 'set-selection: no scene' };
     let target = null;
-    scene.traverse((o) => { if (o && o.userData && o.userData.archdiscStudioPrimitive) target = o; });
+    // Prefer the most-recently-PLACED real-furniture group ROOT — moving a child
+    // mesh inside a glTF group would deform the model, not arrange the piece. Falls
+    // back to the last tagged primitive mesh (the click-primitive path).
+    if (typeof window !== 'undefined' && window.__studioLastPlacedGroup && window.__studioLastPlacedGroup.parent) target = window.__studioLastPlacedGroup;
+    if (!target) scene.traverse((o) => { if (o && o.userData && o.userData.archdiscStudioPrimitive) target = o; });
     if (!target) return { ok: false, summary: 'set-selection: no primitive to configure' };
     const dash = axis.indexOf('-');
     const comp = dash >= 0 ? axis.slice(0, dash) : axis;
@@ -8463,6 +8646,48 @@ async function executeToolCall(call) {
     target.updateMatrix && target.updateMatrix();
     target.updateMatrixWorld && target.updateMatrixWorld(true);
     return { ok: true, summary: `set ${axis} = ${value}` };
+  }
+  if (name === 'place-furniture') {
+    // Slice 1010 — CUA-only furniture placement. The agent places ONE real
+    // model per call by CLICKING the matching library button — NOT by calling
+    // the __studioComposeRealScene composer (which spawns a whole room in one
+    // shot; forbidden). We validate the type against the curated library set
+    // first (honest failure on unknown), then querySelector + .click() the
+    // real data-studio-v3-furniture button. The button's onClick
+    // (placeRealFurniturePiece) does the load + scene.add; we never touch the
+    // composer or the scene directly from here.
+    const type = String(args.type || args.id || '').toLowerCase();
+    const valid = (typeof window !== 'undefined' && Array.isArray(window.__studioFurnitureTypes))
+      ? window.__studioFurnitureTypes : STUDIO_FURNITURE_TYPES;
+    if (!valid.includes(type)) return { ok: false, summary: `unknown furniture type "${type}" (have: ${valid.join(', ')})` };
+    const el = document.querySelector(`[data-studio-v3-furniture="${type}"]`);
+    if (!el) return { ok: false, summary: `no furniture button for "${type}"` };
+    el.click();
+    // The onClick is async (model load); give the load+add a tick so a
+    // following render/set-selection sees the new body. We do NOT await the
+    // composer — there is no composer on this path.
+    await new Promise((r) => setTimeout(r, 0));
+    return { ok: true, summary: `placed ${type}` };
+  }
+  if (name === 'render') {
+    // Slice 1010 — CUA-only render. The agent renders by CLICKING the real
+    // Render control (data-studio-v3-render); its onClick path-traces the
+    // scene and stores the PNG dataURL on window.__studioLastRender. We click
+    // it, then await __studioLastRender to flip from null → result. NO
+    // composer, NO direct runStudioPathTracedRender call from the agent path.
+    const el = document.querySelector('[data-studio-v3-render]');
+    if (!el) return { ok: false, summary: 'no render control' };
+    if (typeof window !== 'undefined') window.__studioLastRender = null; // reset before click
+    el.click();
+    // Poll for the dataURL the button's onClick stores. Path tracing is heavy;
+    // allow up to ~120s before giving an honest timeout.
+    const deadline = Date.now() + 120000;
+    while (Date.now() < deadline) {
+      const r = (typeof window !== 'undefined') ? window.__studioLastRender : null;
+      if (r && r.dataUrl) return { ok: true, summary: `render ${r.width}×${r.height} @ ${r.samples}spp` };
+      await new Promise((res) => setTimeout(res, 200));
+    }
+    return { ok: false, summary: 'render timed out (no __studioLastRender)' };
   }
   return { ok: false, summary: `unknown tool "${name}"` };
 }
