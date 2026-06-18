@@ -1,53 +1,58 @@
 <!doctype html><html><head><meta charset="utf-8">
 <link rel="stylesheet" href="../assets/deck.css">
 <style>
-  /* diagonal espresso zone (lower-right) — sharp edge */
-  .diag{ position:absolute; inset:0; z-index:1; background:var(--ink);
-    clip-path:polygon(64% 0, 100% 0, 100% 100%, 20% 100%); }
-  .diag-line{ position:absolute; inset:0; z-index:2; }
   .eyebrow-mono{ position:absolute; left:60px; top:50px; z-index:6; font-family:var(--mono); font-size:12px; letter-spacing:.24em; color:var(--clay); }
-  .htext{ position:absolute; left:60px; top:100px; z-index:6; max-width:560px; }
-  .bigh{ font-size:46px; }
+  .htext{ position:absolute; left:60px; top:98px; z-index:6; }
+  .bigh{ font-size:44px; }
   .bigh .g{ color:var(--ink-mid); }
-  .sub{ font-size:17px; line-height:1.5; color:var(--ink-soft); margin-top:14px; }
+  .sub{ font-size:16px; line-height:1.45; color:var(--ink-soft); margin-top:12px; max-width:560px; }
   .sub b{ color:var(--ink); font-weight:600; }
-  /* free block, light side */
-  .free{ position:absolute; left:60px; top:330px; width:420px; z-index:6; }
-  .tname{ font-family:var(--disp); font-weight:700; font-size:46px; letter-spacing:-.025em; line-height:1; }
-  .twho{ font-family:var(--mono); font-size:11px; letter-spacing:.12em; text-transform:uppercase; margin-top:6px; }
-  .tbody{ font-size:16px; line-height:1.5; margin-top:16px; }
-  .free .tname{ color:var(--ink); } .free .twho{ color:var(--muted); } .free .tbody{ color:var(--ink-soft); }
-  .free .tbody b{ color:var(--ink); font-weight:600; }
-  .free .price{ font-family:var(--disp); font-weight:600; font-size:30px; color:var(--clay); margin-top:4px; }
-  /* paid block, dark side */
-  .paid{ position:absolute; right:62px; top:230px; width:400px; z-index:6; text-align:right; }
-  .paid .tname{ color:var(--on-ink); } .paid .twho{ color:var(--on-ink-faint); } .paid .tbody{ color:var(--on-ink-soft); }
-  .paid .tbody b{ color:var(--on-ink); font-weight:600; }
-  .paid .price{ font-family:var(--disp); font-weight:600; font-size:30px; color:var(--amber); margin-top:4px; }
+  /* rising hierarchy ladder */
+  .tier{ position:absolute; z-index:6; width:362px; padding:20px 24px; border:1px solid var(--line-strong); background:var(--surface); }
+  .t-free{ left:60px; top:438px; }
+  .t-pro{ left:458px; top:330px; }
+  .t-ent{ left:856px; top:206px; border:1.6px solid var(--clay); box-shadow:0 16px 40px rgba(166,114,77,.16); }
+  .crown{ position:absolute; right:20px; top:-12px; font-family:var(--mono); font-size:9px; letter-spacing:.16em; background:var(--clay); color:#fff; padding:5px 9px; }
+  .tname{ font-family:var(--disp); font-weight:700; font-size:30px; color:var(--ink); letter-spacing:-.022em; line-height:1; }
+  .twho{ font-family:var(--mono); font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); margin-top:8px; }
+  .price{ font-family:var(--disp); font-weight:600; font-size:20px; color:var(--clay); margin-top:10px; }
+  .frow{ font-size:13.5px; line-height:1.45; color:var(--ink-mid); margin-top:10px; }
+  .frow b{ color:var(--ink); font-weight:600; }
+  .rise{ position:absolute; left:0; bottom:64px; z-index:6; font-family:var(--mono); font-size:10px; letter-spacing:.16em; color:var(--muted); }
 </style></head>
 <body>
 <div class="sheet" data-sheet="07" data-foot="BUSINESS MODEL">
-  <div class="diag"></div>
-  <svg class="diag-line" width="1280" height="720"><line x1="819" y1="0" x2="256" y2="720" stroke="var(--amber)" stroke-width="3" opacity="0.95"/></svg>
+  <svg style="position:absolute;inset:0;z-index:2" width="1280" height="720">
+    <line x1="120" y1="470" x2="1080" y2="250" stroke="var(--clay)" stroke-width="1.5" stroke-dasharray="2 7" opacity="0.7"/>
+    <path d="M1080 250 l-13 -2 l5 12 Z" fill="var(--clay)"/>
+  </svg>
   <div class="eyebrow-mono">BUSINESS MODEL</div>
   <div class="htext">
-    <div class="bigh">Free for dreamers. <span class="g">Built for teams.</span></div>
-    <div class="sub">The same idea as GitHub and Vercel. <b>Free to use for anyone creating on their own.</b> Paid when a team needs to work together.</div>
+    <div class="bigh">Free to dream. <span class="g">Pay to grow.</span></div>
+    <div class="sub">The same idea as GitHub and Vercel. <b>Free to use for anyone creating on their own.</b> You pay only as your work outgrows one machine.</div>
   </div>
 
-  <div class="free">
+  <div class="tier t-free">
     <div class="tname">Free</div>
-    <div class="twho">For dreamers, students and hobbyists</div>
+    <div class="twho">Individuals · students · dreamers</div>
     <div class="price">$0, always</div>
-    <div class="tbody">Both apps and the full model, yours to use on your machine at no cost. <b>You build anything with it. The source stays ours.</b></div>
+    <div class="frow">Both apps and the full model on your machine. <b>Build anything. The source stays ours.</b></div>
+  </div>
+  <div class="tier t-pro">
+    <div class="tname">Pro</div>
+    <div class="twho">Serious creators</div>
+    <div class="price">Monthly</div>
+    <div class="frow"><b>Cloud compute and storage.</b> Render bigger, build beyond your laptop, your work synced everywhere.</div>
+  </div>
+  <div class="tier t-ent">
+    <span class="crown">TOP TIER</span>
+    <div class="tname">Studios and Enterprises</div>
+    <div class="twho">Teams shipping together</div>
+    <div class="price">Let’s talk</div>
+    <div class="frow">Shared projects, private deployment, security, support, and <b>custom models trained for your work.</b></div>
   </div>
 
-  <div class="paid">
-    <div class="tname">Studios and Enterprises</div>
-    <div class="twho">For teams shipping together</div>
-    <div class="price">Let’s talk</div>
-    <div class="tbody">Shared projects, private deployment, security, support, and custom models <b>trained for your work.</b></div>
-  </div>
+  <div class="rise">PAYING HIERARCHY ↗</div>
 </div>
 <script src="../assets/frame.js"></script>
 </body></html>
