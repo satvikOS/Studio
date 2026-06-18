@@ -87,3 +87,8 @@ docs/superpowers/notes/custom-occt-build-recon.md
 .claude/worktrees/
 image.png
 e2e/demo/shots/studio/anim_frames/
+
+# CC0 photoreal assets (Poly Haven / ambientCG) — local, reproducible, not in git
+frontend/public/assets/pbr/
+frontend/public/assets/hdri/
+frontend/public/assets/models/
