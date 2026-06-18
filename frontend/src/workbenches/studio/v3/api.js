@@ -16,11 +16,13 @@ import * as THREE from 'three';
 import { countPrimitives, clearPrimitives, spawnPrimitive } from './spawn';
 import { installStudioPathTracer } from './rtgpu/PathTracedRender.js';
 import { installStudioComposer } from './builders/sceneComposer.js';
+import { installRealFurniture } from './builders/realFurniture.js';
 import { installEnvironmentBuilder } from './builders/environmentBuilder.js';
 import { installOrganicSculpt } from './builders/organicSculpt.js';
 import { installAnimationDirector } from './builders/animationDirector.js';
 import { installRigDirector } from './builders/rigDirector.js';
 import { installHumanoidBuilder } from './builders/humanoid.js';
+import { installHumanoidLocomotion } from './builders/humanoidLocomotion.js';
 import { installLookdevDirector } from './builders/lookdevDirector.js';
 
 // ─── Edit-mode state (slice 376/377 V2 equivalent) ───────────────────────
@@ -162,11 +164,13 @@ export function registerV3Api() {
   // parametric furniture composer (window.__studioComposeScene).
   try { installStudioPathTracer(); } catch (_) {}
   try { installStudioComposer(); } catch (_) {}
+  try { installRealFurniture(); } catch (_) {} // window.__studioLoadRealFurniture + __studioComposeRealScene (downloaded CC0 glTF furniture)
   try { installEnvironmentBuilder(); } catch (_) {}
   try { installOrganicSculpt(); } catch (_) {} // window.__studioSculptOrganic (1:1 organic brush-sculpt forms)
   try { installAnimationDirector(); } catch (_) {} // window.__studioAnimate (camera-path animation: turntable/dolly/product-reveal → frame sequence)
   try { installRigDirector(); } catch (_) {} // window.__studioRig (skinned-armature rigging + organic movement → frame sequence)
   try { installHumanoidBuilder(); } catch (_) {} // window.__studioBuildHumanoid + __studioPoseHumanoid (rigged biped: 8-head proportions, bipedal skeleton, skinned skin/shirt/trouser shells, posed via bone rotation)
+  try { installHumanoidLocomotion(); } catch (_) {} // window.__studioHumanoidAnimate + __studioHumanoidPlay (procedural WALK/RUN/IDLE gait cycles over phase t, contralateral swing + hip sway + knee/ankle roll + foot-plant IK + flight phase)
   try { installLookdevDirector(); } catch (_) {} // window.__studioLight + __studioLookdevMaterials (cinematic 3-point rigs + PBR upgrade → lit final)
 
   // Edit-mode state.

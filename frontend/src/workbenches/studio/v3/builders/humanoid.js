@@ -3,10 +3,15 @@
 // buildHumanoid(opts) creates a GENUINE rigged biped in the LIVE viewport scene:
 //
 //   1. A HUMANOID MESH with real 8-head-canon proportions — a smooth body
-//      (capsules for limbs/neck, tapered capsules for the torso, a sphere head,
-//      foot wedges), NOT a stack of boxes. Limbs/torso/head/hands/feet are
-//      merged (mergeGeometries + mergeVertices for connected 1-ring adjacency)
-//      into three skinnable shells: SKIN (head/neck/hands), SHIRT (torso+arms),
+//      built from high-resolution PROFILE SOLIDS (each limb swept along its
+//      bone with a per-section girth ladder: thigh-belly→knee→calf→ankle,
+//      biceps→elbow→forearm→wrist), a lathe-shaped torso (waist pinch → rib
+//      bulge → shoulder yoke, elliptical not boxy), an anatomical ellipsoid
+//      head + tapered neck, recognizable HANDS (flattened palm + mitten finger
+//      block + thumb nub) and FEET (heel→arch→toe wedge, flat sole), NOT a
+//      stack of stretched capsules. Limbs/torso/head/hands/feet are merged
+//      (mergeGeometries + mergeVertices for connected 1-ring adjacency) into
+//      three skinnable shells: SKIN (head/neck/hands), SHIRT (torso+arms),
 //      and TROUSERS (pelvis+legs+feet) so the figure reads clothed, not grey.
 //
 //   2. A real THREE.Skeleton with a bipedal THREE.Bone hierarchy:
@@ -67,70 +72,191 @@ function matFor(id, color) {
 }
 
 // ─────────────────────────── geometry helpers ───────────────────────────────
-// A capsule along +Y, base of the cylindrical section at y=0, growing +Y.
-// CapsuleGeometry is centred; we translate so the segment spans [0, len].
-function capsule(radius, len, rt = radius) {
-  // CapsuleGeometry(radius, length, capSeg, radialSeg) — length is the
-  // cylindrical part (caps add `radius` at each end). We want overall feel of
-  // a limb of `len`, so make the cylinder len and keep round caps.
-  const g = new THREE.CapsuleGeometry(Math.max(0.01, radius), Math.max(0.01, len), 6, 14);
-  // taper toward the far (+Y) end if rt != radius (wrist thinner than elbow).
-  if (rt !== radius) {
-    const pos = g.attributes.position;
-    const half = len / 2 + radius;
-    for (let i = 0; i < pos.count; i++) {
-      const y = pos.getY(i);
-      const t = (y + half) / (2 * half); // 0 at base, 1 at tip
-      const s = THREE.MathUtils.lerp(1, rt / radius, THREE.MathUtils.clamp(t, 0, 1));
-      pos.setX(i, pos.getX(i) * s);
-      pos.setZ(i, pos.getZ(i) * s);
+// Everything below builds SMOOTH, higher-resolution profile solids instead of
+// the old low-poly stretched-capsule "scarecrow". Limbs/torso are swept from a
+// per-section radius PROFILE (an array of {t, rx, rz}) along +Y with rounded
+// hemispherical caps, so a thigh can bulge then taper to the knee, the knee can
+// have girth, and the calf can taper to a slim ankle — real joint girth, smooth
+// silhouettes, no facets. The whole figure is later welded (mergeVertices) so
+// the skin auto-weighter sees true 1-ring adjacency for its Laplacian smooth.
+
+const RADIAL = 24; // radial segments — high enough to read round, not faceted.
+
+function smooth(t) { return t * t * (3 - 2 * t); }
+function clamp01(t) { return t < 0 ? 0 : t > 1 ? 1 : t; }
+
+// Sample an ascending profile (array of {t in [0,1], rx, rz}) at parameter t,
+// smooth-interpolating the two bracketing control points.
+function sampleProfile(profile, t) {
+  t = clamp01(t);
+  if (t <= profile[0].t) return { rx: profile[0].rx, rz: profile[0].rz };
+  const last = profile[profile.length - 1];
+  if (t >= last.t) return { rx: last.rx, rz: last.rz };
+  for (let i = 1; i < profile.length; i++) {
+    const a = profile[i - 1], b = profile[i];
+    if (t <= b.t) {
+      const u = smooth((t - a.t) / Math.max(1e-6, b.t - a.t));
+      return {
+        rx: THREE.MathUtils.lerp(a.rx, b.rx, u),
+        rz: THREE.MathUtils.lerp(a.rz, b.rz, u),
+      };
     }
-    pos.needsUpdate = true;
   }
-  g.translate(0, len / 2 + radius, 0); // base cap bottom near y=0
-  return g;
+  return { rx: last.rx, rz: last.rz };
 }
 
-function sphere(r, sy = 1) {
-  const g = new THREE.SphereGeometry(r, 18, 14);
-  if (sy !== 1) g.scale(1, sy, 1);
-  return g;
-}
+// A SMOOTH limb/torso solid swept along +Y over [0, len] with an elliptical
+// (rx,rz) cross-section that follows `profile`, plus rounded hemispherical caps
+// at both ends sized to the local radius. `rings` controls vertical resolution
+// (more = smoother joint bulges). Returns an indexed BufferGeometry.
+function profileSolid(profile, len, rings = 16, capRings = 5) {
+  const positions = [];
+  const indices = [];
+  const radial = RADIAL;
+  const rowOf = [];          // first vertex index of each ring row
+  const r0 = sampleProfile(profile, 0);
+  const r1 = sampleProfile(profile, 1);
 
-// A torso shell: an elliptical-cross-section tapered solid from pelvis→shoulders.
-// Built as a lathe-ish stack via CapsuleGeometry scaled on X/Z for the
-// chest/waist shaping so it's a smooth body, not a box.
-function torsoGeom(opts) {
-  const { waistY, chestY, chestW, chestD, waistW, waistD } = opts;
-  const h = chestY - waistY;
-  const g = new THREE.CapsuleGeometry(0.5, Math.max(0.02, h), 8, 18);
-  g.translate(0, h / 2 + 0.5, 0);
-  const pos = g.attributes.position;
-  const top = h + 1.0; // capsule full height in its own space
-  for (let i = 0; i < pos.count; i++) {
-    const y = pos.getY(i);
-    const t = THREE.MathUtils.clamp(y / top, 0, 1); // 0 base(pelvis) → 1 top(shoulders)
-    // taper: narrow at waist (~0.35), widen to chest, ellipse (D < W)
-    const wprofile = THREE.MathUtils.lerp(waistW, chestW, smooth(t));
-    const dprofile = THREE.MathUtils.lerp(waistD, chestD, smooth(t));
-    pos.setX(i, (pos.getX(i) / 0.5) * wprofile);
-    pos.setZ(i, (pos.getZ(i) / 0.5) * dprofile);
+  // ── bottom cap (hemisphere bulging to -Y), squashed to the base ellipse.
+  for (let i = capRings; i >= 1; i--) {
+    const phi = (i / capRings) * (Math.PI / 2); // 90°→ ~0
+    const y = -Math.cos(phi) * Math.min(r0.rx, r0.rz);
+    const ring = Math.sin(phi);
+    rowOf.push(positions.length / 3);
+    for (let j = 0; j <= radial; j++) {
+      const th = (j / radial) * Math.PI * 2;
+      positions.push(Math.cos(th) * r0.rx * ring, y, Math.sin(th) * r0.rz * ring);
+    }
   }
-  pos.needsUpdate = true;
-  // place so base sits at waistY
-  g.translate(0, waistY - 0.5, 0);
+  // ── body rings.
+  for (let k = 0; k <= rings; k++) {
+    const t = k / rings;
+    const r = sampleProfile(profile, t);
+    const y = t * len;
+    rowOf.push(positions.length / 3);
+    for (let j = 0; j <= radial; j++) {
+      const th = (j / radial) * Math.PI * 2;
+      positions.push(Math.cos(th) * r.rx, y, Math.sin(th) * r.rz);
+    }
+  }
+  // ── top cap (hemisphere bulging to +Y).
+  for (let i = 1; i <= capRings; i++) {
+    const phi = (i / capRings) * (Math.PI / 2);
+    const y = len + Math.sin(phi) * Math.min(r1.rx, r1.rz);
+    const ring = Math.cos(phi);
+    rowOf.push(positions.length / 3);
+    for (let j = 0; j <= radial; j++) {
+      const th = (j / radial) * Math.PI * 2;
+      positions.push(Math.cos(th) * r1.rx * ring, y, Math.sin(th) * r1.rz * ring);
+    }
+  }
+
+  // Stitch consecutive rings into quads (two tris).
+  for (let row = 0; row < rowOf.length - 1; row++) {
+    const a0 = rowOf[row], b0 = rowOf[row + 1];
+    for (let j = 0; j < radial; j++) {
+      const a = a0 + j, b = a0 + j + 1, c = b0 + j + 1, d = b0 + j;
+      indices.push(a, d, b);
+      indices.push(b, d, c);
+    }
+  }
+
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  g.setIndex(indices);
   g.computeVertexNormals();
   return g;
 }
-function smooth(t) { return t * t * (3 - 2 * t); }
 
-// A simple foot: a stretched, forward-pointing capsule wedge.
-function footGeom(len, w, h) {
-  const g = new THREE.CapsuleGeometry(w / 2, Math.max(0.01, len - w), 5, 12);
-  g.rotateZ(Math.PI / 2); // lie along X first
-  g.rotateY(Math.PI / 2); // then along Z (forward)
-  g.scale(1, h / (w), 1);
+// Smooth ellipsoid head — a UV sphere scaled per-axis (taller than wide, a
+// touch deeper for an occiput) so it reads like a human cranium, not a ball.
+function ellipsoid(rx, ry, rz) {
+  const g = new THREE.SphereGeometry(1, RADIAL, 18);
+  g.scale(rx, ry, rz);
   return g;
+}
+
+// A capsule-equivalent built from profileSolid (constant radius) — used for
+// the neck. Keeps the welded-adjacency story consistent with the limbs.
+function tube(radius, len, radTip = radius) {
+  return profileSolid([{ t: 0, rx: radius, rz: radius }, { t: 1, rx: radTip, rz: radTip }], len, 6, 4);
+}
+
+// ── HAND: a flattened rounded palm block + a mitten finger block + a thumb
+// nub. Built in LOCAL space (palm extends +X from the wrist, flattened on Y),
+// returned as one welded geometry the caller positions/rotates onto the wrist.
+function handGeom(P, dir) {
+  const parts = [];
+  const palmLen = P.handLen * 0.55;
+  const palmW = P.handW;            // thickness across the palm (Z)
+  const palmH = P.handW * 0.55;     // palm thickness top-bottom (Y)
+  // palm: a short flattened profile solid along +X.
+  const palm = profileSolid(
+    [{ t: 0, rx: palmH * 0.55, rz: palmW * 0.5 },
+     { t: 0.5, rx: palmH * 0.6, rz: palmW * 0.55 },
+     { t: 1, rx: palmH * 0.55, rz: palmW * 0.5 }],
+    palmLen, 8, 4);
+  palm.rotateZ(-Math.PI / 2); // +Y sweep → +X sweep
+  parts.push(palm);
+  // fingers: one rounded mitten block continuing +X past the palm.
+  const fingLen = P.handLen * 0.45;
+  const fingers = profileSolid(
+    [{ t: 0, rx: palmH * 0.5, rz: palmW * 0.46 },
+     { t: 0.7, rx: palmH * 0.45, rz: palmW * 0.44 },
+     { t: 1, rx: palmH * 0.36, rz: palmW * 0.4 }],
+    fingLen, 7, 4);
+  fingers.rotateZ(-Math.PI / 2);
+  fingers.translate(palmLen, 0, 0);
+  parts.push(fingers);
+  // thumb: a small nub off the palm side (toward the body, +Z·dir·-1 ish).
+  const thumb = tube(palmH * 0.32, P.handLen * 0.26, palmH * 0.24);
+  thumb.rotateZ(-Math.PI / 2.6);
+  thumb.translate(palmLen * 0.25, -palmH * 0.1, -dir * palmW * 0.42);
+  parts.push(thumb);
+  return mergeWeld(parts);
+}
+
+// ── FOOT: heel ball → arch → toe box, built as a forward-swept (+Z) profile
+// solid that sits flat on the floor. Heel is rounded, toe tapers, sole flat.
+function footGeom(P) {
+  const len = P.footLen, w = P.footW, h = P.footH;
+  // sweep along +Z (forward). profile gives width(rx after rotation)/height.
+  const g = profileSolid(
+    [{ t: 0.0, rx: h * 0.55, rz: w * 0.42 },   // heel (rounded, narrower)
+     { t: 0.18, rx: h * 0.6,  rz: w * 0.5 },   // ankle ball
+     { t: 0.5, rx: h * 0.48, rz: w * 0.52 },   // arch / midfoot (widest)
+     { t: 0.82, rx: h * 0.4,  rz: w * 0.5 },   // ball of foot
+     { t: 1.0, rx: h * 0.22, rz: w * 0.4 }],   // toe (tapered, low)
+    len, 14, 4);
+  // profileSolid sweeps +Y; rotate so length runs along +Z (forward).
+  g.rotateX(Math.PI / 2);     // +Y → +Z
+  // squash the bottom flat onto the floor: clamp y below sole to a flat sole.
+  const pos = g.attributes.position;
+  const sole = -h * 0.5;
+  for (let i = 0; i < pos.count; i++) {
+    if (pos.getY(i) < sole) pos.setY(i, sole);
+  }
+  pos.needsUpdate = true;
+  g.computeVertexNormals();
+  return g;
+}
+
+// Merge + weld a list of geometries into one indexed, vertex-welded geometry
+// with recomputed normals (real 1-ring adjacency for the skin smoother).
+// We strip every attribute except `position` first so mixed sources (sphere
+// has uv, profileSolid does not) merge cleanly — normals are recomputed and
+// the skin weighter only needs positions.
+function mergeWeld(parts) {
+  const cleaned = parts.map((g) => {
+    const ni = g.toNonIndexed();
+    const out = new THREE.BufferGeometry();
+    out.setAttribute('position', ni.getAttribute('position'));
+    return out;
+  });
+  const m = mergeGeometries(cleaned, false);
+  const welded = mergeVertices(m, 1e-4);
+  welded.computeVertexNormals();
+  return welded;
 }
 
 // ───────────────────────── proportions (8-head canon) ───────────────────────
@@ -154,11 +280,26 @@ function proportions(H) {
     hipHalf: 0.065 * H,
     chestW: 0.105 * H, chestD: 0.072 * H,
     waistW: 0.082 * H, waistD: 0.060 * H,
-    upperArmR: 0.030 * H, lowerArmR: 0.024 * H,
-    thighR: 0.052 * H, calfR: 0.036 * H,
-    neckR: 0.034 * H, headR: 0.066 * H,
-    handLen: 0.075 * H, handW: 0.045 * H,
-    footLen: 0.135 * H, footW: 0.05 * H, footH: 0.045 * H,
+    // limb GIRTH ladder (proper joint sizing): shoulder→biceps→elbow→
+    // forearm→wrist, and hip/thigh→knee→calf→ankle. Real humans bulge at the
+    // muscle belly and pinch at the joints — these capture that taper.
+    deltoidR: 0.038 * H,       // shoulder ball
+    bicepsR: 0.034 * H,        // upper-arm muscle belly
+    elbowR: 0.027 * H,         // elbow joint
+    forearmR: 0.030 * H,       // forearm belly
+    wristR: 0.020 * H,         // wrist (slim)
+    thighTopR: 0.060 * H,      // thigh near hip (thickest)
+    thighR: 0.052 * H,         // mid-thigh
+    kneeR: 0.040 * H,          // knee joint
+    calfR: 0.045 * H,          // calf muscle belly (thicker than knee)
+    ankleR: 0.026 * H,         // ankle (slim)
+    upperArmR: 0.034 * H, lowerArmR: 0.028 * H, // legacy aliases (kept for refs)
+    // head: 8-head canon → head spans H/8 (≈0.125 H). Centre at 0.9375 H so the
+    // crown lands at ~H. Half-height = 0.063 H (a touch egg-shaped, occiput deep).
+    neckR: 0.034 * H, headRX: 0.058 * H, headRY: 0.066 * H, headRZ: 0.066 * H,
+    headR: 0.062 * H,
+    handLen: 0.085 * H, handW: 0.052 * H,
+    footLen: 0.145 * H, footW: 0.058 * H, footH: 0.062 * H,
   };
 }
 
@@ -216,91 +357,127 @@ function orderedBones(root) {
 // Builds 3 merged geometries (skin / shirt / trousers) in WORLD space (so the
 // bones — which are in world-space offsets after armature placement — segment-
 // weight them directly). Returns { skin, shirt, trousers } BufferGeometries.
+//
+// Every limb is a profileSolid with a GIRTH LADDER (multiple control radii)
+// swept between the two joint points, then oriented onto the bind-pose segment.
+// The torso is a lathe-style profile: pelvis → narrow waist → broad chest →
+// shoulder line, elliptical (deeper than the old box). Result: a smooth,
+// articulated body with real joint girth instead of stacked stretched capsules.
 function buildBodyGeoms(P) {
   const skinParts = [];
   const shirtParts = [];
   const trouserParts = [];
 
-  // HEAD (skin) — slightly egg-shaped sphere.
+  // HEAD (skin) — anatomical ellipsoid (taller than wide, slight occiput).
   {
-    const g = sphere(P.headR, 1.18);
-    g.translate(0, P.headCY, 0.005);
+    const g = ellipsoid(P.headRX, P.headRY, P.headRZ);
+    g.translate(0, P.headCY, 0.004);
     skinParts.push(g);
   }
-  // NECK (skin).
+  // JAW/chin fill (skin) — small ellipsoid blending neck→head.
   {
-    const len = P.headBaseY - P.neckY + 0.02;
-    const g = capsule(P.neckR, Math.max(0.02, len * 0.6));
-    g.translate(0, P.neckY, 0);
+    const g = ellipsoid(P.headRX * 0.72, P.headRX * 0.6, P.headRZ * 0.75);
+    g.translate(0, P.headBaseY + P.headRX * 0.2, P.headRZ * 0.18);
+    skinParts.push(g);
+  }
+  // NECK (skin) — smooth tapered tube from chest line up into the head base.
+  {
+    const len = (P.headBaseY - P.neckY) + 0.012 * P.H;
+    const g = profileSolid(
+      [{ t: 0, rx: P.neckR * 1.18, rz: P.neckR * 1.12 },  // trapezius base flare
+       { t: 0.55, rx: P.neckR, rz: P.neckR * 0.96 },
+       { t: 1, rx: P.neckR * 0.92, rz: P.neckR * 0.92 }],
+      Math.max(0.02, len), 8, 4);
+    g.translate(0, P.neckY - 0.01 * P.H, 0);
     skinParts.push(g);
   }
 
-  // TORSO (shirt) — shaped solid pelvis→shoulders.
+  // TORSO (shirt) — shaped lathe solid pelvis(waistY)→shoulder line, with a
+  // rib-cage bulge and narrowed waist. Elliptical cross-section (W > D).
   {
-    const g = torsoGeom(P);
+    const h = P.shoulderY - P.waistY;
+    const g = profileSolid(
+      [{ t: 0.0,  rx: P.waistW * 1.04, rz: P.waistD * 1.06 }, // belly/waist
+       { t: 0.18, rx: P.waistW * 0.96, rz: P.waistD * 0.98 }, // narrowest waist
+       { t: 0.5,  rx: P.chestW * 0.96, rz: P.chestD * 1.0 },  // lower ribs
+       { t: 0.78, rx: P.chestW,        rz: P.chestD },        // chest
+       { t: 1.0,  rx: P.shoulderHalf * 0.86, rz: P.chestD * 0.86 }], // shoulder yoke
+      h, 18, 5);
+    g.translate(0, P.waistY, 0);
     shirtParts.push(g);
   }
-  // SHOULDER caps (shirt) — round the deltoids.
+  // SHOULDER deltoid caps (shirt) — round the join, smooth shoulder transition.
   for (const dir of [1, -1]) {
-    const g = sphere(P.upperArmR * 1.25, 1);
-    g.translate(dir * P.shoulderHalf, P.shoulderY, 0);
+    const g = ellipsoid(P.deltoidR * 1.15, P.deltoidR * 1.1, P.deltoidR * 1.05);
+    g.translate(dir * (P.shoulderHalf - P.deltoidR * 0.15), P.shoulderY, 0);
     shirtParts.push(g);
   }
 
   // ARMS (shirt sleeve = upper+lower arm; hands are skin).
+  const upperArmLen = 0.16 * P.H, lowerArmLen = 0.155 * P.H;
   for (const dir of [1, -1]) {
-    // upper arm: shoulder→elbow, pointing outward (+X) and slightly down.
     const shoulderX = dir * P.shoulderHalf, shoulderY = P.shoulderY;
-    const elbowX = dir * (P.shoulderHalf + 0.16 * P.H), elbowY = P.shoulderY;
-    shirtParts.push(segCapsule(shoulderX, shoulderY, 0, elbowX, elbowY, 0, P.upperArmR, P.lowerArmR * 1.1));
-    const wristX = dir * (P.shoulderHalf + 0.16 * P.H + 0.155 * P.H), wristY = P.shoulderY;
-    shirtParts.push(segCapsule(elbowX, elbowY, 0, wristX, wristY, 0, P.lowerArmR * 1.1, P.lowerArmR));
-    // hand (skin) — a small flattened capsule continuing +X.
-    const handG = capsule(P.handW * 0.55, P.handLen * 0.7);
-    handG.rotateZ(dir > 0 ? -Math.PI / 2 : Math.PI / 2);
-    handG.scale(1, 1, 0.55); // flatten front-back
-    handG.translate(wristX + dir * P.handLen * 0.45, wristY, 0);
+    const elbowX = dir * (P.shoulderHalf + upperArmLen), elbowY = P.shoulderY;
+    const wristX = dir * (P.shoulderHalf + upperArmLen + lowerArmLen), wristY = P.shoulderY;
+    // upper arm: deltoid → biceps belly → elbow (taper to joint).
+    shirtParts.push(segProfile(shoulderX, shoulderY, 0, elbowX, elbowY, 0,
+      [{ t: 0, rx: P.deltoidR, rz: P.deltoidR },
+       { t: 0.35, rx: P.bicepsR, rz: P.bicepsR },
+       { t: 1, rx: P.elbowR, rz: P.elbowR * 0.95 }]));
+    // forearm: elbow → forearm belly → slim wrist.
+    shirtParts.push(segProfile(elbowX, elbowY, 0, wristX, wristY, 0,
+      [{ t: 0, rx: P.elbowR, rz: P.elbowR * 0.95 },
+       { t: 0.3, rx: P.forearmR, rz: P.forearmR * 0.92 },
+       { t: 1, rx: P.wristR, rz: P.wristR * 0.85 }]));
+    // hand (skin) — palm + mitten fingers + thumb, oriented +X·dir from wrist.
+    const handG = handGeom(P, dir);
+    if (dir < 0) handG.rotateY(Math.PI); // mirror to the left side
+    handG.translate(wristX + dir * P.wristR, wristY, 0);
     skinParts.push(handG);
   }
 
-  // PELVIS block (trousers) — bridge waist→hips, slightly wider hips.
+  // PELVIS (trousers) — broad rounded hip block waist→hips, wider than waist.
   {
-    const g = capsule(P.waistW * 0.92, Math.max(0.02, (P.waistY - P.hipY) + 0.04));
-    g.scale(1, 1, P.waistD / P.waistW);
-    g.translate(0, P.hipY - 0.02, 0);
+    const h = (P.waistY - P.hipY) + 0.05 * P.H;
+    const g = profileSolid(
+      [{ t: 0.0, rx: P.hipHalf * 1.55, rz: P.waistD * 1.1 },  // glutes / hip width
+       { t: 0.5, rx: P.hipHalf * 1.5,  rz: P.waistD * 1.05 },
+       { t: 1.0, rx: P.waistW * 1.0,   rz: P.waistD * 1.02 }], // up into waist
+      Math.max(0.02, h), 8, 5);
+    g.translate(0, P.hipY - 0.03 * P.H, 0);
     trouserParts.push(g);
   }
 
-  // LEGS (trousers = thigh+calf; feet separate).
+  // LEGS (trousers = thigh+calf; feet separate skin/shoe on the trouser shell).
   for (const dir of [1, -1]) {
     const hipX = dir * P.hipHalf, hipY = P.hipY;
-    const kneeX = dir * P.hipHalf * 0.85, kneeY = P.kneeY;
-    trouserParts.push(segCapsule(hipX, hipY, 0, kneeX, kneeY, 0, P.thighR, P.calfR * 1.15));
-    const ankleX = dir * P.hipHalf * 0.8, ankleY = P.ankleY;
-    trouserParts.push(segCapsule(kneeX, kneeY, 0, ankleX, ankleY, 0, P.calfR * 1.15, P.calfR * 0.7));
-    // foot (skin/shoe — keep on trousers shell as "shoe" colour later; use skin tone shoe? use trousers fabric for shoe).
-    const fg = footGeom(P.footLen, P.footW, P.footH);
-    fg.translate(ankleX, P.footH / 2, P.footLen * 0.25);
+    const kneeX = dir * P.hipHalf * 0.78, kneeY = P.kneeY;
+    const ankleX = dir * P.hipHalf * 0.72, ankleY = P.ankleY;
+    // thigh: thick at hip → muscle belly → knee joint.
+    trouserParts.push(segProfile(hipX, hipY, 0, kneeX, kneeY, 0,
+      [{ t: 0, rx: P.thighTopR, rz: P.thighTopR * 0.96 },
+       { t: 0.4, rx: P.thighR, rz: P.thighR * 0.94 },
+       { t: 1, rx: P.kneeR, rz: P.kneeR * 0.96 }]));
+    // calf: knee → calf belly (thicker) → slim ankle.
+    trouserParts.push(segProfile(kneeX, kneeY, 0, ankleX, ankleY, 0,
+      [{ t: 0, rx: P.kneeR, rz: P.kneeR * 0.96 },
+       { t: 0.3, rx: P.calfR, rz: P.calfR * 0.9 },
+       { t: 1, rx: P.ankleR, rz: P.ankleR * 0.92 }]));
+    // foot: heel→arch→toe wedge, sole flat on floor, forward (+Z).
+    const fg = footGeom(P);
+    fg.translate(ankleX, P.footH * 0.5, P.footLen * 0.28);
     trouserParts.push(fg);
   }
 
-  const merge = (parts) => {
-    const m = mergeGeometries(parts.map((g) => g.toNonIndexed()), false);
-    // Weld coincident verts → real 1-ring adjacency for Laplacian weight smoothing.
-    const welded = mergeVertices(m, 1e-4);
-    welded.computeVertexNormals();
-    return welded;
-  };
-
-  return { skin: merge(skinParts), shirt: merge(shirtParts), trousers: merge(trouserParts) };
+  return { skin: mergeWeld(skinParts), shirt: mergeWeld(shirtParts), trousers: mergeWeld(trouserParts) };
 }
 
-// A capsule spanning two world points a→b, with a base/tip radius taper.
-function segCapsule(ax, ay, az, bx, by, bz, rBase, rTip) {
+// A profileSolid spanning two world points a→b, swept with a girth `profile`
+// (t along the segment, elliptical rx/rz). Oriented +Y→(a→b) then placed at a.
+function segProfile(ax, ay, az, bx, by, bz, profile, rings = 14) {
   const dx = bx - ax, dy = by - ay, dz = bz - az;
   const len = Math.hypot(dx, dy, dz);
-  const g = capsule(rBase, Math.max(0.01, len - rBase), rTip);
-  // capsule grows +Y from origin; rotate +Y axis to (a→b) direction, translate to a.
+  const g = profileSolid(profile, Math.max(0.01, len), rings, 5);
   const from = new THREE.Vector3(0, 1, 0);
   const to = new THREE.Vector3(dx, dy, dz).normalize();
   const q = new THREE.Quaternion().setFromUnitVectors(from, to);
