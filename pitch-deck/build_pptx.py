@@ -46,9 +46,9 @@ SCRIPTS = {
 pngs = sorted(glob.glob(os.path.join(BD, 'render', '0[0-9]-*.png')))
 assert len(pngs) == 9, f'expected 9 slides, got {len(pngs)}: {[os.path.basename(p) for p in pngs]}'
 
-# demo video frame rect in logical px (must match .vframe in 04-demo.html)
-VF = dict(left=260, top=190, w=760, h=428)
-VIDEO = os.path.join(BD, 'assets', 'demo.mp4')
+# demo: Forge video frame rect in logical px (must match .f-forge in 04-demo.html)
+VF = dict(left=56, top=244, w=572, h=280)
+VIDEO = os.path.join(BD, 'assets', 'demo-forge.mp4')
 
 for p in pngs:
     s = prs.slides.add_slide(blank)

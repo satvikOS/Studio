@@ -4,31 +4,48 @@
   .eyebrow-mono{ position:absolute; left:60px; top:50px; z-index:6; font-family:var(--mono); font-size:12px; letter-spacing:.24em; color:var(--clay); }
   .lockup{ position:absolute; right:60px; top:48px; z-index:6; color:var(--ink); font-size:14px; }
   .htext{ position:absolute; left:60px; top:96px; z-index:6; }
-  .bigh{ font-size:46px; }
+  .bigh{ font-size:44px; }
   .bigh .g{ color:var(--ink-mid); }
-  .subline{ font-size:17px; color:var(--ink-soft); margin-top:10px; }
-  .vframe{ position:absolute; left:260px; top:190px; width:760px; height:428px; z-index:6;
-    border:1.4px solid var(--line-strong); background:#16110d; overflow:hidden; box-shadow:0 18px 50px rgba(58,44,31,.22); }
-  .play{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:80px; height:80px; border-radius:50%;
-    border:2px solid #f1e8d4; display:flex; align-items:center; justify-content:center; background:rgba(30,22,16,.4); }
-  .play::after{ content:""; border-left:24px solid #f1e8d4; border-top:14px solid transparent; border-bottom:14px solid transparent; margin-left:6px; }
-  .vcap{ position:absolute; left:0; bottom:0; font-family:var(--mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase;
-    color:#f1e8d4; background:rgba(15,11,8,.66); padding:8px 13px; }
-  .vtag{ position:absolute; right:13px; top:12px; font-family:var(--mono); font-size:11px; letter-spacing:.14em; color:rgba(241,232,212,.6); }
+  .subline{ font-size:16px; color:var(--ink-soft); margin-top:9px; }
+  /* two demo frames */
+  .flab{ position:absolute; z-index:6; top:212px; font-family:var(--mono); font-size:11px; letter-spacing:.16em; color:var(--muted); display:flex; align-items:center; gap:8px; }
+  .flab .dot{ width:6px; height:6px; background:var(--clay); border-radius:50%; }
+  .frame{ position:absolute; top:244px; height:280px; z-index:6; border:1.4px solid var(--line-strong); overflow:hidden;
+    box-shadow:0 16px 44px rgba(58,44,31,.2); }
+  .frame img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .f-forge{ left:56px; width:572px; background:#14110d; }
+  .f-studio{ left:652px; width:572px; background:#221a12; display:flex; align-items:center; justify-content:center; }
+  .play{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:74px; height:74px; border-radius:50%;
+    border:2px solid #f1e8d4; display:flex; align-items:center; justify-content:center; background:rgba(20,15,10,.4); }
+  .play::after{ content:""; border-left:22px solid #f1e8d4; border-top:13px solid transparent; border-bottom:13px solid transparent; margin-left:6px; }
+  .ftag{ position:absolute; left:0; bottom:0; font-family:var(--mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase;
+    color:#f1e8d4; background:rgba(10,8,5,.66); padding:6px 11px; }
+  .ph{ text-align:center; color:rgba(241,232,212,.55); }
+  .ph .pi{ width:62px; height:62px; border-radius:50%; border:2px dashed rgba(241,232,212,.4); display:flex; align-items:center; justify-content:center; margin:0 auto 14px; }
+  .ph .pi::after{ content:""; border-left:18px solid rgba(241,232,212,.5); border-top:11px solid transparent; border-bottom:11px solid transparent; margin-left:5px; }
+  .ph .pt{ font-family:var(--mono); font-size:11px; letter-spacing:.16em; }
 </style></head>
 <body>
 <div class="sheet" data-sheet="04" data-foot="THE DEMO">
-  <div class="bgmodel right art tall" style="opacity:.18"><img src="../assets/abstract/abs5.png"></div>
-  <div class="vframe">
-    <div class="play"></div>
-    <div class="vcap">STUDIO. ARCHIE RIGS AND ANIMATES, LIVE</div>
-    <div class="vtag">▶ CLICK TO PLAY</div>
-  </div>
+  <div class="bgmodel right art tall" style="opacity:.14"><img src="../assets/abstract/abs5.png"></div>
   <div class="eyebrow-mono">THE DEMO</div>
   <div class="lockup">ClawComp <span class="x">×</span> Link&nbsp;Ventures</div>
   <div class="htext">
     <div class="bigh">Don’t take our word. <span class="g">Watch it build.</span></div>
-    <div class="subline">One sentence in. Archie plans, builds, and brings it to life, right on your machine.</div>
+    <div class="subline">A real part, and a real scene, built by Archie. Right on the machine.</div>
+  </div>
+
+  <div class="flab" style="left:56px"><span class="dot"></span>FORGE · LEAP-1A ENGINE · FULL PROCESS</div>
+  <div class="flab" style="left:652px"><span class="dot"></span>STUDIO · DEMO COMING</div>
+
+  <div class="frame f-forge">
+    <img src="../assets/shots/forge-leap1a-poster.png">
+    <div class="play"></div>
+    <div class="ftag">FORGE · CLICK TO PLAY</div>
+  </div>
+  <div class="frame f-studio">
+    <div class="ph"><div class="pi"></div><div class="pt">STUDIO DEMO HERE</div></div>
+    <div class="ftag">STUDIO · COMING SOON</div>
   </div>
 </div>
 <script src="../assets/frame.js"></script>
