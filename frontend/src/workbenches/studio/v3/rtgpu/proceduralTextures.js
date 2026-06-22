@@ -2251,6 +2251,14 @@ export const ABSOLUTE_ROUGHNESS_IDS = new Set(Object.keys(MICRO));
 const REAL_PBR_IDS = new Set([
   'wood-oak', 'wood-walnut', 'marble-white', 'fabric-linen', 'fabric-grey',
   'leather-tan', 'concrete', 'ceramic-white', 'steel-brushed', 'velvet', 'skin-warm',
+  // ── ENVIRONMENT sets (ambientCG CC0, 2K-JPG) added 2026-06-18 ──────────────
+  // albedo/normal(GL)/roughness only; no AO/metalness map slot in loadRealPbrSet.
+  //   asphalt   ← Road007        (road carriageway / dark asphalt ground)
+  //   facade    ← Bricks097      (building exterior brick facade, 2048×1024)
+  //   grass     ← Grass004       (lawn / foliage ground)
+  //   sidewalk  ← PavingStones070 (paving-stone sidewalk / plaza)
+  //   car-paint ← Metal032       (smooth painted-metal stand-in for car body)
+  'asphalt', 'facade', 'grass', 'sidewalk', 'car-paint',
 ]);
 export { REAL_PBR_IDS };
 // Real roughness maps are absolute (JPG greyscale 0..1 = true roughness), so the

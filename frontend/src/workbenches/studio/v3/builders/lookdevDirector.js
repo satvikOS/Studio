@@ -11,6 +11,7 @@
 // window.__studioLookdev({lightPreset,materialPlan,resolution}) — material+light+render → dataUrl.
 
 import { MATERIALS, resolveMaterial } from '../materialRegistry.js';
+import { loadRealPbrSet, hasRealPbr } from '../rtgpu/proceduralTextures.js';
 
 // Kelvin → approximate linear-ish sRGB hue for light colour.
 const K = { 1800: 0xff8b2a, 2800: 0xffb46b, 3200: 0xffc489, 4300: 0xffe2c0, 5000: 0xfff0e0, 5600: 0xfff4ea, 6500: 0xdfe8ff, 7500: 0xc8d8ff, 10000: 0xa8c0ff };
@@ -51,19 +52,77 @@ export function applyLightingRig(THREE, scene, presetId, opts = {}) {
   return { cleanup: () => { for (let i = scene.children.length - 1; i >= 0; i--) { const ch = scene.children[i]; if (ch.userData && ch.userData._lookdevLight) scene.remove(ch); } scene.background = prevBg; scene.fog = prevFog; }, rig, center: c, radius: R };
 }
 
-// Upgrade tagged body materials to MeshPhysicalMaterial from the registry + procedural maps.
+// Build a MeshPhysicalMaterial from a registry spec, honouring the full skin
+// subsurface-approximation set (transmission/thickness/attenuation + sheen +
+// clearcoat) as well as the generic fabric/metal/wood presets. `skinning` keeps
+// the SkinnedMesh deform working when we swap a humanoid shell's material.
+function physFromSpec(THREE, m, { skinning = false } = {}) {
+  const isSkin = !!m.isSkin;
+  const params = {
+    color: m.color,
+    metalness: m.metalness ?? 0,
+    roughness: m.roughness ?? 0.6,
+    clearcoat: m.clearcoat ?? 0,
+    clearcoatRoughness: m.clearcoatRoughness ?? 0.15,
+    transmission: m.transmission ?? 0,
+    ior: m.ior ?? 1.5,
+    // SKIN: warm light-bleed through thin flesh + peach diffuse-fresnel fuzz.
+    thickness: m.thickness ?? 0,
+    attenuationDistance: m.attenuationDistance ?? Infinity,
+    sheen: m.sheen != null ? m.sheen : ((m.roughness ?? 0.6) > 0.7 && (m.metalness ?? 0) === 0 ? 0.4 : 0),
+    sheenColor: new THREE.Color(m.sheenColor != null ? m.sheenColor : m.color),
+    sheenRoughness: m.sheenRoughness ?? 0.5,
+    specularIntensity: m.specularIntensity ?? 1.0,
+    envMapIntensity: isSkin ? 0.8 : 1.1,
+  };
+  if (m.attenuationColor != null) params.attenuationColor = new THREE.Color(m.attenuationColor);
+  const phys = new THREE.MeshPhysicalMaterial(params);
+  if (skinning) phys.skinning = true;
+  return phys;
+}
+
+// Assign a real CC0/scan PBR set (albedo/normal/roughness) onto a live-raster
+// material — this is what makes the real 4K SKIN scan + fabric weave visible in
+// the WebGL viewport (the path tracer has its own loader). Async: textures stream
+// in and trigger a re-render via needsUpdate. Real albedo carries the true hue,
+// so we whiten the tint and neutralise the roughness scalar (the map is absolute).
+function assignRealMaps(THREE, mat, id) {
+  if (!hasRealPbr(id)) return;
+  const isSkin = id === 'skin-warm';
+  loadRealPbrSet(id).then((set) => {
+    if (!set) return;
+    const clone = (t, cs) => { if (!t) return null; const c = t.clone(); c.needsUpdate = true; c.colorSpace = cs; c.wrapS = c.wrapT = THREE.RepeatWrapping; c.anisotropy = t.anisotropy || 8; return c; };
+    if (set.map) { mat.map = clone(set.map, THREE.SRGBColorSpace); mat.color = new THREE.Color(0xffffff); }
+    if (set.roughnessMap) { mat.roughnessMap = clone(set.roughnessMap, THREE.NoColorSpace); mat.roughness = 1.0; }
+    if (set.normalMap) {
+      mat.normalMap = clone(set.normalMap, THREE.NoColorSpace);
+      // Pores read at full strength on skin; soften the woven relief on fabric so
+      // the weave doesn't look embossed/checkered.
+      const s = isSkin ? 0.55 : 0.3;
+      mat.normalScale = new THREE.Vector2(s, s);
+    }
+    mat.needsUpdate = true;
+  }).catch(() => {});
+}
+
+// Upgrade tagged body materials to MeshPhysicalMaterial from the registry + real
+// PBR maps. SKIN shells get the subsurface-approximation material + the real 4K
+// skin scan; clothing shells keep their real fabric PBR; furniture resolves by
+// name. Preserves SkinnedMesh skinning so the rig keeps deforming.
 export function applyMaterials(THREE, scene, plan = {}) {
   let applied = 0;
   scene.traverse((o) => {
     if (!o.isMesh || !(o.userData && (o.userData.archdiscStudioPrimitive || o.userData.organic))) return;
     const want = plan[o.name] || plan[o.userData.kind] || o.userData.studioMaterial || pickByName(o.name || o.userData.kind || '');
     const m = resolveMaterial(want);
-    const phys = new THREE.MeshPhysicalMaterial({ color: m.color, metalness: m.metalness ?? 0, roughness: m.roughness ?? 0.6,
-      clearcoat: m.clearcoat ?? 0, clearcoatRoughness: 0.15, transmission: m.transmission ?? 0, ior: m.ior ?? 1.5,
-      sheen: (m.roughness ?? 0.6) > 0.7 && (m.metalness ?? 0) === 0 ? 0.4 : 0, sheenColor: new THREE.Color(m.color),
-      envMapIntensity: 1.1 });
+    const phys = physFromSpec(THREE, m, { skinning: !!o.isSkinnedMesh });
+    // Carry any map already present (e.g. a procedural map a builder attached).
     if (o.material && o.material.map) phys.map = o.material.map;
-    o.material = phys; applied++;
+    o.material = phys;
+    // Stream the real scanned maps in (skin 4K scan, fabric weave) when the
+    // geometry has UVs to land them on.
+    if (o.geometry && o.geometry.attributes && o.geometry.attributes.uv) assignRealMaps(THREE, phys, want);
+    applied++;
   });
   return applied;
 }

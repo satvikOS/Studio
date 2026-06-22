@@ -48,8 +48,20 @@ test('Studio humanoid locomotion — walk + run (video)', async () => {
   //    per-frame tracking camera we set isn't fought, and stash the rig handle.
   const build = await win.evaluate(() => {
     const b = window.__studioBuildHumanoid({ sex: 'female', height: 1.72, pose: 'relaxed-stand' });
-    // PBR skin/cloth upgrade (brief: apply skin/cloth materials).
+    // PBR skin/cloth upgrade (brief: subsurface-approx skin shell + real fabric PBR).
+    // applyMaterials swaps each shell to a MeshPhysicalMaterial (skin = the
+    // subsurface 'skin-warm' recipe) and STREAMS the real 4K skin/fabric scans on.
     let mats = null; try { mats = window.__studioLookdevMaterials(); } catch (_) {}
+    // Warmer, slightly brighter tone-map so the skin's subsurface read isn't
+    // crushed and the figure pops off the neutral stage.
+    try {
+      const TH = window.__archdiscTHREE, vp = window.__archdiscViewport;
+      if (TH && vp && vp.renderer) {
+        vp.renderer.toneMapping = TH.ACESFilmicToneMapping;
+        vp.renderer.toneMappingExposure = 1.15;
+        vp.renderer.outputColorSpace = TH.SRGBColorSpace;
+      }
+    } catch (_) {}
     // A stage-preset light rig centred on the figure's torso (~1.0 m).
     let stage = null; try { stage = window.__studioStage3Point({ target: [0, 1.0, 0], distance: 4, intensity: 1.4 }); } catch (_) {}
     // Soft ambient fill so the dark side of the figure still reads on the live WebGL.
@@ -87,7 +99,30 @@ test('Studio humanoid locomotion — walk + run (video)', async () => {
   console.log(`[loco] built humanoid: ${build.build.boneCount} bones, ${build.build.totalVertices} verts, height ${build.build.height} — materials ${build.materialsApplied}, stage ${build.stageOk}`);
   expect(build.build.ok, 'humanoid built').toBeTruthy();
 
-  await win.waitForTimeout(400);
+  // ── WAIT for the real 4K skin scan + fabric maps to STREAM in (23MB albedo +
+  //    28MB normal + 14MB roughness for skin alone) so the captured frames show
+  //    textured skin, not the flat base tint. Poll the skin shell's material for
+  //    a resolved .map; bounded so the spec never hangs.
+  const texReady = await win.waitForFunction(() => {
+    const store = window.__studioHumanoids || {};
+    const h = store[window.__studioHumanoidLast];
+    if (!h) return false;
+    const skin = (h.skinnedMeshes || []).find((m) => m.userData && m.userData.archdiscStudioHumanoidShell === 'skin');
+    return !!(skin && skin.material && skin.material.map && skin.material.map.image);
+  }, { timeout: 60000 }).then(() => true).catch(() => false);
+  const texState = await win.evaluate(() => {
+    const store = window.__studioHumanoids || {};
+    const h = store[window.__studioHumanoidLast];
+    const out = {};
+    for (const m of (h && h.skinnedMeshes) || []) {
+      const k = m.userData && m.userData.archdiscStudioHumanoidShell;
+      out[k] = { map: !!(m.material && m.material.map), normal: !!(m.material && m.material.normalMap), rough: !!(m.material && m.material.roughnessMap), isPhysical: m.material && m.material.isMeshPhysicalMaterial === true };
+    }
+    return out;
+  });
+  console.log(`[loco] textures ready=${texReady}  shells=${JSON.stringify(texState)}`);
+
+  await win.waitForTimeout(600);   // let mipmaps generate + a couple frames paint
 
   const proof = {};
   for (const cycle of CYCLES) {
@@ -132,25 +167,40 @@ test('Studio humanoid locomotion — walk + run (video)', async () => {
           for (const sm of (h.skinnedMeshes || [])) { sm.updateMatrixWorld(true); box.expandByObject(sm); }
           if (!box.isEmpty()) { const c = box.getCenter(new TH.Vector3()); figureZ = c.z; figureY = c.y; }
         }
-        // 3) EYE-LEVEL tracking camera: stand off to the FRONT-quarter at roughly the
-        //    figure's eye height (~1.55 m for a 1.72 m figure), close enough that the
-        //    figure DOMINATES the frame (scale-to-viewer), dolly forward with the figure
-        //    along +Z so it stays framed as it walks/runs across the floor, and aim a
-        //    touch low so both the head AND the feet/ground stay in shot.
+        // 3) EYE-LEVEL tracking camera, framed on the figure's FRONT (so the face
+        //    + textured skin read). We derive the actual facing from the HEAD
+        //    bone's world forward axis (robust to any rig sign convention) and
+        //    stand the camera a touch in FRONT + off to one quarter at eye height
+        //    (~1.55 m), close enough that the figure DOMINATES the frame
+        //    (scale-to-viewer), tracking it as it travels and aiming a hair low so
+        //    both the head AND the feet/ground stay in shot.
         const vp = window.__archdiscViewport, cam = vp && vp.camera;
+        let facing = 1; // +Z by default
+        if (h) {
+          const head = (h.boneList || []).find((b) => b.name === 'Head') || (h.boneList || []).find((b) => b.name === 'Chest');
+          if (head) {
+            head.updateMatrixWorld(true);
+            // the head's local +Y runs up the neck; face features are pushed +Z,
+            // so the world facing is the head's +Z column of its world matrix.
+            const e = head.matrixWorld.elements;
+            const fz = e[10]; // world Z of the local +Z axis
+            facing = fz >= 0 ? 1 : -1;
+          }
+        }
         if (cam) {
           const gY = window.__locoGroundY || 0;
-          const eyeY = gY + 1.55;                  // ~eye level
-          // front-quarter: ahead of the figure (+Z) and off to one side, looking back at it.
-          const off = { x: 1.9, y: eyeY, z: 3.3 };
-          cam.position.set(off.x, off.y, figureZ + off.z);
+          const eyeY = gY + 1.52;                  // ~eye level
+          // stand IN FRONT of the figure along its facing, off to one quarter.
+          const ahead = facing * 3.1;              // distance in front (signed by facing)
+          const side = 1.7;
+          cam.position.set(side, eyeY, figureZ + ahead);
           cam.up.set(0, 1, 0);
-          cam.lookAt(0, gY + 0.85, figureZ);       // aim at mid-torso/hip line of the travelling figure
-          cam.fov = 38;                            // tighter fov → figure fills more of the frame
+          cam.lookAt(0, gY + 0.92, figureZ);       // aim at mid-torso of the travelling figure
+          cam.fov = 36;                            // tight fov → figure fills more of the frame
           cam.near = 0.05; cam.far = 200;
           cam.updateProjectionMatrix(); cam.updateMatrixWorld();
         }
-        return { contact: a && a.contact, flight: a && a.flight, figureZ, figureY };
+        return { contact: a && a.contact, flight: a && a.flight, figureZ, figureY, facing };
       }, { cycle, t, travel });
 
       if (fr.flight) flightFrames++;

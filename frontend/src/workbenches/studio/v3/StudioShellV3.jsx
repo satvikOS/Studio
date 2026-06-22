@@ -14,6 +14,11 @@ import { registerCameraOps, unregisterCameraOps } from './cameraops';
 import { registerModOps, unregisterModOps } from './modops';
 import { registerLightingOps, unregisterLightingOps } from './lightingops';
 import { registerAnimPhysOps, unregisterAnimPhysOps } from './animphysops';
+import { installStudioAnimPlayer, uninstallStudioAnimPlayer } from './studioAnimPlayer';
+import {
+  installRealCharacter, uninstallRealCharacter,
+  CHARACTER_MAP, CHARACTER_ASSETS, PROP_MAP, PROP_ASSETS, HDRI_MAP, HDRI_ASSETS,
+} from './builders/realCharacter';
 import { registerPaintOps, unregisterPaintOps } from './paintops';
 import { registerSurfOps, unregisterSurfOps } from './surfops';
 import { registerAudioXROps, unregisterAudioXROps } from './audioxrops';
@@ -36,7 +41,7 @@ import { registerDisplayOps, unregisterDisplayOps } from './displayops';
 // REAL onClick handlers on the FurnitureLibrarySection buttons + the render
 // button — the composer-free path the agent reaches by .click()ing the DOM.
 import { loadRealFurniture, REAL_FURNITURE_TYPES } from './builders/realFurniture.js';
-import { runStudioPathTracedRender } from './rtgpu/PathTracedRender.js';
+import { runStudioPathTracedRender, runStudioPathTracedSequence } from './rtgpu/PathTracedRender.js';
 // Slice 951 — Studio Tool Registry powers the discipline-aware <tools>
 // block in Archie's system prompt. The local LoRAs (studio_v16/<disc>)
 // were trained against this exact catalogue per [[archie-fleet-schema]];
@@ -4290,6 +4295,15 @@ function RightPanel({ collapsed, onToggle, activeWb, editMode, selection }) {
                 path-traced Render button. The CUA-only photoreal authoring
                 surface: the agent clicks these, never the composer. */}
             <FurnitureLibrarySection />
+            {/* Slice 1011 — Construct library (one parametric flagship subject
+                per click: Human / Vehicle / Nature / City). Reaches the GOOD
+                builders by a real DOM click — the `construct` CUA op. */}
+            <ConstructLibrarySection />
+            {/* Slice 1012 — Asset library: real rigged characters (.glb) +
+                real outdoor HDRI skies + Poly Haven props. Each control is a
+                real DOM click the CUA reaches via import-character / set-
+                environment / place-prop — genuine model-driven asset placement. */}
+            <AssetLibrarySection />
             {/* Slice 516 — Per-workbench Notes textarea. */}
             <NotesSection activeWb={activeWb} />
             {/* Slice 518 — Recent undo history list. */}
@@ -5976,11 +5990,47 @@ export const STUDIO_FURNITURE_LIBRARY = Object.freeze([
 ]);
 export const STUDIO_FURNITURE_TYPES = STUDIO_FURNITURE_LIBRARY.map((f) => f.type);
 
+// ── Construct library (Slice 1011) — the GOOD flagship parametric builders, made
+// reachable by the CUA the same way furniture is: ONE clickable library control
+// per subject, one real (parametric, NOT imported) model per click. Each entry's
+// window builder (__studioBuildHumanoid / __studioBuildVehicle / __studioBuildNature
+// / __studioBuildCity) RESOLVES the live scene itself, scene.add()s its bodies,
+// tags userData.archdiscStudioPrimitive + userData.studioMaterial (so the 4K PBR
+// path tracer maps real materials), and returns { ok, ... }. The button onClick
+// invokes the builder; the agent reaches the SAME work by .click()-ing
+// data-studio-v3-construct-<subject>. NO composer ops, NO setState. This is the
+// allowed "clickable LIBRARY, one real model per click" surface (project rule 6) —
+// the builder is the IMPLEMENTATION the control calls, exactly like place-furniture.
+export const STUDIO_CONSTRUCT_LIBRARY = Object.freeze([
+  { subject: 'humanoid', label: 'Human',   fn: '__studioBuildHumanoid' },
+  { subject: 'vehicle',  label: 'Vehicle', fn: '__studioBuildVehicle' },
+  // `construct {subject:'nature'}` yields a real wind-blown FOREST by default —
+  // forest:true engages the walkable path/clearing, layered canopy, denser groves,
+  // forest-floor scatter, depth-haze, the golden-hour SKY HDRI and the directional
+  // WIND field (window.__studioForestWind). A caller can still pass forest:false in
+  // params for the bare river-valley meadow. (Direct __studioBuildNature({...}) calls
+  // — e.g. the flagship-nature deliverable — are unaffected; the default only applies
+  // to the construct op, which merges these under any explicit params.)
+  { subject: 'nature',   label: 'Nature',  fn: '__studioBuildNature', defaults: { forest: true } },
+  { subject: 'city',     label: 'City',    fn: '__studioBuildCity' },
+]);
+export const STUDIO_CONSTRUCT_SUBJECTS = STUDIO_CONSTRUCT_LIBRARY.map((c) => c.subject);
+const STUDIO_CONSTRUCT_FN = Object.freeze(
+  STUDIO_CONSTRUCT_LIBRARY.reduce((m, c) => { m[c.subject] = c.fn; return m; }, {}),
+);
+// Per-subject DEFAULT params merged UNDER any explicit construct params, so the
+// CUA `construct {subject}` op (and a bare human click) reaches the flagship
+// configuration of each subject without the caller having to spell it out.
+const STUDIO_CONSTRUCT_DEFAULTS = Object.freeze(
+  STUDIO_CONSTRUCT_LIBRARY.reduce((m, c) => { if (c.defaults) m[c.subject] = c.defaults; return m; }, {}),
+);
+
 // Expose the curated type set + the (composer-free) helpers on window so tests
 // and the executeToolCall validator can read the live list. These are data /
 // pure functions only — NOT React state setters (window-API-no-setState).
 if (typeof window !== 'undefined') {
   window.__studioFurnitureTypes = STUDIO_FURNITURE_TYPES;
+  window.__studioConstructSubjects = STUDIO_CONSTRUCT_SUBJECTS;
   // __studioPlaceFurniturePiece / __studioRenderLastImage assigned after their
   // function declarations below (hoisted function refs are bound at module load).
 }
@@ -6032,18 +6082,156 @@ async function placeRealFurniturePiece(type) {
   return group;
 }
 
+// Construct ONE flagship parametric subject and add it to the live scene by
+// INVOKING its window builder — the same way placeRealFurniturePiece invokes
+// loadRealFurniture. The builder (resolved from STUDIO_CONSTRUCT_FN) resolves the
+// scene itself, scene.add()s every body, and tags userData.archdiscStudioPrimitive
+// + userData.studioMaterial (so the path tracer harvests it with real PBR). It
+// returns { ok, ... } — NOT a group root — so after a successful build we record a
+// representative ROOT (the humanoid armature when present; else the most-recently
+// tagged body) as __studioLastPlacedGroup so a following set-selection can arrange
+// the WHOLE subject, then frame the camera on it. NO setState (window-API-no-
+// setState). This is the onClick the agent reaches by clicking
+// [data-studio-v3-construct-<subject>]; a human reaches it by tapping the button.
+async function constructSubject(subject, params) {
+  const subj = String(subject || '').toLowerCase();
+  const fnName = STUDIO_CONSTRUCT_FN[subj];
+  if (!fnName) throw new Error(`construct: unknown subject "${subject}" (have: ${STUDIO_CONSTRUCT_SUBJECTS.join(', ')})`);
+  const fn = (typeof window !== 'undefined') ? window[fnName] : undefined;
+  if (typeof fn !== 'function') throw new Error(`construct: builder ${fnName} unavailable (registerV3Api not run?)`);
+  const scene = _studioScene();
+  if (!scene) throw new Error('construct: no scene');
+  // Merge the per-subject DEFAULT params UNDER any explicit params so the construct
+  // op reaches each subject's flagship configuration (e.g. nature → a real wind-blown
+  // forest) while still letting a caller override (e.g. pass forest:false for the
+  // bare meadow). Explicit params WIN.
+  const merged = { ...(STUDIO_CONSTRUCT_DEFAULTS[subj] || {}), ...(params && typeof params === 'object' ? params : {}) };
+  // A builder may be sync (humanoid/vehicle/nature) or async (city — it awaits
+  // real CC0 vehicle/tree glbs). Await so the post-build framing + arrange-target
+  // traversal below see the finished geometry either way.
+  const r = await fn(merged);
+  if (r && r.ok === false) throw new Error(`construct ${subj}: ${r.error || 'builder failed'}`);
+  // Record an arrange target ROOT. The humanoid emits an armature Group carrying
+  // archdiscStudioRigArmatureName — prefer that; otherwise fall back to the most
+  // recently tagged body so set-selection still has a handle.
+  if (typeof window !== 'undefined') {
+    let root = null;
+    if (subj === 'humanoid') {
+      scene.traverse((o) => { if (o && o.userData && o.userData.archdiscStudioRigArmatureName) root = o; });
+    }
+    if (!root) scene.traverse((o) => { if (o && o.userData && o.userData.archdiscStudioPrimitive) root = o; });
+    if (root) window.__studioLastPlacedGroup = root;
+  }
+  // Frame the camera on the new geometry (same affordance the spawn/quick-add
+  // path gives a human). Best-effort — never throw on a missing helper.
+  try { if (typeof window !== 'undefined' && typeof window.__studioFrameAll === 'function') window.__studioFrameAll(); } catch (_) {}
+  if (typeof window !== 'undefined' && window.__studioToast) window.__studioToast(`Constructed ${subj}`, 'ok');
+  return r;
+}
+
 // Render the live scene with the GPU path tracer (room walls/floor + real HDRI +
 // real PBR) and stash the dataURL on window.__studioLastRender. NO setState. This
 // is the onClick the agent reaches by clicking [data-studio-v3-render].
 async function runStudioLibraryRender() {
   if (typeof window !== 'undefined') window.__studioLastRender = null; // signal "in flight"
-  const { canvas, width, height, samples } = await runStudioPathTracedRender({
-    room: true, resolutionId: '1440p', samples: 128, envPresetId: 'daylight', angle: 'eye-level',
+  // Detect an OUTDOOR scene (city / nature / a rigged character present) → render
+  // GROUNDLESS (no interior room shell) with the HDRI sky as a VISIBLE background,
+  // so a street scene reads as a street, not a tabletop model inside a room. Only
+  // a furnished INTERIOR scene keeps the room walls/floor. We also note the
+  // rigged-character root (window.__studioLastPlacedGroup carrying a SkinnedMesh)
+  // so the outdoor render can FRAME THE CHARACTER at street level rather than
+  // pulling the camera back to fit the whole skyline.
+  let outdoor = false;
+  let charRoot = null;
+  try {
+    const scene = (typeof window !== 'undefined') && window.__archdiscScene;
+    if (scene && scene.traverse) scene.traverse((o) => {
+      const u = o && o.userData;
+      if (u && (u.archdiscStudioCity || u.archdiscStudioNature)) outdoor = true;
+      if (o && o.isSkinnedMesh) outdoor = true; // a rigged character = a shot, not a room
+    });
+    // Prefer the most-recently placed group IF it actually contains a SkinnedMesh
+    // (the rigged human) — that is the hero subject the chase camera frames.
+    const last = (typeof window !== 'undefined') && window.__studioLastPlacedGroup;
+    if (last && last.parent) {
+      let skinned = false;
+      last.traverse?.((o) => { if (o && o.isSkinnedMesh) skinned = true; });
+      if (skinned) charRoot = last;
+    }
+  } catch (_) {}
+
+  // ── INTERIOR scene → single still inside the room shell (unchanged path). ─────
+  if (!outdoor) {
+    const { canvas, width, height, samples } = await runStudioPathTracedRender(
+      { room: true, resolutionId: '1440p', samples: 128, envPresetId: 'daylight', angle: 'eye-level' });
+    const dataUrl = canvas.toDataURL('image/png');
+    if (typeof window !== 'undefined') {
+      window.__studioLastRender = { dataUrl, width, height, samples };
+      if (window.__studioToast) window.__studioToast(`Rendered ${width}×${height} @ ${samples}spp`, 'ok');
+    }
+    return window.__studioLastRender;
+  }
+
+  // ── OUTDOOR scene → render a CHARACTER-FRAMED hero frame via the SEQUENCE path.
+  // The single-still frameCamera() fits the WHOLE scene bounding sphere, so with a
+  // city + skyline the camera pulls far back: the soldier becomes a distant speck
+  // and the giant flat asphalt slab — viewed at a grazing distance where its real
+  // PBR scan tiles below one texel/repeat and washes to a flat average — reads as
+  // a sky-reflecting MIRROR. The proven-good _validate-real-human path avoids both
+  // by driving runStudioPathTracedSequence with a LOW CHASE camera positioned
+  // relative to the running figure (close, low, slightly behind, looking AT it):
+  // the asphalt is then seen up-close at a steep angle where its grain resolves
+  // (matte), the soldier dominates the frame, and the city falls into soft bokeh.
+  // We render ONE hero frame (mid-stride) through that same code path here.
+  const TH = (typeof window !== 'undefined') && window.__archdiscTHREE;
+  const poseFrame = async () => {
+    // Default chase spec (used when there is no rigged character — e.g. a pure
+    // city/nature scene): a low, slightly-pulled-back eye-level look into the
+    // street so the ground reads as matte asphalt, not a distant mirror.
+    let figureX = 0, figureZ = 0, footY = 0;
+    if (charRoot && TH) {
+      const g = charRoot;
+      // Advance the run cycle to a clear mid-stride pose (legs apart, not T-pose).
+      const mixer = g.userData && g.userData.archdiscCharacterMixer;
+      if (mixer && mixer.setTime) {
+        let dur = (g.userData && g.userData.archdiscCharacterClipDuration) || 1;
+        try { const a = mixer._actions && mixer._actions[0]; if (a && a._clip) dur = a._clip.duration || dur; } catch (_) {}
+        mixer.setTime(0.35 * dur);  // ~mid run cycle
+      }
+      g.updateMatrixWorld(true);
+      const box = new TH.Box3();
+      g.traverse((o) => { if (o.isMesh) { o.updateWorldMatrix?.(true, false); box.expandByObject(o); } });
+      if (!box.isEmpty()) { const ctr = box.getCenter(new TH.Vector3()); figureX = ctr.x; figureZ = ctr.z; footY = box.min.y; }
+    }
+    // LOW CHASE camera (mirrors _validate-real-human): low + slightly behind + to
+    // one side, looking a touch ahead of the figure so it dominates the frame.
+    const side   = 1.6;
+    const behind = 3.6;
+    const eyeY   = footY + 1.05;                 // ~chest height of a 1.8 m figure
+    return {
+      position: [figureX + side, eyeY, figureZ - behind],
+      lookAt:   [figureX, footY + 0.95, figureZ + 1.0],
+      fov: 42,
+      focusDistance: Math.hypot(side, eyeY - (footY + 0.95), behind + 1.0),
+      fStop: 3.2,
+    };
+  };
+  const seq = await runStudioPathTracedSequence({
+    poseFrame,
+    frameCount: 1,
+    spp: 128,
+    resolutionId: '1440p',
+    envPresetId: 'daylight',     // real outdoor sky-day.hdr → blue sky background
+    groundless: true,            // city supplies its OWN matte asphalt ground
+    showBackground: true,        // render the HDRI sky as a VISIBLE background
+    fStop: 3.2,
   });
-  const dataUrl = canvas.toDataURL('image/png');
+  const dataUrl = (seq.frames && seq.frames[0]) || null;
   if (typeof window !== 'undefined') {
-    window.__studioLastRender = { dataUrl, width, height, samples };
-    if (window.__studioToast) window.__studioToast(`Rendered ${width}×${height} @ ${samples}spp`, 'ok');
+    window.__studioLastRender = dataUrl
+      ? { dataUrl, width: seq.width, height: seq.height, samples: seq.spp }
+      : null;
+    if (dataUrl && window.__studioToast) window.__studioToast(`Rendered ${seq.width}×${seq.height} @ ${seq.spp}spp`, 'ok');
   }
   return window.__studioLastRender;
 }
@@ -6054,6 +6242,7 @@ async function runStudioLibraryRender() {
 if (typeof window !== 'undefined') {
   window.__studioPlaceFurniturePiece = placeRealFurniturePiece;
   window.__studioRenderLastImage = runStudioLibraryRender;
+  window.__studioConstructSubject = constructSubject;
 }
 
 // Furniture library panel — one clickable button per real-furniture type. Each
@@ -6108,6 +6297,167 @@ function FurnitureLibrarySection() {
           fontWeight: 600, padding: '5px', borderRadius: 3, fontSize: 11, cursor: 'pointer',
         }}
       >Render (path-traced)</button>
+    </div>
+  );
+}
+
+// Construct library panel (Slice 1011) — one clickable button per flagship
+// parametric subject (Human / Vehicle / Nature / City). Each button carries
+// data-studio-v3-construct-<subject>; its onClick INVOKES the matching window
+// builder (constructSubject), which adds the GOOD parametric geometry to the live
+// scene with real PBR tags. The agent reaches the same work by .click()-ing the
+// button via the `construct` executeToolCall op — NOT by calling window.__studio*
+// directly. One real (parametric) model per click, mirroring FurnitureLibrarySection.
+function ConstructLibrarySection() {
+  return (
+    <div className="studio-right-section" data-studio-v3-construct-library>
+      <div className="studio-right-section-title">Construct library</div>
+      <div className="studio-right-row" style={{ flexWrap: 'wrap', gap: 4 }}>
+        {STUDIO_CONSTRUCT_LIBRARY.map((c) => (
+          <button
+            key={c.subject}
+            type="button"
+            data-studio-v3-construct={c.subject}
+            {...{ [`data-studio-v3-construct-${c.subject}`]: 'true' }}
+            title={`Construct a parametric ${c.label.toLowerCase()} (real geometry + PBR)`}
+            onClick={() => {
+              // Real work happens here — invoke the builder, add one parametric
+              // subject. The agent reaches this by .click(); a human by tapping.
+              // The `construct` op stashes optional params on window.__studio-
+              // ConstructParams (a DOM click carries no args); a human click uses
+              // builder defaults. Consume + clear it so the next click is clean.
+              let params = {};
+              if (typeof window !== 'undefined' && window.__studioConstructParams && typeof window.__studioConstructParams === 'object') {
+                params = window.__studioConstructParams;
+                window.__studioConstructParams = null;
+              }
+              Promise.resolve(constructSubject(c.subject, params)).catch((err) => {
+                if (typeof window !== 'undefined' && window.__studioToast) {
+                  window.__studioToast(`Construct ${c.subject} failed: ${String(err && err.message || err)}`, 'warn');
+                }
+              });
+            }}
+            style={{
+              flex: '1 1 calc(50% - 4px)', minWidth: 80,
+              padding: '4px 6px', fontSize: 11,
+              background: 'var(--studio-canvas-3, #141414)',
+              color: 'var(--studio-ink, #f0eee6)',
+              border: '1px solid var(--studio-rail-edge, #1d2027)',
+              borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit',
+            }}
+          >{c.label}</button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Asset library (Slice 1012) — clickable REAL assets (CUA-consistent). ──────
+// One panel, three rows of real downloaded CC0 assets, each reached by the agent
+// the SAME way furniture/construct are: a real DOM click on a real control.
+//   • data-studio-v3-character="soldier|robot|xbot"  → window.__studioImportCharacter
+//     (rigged .glb, scaled to height, plays a clip via the anim transport)
+//   • data-studio-v3-hdri="wide_street_01|…"          → window.__studioSetEnvironmentHDRI
+//     (real outdoor .hdr → scene.environment + background = the real sky)
+//   • data-studio-v3-prop="<id>"                       → window.__studioPlaceProp
+//     (Poly Haven CC0 prop grounded on the floor)
+// The real work happens in each button's onClick (which calls the window fn — a
+// pure scene mutation, NO setState — per window-API-no-setState). The agent
+// reaches the identical work via executeToolCall .click()-ing these controls.
+const STUDIO_CHARACTER_LIBRARY = Object.freeze(
+  CHARACTER_ASSETS.map((id) => ({ id, label: CHARACTER_MAP[id].label })),
+);
+const STUDIO_HDRI_LIBRARY = Object.freeze(
+  HDRI_ASSETS.map((id) => ({ id, label: HDRI_MAP[id].label })),
+);
+const STUDIO_PROP_LIBRARY = Object.freeze(
+  PROP_ASSETS.map((id) => ({ id, label: PROP_MAP[id].label })),
+);
+function AssetLibrarySection() {
+  const cellBtn = {
+    flex: '1 1 calc(50% - 4px)', minWidth: 80, padding: '4px 6px', fontSize: 11,
+    background: 'var(--studio-canvas-3, #141414)', color: 'var(--studio-ink, #f0eee6)',
+    border: '1px solid var(--studio-rail-edge, #1d2027)', borderRadius: 3,
+    cursor: 'pointer', fontFamily: 'inherit',
+  };
+  const run = (label, p) => {
+    Promise.resolve(p).catch((err) => {
+      if (typeof window !== 'undefined' && window.__studioToast) {
+        window.__studioToast(`${label} failed: ${String(err && err.message || err)}`, 'warn');
+      }
+    });
+  };
+  return (
+    <div className="studio-right-section" data-studio-v3-asset-library>
+      <div className="studio-right-section-title">Asset library</div>
+
+      {/* Characters — rigged humans/robots (real .glb). The clip the agent wants
+          is stashed on window.__studioImportCharacterArgs by the import-character
+          op; a human click defaults to the idle clip. */}
+      <div style={{ opacity: 0.55, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '2px 0 4px' }}>Characters</div>
+      <div className="studio-right-row" style={{ flexWrap: 'wrap', gap: 4 }}>
+        {STUDIO_CHARACTER_LIBRARY.map((c) => (
+          <button
+            key={c.id}
+            type="button"
+            data-studio-v3-asset
+            data-studio-v3-character={c.id}
+            title={`Import ${c.label} (real rigged model + animation)`}
+            onClick={() => {
+              // Consume optional args the import-character op stashed (clip/height/
+              // position); a human click uses idle defaults. Clear after read.
+              let opts = { asset: c.id };
+              if (typeof window !== 'undefined' && window.__studioImportCharacterArgs && typeof window.__studioImportCharacterArgs === 'object') {
+                opts = Object.assign({ asset: c.id }, window.__studioImportCharacterArgs);
+                opts.asset = c.id;
+                window.__studioImportCharacterArgs = null;
+              }
+              run(`Import ${c.id}`, window.__studioImportCharacter && window.__studioImportCharacter(opts));
+            }}
+            style={cellBtn}
+          >{c.label}</button>
+        ))}
+      </div>
+
+      {/* Environment — real outdoor HDRI skies. One click = the real sky. */}
+      <div style={{ opacity: 0.55, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '8px 0 4px' }}>Environment (real sky)</div>
+      <div className="studio-right-row" style={{ flexWrap: 'wrap', gap: 4 }}>
+        {STUDIO_HDRI_LIBRARY.map((h) => (
+          <button
+            key={h.id}
+            type="button"
+            data-studio-v3-asset
+            data-studio-v3-hdri={h.id}
+            title={`Set the real outdoor sky: ${h.label}`}
+            onClick={() => run(`Sky ${h.id}`, window.__studioSetEnvironmentHDRI && window.__studioSetEnvironmentHDRI(h.id))}
+            style={cellBtn}
+          >{h.label}</button>
+        ))}
+      </div>
+
+      {/* Props — Poly Haven CC0 street/outdoor dressing. */}
+      <div style={{ opacity: 0.55, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '8px 0 4px' }}>Props</div>
+      <div className="studio-right-row" style={{ flexWrap: 'wrap', gap: 4 }}>
+        {STUDIO_PROP_LIBRARY.map((pr) => (
+          <button
+            key={pr.id}
+            type="button"
+            data-studio-v3-asset
+            data-studio-v3-prop={pr.id}
+            title={`Place ${pr.label} (real CC0 model)`}
+            onClick={() => {
+              let opts = { asset: pr.id };
+              if (typeof window !== 'undefined' && window.__studioPlacePropArgs && typeof window.__studioPlacePropArgs === 'object') {
+                opts = Object.assign({ asset: pr.id }, window.__studioPlacePropArgs);
+                opts.asset = pr.id;
+                window.__studioPlacePropArgs = null;
+              }
+              run(`Place ${pr.id}`, window.__studioPlaceProp && window.__studioPlaceProp(opts));
+            }}
+            style={cellBtn}
+          >{pr.label}</button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -7105,6 +7455,134 @@ function OutlinerRows() {
   );
 }
 
+// ─── TransportBar (animation player) ──────────────────────────────────────
+// Play / pause / stop / scrub transport wired to window.__studioAnimPlayer
+// (studioAnimPlayer.js). The player owns a rAF loop + module-level state (the
+// window-API-no-setState discipline: the loop & window surface must NEVER live
+// in React state or a re-render would strand them). This component is READ-only
+// over the player: it POLLS player.state() every ~80ms to paint the playhead +
+// time/frame readout, and its controls call the player ops. The CUA reaches the
+// exact same controls by .click()ing the data-studio-v3-anim-* attributes.
+//
+// Controls:
+//   ▶ data-studio-v3-anim-play   ⏸ data-studio-v3-anim-pause   ⏹ data-studio-v3-anim-stop
+//   scrub slider  data-studio-v3-anim-scrub   (range 0..1000 ⇒ phase 0..1)
+//   clip <select> data-studio-v3-anim-clip    (walk | run | idle | …)
+//   readout       data-studio-v3-anim-readout (t + frame-of-cycle)
+function TransportBar() {
+  // Poll the player's module-level state (NOT React state for the loop itself).
+  const [snap, setSnap] = React.useState({ clip: 'walk', t: 0, playing: false, seconds: 1.4, clips: ['walk', 'run', 'idle'], lastError: null });
+  // Track whether the user is actively dragging the scrub so polling doesn't
+  // fight the thumb position mid-drag.
+  const draggingRef = React.useRef(false);
+  React.useEffect(() => {
+    const read = () => {
+      const p = (typeof window !== 'undefined') ? window.__studioAnimPlayer : null;
+      if (p && typeof p.state === 'function') {
+        const st = p.state();
+        // skip the t/clip churn while dragging (user owns the thumb then).
+        if (draggingRef.current) { setSnap((s) => ({ ...st, t: s.t })); }
+        else setSnap(st);
+      }
+    };
+    read();
+    const id = setInterval(read, 80);
+    return () => clearInterval(id);
+  }, []);
+
+  const player = () => (typeof window !== 'undefined' ? window.__studioAnimPlayer : null);
+  const clips = Array.isArray(snap.clips) && snap.clips.length ? snap.clips : ['walk', 'run', 'idle'];
+  const sliderVal = Math.round((Number(snap.t) || 0) * 1000);
+  // Approx frame-of-cycle readout. Uses the clip's CYCLE_DEFAULTS-style frames-
+  // per-cycle implied by its `seconds` at 24fps for an honest, cheap label.
+  const fpc = Math.max(2, Math.round((snap.seconds || 1.4) * 24));
+  const frameOfCycle = Math.round((Number(snap.t) || 0) * fpc);
+
+  const onScrubInput = (e) => {
+    draggingRef.current = true;
+    const t = Math.max(0, Math.min(1, Number(e.currentTarget.value) / 1000));
+    setSnap((s) => ({ ...s, t }));
+    const p = player(); if (p && typeof p.scrub === 'function') p.scrub(t);
+  };
+  const onScrubCommit = () => { draggingRef.current = false; };
+
+  const btn = (active) => ({
+    width: 28, height: 22, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    background: active ? 'var(--studio-accent, #ebecef)' : 'var(--studio-canvas-3, #141414)',
+    color: active ? '#000000' : 'var(--studio-ink, #f0eee6)',
+    border: '1px solid var(--studio-rail-edge, #1d2027)', borderRadius: 3,
+    cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, lineHeight: 1, padding: 0,
+  });
+
+  return (
+    <div
+      className="studio-transportbar"
+      data-studio-v3-transport
+      data-studio-v3-anim-playing={snap.playing ? 'true' : 'false'}
+      data-studio-v3-anim-clip-active={snap.clip}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 8,
+        padding: '3px 8px', height: 28,
+        background: 'var(--studio-canvas-3, #141414)',
+        borderTop: '1px solid var(--studio-rail-edge, #1d2027)',
+        fontFamily: 'var(--studio-mono, ui-monospace)', fontSize: 10,
+        color: 'var(--studio-ink-mute, #9aa6b2)', userSelect: 'none',
+      }}
+    >
+      <button type="button" data-studio-v3-anim-play  title="Play (loop the active clip)" onClick={() => { const p = player(); p && p.play(); }}  style={btn(snap.playing)}>▶</button>
+      <button type="button" data-studio-v3-anim-pause title="Pause (keep position)"       onClick={() => { const p = player(); p && p.pause(); }} style={btn(false)}>⏸</button>
+      <button type="button" data-studio-v3-anim-stop  title="Stop (reset to frame 0)"     onClick={() => { const p = player(); p && p.stop(); }}  style={btn(false)}>⏹</button>
+
+      <select
+        data-studio-v3-anim-clip
+        value={snap.clip}
+        onChange={(e) => { const p = player(); p && p.setClip(e.currentTarget.value); }}
+        title="Animation clip"
+        style={{
+          height: 22, padding: '0 4px', fontSize: 10,
+          background: 'var(--studio-canvas, #000000)',
+          color: 'var(--studio-ink, #f0eee6)',
+          border: '1px solid var(--studio-rail-edge, #1d2027)', borderRadius: 3,
+          fontFamily: 'inherit', textTransform: 'capitalize',
+        }}
+      >
+        {clips.map((c) => <option key={c} value={c}>{c}</option>)}
+      </select>
+
+      {/* Scrubbable timeline (0..1000 ⇒ phase 0..1) with a native range thumb as
+          the playhead. The fill before the thumb reads as the elapsed timeline. */}
+      <input
+        type="range"
+        data-studio-v3-anim-scrub
+        data-studio-v3-anim-t={Number(snap.t).toFixed(4)}
+        min={0} max={1000} step={1}
+        value={sliderVal}
+        onInput={onScrubInput}
+        onChange={onScrubInput}
+        onMouseUp={onScrubCommit}
+        onTouchEnd={onScrubCommit}
+        onBlur={onScrubCommit}
+        title={`Scrub — phase ${Number(snap.t).toFixed(3)}`}
+        style={{ flex: 1, minWidth: 80, height: 16, cursor: 'ew-resize', accentColor: 'var(--studio-accent, #ebecef)' }}
+      />
+
+      <span
+        data-studio-v3-anim-readout
+        data-studio-v3-anim-frame={frameOfCycle}
+        style={{ minWidth: 92, textAlign: 'right', whiteSpace: 'nowrap' }}
+        title="phase t · frame-of-cycle"
+      >
+        t {Number(snap.t).toFixed(3)} · f {frameOfCycle}/{fpc}
+      </span>
+      {snap.lastError && (
+        <span data-studio-v3-anim-error style={{ color: '#e08a8a', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={snap.lastError}>
+          {snap.lastError}
+        </span>
+      )}
+    </div>
+  );
+}
+
 // ─── TimelineStrip (slice 444) ───────────────────────────────────────────
 // Compact horizontal timeline showing frame 0..maxFrame, a teal marker
 // for the current frame, and amber dots for the active mesh's keyframes.
@@ -7596,17 +8074,25 @@ const STUDIO_TO_TRAINED_DISCIPLINE = {
 // Hermes LoRAs land. Keeping the per-workbench helper signature so the
 // downstream discipline-aware tools/UI stay unchanged.
 function _archieAdapterPath(/* activeWb */) {
-  // 2026-06-17 — genuine-CUA fold: modeling-cua-staged-20260617 resumes
-  // hermes_studio/modeling and adds the staged UI-driving workflow (build →
-  // arrange via set-selection → click a real stage-lighting preset), trained
-  // on a 99.75%-coherent pure-DOM-op corpus (no composer ops). The SYSTEM in
-  // _buildArchieSystemPrompt is byte-identical to that fold's training SYSTEM.
-  // 2026-06-17 — PURE-CUA / NO-IMPORTS (user decision): Archie models from scratch via
-  // the UI (primitives + modeling ops + arrange + stage-light), NO place-furniture/imported
-  // models. The photoreal-via-imports fold is RETIRED. modeling-cua-staged is the pure-CUA
-  // scene model; a pure-CUA build+render fold supersedes it next. Honest ceiling: textured-lit
-  // blockout (real PBR/HDRI on CUA-built geometry), not imported-asset fidelity.
-  return 'adapters/archie/hermes_studio/modeling-cua-staged-20260617';
+  // 2026-06-18 — GENUINE-CUA REAL-ASSETS fold: cua-realassets-20260618 is the
+  // flagship console adapter. It is trained on the real-asset cinematic corpus
+  // (construct city/nature/vehicle + import-character + set-environment HDRI +
+  // place-prop + play/scrub-animation + render), byte-synced to the SYSTEM in
+  // _buildArchieSystemPrompt (and archdisc-Models/scripts/synth_studio_realassets.py).
+  // So the live console types a prompt → this adapter → genuine DOM .click() ops
+  // via executeToolCall → real geometry + real characters/skies/props → path-trace.
+  //
+  // Served by archdisc-Models/serve_studio_cua.sh, which boots the base
+  // models/hermes-3-8b-4bit on :8080; this string is the per-request `adapters`
+  // value that hot-swaps the fold for each turn (per-request adapter routing —
+  // [[archdisc-models-state-2026-06-07]]).
+  //
+  // NOTE (2026-06-18): the weights for this fold are still TRAINING. Until
+  // adapters.safetensors lands AND a live serve confirms it, this path is
+  // unverified end-to-end — the prior fold modeling-cua-staged-20260617 is the
+  // last KNOWN-GOOD console adapter (kept here, commented, for a quick revert).
+  // return 'adapters/archie/hermes_studio/modeling-cua-staged-20260617'; // known-good fallback
+  return 'adapters/archie/hermes_studio/cua-realassets-20260618';
 }
 
 // Slice 952 — §6 failure-mode catalog client. Every Archie failure
@@ -7807,13 +8293,15 @@ function _removeBodiesByName(names) {
 // training constant reintroduces base-model regression — see the
 // slice-951x few-shot incident.
 function _buildArchieSystemPrompt(/* activeWb */) {
-  // Genuine-CUA SYSTEM (2026-06-17): Archie DRIVES the real UI step by step.
-  // Two paths, one prompt: (a) PHOTOREAL — place-furniture each real model,
-  // arrange with set-selection, click a stage preset, then render (path-trace);
-  // (b) PRIMITIVE — spawn each primitive, arrange, click a stage preset. No
-  // window.__studio* composer ops (light/animate/sculpt-organic/compose bypass
-  // the UI). MUST be byte-identical to the SYSTEM in
-  // archdisc-Models/scripts/synth_studio_cua_staged.py (the corpus agent copies
+  // Genuine-CUA SYSTEM (2026-06-18): Archie DRIVES the real UI step by step.
+  // REAL-ASSET cinematic authoring: construct a real parametric environment
+  // (city/nature/vehicle), import REAL rigged characters + real outdoor HDRI
+  // skies + CC0 props, play the real animation transport, then path-trace —
+  // every step a genuine DOM .click() that executeToolCall reaches. NO
+  // window.__studio* composer ops (light/animate/sculpt-organic/compose, or any
+  // direct builder call, bypass the UI and are forbidden). MUST be byte-
+  // identical to the SYSTEM in
+  // archdisc-Models/scripts/synth_studio_realassets.py (the corpus agent copies
   // this verbatim; byte-drift reintroduces base-model regression — slice-951z
   // few-shot incident).
   return `You are Archie. You operate ArchDisc Studio like a senior 3D designer — by driving the real UI, one step at a time.
@@ -7821,37 +8309,46 @@ function _buildArchieSystemPrompt(/* activeWb */) {
 Output exactly this shape:
   <plan>{"goal":"<noun>","bodies":<int>}</plan>
   <tool_call>{"name":"click-discipline","arguments":{"id":"modeling"}}</tool_call>
-  <tool_call>{"name":"click-primitive","arguments":{"id":"<id>"}}</tool_call>
+  <tool_call>{"name":"construct","arguments":{"subject":"city"}}</tool_call>
   ...one <tool_call> per step...
 
-Primitive ids: cube, sphere, plane, cylinder, cone, torus, icosahedron, text, curve, empty.
-Furniture types (real photoreal models): sofa, armchair, coffee-table, dining-chair, dining-table, bed, desk, bookshelf, lamp, plant, stool, console.
+Genuine ops (each is a real DOM click — NEVER a window.__studio* / composer / spawn call):
+  click-discipline {"id":"<modeling|animation|rendering>"} — switch workbench.
+  construct {"subject":"<city|vehicle|nature|humanoid|human>","params":{...}} — build ONE real parametric subject with real PBR. "human" imports the real rigged Soldier.
+  import-character {"asset":"<soldier|robot|xbot>","clip":"<walk|run|idle|jump>","height":<m>} — add ONE real rigged character. soldier ≈ 1.8 m. soldier/xbot have NO jump (jump auto-routes to robot).
+  set-environment {"hdri":"<id>"} — load a REAL .hdr sky.
+  place-prop {"asset":"<id>"} — drop a real CC0 prop.
+  place-furniture {"type":"<id>"} — drop a real furniture model (interiors).
+  click-primitive {"id":"<id>"} — spawn a primitive (blockout only).
+  set-selection {"axis":"<position-x|position-y|position-z|rotation-y|scale-x|scale-y|scale-z>","value":<number>} — arrange the most-recent body (position metres, rotation radians, scale ×0.03 m base).
+  click-stage-preset {"id":"<workshop|showroom|sunset|night>"} — cinematic indoor lighting (alternative to set-environment).
+  play-animation {"clip":"<walk|run|idle|jump>"} / pause-animation / stop-animation / scrub-animation {"t":<0..1>} — drive the real anim transport.
+  render {} — path-trace the scene (always the final step).
 
-Pick the path that fits the request:
-  • PHOTOREAL / FURNISHED room (living room, bedroom, office, dining, lounge) — place REAL furniture models, then path-trace. Prefer this over raw primitives whenever the user wants a believable, rendered room.
-  • ABSTRACT / BLOCKOUT shape (a logo, a sculpture, a massing study, a single object made of parts) — build it from primitives.
+Real-asset catalog:
+  Characters (rigged .glb): soldier (human; clips walk/run/idle), robot (clips walk/run/idle/jump/walkjump), xbot (clips walk/run/idle).
+  Construct subjects: city, vehicle, nature, humanoid (procedural), human (real Soldier).
+  HDRI skies: wide_street_01 (daytime street — best for city), docklands_02, german_town_street, canary_wharf, daylight, golden (golden hour), studio.
+  Real PBR (auto-applied by construct/furniture): asphalt, facade, sidewalk, car-paint, grass, concrete, skin-warm, wood-oak, wood-walnut, marble-white, fabric-linen, leather-tan, steel-brushed.
+  Furniture (interiors): sofa, armchair, coffee-table, dining-chair, dining-table, bed, desk, bookshelf, lamp, plant, stool, console.
+  Props (CC0): planter_box_01, planter_pot_clay, potted_plant_04, shrub_03, street_lamp_01, street_lamp_02, water_manhole_cover, wooden_crate_01.
+  Primitive ids: cube, sphere, plane, cylinder, cone, torus, icosahedron, text, curve, empty.
 
-Always start with click-discipline {"id":"modeling"} to enter the modeling workbench.
+Always start with click-discipline {"id":"modeling"} and finish with render.
 
-PHOTOREAL path — place real models, arrange them, light, then render:
-  1. For EACH piece: place-furniture {"type":"<one of the furniture types>"} to drop a REAL model, then ARRANGE it with set-selection
-     {"axis":"<position-x|position-z|rotation-y>","value":<number>} (position is metres; rotation-y is radians).
-     Lay out a sensible room: sofa back to a wall, coffee-table in front of it, armchairs flanking, desk/bed/table as the focal piece, lamp/plant in a corner. Keep pieces ~2–3 m apart so they never overlap, and rotation-y each piece to face the centre of the room.
-  2. CLICK a real stage preset for cinematic lighting:
-     <tool_call>{"name":"click-stage-preset","arguments":{"id":"<workshop|showroom|sunset|night>"}}</tool_call>
-  3. PATH-TRACE the scene as the final step:
-     <tool_call>{"name":"render","arguments":{}}</tool_call>
+CINEMATIC / REAL-ASSET path (a character in a city, a car through a street, a nature shot) — preferred for believable scenes:
+  1. click-discipline {"id":"modeling"}.
+  2. construct the environment: {"subject":"city"} (or "nature"/"vehicle") with real façade/asphalt/sidewalk/grass/car-paint PBR. Add a vehicle or props as needed.
+  3. import-character a real rigged actor sized to the world (soldier ≈ 1.8 m) with the right clip, then set-selection to place it (position-x/position-z metres, rotation-y radians) so it stands on the ground, not at the origin.
+  4. set-environment a REAL outdoor sky (wide_street_01 for a daytime street, golden for golden hour).
+  5. click-discipline {"id":"animation"}, then play-animation {"clip":"run"} and scrub-animation {"t":<0..1>} to pose the action.
+  6. click-discipline {"id":"rendering"}, then render {} to path-trace.
 
-PRIMITIVE path — build from primitives, arrange, then light:
-  1. For EACH part: click-primitive {"id":"<id>"} to spawn it, then ARRANGE it with set-selection
-     {"axis":"<scale-x|scale-y|scale-z|position-x|position-y|position-z|rotation-y>","value":<number>}.
-     scale is a multiplier on the 0.03 m base; position is metres. Lay parts out in a real-world
-     arrangement — floor/ground down first, furniture on the floor, objects resting on surfaces —
-     NEVER piled at the origin.
-  2. Finish with cinematic lighting by CLICKING a real stage preset:
-     <tool_call>{"name":"click-stage-preset","arguments":{"id":"<workshop|showroom|sunset|night>"}}</tool_call>
+INTERIOR path — furnished room: click-discipline modeling → place-furniture each real piece + set-selection to arrange → click-stage-preset for lighting → render.
 
-Never emit light, animate, sculpt-organic, or any window.__studio* composer op — those bypass the UI. Lighting is done by clicking a stage preset; furniture is placed one real model at a time with place-furniture; rendering is done with render.
+BLOCKOUT path — abstract shape: click-discipline modeling → click-primitive each part + set-selection to arrange → click-stage-preset → render.
+
+Never emit light, animate, sculpt-organic, compose, or any window.__studio* / direct-builder op — those bypass the UI. Construct/import/place/light/animate/render are ALL done by the genuine ops above.
 No prose outside the tags. No <think> block.`;
 }
 
@@ -8038,6 +8535,10 @@ function _summariseDispatch(calls) {
     else if (name === 'sculpt-organic') actions.push(`sculpted ${(c.arguments && (c.arguments.form || c.arguments.id)) || 'an organic form'}`);
     else if (name === 'light') actions.push(`lit the scene (${(c.arguments && (c.arguments.preset || c.arguments.id)) || 'studio'})`);
     else if (name === 'animate') actions.push(`animated a ${(c.arguments && (c.arguments.preset || c.arguments.id)) || 'camera move'}`);
+    else if (name === 'play-animation') actions.push(`played the ${(c.arguments && (c.arguments.clip || c.arguments.id)) || 'walk'} animation`);
+    else if (name === 'pause-animation') actions.push('paused the animation');
+    else if (name === 'stop-animation') actions.push('stopped the animation');
+    else if (name === 'scrub-animation') actions.push(`scrubbed the timeline to ${(c.arguments && c.arguments.t)}`);
     else if (name === 'set-selection') actions.push('positioned it');
     else if (name === 'set-param') actions.push('tuned a parameter');
     else if (name === 'fn') actions.push(`ran ${(c.arguments && c.arguments.name) || 'a tool'}`);
@@ -8694,6 +9195,167 @@ async function executeToolCall(call) {
     await new Promise((r) => setTimeout(r, 0));
     return { ok: true, summary: `placed ${type}` };
   }
+  if (name === 'import-character') {
+    // Slice 1012 — genuine-CUA character import. The agent imports ONE real rigged
+    // character per call by CLICKING the matching Asset-library button (data-studio-
+    // v3-character) — NOT by calling window.__studioImportCharacter directly. We
+    // validate the asset against the live set, stash the optional clip/height/
+    // position args on window.__studioImportCharacterArgs (a DOM click carries no
+    // args; the button's onClick reads + clears them), then .click() the control.
+    // Its onClick GLTFLoads the .glb, scales to height, adds the SkinnedMesh+rig,
+    // and plays the requested clip via the anim transport. Same one-click contract
+    // as place-furniture. NOTE: a human (soldier/xbot) jump is auto-routed to the
+    // robot by the loader (no authored human jump clip) — reported honestly.
+    let asset = String(args.asset || args.id || 'soldier').toLowerCase();
+    const valid = (typeof window !== 'undefined' && Array.isArray(window.__studioCharacterAssets))
+      ? window.__studioCharacterAssets : CHARACTER_ASSETS;
+    if (!valid.includes(asset)) return { ok: false, summary: `unknown character "${asset}" (have: ${valid.join(', ')})` };
+    const clip = args.clip != null ? String(args.clip).toLowerCase() : null;
+    // Pragmatic jump routing — keep the op's reported asset honest (the loader
+    // also routes, but we click the button it will actually use).
+    if (clip === 'jump' && CHARACTER_MAP[asset] && CHARACTER_MAP[asset].clips.jump === null) asset = 'robot';
+    const el = document.querySelector(`[data-studio-v3-character="${asset}"]`);
+    if (!el) return { ok: false, summary: `no character button for "${asset}"` };
+    const opts = {};
+    if (clip) opts.clip = clip;
+    if (args.height != null && isFinite(Number(args.height))) opts.height = Number(args.height);
+    if (Array.isArray(args.position) && args.position.length === 3) opts.position = args.position.map(Number);
+    if (typeof window !== 'undefined') window.__studioImportCharacterArgs = opts;
+    // Capture the result the onClick produces so we can report the actual clip
+    // played + any retarget note (the onClick stores nothing, so re-call the
+    // window fn's promise via a one-shot flag is overkill — instead read after).
+    el.click();
+    await new Promise((r) => setTimeout(r, 0));
+    return { ok: true, summary: `import-character ${asset}${clip ? ` (${clip})` : ''}` };
+  }
+  if (name === 'set-environment') {
+    // Slice 1012 — set the REAL outdoor sky. The agent picks a real .hdr by
+    // CLICKING the matching Asset-library HDRI control (data-studio-v3-hdri),
+    // whose onClick calls window.__studioSetEnvironmentHDRI(id) → loads the .hdr
+    // and sets scene.environment + background (the real sky). Accepts the real
+    // outdoor ids (wide_street_01 / docklands_02 / german_town_street / canary_
+    // wharf / daylight / golden / studio). Honest failure on an unknown id.
+    const hdri = String(args.hdri || args.id || args.preset || '').toLowerCase();
+    const valid = (typeof window !== 'undefined' && Array.isArray(window.__studioEnvironmentHDRIs))
+      ? window.__studioEnvironmentHDRIs : HDRI_ASSETS;
+    if (!valid.includes(hdri)) return { ok: false, summary: `unknown hdri "${hdri}" (have: ${valid.join(', ')})` };
+    const el = document.querySelector(`[data-studio-v3-hdri="${hdri}"]`);
+    if (!el) return { ok: false, summary: `no hdri button for "${hdri}"` };
+    el.click();
+    await new Promise((r) => setTimeout(r, 0));
+    return { ok: true, summary: `set-environment ${hdri}` };
+  }
+  if (name === 'place-prop') {
+    // Slice 1012 — place a real CC0 Poly Haven prop. The agent picks a prop by
+    // CLICKING the matching Asset-library control (data-studio-v3-prop), whose
+    // onClick calls window.__studioPlaceProp({asset,position}). Honest failure on
+    // an unknown id (and the whole op is skipped gracefully if no props landed).
+    const asset = String(args.asset || args.id || '').toLowerCase();
+    const valid = (typeof window !== 'undefined' && Array.isArray(window.__studioPropAssets))
+      ? window.__studioPropAssets : PROP_ASSETS;
+    if (!valid.length) return { ok: false, summary: 'no props available on disk' };
+    if (!valid.includes(asset)) return { ok: false, summary: `unknown prop "${asset}" (have: ${valid.join(', ')})` };
+    const el = document.querySelector(`[data-studio-v3-prop="${asset}"]`);
+    if (!el) return { ok: false, summary: `no prop button for "${asset}"` };
+    const opts = {};
+    if (Array.isArray(args.position) && args.position.length === 3) opts.position = args.position.map(Number);
+    if (typeof window !== 'undefined') window.__studioPlacePropArgs = opts;
+    el.click();
+    await new Promise((r) => setTimeout(r, 0));
+    return { ok: true, summary: `place-prop ${asset}` };
+  }
+  if (name === 'construct') {
+    // Slice 1011 — CUA-only flagship construction. The agent constructs ONE real
+    // PARAMETRIC subject (humanoid | vehicle | nature | city) per call by CLICKING
+    // the matching Construct-library button — NOT by calling window.__studioBuild*
+    // (those bypass the UI). We validate the subject against the live curated set
+    // first (honest failure on unknown), then querySelector + .click() the real
+    // data-studio-v3-construct button. The button's onClick (constructSubject)
+    // invokes the builder, which adds the GOOD geometry to the scene with real PBR
+    // tags + records the arrange root + frames the camera. We pass params through
+    // window.__studioConstructParams so the click handler reads them (the DOM click
+    // path carries no args), keeping the same one-click contract as place-furniture.
+    //
+    // Slice 1012 — `construct {subject:'human'}` now yields the REAL rigged human
+    // (Soldier.glb) instead of the procedural humanoid: we route it to the Asset-
+    // library Soldier control so the model's existing `construct human` builds the
+    // real character. ('humanoid' still maps to the parametric builder.)
+    let subject = String(args.subject || args.id || '').toLowerCase();
+    if (subject === 'human' || subject === 'person' || subject === 'character') {
+      const el = document.querySelector('[data-studio-v3-character="soldier"]');
+      if (!el) return { ok: false, summary: 'no soldier character button' };
+      const opts = {};
+      if (args.clip != null) opts.clip = String(args.clip).toLowerCase();
+      if (args.height != null && isFinite(Number(args.height))) opts.height = Number(args.height);
+      if (typeof window !== 'undefined') window.__studioImportCharacterArgs = opts;
+      el.click();
+      await new Promise((r) => setTimeout(r, 0));
+      return { ok: true, summary: 'construct human → Soldier.glb (real rigged human)' };
+    }
+    const valid = (typeof window !== 'undefined' && Array.isArray(window.__studioConstructSubjects))
+      ? window.__studioConstructSubjects : STUDIO_CONSTRUCT_SUBJECTS;
+    if (!valid.includes(subject)) return { ok: false, summary: `unknown construct subject "${subject}" (have: ${valid.join(', ')})` };
+    const el = document.querySelector(`[data-studio-v3-construct="${subject}"]`);
+    if (!el) return { ok: false, summary: `no construct button for "${subject}"` };
+    // Stash params for the click handler (which takes no args from a DOM click).
+    const params = (args && typeof args.params === 'object' && args.params) ? args.params : {};
+    if (typeof window !== 'undefined') window.__studioConstructParams = params;
+    el.click();
+    // The onClick is async (builder build); give it a tick so a following
+    // render/set-selection sees the new bodies. We do NOT call the builder here.
+    await new Promise((r) => setTimeout(r, 0));
+    return { ok: true, summary: `construct ${subject}` };
+  }
+  if (name === 'play-animation') {
+    // Genuine-CUA animation playback: optionally set the clip via the REAL
+    // clip <select> (data-studio-v3-anim-clip), then CLICK the real Play button
+    // (data-studio-v3-anim-play) whose onClick starts the player's rAF loop.
+    // This is a real DOM interaction on real controls — NOT a direct
+    // window.__studioAnimPlayer.play() call from the agent path.
+    const clip = args && (args.clip != null || args.id != null) ? String(args.clip != null ? args.clip : args.id).toLowerCase() : null;
+    const valid = (typeof window !== 'undefined' && Array.isArray(window.__studioAnimClips) && window.__studioAnimClips.length)
+      ? window.__studioAnimClips : ['walk', 'run', 'idle'];
+    if (clip) {
+      if (!valid.includes(clip)) return { ok: false, summary: `unknown clip "${clip}" (have: ${valid.join(', ')})` };
+      const sel = document.querySelector('[data-studio-v3-anim-clip]');
+      if (!sel) return { ok: false, summary: 'no clip selector' };
+      // set the <select> value + fire change so React's onChange (→ setClip) runs.
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value');
+      if (setter && setter.set) setter.set.call(sel, clip); else sel.value = clip;
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    const el = document.querySelector('[data-studio-v3-anim-play]');
+    if (!el) return { ok: false, summary: 'no play control' };
+    el.click();
+    return { ok: true, summary: `play-animation${clip ? ` ${clip}` : ''}` };
+  }
+  if (name === 'pause-animation') {
+    const el = document.querySelector('[data-studio-v3-anim-pause]');
+    if (!el) return { ok: false, summary: 'no pause control' };
+    el.click();
+    return { ok: true, summary: 'pause-animation' };
+  }
+  if (name === 'stop-animation') {
+    const el = document.querySelector('[data-studio-v3-anim-stop]');
+    if (!el) return { ok: false, summary: 'no stop control' };
+    el.click();
+    return { ok: true, summary: 'stop-animation' };
+  }
+  if (name === 'scrub-animation') {
+    // Seek the timeline by setting the REAL scrub slider
+    // (data-studio-v3-anim-scrub, range 0..1000 ⇒ phase 0..1) and dispatching an
+    // input event so the bar's onInput (→ player.scrub) poses the rig at t.
+    const t = Number(args && args.t);
+    if (!isFinite(t) || t < 0 || t > 1) return { ok: false, summary: `scrub-animation needs t∈[0,1], got ${args && args.t}` };
+    const el = document.querySelector('[data-studio-v3-anim-scrub]');
+    if (!el) return { ok: false, summary: 'no scrub control' };
+    const v = String(Math.round(t * 1000));
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value');
+    if (setter && setter.set) setter.set.call(el, v); else el.value = v;
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+    return { ok: true, summary: `scrub-animation t=${t.toFixed(3)}` };
+  }
   if (name === 'render') {
     // Slice 1010 — CUA-only render. The agent renders by CLICKING the real
     // Render control (data-studio-v3-render); its onClick path-traces the
@@ -8753,6 +9415,54 @@ function callDirectIfPossible(input) {
   } catch (err) {
     return { ok: false, fname, args, error: String(err) };
   }
+}
+
+// ─── Prompt presets ───────────────────────────────────────────────────────
+// Demo "Try:" chips. Clicking a chip INJECTS the preset text into the
+// cmdbar input (visibly) and then submits it through the SAME path a
+// typed+Enter prompt uses (onCmdSubmit → runArchie → executeToolCall),
+// so Archie genuinely performs it via CUA — there is no scripted
+// shortcut. Each chip carries data-studio-v3-prompt-preset="<id>".
+const STUDIO_PROMPT_PRESETS = [
+  {
+    id: 'soldier-intersection',
+    label: 'Soldier · downtown',
+    text: 'A soldier runs across a sunlit downtown intersection, traffic and skyscrapers, clear blue sky — build it and render it cinematically.',
+  },
+  {
+    id: 'sports-car-boulevard',
+    label: 'Sports car · golden hour',
+    text: 'A sleek sports car carves down a city boulevard at golden hour — build and render.',
+  },
+  {
+    id: 'misty-forest-river',
+    label: 'Misty forest · river',
+    text: 'A misty forest with a winding river at golden hour — build, animate the water, and render.',
+  },
+];
+
+// ─── PromptPresetRow ──────────────────────────────────────────────────────
+// A labeled "Try:" row of small chips rendered just above the cmdbar.
+// onInject(text) is the component's own submit handler (onCmdSubmit) —
+// the chip routes to exactly the same path as a manually-typed prompt.
+function PromptPresetRow({ onInject }) {
+  return (
+    <div className="studio-prompt-presets" data-studio-v3-prompt-presets>
+      <span className="studio-prompt-presets-label">Try:</span>
+      {STUDIO_PROMPT_PRESETS.map((p) => (
+        <button
+          key={p.id}
+          type="button"
+          className="studio-prompt-preset-chip"
+          data-studio-v3-prompt-preset={p.id}
+          title={p.text}
+          onClick={() => onInject && onInject(p.text)}
+        >
+          {p.label}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 // ─── CommandBar (slice 947) ───────────────────────────────────────────────
@@ -8942,6 +9652,11 @@ export function StudioShellV3({ mode = 'dark' }) {
   const [selection, setSelection] = useState(null);
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const [thread, setThread] = useState([]);
+  // Holds the live onCmdSubmit handler so window.__studioInjectPrompt can
+  // reuse the EXACT submit path a typed+Enter prompt uses — without ever
+  // calling a React state setter from the window helper (studio rule:
+  // window-API-no-setState). The ref is refreshed each render below.
+  const onCmdSubmitRef = useRef(null);
   // Slice 947 — Archie chat overlay. The strip stays at the foot
   // (CommandBar), the floating overlay shows the conversation. Auto-
   // opens whenever a message is pushed to the thread so the user sees
@@ -8973,6 +9688,8 @@ export function StudioShellV3({ mode = 'dark' }) {
     registerModOps();
     registerLightingOps();
     registerAnimPhysOps();
+    installStudioAnimPlayer();
+    installRealCharacter();   // window.__studioImportCharacter / __studioPlaceProp / __studioSetEnvironmentHDRI (real glb/hdri assets) — after anim player so registerClip exists
     registerPaintOps();
     registerSurfOps();
     registerAudioXROps();
@@ -9006,6 +9723,8 @@ export function StudioShellV3({ mode = 'dark' }) {
       unregisterAudioXROps();
       unregisterSurfOps();
       unregisterPaintOps();
+      uninstallRealCharacter();
+      uninstallStudioAnimPlayer();
       unregisterAnimPhysOps(); unregisterLightingOps(); unregisterModOps();
       unregisterCameraOps(); unregisterEditOps(); unregisterV3Api();
     };
@@ -9850,6 +10569,47 @@ export function StudioShellV3({ mode = 'dark' }) {
     }
   };
 
+  // Keep the submit ref pointing at the live onCmdSubmit closure so the
+  // window inject helper always calls the current handler. Plain
+  // assignment in render is safe (no setState).
+  onCmdSubmitRef.current = onCmdSubmit;
+
+  // Install the prompt-preset window surface. window.__studioInjectPrompt
+  // sets the cmdbar input value VISIBLY (same write surface a human
+  // types into) then submits via onCmdSubmitRef.current — the identical
+  // path a typed+Enter prompt takes. No React state setters are called
+  // here; the submit closure owns all the setThread() calls.
+  useEffect(() => {
+    window.__studioPromptPresets = STUDIO_PROMPT_PRESETS.map((p) => ({ ...p }));
+    window.__studioInjectPrompt = (idOrText) => {
+      const preset = STUDIO_PROMPT_PRESETS.find((p) => p.id === idOrText);
+      const text = (preset ? preset.text : String(idOrText || '')).trim();
+      if (!text) return false;
+      // Mirror the prompt into the cmdbar input so the demoer sees the
+      // exact text that's being submitted (visible inject, not silent).
+      try {
+        const el = document.querySelector('[data-studio-v3-cmdbar-input]');
+        if (el) {
+          el.value = text;
+          setArchieOpen(true);
+        }
+      } catch (_) {}
+      const submit = onCmdSubmitRef.current;
+      if (typeof submit !== 'function') return false;
+      Promise.resolve(submit(text)).catch(() => {});
+      // Clear the input after submit, matching the Enter-key handler.
+      try {
+        const el = document.querySelector('[data-studio-v3-cmdbar-input]');
+        if (el) el.value = '';
+      } catch (_) {}
+      return true;
+    };
+    return () => {
+      if (window.__studioInjectPrompt) delete window.__studioInjectPrompt;
+      if (window.__studioPromptPresets) delete window.__studioPromptPresets;
+    };
+  }, []);
+
   // Slice 400/407 — QAT actions call V3 APIs and push a tool-message
   // into the thread strip (which auto-shows above the cmdbar).
   const onQatAction = (id) => {
@@ -10081,6 +10841,7 @@ export function StudioShellV3({ mode = 'dark' }) {
         editMode={editMode}
         selection={selection}
       />
+      <TransportBar />
       <TimelineStrip />
       <StatusBar wb={activeWb} editMode={editMode} />
       <ArchieChatOverlay
@@ -10091,6 +10852,7 @@ export function StudioShellV3({ mode = 'dark' }) {
         onToggleExpanded={() => setArchieExpanded((v) => !v)}
         onClear={() => { setThread([]); }}
       />
+      <PromptPresetRow onInject={(text) => { setArchieOpen(true); onCmdSubmit(text); }} />
       <CommandBar
         onSubmit={onCmdSubmit}
         archieOpen={archieOpen}

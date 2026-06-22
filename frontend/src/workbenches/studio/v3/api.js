@@ -23,6 +23,9 @@ import { installAnimationDirector } from './builders/animationDirector.js';
 import { installRigDirector } from './builders/rigDirector.js';
 import { installHumanoidBuilder } from './builders/humanoid.js';
 import { installHumanoidLocomotion } from './builders/humanoidLocomotion.js';
+import { installCityBuilder } from './builders/cityBlock.js';
+import { installVehicleBuilder } from './builders/vehicleBuilder.js';
+import { installNatureBuilder } from './builders/natureBuilder.js';
 import { installLookdevDirector } from './builders/lookdevDirector.js';
 
 // ─── Edit-mode state (slice 376/377 V2 equivalent) ───────────────────────
@@ -170,7 +173,10 @@ export function registerV3Api() {
   try { installAnimationDirector(); } catch (_) {} // window.__studioAnimate (camera-path animation: turntable/dolly/product-reveal → frame sequence)
   try { installRigDirector(); } catch (_) {} // window.__studioRig (skinned-armature rigging + organic movement → frame sequence)
   try { installHumanoidBuilder(); } catch (_) {} // window.__studioBuildHumanoid + __studioPoseHumanoid (rigged biped: 8-head proportions, bipedal skeleton, skinned skin/shirt/trouser shells, posed via bone rotation)
-  try { installHumanoidLocomotion(); } catch (_) {} // window.__studioHumanoidAnimate + __studioHumanoidPlay (procedural WALK/RUN/IDLE gait cycles over phase t, contralateral swing + hip sway + knee/ankle roll + foot-plant IK + flight phase)
+  try { installHumanoidLocomotion(); } catch (_) {} // window.__studioHumanoidAnimate + __studioHumanoidPlay (procedural WALK/RUN/JUMP/IDLE gait cycles over phase t, contralateral swing + hip sway + knee/ankle roll + foot-plant IK + flight phase + ballistic jump arc)
+  try { installCityBuilder(); } catch (_) {} // window.__studioBuildCity({blocks,seed}) — procedural walkable city block (streets/sidewalks/lane markings, varied window-banded setback buildings + rooftop units, lamp posts/benches/trees/cars), all tagged archdiscStudioPrimitive + materialed for the path tracer
+  try { installVehicleBuilder(); } catch (_) {} // window.__studioBuildVehicle({length,width,height,wheelbase,rideHeight,wheelCount,bodyStyle}) + __studioVehicleDriveFrame/__studioVehicleDrivePoseFrame — STUDIO FLAGSHIP #2: fully parametric procedural SPORTS CAR (lofted smooth body hull from profile curves, tinted glass greenhouse, spoked wheels + rubber tyres, emissive head/taillight bar, chrome grille/trim/mirrors, door creases, underbody/diffuser/wing), tagged car-paint/glass/rubber/chrome + emissive for the 4K PBR path tracer; drive helper splines it through the city with wheel spin + steering + a chase/side/low camera spec for __studioRunPathTracedSequence
+  try { installNatureBuilder(); } catch (_) {} // window.__studioBuildNature({terrainSize,relief,treeCount,species,waterLevel,season,seed}) + __studioNatureAnimate(t) — procedural NATURE ENVIRONMENT (eroded multi-octave terrain + carved river valley, L-system trees conifer/broadleaf/birch/shrub + leaf canopy, rock/grass/fern scatter, rippling water plane, depth-haze fog), all tagged archdiscStudioPrimitive + materialed (bark/foliage/rock/grass/water/dirt) for the 4K PBR path tracer
   try { installLookdevDirector(); } catch (_) {} // window.__studioLight + __studioLookdevMaterials (cinematic 3-point rigs + PBR upgrade → lit final)
 
   // Edit-mode state.

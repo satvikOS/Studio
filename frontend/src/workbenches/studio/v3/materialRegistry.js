@@ -31,6 +31,67 @@ export const MATERIALS = {
   'glass-clear':     { color: 0xeaf2f5, metalness: 0.0, roughness: 0.02, transmission: 0.9, ior: 1.5 },
   'ceramic-white':   { color: 0xf2f0ec, metalness: 0.0, roughness: 0.25, clearcoat: 0.6 },
   'rubber-black':    { color: 0x1a1a1c, metalness: 0.0, roughness: 0.95 },
+  // ── ENVIRONMENT / city materials (real CC0 PBR sets, color comes from the
+  //    scanned albedo at render time → these base specs only set roughness/metal).
+  'asphalt':         { color: 0x3a3b3d, metalness: 0.0, roughness: 0.95 },
+  'facade':          { color: 0x9c8b7a, metalness: 0.0, roughness: 0.85 },
+  'sidewalk':        { color: 0xb6b3ad, metalness: 0.0, roughness: 0.88 },
+  'grass':           { color: 0x4a5d35, metalness: 0.0, roughness: 0.95 },
+  // ── AUTOMOTIVE materials (vehicleBuilder.js / flagship sports car) ──────────
+  // car-paint: a metallic basecoat under a smooth clearcoat — the defining
+  // automotive look. Medium-low base roughness + a hard, near-mirror clearcoat
+  // (clearcoatRoughness low) so the path tracer lays a crisp reflection streak
+  // over a deep metallic flake colour. The PT honours clearcoat on
+  // MeshPhysicalMaterial (see PathTracedRender.physMatFrom).
+  'car-paint':       {
+    color: 0x8a1620, metalness: 0.85, roughness: 0.38,
+    clearcoat: 1.0, clearcoatRoughness: 0.06, specularIntensity: 1.0,
+  },
+  // chrome: a polished mirror metal for trim / grille slats / exhaust tips.
+  'chrome':          { color: 0xeef0f3, metalness: 1.0, roughness: 0.045 },
+  // glass / rubber convenience aliases so a builder can tag the human-readable
+  // name from the brief and still resolve a full physical spec (the tinted car
+  // greenhouse glass + the matte tyre rubber).
+  'glass':           { color: 0x12161a, metalness: 0.0, roughness: 0.04, transmission: 0.78, ior: 1.5 },
+  'rubber':          { color: 0x121214, metalness: 0.0, roughness: 0.92 },
+  // SKIN — subsurface APPROXIMATION inside the MeshPhysicalMaterial system. A
+  // warm dermal base (slightly desaturated so the real albedo scan supplies the
+  // hue), zero metalness, medium-low roughness (oily highlight on cheeks/nose
+  // without going wet), then the SSS cues: a small transmission + finite
+  // thickness so thin parts (ears, fingers, nostrils) bleed warm light, a warm
+  // attenuation tint for that red-through-flesh look, a soft peach SHEEN for the
+  // diffuse fresnel "fuzz" at grazing angles (vellus hair / soft skin rolloff),
+  // and a faint clearcoat for the surface oil/sweat layer. `isSkin` flags the
+  // renderers to also load the real 4K skin texture set (albedo/normal/rough).
+  'skin-warm':       {
+    color: 0xe6b89c, metalness: 0.0, roughness: 0.46,
+    clearcoat: 0.12, clearcoatRoughness: 0.42,
+    transmission: 0.12, thickness: 0.5, ior: 1.4,
+    attenuationColor: 0xff5a3c, attenuationDistance: 0.42,
+    sheen: 0.55, sheenColor: 0xffb89c, sheenRoughness: 0.65,
+    specularIntensity: 0.5,
+    isSkin: true,
+  },
+  // HAIR — a strand/clump material for the parametric hairstyle (groomed
+  // character ref Video-350). Hair is a dielectric keratin fibre: a low-
+  // saturation base (the real albedo/tint scan supplies the true colour), zero
+  // metalness, a MEDIUM-LOW roughness so the path tracer lays the characteristic
+  // hair SPECULAR band (the bright lengthwise highlight), and a strong warm
+  // SHEEN for the soft secondary scatter glow along the fibre at grazing angles.
+  // A faint transmission lets light bleed through thin clumps at the tips, and a
+  // light clearcoat gives the groomed/oiled gloss. `isHair` flags the renderers
+  // to (a) keep the bright fibre specular, (b) load the real hair albedo/normal/
+  // roughness set when present (negative-cached if absent → falls back to this
+  // base spec). Used by the strand-clump shells the humanoid builder emits in the
+  // 'hair' region.
+  'hair-strand':     {
+    color: 0x3a2a1e, metalness: 0.0, roughness: 0.32,
+    clearcoat: 0.25, clearcoatRoughness: 0.28,
+    transmission: 0.06, thickness: 0.02, ior: 1.55,
+    sheen: 0.85, sheenColor: 0xc9a878, sheenRoughness: 0.4,
+    specularIntensity: 0.85,
+    isHair: true,
+  },
 };
 
 export const MATERIAL_IDS = Object.keys(MATERIALS);
